@@ -12,6 +12,10 @@ dist/
 # IDE
 .vscode/
 .idea/
+.cursor/
+
+# Project-local (not tracked)
+night-diary-v2-cursor-rules.md
 
 # System
 .DS_Store
