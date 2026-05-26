@@ -1,13 +1,29 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .venv/
 venv/
 .env
+.env.local
+.env.*.local
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.egg-info/
 
 # Node
 node_modules/
 dist/
+.vite/
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
 
 # IDE
 .vscode/
@@ -23,3 +39,11 @@ Thumbs.db
 
 # Docs
 架构诊断与重构蓝图.md
+
+# Application data (local volumes / runtime)
+chroma_data/
+mysql_data/
+redis_data/
+*.sqlite
+*.sqlite3
+test.db
