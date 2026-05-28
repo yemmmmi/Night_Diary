@@ -1,19 +1,21 @@
 # Night Diary V2 — 任务总纲
 
-> **仓库级施工蓝图**（非 Cursor Plan 文件）。每个 **PR = 下方一个章节**，含 `Implementation Plan` 三段式。  
+> **仓库级施工蓝图**（非 Cursor Plan 文件）。每个 **PR = 下方一个章节**，含 `Implementation Plan` 三段式。
 > **V1 只读参考**：`D:\work\night_diary`（不可修改）。**架构/协作细则**：`.cursor/rules/` 下 `architecture.mdc`、`collaboration.mdc`、`coding-standards.mdc`、`execution-plan.mdc`。
 
 ---
 
 ## 0. 如何使用本文
 
-1. 按 **Phase 顺序**执行；Phase 2 内按 PR 编号 **2.1 → 2.6** 依赖顺序合并。
+1. 按 **Phase 顺序**执行（A → E），每个 Phase 内 PR 按编号顺序合并。
 2. 开始 PR 前：`git checkout main && git pull && git checkout -b <Branch>`（见各章节）。
 3. 将对应章节的 **Tasks** 复制到 PR 描述（与 `.github/pull_request_template.md` 一致）。
-4. **合并标准**：该 PR 的 Verification 全部通过，且 `main` 可运行（`make up` / `make test` / 该阶段手动流）。
+4. **合并标准**：该 PR 的 Verification 全部通过，且 `main` 可运行（`make test` / `make lint` / 该阶段手动流）。
 5. 当前应执行的 PR：见 `.cursor/rules/current_phase.mdc`（随进度更新）。
 
-**累计 PR 数**：18（Phase 0:1 + 1:1 + 2:6 + 3:2 + 4:5 + 5:3）
+**累计 PR 数**：19（Phase A:5 + B:6 + C:3 + D:4 + E:1）
+
+**架构方案**：`docs/本地化桌面端重构方案.md`（本文件仅维护施工清单，不重复论述设计决策）
 
 ---
 
@@ -28,142 +30,211 @@
 | 错误 | 服务层抛 `AppError` 子类，路由层转换 HTTP |
 | DI | Agent/Skill 通过构造函数接收 LLM、DB session，禁止 `SessionLocal()` / 自行 `ChatOpenAI()` |
 | V2 独立性 | 绝不 import V1 代码 |
+| 架构约束 | 无 MySQL、无 Redis、无 JWT、无 Docker。单用户本地桌面应用。 |
 
 ---
 
-## 2. 部署与环境策略
+## 2. 环境与启动策略
 
-### 本地开发（Phase 0 起）
+### 开发环境
 
 ```text
-web :5173 (Vite)  --VITE_API_BASE_URL-->  server :8000 (FastAPI)
-                                              |
-                                    docker-compose (MySQL 8, Redis 7)
-                                              |
-                                    ./chroma_data (Chroma 本地卷，RAG/knowledge 使用)
+                                 npm run tauri dev
+                                    │
+  Vue 3 (Vite HMR)  ◄────────  Tauri v2 (Rust)  ──────────► Python sidecar
+  http://localhost:5173                                        127.0.0.1:{port}
+       (WebView)                                              (FastAPI, uvicorn)
+                                                                  │
+                                                          SQLite + ChromaDB
+                                                      (%APPDATA%/night-diary/)
 ```
 
-### 环境变量（`config.py` / `.env.example`，禁止硬编码 host）
+### 配置文件
 
-| 变量 | 本地默认 | 云上扩展 |
-|------|----------|----------|
-| `DATABASE_URL` | `mysql+pymysql://...@localhost:3306/...` | 托管 MySQL；`server/.env.production.example` 注明 SSL |
-| `REDIS_URL` | `redis://localhost:6379/0` | 云 Redis URL |
-| `ALLOWED_ORIGINS` | `http://localhost:5173` | 生产前端域名，逗号分隔 |
-| `CHROMA_PERSIST_DIR` | `./chroma_data` | 同卷或 Phase 5 文档中的 `CHROMA_HOST` 占位 |
-| `VITE_API_BASE_URL` | `http://localhost:8000` | 构建时注入 `https://api.example.com` |
-| `APP_ENV` | `development` | `production`（日志/OpenAPI 开关） |
-| `JWT_SECRET_KEY` | 必填，无 fallback | 同上 |
-| `MODEL_KEY_SECRET` | 必填，独立于 JWT | 同上 |
-| `TRUSTED_PROXY_IPS` | 空或本地代理 | 受信代理 IP 列表（限流/锁） |
+| 配置方式 | 用途 |
+|----------|------|
+| CLI 参数 `--port` `--data-dir` | Tauri 启动 Python 时动态传入 |
+| `server/.env` / 环境变量 | 本地开发时手动设置 |
+| `%APPDATA%/night-diary/config.json` | 运行时非敏感配置（主题、窗口大小等） |
+| `%APPDATA%/night-diary/secrets.key` | Fernet 密钥（加密 LLM API Key） |
 
-### Makefile 目标（Phase 0 交付）
+### Makefile 目标
 
-`make up` / `make down` / `make migrate` / `make dev-api` / `make dev-web` / `make test` / `make lint`（与 CI 一致）
+`make dev-api` / `make dev-web` / `make test` / `make lint`（与 CI 一致）
 
 ---
 
-## PR: phase-0-project-scaffold
+## PR: phase-a-1-server-adapt
 
-- **Branch**: `chore/project-scaffold`
-- **Depends on**: —
-- **合并后 main**: `make up` + `make migrate` + `GET /health` 200 + Vue 占位首页 + CI 绿
+- **Branch**: `refactor/desktop-architecture`
+- **Depends on**: Phase 0 scaffold（`main`）
+- **合并后 main**: `make dev-api` 启动 127.0.0.1:8000，`/health` 返回 200，`pytest` 通过，无 Docker 依赖
 
 ### Implementation Plan
 
 #### Overview
 
-搭建 monorepo 目录、本地 Docker 基础设施、双端工具链与 CI；配置按环境变量设计，云上仅换 env。
+服务端适配：config/main 移除 Redis/JWT/CORS，改为 SQLite + CLI 参数；删除 docker-compose；更新 CI。
 
 #### Tasks
 
-- [ ] 1. [核心] 目录结构 — 按 `architecture.mdc` 创建 `server/`、`web/`、`alembic/`、`.github/workflows/`、`server/app/{api,services,domain,shared,infrastructure}/`、`web/src/{pages,features,shared,router}/`
-- [ ] 2. [核心] `server/pyproject.toml` — 依赖 FastAPI、SQLAlchemy 2、alembic、pydantic-settings、redis、pytest、ruff、mypy
-- [ ] 3. [核心] `server/app/config.py` — `Settings`：`DATABASE_URL`、`REDIS_URL`、`ALLOWED_ORIGINS`、`APP_ENV`、`JWT_SECRET_KEY`、`MODEL_KEY_SECRET`、`CHROMA_PERSIST_DIR`；启动校验必填项
-- [ ] 4. [核心] `server/app/main.py` — `GET /health` → `{"status":"ok"}`；CORS 读 `ALLOWED_ORIGINS`
-- [ ] 5. [核心] `server/.env.example` — 对齐上表变量 + 云库 SSL 注释块
-- [ ] 6. [核心] `web/package.json`、`web/vite.config.ts`、`web/tsconfig.json`、`web/tailwind.config.js`、`web/index.html`
-- [ ] 7. [核心] `web/src/main.ts`、`web/src/App.vue` — 占位「Night Diary V2」
-- [ ] 8. [核心] `web/.env.example` — `VITE_API_BASE_URL=http://localhost:8000`
-- [ ] 9. [核心] `docker-compose.yml` — `mysql:8`、`redis:7`；卷 `mysql_data`、`redis_data`；端口映射文档说明（应用连 `localhost`）
-- [ ] 10. [核心] `alembic.ini` + `alembic/env.py` — 从 `Settings.DATABASE_URL` 读取
-- [ ] 11. [核心] 根目录 `Makefile` — `up`/`down`/`migrate`/`dev-api`/`dev-web`/`test`/`lint`
-- [ ] 12. [CI] `.github/workflows/ci.yml` — pytest、vitest、mypy、vue-tsc、ruff、eslint（空测试可通过）
-- [ ] 13. [CI] `.pre-commit-config.yaml` + `.github/pull_request_template.md`（含 Implementation Plan 模板）
-- [ ] 14. [文档] `README.md` — `cp server/.env.example` → `make up` → `make migrate` → `make dev-api` / `make dev-web`
+- [x] 1. [核心] `server/app/config.py` — 移除 `redis_url`/`jwt_*`/`allowed_origins`/`trusted_proxy_ips`；新增 `data_dir`/`port`；`database_url` 等改为 `@property` 派生自 `data_dir`；`model_key_secret` 改为可选
+- [x] 2. [核心] `server/app/main.py` — 移除 CORS；新增 `--port`/`--data-dir` CLI 参数；`create_app()` 内自动创建数据目录；新增 `/shutdown` 端点
+- [x] 3. [核心] `server/pyproject.toml` — 移除 `redis`/`pymysql`/`cryptography`/`types-redis`；新增 `aiosqlite`
+- [x] 4. [核心] `server/.env.example` — 精简为 `APP_ENV`/`DATA_DIR`/`PORT`/`MODEL_KEY_SECRET`/`LLM_*`
+- [x] 5. [核心] 删除 `docker-compose.yml`；简化 `Makefile`（去 Docker 目标）；更新 `.github/workflows/ci.yml`（去 Redis/JWT env vars）
+- [x] 6. [测试] 更新 `tests/conftest.py`/`test_config.py` — 适配新 Settings
+- [x] 7. [文档] 新增 `docs/本地化桌面端重构方案.md`；更新 `README.md` 和 `.cursor/rules/`
 
 #### Verification
 
-1. `docker compose up -d` 后 MySQL/Redis 健康
-2. `make migrate` 无报错（可无业务表）
-3. `curl localhost:8000/health` → 200；浏览器 `localhost:5173` 可打开
-4. Push 后 GitHub Actions 全绿
+1. `make dev-api` 启动成功，`curl localhost:8000/health` → 200
+2. `make test` — pytest 5 passed
+3. `make lint` — ruff + mypy 全部通过
+4. CI 全绿，无 Docker 服务依赖
 
 ---
 
-## PR: phase-1-infrastructure-layer
+## PR: phase-a-2-tauri-shell
 
-- **Branch**: `feature/infrastructure-layer`
-- **Depends on**: phase-0
-- **合并后 main**: `make migrate` 建全表；`pytest server/tests` 通过；缺 `JWT_SECRET_KEY` 启动失败
+- **Branch**: `feature/tauri-shell`
+- **Depends on**: phase-a-1（server-adapt）
+- **合并后 main**: `npm run tauri dev` 打开桌面窗口；启动画面显示；Python sidecar 自动启动
 
 ### Implementation Plan
 
 #### Overview
 
-ORM、初始 schema、安全、Redis、统一错误与 LLM 工厂就位。
+初始化 Tauri v2 项目脚手架：Rust 源码、窗口配置、启动画面、Vite 集成。
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/infrastructure/database.py` — SQLAlchemy 2.0 引擎/Session；`pool_pre_ping=True`、`pool_recycle=3600`
-- [ ] 2. [核心] `server/app/infrastructure/models/__init__.py` — 导出全部模型
-- [ ] 3. [核心] `server/app/infrastructure/models/user.py` — `User`
-- [ ] 4. [核心] `server/app/infrastructure/models/diary_entry.py` — `DiaryEntry`
-- [ ] 5. [核心] `server/app/infrastructure/models/analysis.py` — `Analysis`；含 **`execution_tier`** 列（`String(16)`，可空，为 Phase 2/3 预留）
-- [ ] 6. [核心] `server/app/infrastructure/models/tag.py` — `Tag`
-- [ ] 7. [核心] `server/app/infrastructure/models/diary_tag.py` — **显式** `DiaryTag` 关联模型（非裸 `Table`）
-- [ ] 8. [核心] `server/app/infrastructure/models/model_provider.py` — `ModelProvider`
-- [ ] 9. [核心] `server/app/infrastructure/models/feedback.py` — `Feedback`
-- [ ] 10. [核心] `server/app/infrastructure/models/style_preference.py` — `StylePreference`
-- [ ] 11. [核心] `server/app/infrastructure/models/knowledge_entry.py` — `KnowledgeEntry`；`long_term_profile`、`entity_data` 用 **MySQL JSON**
-- [ ] 12. [核心] Alembic — `alembic revision --autogenerate -m "initial_schema"`；`alembic/versions/*.py` 入库
-- [ ] 13. [核心] `server/app/infrastructure/security.py` — JWT + bcrypt；`hash_password`/`verify_password`/`create_access_token`/`decode_token`；**无 fallback secret**
-- [ ] 14. [核心] `server/app/shared/errors.py` — `AppError`、`AuthError`、`DiaryError`、`AnalysisError`、`ValidationError`；`http_status` 映射
-- [ ] 15. [核心] `server/app/shared/llm.py` — `LLMFactory.create(provider|settings)`；支持用户 `ModelProvider`
-- [ ] 16. [核心] `server/app/infrastructure/redis.py` — 连接池；不可用则 **启动失败**（非 `Optional` 静默降级）
-- [ ] 17. [核心] `server/app/infrastructure/distributed_lock.py` — 从 V1 `core/distributed_lock.py` 迁移
-- [ ] 18. [核心] `server/app/infrastructure/rate_limiter.py` — 从 V1 迁移；`get_client_ip()` 尊重 `TRUSTED_PROXY_IPS`
-- [ ] 19. [核心] `server/app/config.py` — 增加 `TRUSTED_PROXY_IPS: list[str]`
-- [ ] 20. [核心] `server/app/di.py` — 骨架：`get_db`、`get_redis`（Phase 3 扩展）
-- [ ] 21. [测试] `server/tests/conftest.py` — SQLite 内存库 / Redis mock fixtures
-- [ ] 22. [测试] `server/tests/unit/test_errors.py`、`test_security.py`、`test_rate_limiter.py`、`test_distributed_lock.py`
+- [ ] 1. [核心] 安装 Tauri CLI：`npm install -D @tauri-apps/cli@latest`；`npm run tauri init`，生成 `src-tauri/`
+- [ ] 2. [核心] `src-tauri/Cargo.toml` — 依赖 `tauri` v2、`tauri-plugin-shell`、`tokio`、`serde`、`serde_json`
+- [ ] 3. [核心] `src-tauri/tauri.conf.json` — 窗口标题 "夜记"、无边框（`decorations: false`）、最小尺寸 900×600、默认 1200×800；identifier `com.nightdiary.app`
+- [ ] 4. [核心] `src-tauri/resources/splash.html` — 启动画面：Logo 居中 + "正在准备 AI 引擎..." + 进度条动画
+- [ ] 5. [核心] `src-tauri/src/main.rs` — 入口：加载 splash → 启动 Python sidecar → 健康检查 → 关闭 splash → 打开主窗口
+- [ ] 6. [核心] `src-tauri/src/lib.rs` — Tauri commands：`get_backend_port()`、`get_data_dir()`、`get_app_version()`
+- [ ] 7. [核心] `src-tauri/src/process.rs` — Python 子进程管理：`spawn_backend()`、`health_poll()`、`graceful_shutdown()`
+- [ ] 8. [核心] `src-tauri/capabilities/default.json` — Tauri v2 权限声明（shell 执行、窗口管理）
+- [ ] 9. [核心] `src-tauri/icons/` — 应用图标（ico + png）
+- [ ] 10. [配置] 更新 `package.json` scripts — `tauri dev`、`tauri build`
+- [ ] 11. [配置] 更新 `vite.config.ts` — Tauri 适配（`server.strictPort = true`）
 
 #### Verification
 
-1. `make migrate` 在本地 MySQL 建表成功
-2. `pytest server/tests -v` 通过
-3. 未设置 `JWT_SECRET_KEY` 时 `uvicorn` 启动失败
+1. `npm run tauri dev` 打开桌面窗口
+2. 启动画面短暂显示后自动切换到 Vue 页面
+3. Python 进程随窗口关闭自动退出
+4. `make lint-web` 通过（vue-tsc + eslint）
 
 ---
 
-## PR: phase-2-1-domain-knowledge
+## PR: phase-a-3-frontend-migration
+
+- **Branch**: `feature/frontend-migration`
+- **Depends on**: phase-a-2（tauri-shell）
+- **合并后 main**: `web/` → `src/` 迁移完成；Vue 通过 Tauri invoke 获取后端端口；API 请求正确发往 Python sidecar
+
+### Implementation Plan
+
+#### Overview
+
+将 `web/` 目录迁移为 `src/`（Tauri 前端标准布局），建立 Vue-Tauri 通信桥接。
+
+#### Tasks
+
+- [ ] 1. [核心] 移动 `web/` 所有文件到 `src/`（保留 `web/` 为兼容期软链接或直接删除）
+- [ ] 2. [核心] 更新 `vite.config.ts` — 根目录改为 `./`，`@` alias 保持指向 `src/`
+- [ ] 3. [核心] 更新 `index.html` — 位于项目根目录
+- [ ] 4. [核心] `src/shared/api/http.ts` — 新增 `useBackend()` composable：通过 `invoke('get_backend_port')` 获取端口，动态设置 axios `baseURL`
+- [ ] 5. [核心] `src/App.vue` — 改造为 Tauri 感知：启动时等待后端端口就绪，显示加载状态
+- [ ] 6. [配置] 更新 `Makefile` — `dev-web` 目标指向 `npm run tauri dev`
+- [ ] 7. [配置] 更新 CI — web job 的 `working-directory` 仍为 `web/` 或更新为根目录
+- [ ] 8. [清理] 删除 `web/` 目录中已迁移的冗余文件
+
+#### Verification
+
+1. `npm run tauri dev` → 桌面窗口打开，Vue 页面正确渲染
+2. `curl` 验证前端 API 请求正确到达 Python 后端
+3. `make test-web` — vitest 通过
+4. `make lint-web` — vue-tsc + eslint 通过
+
+---
+
+## PR: phase-a-4-frontend-cleanup
+
+- **Branch**: `chore/frontend-cleanup`
+- **Depends on**: phase-a-3（frontend-migration）
+- **合并后 main**: `web/` 目录完全删除；前端目录结构为 `src/` 标准 Tauri 布局
+
+### Implementation Plan
+
+#### Overview
+
+删除旧 `web/` 目录，验证构建链路完整。
+
+#### Tasks
+
+- [ ] 1. [清理] 删除 `web/` 目录
+- [ ] 2. [配置] 验证 `package.json`、`vite.config.ts`、`tsconfig.json` 路径均指向 `src/`
+- [ ] 3. [配置] 更新 CI — web job 的 working-directory 改为根目录
+- [ ] 4. [配置] 更新 `.gitignore` — 移除 `web/` 专属忽略规则
+- [ ] 5. [文档] 更新 `README.md` 目录结构图
+
+#### Verification
+
+1. `npm install && npm run tauri dev` 从零构建成功
+2. `make test` / `make lint` 全部通过
+3. CI 全绿
+
+---
+
+## PR: phase-a-5-python-build
+
+- **Branch**: `feature/python-pyinstaller`
+- **Depends on**: phase-a-4（frontend-cleanup）
+- **合并后 main**: `server/build.spec` 可用；`pyinstaller server/build.spec` 生成独立 Python .exe
+
+### Implementation Plan
+
+#### Overview
+
+为 Python AI 引擎编写 PyInstaller spec，确保 ChromaDB/onnxruntime/torch 等原生依赖正确打包。
+
+#### Tasks
+
+- [ ] 1. [核心] `server/build.spec` — PyInstaller spec 文件：hidden imports（chromadb、onnxruntime、sentence_transformers、jieba、torch、tokenizers）
+- [ ] 2. [核心] 处理二进制依赖 — ChromaDB 的 onnxruntime DLL、sentence-transformers 的模型文件路径
+- [ ] 3. [核心] `server/app/main.py` 的 `main()` 函数 — 确保 PyInstaller 入口正确
+- [ ] 4. [文档] `server/README.md` 或 `docs/` — 打包说明（命令、常见问题）
+
+#### Verification
+
+1. `pyinstaller server/build.spec` 成功生成 `dist/nightdiary-backend.exe`
+2. 手动运行生成的 .exe：`nightdiary-backend.exe --port 8000 --data-dir ./testdata`
+3. `curl localhost:8000/health` → 200
+
+---
+
+## PR: phase-b-1-domain-knowledge
 
 - **Branch**: `feature/domain-knowledge`
-- **Depends on**: phase-1
-- **合并后 main**: `DomainKnowledgeStore` 可单元测试；Chroma 目录可配置
+- **Depends on**: Phase A 全部完成
+- **合并后 main**: `DomainKnowledgeStore` 作为 ChromaDB 唯一查询入口可单元测试
 
 ### Implementation Plan
 
 #### Overview
 
-领域知识库作为 **唯一** Chroma 查询入口；后续 RAG 与 Agent 均依赖本模块。
+迁移 V1 `domain_store.py` + `extractor.py` → `server/app/domain/knowledge/`。修复 V1 坏味 3（重复查询逻辑）：所有 Agent 通过此类查询领域知识。
 
 #### Tasks
 
 - [ ] 1. [核心] `server/app/domain/knowledge/__init__.py`
-- [ ] 2. [核心] `server/app/domain/knowledge/store.py` — `DomainKnowledgeStore`：迁移 V1 `domain_store.py`；`query()`、`add()`、`delete()`；读 `Settings.CHROMA_PERSIST_DIR`
-- [ ] 3. [核心] `server/app/domain/knowledge/extractor.py` — 迁移 V1 extractor；修复 `entity_type` 文档与实现不一致
-- [ ] 4. [核心] `server/app/domain/knowledge/types.py` — `KnowledgeHit`、`EntityRecord` 等 dataclass/TypedDict
+- [ ] 2. [核心] `server/app/domain/knowledge/types.py` — `KnowledgeHit`、`EntityRecord` dataclass/TypedDict
+- [ ] 3. [核心] `server/app/domain/knowledge/store.py` — `DomainKnowledgeStore`：迁移 V1 `domain_store.py`；`query()`/`add()`/`delete()`；读 `Settings.chroma_persist_dir`；单例 Chroma client
+- [ ] 4. [核心] `server/app/domain/knowledge/extractor.py` — 迁移 V1 extractor；修复 `entity_type` 文档与实现不一致
 - [ ] 5. [测试] `server/tests/unit/domain/knowledge/test_store.py` — mock Chroma client
 - [ ] 6. [测试] `server/tests/unit/domain/knowledge/test_extractor.py`
 
@@ -174,586 +245,456 @@ ORM、初始 schema、安全、Redis、统一错误与 LLM 工厂就位。
 
 ---
 
-## PR: phase-2-2-domain-rag
+## PR: phase-b-2-domain-rag
 
 - **Branch**: `feature/domain-rag`
-- **Depends on**: phase-2-1-domain-knowledge
-- **合并后 main**: 日记向量同步可调用 `HybridRetriever`（单元测试 mock）
+- **Depends on**: phase-b-1（domain-knowledge）
+- **合并后 main**: `HybridRetriever` 可调用（单元测试 mock embedding）
 
 ### Implementation Plan
 
 #### Overview
 
-将 V1 `vector_service.py`（771 行）拆为 4 模块 + collection 管理；消除全局副作用。
+将 V1 `vector_service.py`（771 行 God class）拆为 4 个独立模块 + collection 管理。消除全局副作用（V1 坏味 3）。
 
 #### Tasks
 
 - [ ] 1. [核心] `server/app/domain/rag/__init__.py`
 - [ ] 2. [核心] `server/app/domain/rag/chunker.py` — `ChunkSplitter`；合并 V1 `ParentChildChunker` 逻辑
-- [ ] 3. [核心] `server/app/domain/rag/bm25.py` — `BM25Index` **类实例**（非模块级 dict，防内存泄漏）
-- [ ] 4. [核心] `server/app/domain/rag/retriever.py` — `HybridRetriever`：向量 + BM25；依赖 `DomainKnowledgeStore` 做 collection 名约定
-- [ ] 5. [核心] `server/app/domain/rag/reranker.py` — `Reranker`；**实例级** 配置，禁止 `os.environ` 全局写入
-- [ ] 6. [核心] `server/app/domain/rag/collections.py` — `DiaryCollectionManager`：用户日记 collection 生命周期
-- [ ] 7. [测试] `server/tests/unit/domain/rag/test_chunker.py`
-- [ ] 8. [测试] `server/tests/unit/domain/rag/test_bm25.py`
-- [ ] 9. [测试] `server/tests/unit/domain/rag/test_retriever.py` — mock embedding
-- [ ] 10. [测试] `server/tests/unit/domain/rag/test_reranker.py`
+- [ ] 3. [核心] `server/app/domain/rag/bm25.py` — `BM25Index` **类实例**（非模块级 dict，防 V1 内存泄漏问题）
+- [ ] 4. [核心] `server/app/domain/rag/retriever.py` — `HybridRetriever`：向量 + BM25；依赖 `DomainKnowledgeStore`
+- [ ] 5. [核心] `server/app/domain/rag/reranker.py` — `Reranker`；**实例级**配置，禁止 `os.environ` 全局写入（V1 坏味 3）
+- [ ] 6. [核心] `server/app/domain/rag/collections.py` — `DiaryCollectionManager`：日记 chunk 的 collection 生命周期
+- [ ] 7. [测试] `tests/unit/domain/rag/` — test_chunker / test_bm25 / test_retriever / test_reranker
 
 #### Verification
 
 1. `pytest server/tests/unit/domain/rag -v` 通过
-2. 全库 grep 无 `vector_service` 引用（V2 新代码）
+2. 无模块级副作用（如 `HF_HUB_OFFLINE=1` 全局 env 写入）
 
 ---
 
-## PR: phase-2-3-domain-memory
+## PR: phase-b-3-domain-memory
 
 - **Branch**: `feature/domain-memory`
-- **Depends on**: phase-1
-- **合并后 main**: 三层记忆 API 可测；`WorkingMemory` 有集成测试桩
+- **Depends on**: phase-b-2（domain-rag）
+- **合并后 main**: 三层记忆系统可用（进程内存储，无 Redis）
 
 ### Implementation Plan
 
 #### Overview
 
-迁移 V1 记忆模块并修复已知问题；为 Phase 2.5 skills 与 2.6 agents 提供记忆读写。
+迁移 V1 记忆系统。Episodic Memory 从 Redis Sorted Set 改为进程内 `deque` + 可选 SQLite 持久化。Long-Term Memory 从 MySQL JSON 改为 SQLite JSON 列。Working Memory 实际集成到 Multi-Agent 流程。
 
 #### Tasks
 
 - [ ] 1. [核心] `server/app/domain/memory/__init__.py`
-- [ ] 2. [核心] `server/app/domain/memory/episodic.py` — `EpisodicMemory`；修复 V1 **query 参数未使用** 问题
-- [ ] 3. [核心] `server/app/domain/memory/long_term.py` — `LongTermMemory`；JSON 画像读写
-- [ ] 4. [核心] `server/app/domain/memory/working.py` — `WorkingMemory`；会话级上下文
-- [ ] 5. [核心] `server/app/domain/memory/types.py` — `MemoryContext`、`Episode` 等
-- [ ] 6. [测试] `server/tests/unit/domain/memory/test_episodic.py`
-- [ ] 7. [测试] `server/tests/unit/domain/memory/test_long_term.py`
-- [ ] 8. [测试] `server/tests/unit/domain/memory/test_working.py`
+- [ ] 2. [核心] `server/app/domain/memory/episodic.py` — `EpisodicMemory` 类：基于 `deque[EpisodicEntry]`，max 100 条，LRU 淘汰，重要性分数过滤（> 0.5），7 天半衰期时间衰减。可选 SQLite 持久化（`upsert` / `load`）
+- [ ] 3. [核心] `server/app/domain/memory/long_term.py` — `LongTermMemory` 类：SQLite JSON 存储 `UserProfile`，情绪/话题跨天检测（连续 3+ 天 → 提升到长期档案）
+- [ ] 4. [核心] `server/app/domain/memory/working.py` — `WorkingMemory` 类：包装 MultiAgentState，4000 token 限制（**必须集成到 ai_service 中**，V1 中是死代码）
+- [ ] 5. [核心] `server/app/domain/memory/types.py` — `EpisodicEntry`、`UserProfile`、`WorkingContext` dataclass/TypedDict
+- [ ] 6. [测试] `tests/unit/domain/memory/` — test_episodic / test_long_term / test_working
 
 #### Verification
 
 1. `pytest server/tests/unit/domain/memory -v` 通过
-2. `EpisodicMemory.search(query=...)` 断言结果受 query 影响
+2. Episodic 写入 + 读取 + 淘汰流程正确；不依赖 Redis
 
 ---
 
-## PR: phase-2-4-domain-feedback
+## PR: phase-b-4-domain-feedback
 
 - **Branch**: `feature/domain-feedback`
-- **Depends on**: phase-1
-- **合并后 main**: Thompson + PromptTuner 无重复采样逻辑
+- **Depends on**: phase-b-3（domain-memory）
+- **合并后 main**: Thompson Sampling + PromptTuner 可单元测试
 
 ### Implementation Plan
 
 #### Overview
 
-迁移 Thompson Sampling；PromptTuner 委托 Thompson，删除 V1 重复实现。
+迁移 V1 feedback 模块。消除 V1 坏味 3：PromptTuner 调用 ThompsonSampling 而非重新实现 Beta 采样。
 
 #### Tasks
 
 - [ ] 1. [核心] `server/app/domain/feedback/__init__.py`
-- [ ] 2. [核心] `server/app/domain/feedback/thompson.py` — 迁移 V1 `thompson_sampling.py`：`ThompsonSampling.sample_style()`
-- [ ] 3. [核心] `server/app/domain/feedback/prompt_tuner.py` — `PromptTuner`；`_sample_style_from_preferences()` **调用** `ThompsonSampling`，不重复 Beta 采样
-- [ ] 4. [核心] `server/app/domain/feedback/prompt_tuner.py` — 实现 `_infer_response_length()` 真实逻辑（V1 stub 始终 MEDIUM）
-- [ ] 5. [测试] `server/tests/unit/domain/feedback/test_thompson.py`
-- [ ] 6. [测试] `server/tests/unit/domain/feedback/test_prompt_tuner.py`
+- [ ] 2. [核心] `server/app/domain/feedback/thompson_sampling.py` — 迁移 V1 `thompson_sampling.py`；四种风格（共情/务实/哲思/幽默）
+- [ ] 3. [核心] `server/app/domain/feedback/prompt_tuner.py` — 迁移 V1 `prompt_tuner.py`；删除重复的 `_sample_style_from_preferences()`（调用 `ThompsonSampling.sample_style()`）；`_infer_response_length()` stub 完成实现
+- [ ] 4. [测试] `tests/unit/domain/feedback/` — test_thompson_sampling / test_prompt_tuner
 
 #### Verification
 
 1. `pytest server/tests/unit/domain/feedback -v` 通过
-2. PromptTuner 单测 mock Thompson，断言只调用一次采样
+2. `PromptTuner._sample_style_from_preferences()` 调用 `ThompsonSampling` 而非自行实现
 
 ---
 
-## PR: phase-2-5-domain-skills
+## PR: phase-b-5-domain-skills
 
 - **Branch**: `feature/domain-skills`
-- **Depends on**: phase-2-3-domain-memory, phase-2-4-domain-feedback
-- **合并后 main**: `SkillRegistry.select_skills()` 有集成测试；10 个 Skill 注册完成
+- **Depends on**: phase-b-4（domain-feedback）
+- **合并后 main**: Skill 系统就位（**在 Supervisor 中集成**，不再是死代码）
 
 ### Implementation Plan
 
 #### Overview
 
-迁移 V1 Skill 系统并通过 DI 注入依赖；为 Supervisor（2.6）提供技能驱动路由。
+迁移 V1 10 个 Skill + SkillRegistry。**关键**：在 SupervisorAgent 中实际调用 `SkillRegistry.select_skills()`（V1 坏味 2——整个模块是死代码）。
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/skills/base.py` — `BaseSkill`、`SkillResult`；迁移 V1 `base.py`
-- [ ] 2. [核心] `server/app/domain/skills/registry.py` — `SkillRegistry.register()`、`select_skills()`、`get_skill()`
-- [ ] 3. [核心] `server/app/domain/skills/implementations/crisis_detector.py` — 迁移；情感估计不重复 agents 层
-- [ ] 4. [核心] `server/app/domain/skills/implementations/sentiment_skill.py`
-- [ ] 5. [核心] `server/app/domain/skills/implementations/weather_skill.py`
-- [ ] 6. [核心] `server/app/domain/skills/implementations/search_diary_skill.py`
-- [ ] 7. [核心] `server/app/domain/skills/implementations/address_skill.py`
-- [ ] 8. [核心] `server/app/domain/skills/implementations/memory_reader.py`
-- [ ] 9. [核心] `server/app/domain/skills/implementations/memory_writer.py`
-- [ ] 10. [核心] `server/app/domain/skills/implementations/habit_tracker.py`
-- [ ] 11. [核心] `server/app/domain/skills/implementations/pattern_detector.py`
-- [ ] 12. [核心] `server/app/domain/skills/implementations/summary_generator.py`
-- [ ] 13. [核心] `server/app/domain/skills/bootstrap.py` — `register_default_skills(registry, di)` 集中注册
-- [ ] 14. [核心] 各 Skill `__init__` 接收 `llm`、`db`/`memory` 等，禁止自行创建 LLM
-- [ ] 15. [测试] `server/tests/unit/domain/skills/test_registry.py` — register + select 优先级
-- [ ] 16. [测试] `server/tests/unit/domain/skills/test_crisis_detector.py`
-- [ ] 17. [测试] `server/tests/integration/domain/skills/test_skill_selection.py`
+- [ ] 1. [核心] `server/app/domain/skills/__init__.py`
+- [ ] 2. [核心] `server/app/domain/skills/base.py` — 迁移 `BaseSkill` 抽象类 + `SkillMetadata`
+- [ ] 3. [核心] `server/app/domain/skills/registry.py` — 迁移 `SkillRegistry` 贪心选择算法（激活阈值 0.3）
+- [ ] 4. [核心] `server/app/domain/skills/` 下 10 个具体 Skill 实现 — pattern_detector / habit_tracker / crisis_detector / memory_reader / memory_writer / summary_generator / search_diary_skill / sentiment_skill / weather_skill / address_skill
+- [ ] 5. [核心] **集成**：`SupervisorAgent.classify_intent()` 中调用 `SkillRegistry.select_skills()` 替代硬编码 `DEFAULT_INTENT_ROUTING`
+- [ ] 6. [测试] `tests/unit/domain/skills/` — test_registry / test_pattern_detector / test_crisis_detector
 
 #### Verification
 
-1. `pytest server/tests -k skills -v` 通过
-2. `SkillRegistry` 默认注册 10 个实现（与 V1 对齐）
+1. `pytest server/tests/unit/domain/skills -v` 通过
+2. `SkillRegistry.select_skills()` 在生产代码中有调用点（不再是死代码）
 
 ---
 
-## PR: phase-2-6-domain-agents
+## PR: phase-b-6-domain-agents
 
 - **Branch**: `feature/domain-agents`
-- **Depends on**: phase-2-1 ~ 2-5 全部合并
-- **合并后 main**: Supervisor 输出 `execution_tier` + `intent`；graph 单测通过
+- **Depends on**: phase-b-5（domain-skills）
+- **合并后 main**: Multi-Agent 流程可单元测试；LLM mock 注入
 
 ### Implementation Plan
 
 #### Overview
 
-Multi-Agent 协调层；删除硬编码 `DEFAULT_INTENT_ROUTING`；共享知识/情感/Token 工具；危机短路在图外定义（与 Phase 3 `ai_router` 衔接）。
+迁移 V1 Multi-Agent 协调层。所有 Agent 通过 DI 接收 LLM/DB session（V1 坏味 3）。统一使用 `DomainKnowledgeStore`（V1 坏味 3 修复）。
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/agents/types.py` — `ExecutionTier` 枚举：`light`/`medium`/`heavy`；`AgentIntent` 字符串常量
-- [ ] 2. [核心] `server/app/domain/agents/state.py` — `MultiAgentState`；修复 V1 reducer 不一致
-- [ ] 3. [核心] `server/app/domain/agents/intent.py` — `IntentClassifier`；迁移 V1 `intent_classifier.py`
-- [ ] 4. [核心] `server/app/domain/agents/supervisor.py` — `SupervisorAgent`：DI 注入 `llm`、`SkillRegistry`；`classify()` 调 `select_skills()`；输出 `intent`、`execution_tier`、选中 skill 列表
-- [ ] 5. [核心] `server/app/domain/agents/graph.py` — `MultiAgentGraphBuilder`；**删除** `DEFAULT_INTENT_ROUTING`；路由由 skill/supervisor 输出决定 Worker
-- [ ] 6. [核心] `server/app/domain/agents/shared/emotion_estimator.py` — 唯一情感估计入口（供 empathy + crisis）
-- [ ] 7. [核心] `server/app/domain/agents/shared/token_estimator.py`
-- [ ] 8. [核心] `server/app/domain/agents/workers/base.py` — `BaseWorker.run(state) -> state`
-- [ ] 9. [核心] `server/app/domain/agents/workers/empathy.py` — DI LLM + `DomainKnowledgeStore` + `EmotionEstimator`
-- [ ] 10. [核心] `server/app/domain/agents/workers/retrieval.py` — DI LLM + knowledge + `TokenEstimator` + `HybridRetriever`
-- [ ] 11. [核心] `server/app/domain/agents/workers/insight.py` — DI LLM + knowledge
-- [ ] 12. [核心] `server/app/domain/agents/crisis.py` — `CrisisHandler`：图入口前短路文档 + 函数（返回安全模板，`execution_tier=light`）
-- [ ] 13. [核心] 图内仅 `medium`/`heavy` 走 LangGraph 全路径；`light` 不进入图（由 executor 层消费，见 Phase 3）
-- [ ] 14. [测试] `server/tests/unit/domain/agents/test_intent.py`
-- [ ] 15. [测试] `server/tests/unit/domain/agents/test_supervisor.py` — mock skills 降级
-- [ ] 16. [测试] `server/tests/unit/domain/agents/test_graph_routing.py`
-- [ ] 17. [测试] `server/tests/unit/domain/agents/test_crisis_short_circuit.py`
+- [ ] 1. [核心] `server/app/domain/agents/__init__.py`
+- [ ] 2. [核心] `server/app/domain/agents/state.py` — `MultiAgentState` TypedDict + reducer
+- [ ] 3. [核心] `server/app/domain/agents/intent_classifier.py` — 迁移 V1（两级分类，最干净的模块，基本不变）
+- [ ] 4. [核心] `server/app/domain/agents/supervisor.py` — `SupervisorAgent`：classify → allocate budget → route → synthesize。**必须调用 SkillRegistry**
+- [ ] 5. [核心] `server/app/domain/agents/empathy_agent.py` — 迁移 V1；通过 DI 接收 LLM；共享 `DomainKnowledgeStore`/`EmotionEstimator`；删除自行创建 `SessionLocal()`/`ChatOpenAI()`
+- [ ] 6. [核心] `server/app/domain/agents/retrieval_agent.py` — 迁移 V1；多跳检索（最多 3 次）；时间范围推断；共享 `DomainKnowledgeStore`
+- [ ] 7. [核心] `server/app/domain/agents/insight_agent.py` — 迁移 V1；支持常规分析 + 周报/月报；DI 改造
+- [ ] 8. [核心] `server/app/domain/agents/graph.py` — `MultiAgentGraphBuilder`：条件路由、parallel fan-out、安全 Worker 包装
+- [ ] 9. [核心] `server/app/domain/agents/context_compressor.py` — 迁移 V1，**实际集成**到 multi_agent 流程
+- [ ] 10. [核心] `server/app/shared/emotion_estimator.py` — `EmotionEstimator` 类（消除 V1 坏味 3：empathy 和 crisis_detector 的情感估计重复）
+- [ ] 11. [核心] `server/app/shared/token_utils.py` — `estimate_tokens()`（消除 V1 坏味 3：retrieval 和 context_compressor 的重复实现）
+- [ ] 12. [测试] `tests/unit/domain/agents/` — test_intent_classifier / test_supervisor / test_empathy_agent / test_graph
 
 #### Verification
 
 1. `pytest server/tests/unit/domain/agents -v` 通过
-2. `graph.py` 中无 `DEFAULT_INTENT_ROUTING` 字符串
-3. Worker 单测断言不实例化 `ChatOpenAI()`（mock DI）
+2. Agent 不自行创建 `SessionLocal()` 或 `ChatOpenAI()`——全部通过 DI 接收
+3. 3 个 Worker Agent 共享 `DomainKnowledgeStore`/`EmotionEstimator`/`TokenEstimator`
 
 ---
 
-## PR: phase-3-1-services-layer
+## PR: phase-c-1-services-layer
 
 - **Branch**: `feature/services-layer`
-- **Depends on**: phase-2-6
-- **合并后 main**: 服务层单测通过；`ExecutionPlanner` 降级链可测
+- **Depends on**: Phase B 全部完成
+- **合并后 main**: 服务层就位，AI 分析端到端可调用
 
 ### Implementation Plan
 
 #### Overview
 
-业务编排与 AI 执行拆分；替代 V1 `ai_service.py` 三模式为 **tier 驱动** 执行器。
+实现服务层：diary CRUD、analysis 编排、AI 执行路由（三级：light/medium/heavy）。拆分 V1 的 `ai_service.py`（987 行 God class）。
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/services/auth_service.py` — `register`、`login`、`get_current_user`；抛 `AuthError`，无 `HTTPException`
-- [ ] 2. [核心] `server/app/services/diary_service.py` — CRUD；`sync_vector()` 调 `domain/rag`
-- [ ] 3. [核心] `server/app/services/analysis_service.py` — 防重锁；写 `execution_tier`；兼容写入 `agent_mode`；`_get_recent_entries()` 提取 7 天查询
-- [ ] 4. [核心] `server/app/services/admin_service.py` — 用户/日记/分析/知识库管理（从 V1 `routers/admin.py` 抽出）
-- [ ] 5. [核心] `server/app/services/token_stats_service.py` — Token 聚合（从 V1 `routers/token_stats.py` 抽出）
-- [ ] 6. [核心] `server/app/services/feedback_service.py` — 显式/隐式反馈持久化
-- [ ] 7. [核心] `server/app/services/ai_router.py` — `ExecutionPlanner`：`classify → plan(tier) → execute`；危机先 `CrisisHandler`
-- [ ] 8. [核心] `server/app/services/ai_prompts.py` — 全部 prompt 模板
-- [ ] 9. [核心] `server/app/services/ai_executors/light.py` — 单次 LLM（原 chain 路径）
-- [ ] 10. [核心] `server/app/services/ai_executors/medium.py` — 单 Worker + synthesize
-- [ ] 11. [核心] `server/app/services/ai_executors/heavy.py` — LangGraph 全图
-- [ ] 12. [核心] `server/app/services/ai_tools.py` — 工具工厂；**不保留** 独立 `agent.py` executor
-- [ ] 13. [核心] `ai_router.py` — 降级链：`heavy → medium → light → FALLBACK` 常量响应
-- [ ] 14. [核心] `server/app/di.py` — 注册 services 与 executors 工厂
-- [ ] 15. [测试] `server/tests/unit/services/test_auth_service.py`
-- [ ] 16. [测试] `server/tests/unit/services/test_analysis_service.py`
-- [ ] 17. [测试] `server/tests/unit/services/test_ai_router.py` — mock LLM，断言 tier 与降级
+- [ ] 1. [核心] `server/app/services/__init__.py`
+- [ ] 2. [核心] `server/app/services/diary_service.py` — 日记 CRUD；创建/更新时同步向量库（调用 `DiaryCollectionManager`）；不再有 `user_id` 参数
+- [ ] 3. [核心] `server/app/services/analysis_service.py` — 编排：条目所有权检查 → 7 天历史查询 → AI router 调用 → 结果存储。消除重复 7 天逻辑（V1 坏味 3）
+- [ ] 4. [核心] `server/app/services/ai/` — 从 V1 拆分为：
+  - `router.py` — `ExecutionPlanner`：light/medium/heavy 路由决策（~80 行）
+  - `prompts.py` — System Prompt 模板（~80 行）
+  - `tool_factory.py` — 工具工厂函数（~200 行）
+  - `chain_executor.py` — chain 模式（~40 行）
+  - `agent_executor.py` — ReAct Agent 模式（~100 行）
+  - `multi_agent_executor.py` — Multi-Agent 模式，调用 WorkingMemory（~150 行）
+  - `utils.py` — 缓存判断、结果过滤、Token 提取（~60 行）
+- [ ] 5. [核心] `server/app/services/feedback_service.py` — 反馈写入 + 异步更新 Thompson Sampling
+- [ ] 6. [核心] `server/app/services/tag_service.py` — 标签 CRUD
+- [ ] 7. [核心] `server/app/services/model_service.py` — LLM 提供商 CRUD + Fernet 加密 API Key
+- [ ] 8. [测试] `tests/unit/services/` — test_diary_service / test_analysis_service / test_ai_router
 
 #### Verification
 
 1. `pytest server/tests/unit/services -v` 通过
-2. `analysis_service` 单测：`pure_record` 路径写入 `execution_tier=light`
+2. `ai_service` 不再是一个 1000 行的文件——拆分为 `ai/` 目录下的 7 个模块
 
 ---
 
-## PR: phase-3-2-api-routes
+## PR: phase-c-2-api-routes
 
 - **Branch**: `feature/api-routes`
-- **Depends on**: phase-3-1
-- **合并后 main**: `register → login → diary → POST /analysis` 集成测试绿
+- **Depends on**: phase-c-1（services-layer）
+- **合并后 main**: API 路由全部就位，`/docs` 可查看完整 Swagger
 
 ### Implementation Plan
 
 #### Overview
 
-薄路由层 + 统一错误转换；`main.py` lifespan 初始化 Redis。
+实现所有 API 路由。路由层仅负责认证（无，单用户）→ 参数提取 → 调用 service → 格式化响应。使用 `AppError` 子类替代字符串匹配（V1 坏味 4）。
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/api/deps.py` — `get_db`、`get_current_user`、`require_admin`
-- [ ] 2. [核心] `server/app/api/errors.py` — `app_error_handler(AppError)`
-- [ ] 3. [核心] `server/app/api/v1/auth.py` — `/register`、`/login`、`/me`
-- [ ] 4. [核心] `server/app/api/v1/diary.py` — 日记 CRUD + 列表分页
-- [ ] 5. [核心] `server/app/api/v1/analysis.py` — `POST /diary/{id}/analysis`
-- [ ] 6. [核心] `server/app/api/v1/feedback.py`
-- [ ] 7. [核心] `server/app/api/v1/tags.py`
-- [ ] 8. [核心] `server/app/api/v1/models.py` — 用户 LLM 提供商配置
-- [ ] 9. [核心] `server/app/api/v1/weather.py`
-- [ ] 10. [核心] `server/app/api/v1/admin.py` — 仅调 `admin_service`
-- [ ] 11. [核心] `server/app/api/v1/token_stats.py`
-- [ ] 12. [核心] `server/app/api/v1/public_column.py`
-- [ ] 13. [核心] `server/app/api/v1/router.py` — 聚合挂载 `/api/v1`
-- [ ] 14. [核心] `server/app/main.py` — lifespan：Redis ping；`embedding_warmup()` 空实现钩子（Phase 5 实现）
-- [ ] 15. [测试] `server/tests/integration/api/test_auth_flow.py`
-- [ ] 16. [测试] `server/tests/integration/api/test_diary_analysis_flow.py`
+- [ ] 1. [核心] `server/app/api/v1/__init__.py` + `router.py` — 注册所有子路由
+- [ ] 2. [核心] `server/app/api/v1/diary.py` — 5 个端点（list/create/get/update/delete）
+- [ ] 3. [核心] `server/app/api/v1/analysis.py` — 2 个端点（trigger/get）
+- [ ] 4. [核心] `server/app/api/v1/feedback.py` — 1 个端点（submit 👍/👎）
+- [ ] 5. [核心] `server/app/api/v1/tags.py` — 3 个端点（list/create/delete）
+- [ ] 6. [核心] `server/app/api/v1/models.py` — 4 个端点（list/create/update/delete）— LLM 配置管理
+- [ ] 7. [核心] `server/app/api/v1/stats.py` — 1 个端点（日记数、Token 用量等统计）
+- [ ] 8. [核心] `server/app/shared/errors.py` — `AppError` 基类 + `DiaryError`/`AnalysisError`/`ValidationError` 子类 + `http_status` 映射
+- [ ] 9. [核心] `server/app/api/v1/error_handlers.py` — FastAPI exception handlers：`AppError` → HTTP 状态码映射
+- [ ] 10. [测试] `tests/unit/api/` — test_diary_routes / test_analysis_routes
 
 #### Verification
 
-1. `pytest server/tests/integration -v` 通过
-2. 本地手动：`pure_record` 日记分析后 DB 中 `execution_tier=light`
+1. `pytest server/tests/unit/api -v` 通过
+2. `make dev-api` 后访问 `http://127.0.0.1:8000/docs` 查看完整 Swagger
+3. 所有路由层代码不包含业务逻辑——仅参数提取 + service 调用 + 响应格式化
 
 ---
 
-## PR: phase-4-1-frontend-foundation
+## PR: phase-c-3-llm-management
 
-- **Branch**: `feature/frontend-foundation`
-- **Depends on**: phase-3-2（API 可用）
-- **合并后 main**: `npm run build` + vitest 基础通过
+- **Branch**: `feature/llm-management`
+- **Depends on**: phase-c-2（api-routes）
+- **合并后 main**: 用户可通过 Settings 页面配置 LLM 提供商
 
 ### Implementation Plan
 
 #### Overview
 
-共享类型、HTTP 客户端、通用 composables 与布局；消除 V1 重复工具与 `any`。
+LLM 配置管理：ModelProvider CRUD + Fernet 加密 + LLMFactory。统一所有 Agent 使用用户配置的 LLM（V1 坏味 3）。
 
 #### Tasks
 
-- [ ] 1. [核心] `web/src/shared/types/index.ts` — `User`、`DiaryEntry`、`Analysis`、`PaginatedResponse`、`ExecutionTier` 等（无 `any`）
-- [ ] 2. [核心] `web/src/shared/api/http.ts` — axios 实例、JWT 拦截器、401 跳转
-- [ ] 3. [核心] `web/src/shared/api/auth.ts`、`diary.ts`、`analysis.ts`、`feedback.ts`、`tags.ts`、`models.ts`、`admin.ts`、`tokenStats.ts`、`column.ts` — 完整返回类型
-- [ ] 4. [核心] `web/src/shared/utils/date.ts` — `formatDate`、`formatTime`、`formatDateTime`
-- [ ] 5. [核心] `web/src/shared/utils/format.ts` — 通用格式化
-- [ ] 6. [核心] `web/src/shared/composables/useErrorHandler.ts` — `getErrorMessage(err)`
-- [ ] 7. [核心] `web/src/shared/composables/usePagination.ts` — `page`、`pageSize`、`total`、`setPage`
-- [ ] 8. [核心] `web/src/shared/composables/useTheme.ts` — 修复 V1 多 `onUnmounted` 竞态
-- [ ] 9. [核心] `web/src/shared/components/AppLayout.vue` — 顶栏、导航、`router-view`
-- [ ] 10. [核心] `web/src/shared/components/WeatherWidget.vue` — **props**: `weatherInfo`（不 import auth store）
-- [ ] 11. [核心] `web/vite.config.ts` — `server.proxy` 可选 `/api` → `localhost:8000`
-- [ ] 12. [核心] `web/.env.example` — `VITE_API_BASE_URL` + 云构建注释
-- [ ] 13. [测试] `web/src/shared/composables/__tests__/useErrorHandler.spec.ts`
-- [ ] 14. [测试] `web/src/shared/composables/__tests__/usePagination.spec.ts`
-- [ ] 15. [测试] `web/src/shared/composables/__tests__/useTheme.spec.ts`
+- [ ] 1. [核心] `server/app/shared/llm.py` — `LLMFactory.create(provider, settings)`：支持用户配置的 `ModelProvider`；兼容 OpenAI API 格式
+- [ ] 2. [核心] `server/app/infrastructure/security.py` — Fernet 加解密：`encrypt_api_key()`/`decrypt_api_key()`；密钥从 `Settings.model_key_secret` 或 `secrets.key` 文件
+- [ ] 3. [核心] 更新 `model_service.py` — API Key 存储前加密，读取时解密，API 响应绝不返回原始密钥
+- [ ] 4. [配置] 前端 Settings 场景：LLM 配置表单（base_url / api_key / model_name / 设为默认）
+- [ ] 5. [测试] `tests/unit/test_llm.py` — LLMFactory + 加解密
 
 #### Verification
 
-1. `cd web && npm run build && npm run test`
-2. `vue-tsc --noEmit` 零错误
+1. `pytest server/tests/unit/test_llm -v` 通过
+2. 数据库中的 `api_key_encrypted` 字段为密文
+3. API 响应不包含原始 API Key
 
 ---
 
-## PR: phase-4-2-frontend-auth
+## PR: phase-d-1-design-system
 
-- **Branch**: `feature/frontend-auth`
-- **Depends on**: phase-4-1
-- **合并后 main**: 登录/注册/个人资料流可用
+- **Branch**: `feature/design-system`
+- **Depends on**: Phase C 全部完成
+- **合并后 main**: 游戏化 UI 设计系统就位，Storybook 或临时 demo 页面可预览所有组件
 
 ### Implementation Plan
 
 #### Overview
 
-认证 Pinia store 与页面；天气数据与 auth 解耦。
+构建游戏化 UI 组件库：玻璃态面板、动画按钮、粒子背景、页面过渡动画。
 
 #### Tasks
 
-- [ ] 1. [核心] `web/src/shared/stores/auth.ts` — `login`、`logout`、`register`、`fetchMe`；token 持久化
-- [ ] 2. [核心] `web/src/shared/stores/weather.ts` — `fetchWeather()`（或 composable `useWeather`）
-- [ ] 3. [核心] `web/src/features/auth/composables/useAuth.ts` — 包装 store 供页面使用
-- [ ] 4. [核心] `web/src/pages/LoginPage.vue`
-- [ ] 5. [核心] `web/src/pages/RegisterPage.vue`
-- [ ] 6. [核心] `web/src/pages/ProfilePage.vue`
-- [ ] 7. [核心] `web/src/router/index.ts` — 路由表 + `requiresAuth` / `requiresGuest`
-- [ ] 8. [核心] `web/src/router/guards.ts` — `setupAuthGuards(router)`
-- [ ] 9. [测试] `web/src/router/__tests__/guards.spec.ts`
-- [ ] 10. [测试] `web/src/features/auth/composables/__tests__/useAuth.spec.ts`
+- [ ] 1. [核心] `src/shared/components/GlassPanel.vue` — 毛玻璃容器：`backdrop-blur-xl bg-white/10 dark:bg-black/20 border border-white/20 rounded-2xl shadow-2xl`
+- [ ] 2. [核心] `src/shared/components/GameButton.vue` — 动画按钮：hover 微放大 + 阴影提升；click 微缩小 + 涟漪；variants（primary/secondary/ghost）
+- [ ] 3. [核心] `src/shared/components/ParticleBackground.vue` — Canvas 粒子系统：日间暖色浮尘；夜间星空视差；主题切换平滑过渡
+- [ ] 4. [核心] `src/shared/components/PageTransition.vue` — Vue `<Transition>` 包装：当前页 fade-out + scale-down；下一页 fade-in + scale-up
+- [ ] 5. [核心] `src/shared/components/AITypingIndicator.vue` — 三个脉动光点 + "正在思考..." 标签
+- [ ] 6. [核心] `src/shared/components/MoodSelector.vue` — 情绪 emoji 网格（非下拉框）：hover 光晕 + 选中弹跳动画
+- [ ] 7. [核心] `src/shared/components/CustomTitlebar.vue` — 自定义标题栏：可拖拽区域 + 窗口控制按钮（最小化/最大化/关闭）
+- [ ] 8. [样式] `src/styles/base.css` — Tailwind base + CSS 变量（`--color-primary`、`--glass-bg` 等）
+- [ ] 9. [样式] `src/styles/themes/day.css` + `night.css` — 日间暖色系 / 夜间深色星空系
+- [ ] 10. [样式] `src/styles/animations/` — `transitions.css` / `particles.css` / `glow.css`
+- [ ] 11. [配置] 安装 GSAP（`npm install gsap`）用于复杂编排动画
 
 #### Verification
 
-1. 手动：注册 → 登录 → `/profile`；刷新保持登录
-2. `WeatherWidget` 仅通过 prop/store 注入，不读 `auth.weather`
+1. `npm run tauri dev` → 设计系统 demo 页面所有组件正确渲染
+2. 日/夜主题切换平滑，粒子背景跟随变化
+3. `vue-tsc --noEmit` 零错误
 
 ---
 
-## PR: phase-4-3-frontend-diary
+## PR: phase-d-2-home-and-diary
 
-- **Branch**: `feature/frontend-diary`
-- **Depends on**: phase-4-2
-- **合并后 main**: 日记 + AI 分析 + 反馈 UI 完整
+- **Branch**: `feature/home-and-diary`
+- **Depends on**: phase-d-1（design-system）
+- **合并后 main**: 首页场景 + 日记写作场景可用
 
 ### Implementation Plan
 
 #### Overview
 
-日记核心业务与 AI 面板；页面逻辑下沉 composables（非 God Page）。
+实现核心用户流：首页 → 写日记 → AI 分析触发。
 
 #### Tasks
 
-- [ ] 1. [核心] `web/src/features/diary/composables/useDiaryList.ts` — 列表、分页、刷新
-- [ ] 2. [核心] `web/src/features/diary/composables/useDiaryEditor.ts` — 创建/编辑/自动保存
-- [ ] 3. [核心] `web/src/features/diary/components/DiaryList.vue`
-- [ ] 4. [核心] `web/src/features/diary/components/DiaryEditor.vue`
-- [ ] 5. [核心] `web/src/pages/DiaryPage.vue` — 组合 composables + 子组件
-- [ ] 6. [核心] `web/src/features/analysis/composables/useAnalysis.ts` — 触发分析、轮询/状态
-- [ ] 7. [核心] `web/src/features/analysis/composables/useImplicitFeedback.ts` — 迁移 V1 三信号逻辑
-- [ ] 8. [核心] `web/src/features/analysis/components/AIAnalysisPanel.vue` — 展示 `execution_tier` / `agent_mode`
-- [ ] 9. [核心] `web/src/features/analysis/components/FeedbackButtons.vue`
-- [ ] 10. [测试] `web/src/features/diary/components/__tests__/DiaryList.spec.ts`
-- [ ] 11. [测试] `web/src/features/diary/components/__tests__/DiaryEditor.spec.ts`
-- [ ] 12. [测试] `web/src/features/analysis/components/__tests__/AIAnalysisPanel.spec.ts`
+- [ ] 1. [核心] `src/pages/HomeScene.vue` — "桌面"隐喻首页：日历贴纸视图、脉冲光晕"写日记"按钮、连续天数卡片、快速统计
+- [ ] 2. [核心] `src/pages/DiaryScene.vue` — 全屏沉浸式书写区：羊皮纸/信纸风格、日期显示、情绪选择器、字数统计、可选的天气显示
+- [ ] 3. [核心] `src/features/diary/DiaryEditor.vue` — 日记编辑器组件：watch content debounce 1s（隐式反馈信号）、标签选择
+- [ ] 4. [核心] `src/features/diary/DiaryList.vue` — 日记列表组件：分页、`refresh()` expose
+- [ ] 5. [核心] `src/stores/diary.ts` — Pinia store：当前日记状态、CRUD 操作
+- [ ] 6. [核心] `src/shared/api/diary.ts` — API 模块：list/create/get/update/delete
+- [ ] 7. [路由] 注册 `/` → HomeScene, `/write` → DiaryScene, `/write/:id` → DiaryScene
 
 #### Verification
 
-1. 手动：写日记 → 触发分析 → 点赞/点踩反馈
-2. vitest 上述 3 组件测试通过
+1. 首页正确显示日历贴纸（有日记的日期高亮）
+2. 点击"写日记"进入写作场景，可以创建/编辑/删除日记
+3. 日记保存后列表刷新
 
 ---
 
-## PR: phase-4-4-frontend-dashboard
+## PR: phase-d-3-analysis-and-review
 
-- **Branch**: `feature/frontend-dashboard`
-- **Depends on**: phase-4-1
-- **合并后 main**: Token 仪表盘可展示 tier 统计
+- **Branch**: `feature/analysis-and-review`
+- **Depends on**: phase-d-2（home-and-diary）
+- **合并后 main**: AI 分析场景 + 历史回顾场景可用
 
 ### Implementation Plan
 
 #### Overview
 
-Token 用量可视化；复用 `AppLayout` 与 `usePagination`。
+AI 分析结果展示 + 反馈互动 + 历史回顾（日历/时间线）。
 
 #### Tasks
 
-- [ ] 1. [核心] `web/src/features/dashboard/composables/useTokenStats.ts` — 调 `tokenStatsApi`
-- [ ] 2. [核心] `web/src/features/dashboard/components/TokenUsageChart.vue` — Chart.js 配置抽离
-- [ ] 3. [核心] `web/src/features/dashboard/components/TierBreakdownTable.vue` — 按 `execution_tier` 聚合展示
-- [ ] 4. [核心] `web/src/pages/TokenDashboardPage.vue`
-- [ ] 5. [核心] `web/src/router/index.ts` — 增加 `/dashboard` 路由（admin 或登录用户）
-- [ ] 6. [测试] `web/src/features/dashboard/composables/__tests__/useTokenStats.spec.ts`
+- [ ] 1. [核心] `src/pages/AnalysisScene.vue` — AI 回应以"来信"样式淡入；打字指示器；点赞/踩按钮（满足感动画）
+- [ ] 2. [核心] `src/features/analysis/AIAnalysisPanel.vue` — AI 分析面板组件：展示 response、token 消耗、执行 tier
+- [ ] 3. [核心] `src/features/analysis/FeedbackButtons.vue` — 赞/踩按钮：`+1`/`-1` 状态机；点击动画
+- [ ] 4. [核心] `src/shared/api/analysis.ts` — API 模块：trigger/get
+- [ ] 5. [核心] `src/shared/api/feedback.ts` — API 模块：submit
+- [ ] 6. [核心] `src/pages/ReviewScene.vue` — 日历/时间线视图："书架"隐喻（每月一本书）；点击日期展开条目详情 + AI 分析
+- [ ] 7. [核心] `src/features/review/CalendarView.vue` — 日历组件，有日记的日期用贴纸标记
+- [ ] 8. [核心] `src/features/review/TimelineView.vue` — 时间线组件，日记条目按日期排列
+- [ ] 9. [核心] `src/stores/analysis.ts` — Pinia store：当前分析状态
+- [ ] 10. [路由] 注册 `/analysis/:diaryId` → AnalysisScene, `/review` → ReviewScene, `/review/:diaryId` → ReviewScene + 详情
 
 #### Verification
 
-1. 手动：登录后打开仪表盘，有数据时图表渲染
-2. `npm run build` 通过
+1. 写日记后点击"AI 分析"→ analysis scene 正确展示结果
+2. 点赞/踩正确发送反馈
+3. 回顾页面日历/时间线正确展示历史日记
 
 ---
 
-## PR: phase-4-5-frontend-admin
+## PR: phase-d-4-settings-and-onboarding
 
-- **Branch**: `feature/frontend-admin`
-- **Depends on**: phase-4-1, phase-4-2（admin 守卫）
-- **合并后 main**: Admin + tags/models/column 页面齐全；vitest 累计 50+
+- **Branch**: `feature/settings-and-onboarding`
+- **Depends on**: phase-d-3（analysis-and-review）
+- **合并后 main**: 设置场景 + 首次使用引导可用
 
 ### Implementation Plan
 
 #### Overview
 
-管理端与附属功能页；`adminApi` 全类型；拆分 V1 AdminPage 内联组件。
+设置场景（LLM 配置、主题、备份）、首次使用叙事式引导。
 
 #### Tasks
 
-- [ ] 1. [核心] `web/src/shared/components/DataTablePagination.vue` — 从 V1 Admin 内联分页抽出
-- [ ] 2. [核心] `web/src/features/admin/components/UserTable.vue`
-- [ ] 3. [核心] `web/src/features/admin/components/DiaryModerationPanel.vue`
-- [ ] 4. [核心] `web/src/pages/AdminPage.vue` — 组合上述组件，无 `any`
-- [ ] 5. [核心] `web/src/features/tags/pages/TagsPage.vue`
-- [ ] 6. [核心] `web/src/features/models/pages/ModelsPage.vue` — LLM 提供商 UI
-- [ ] 7. [核心] `web/src/features/column/components/ColumnDiaryCard.vue`
-- [ ] 8. [核心] `web/src/features/column/components/ColumnDiaryDetail.vue`
-- [ ] 9. [核心] `web/src/features/column/pages/ColumnPage.vue`
-- [ ] 10. [核心] `web/src/router/index.ts` — `requiresAdmin` 路由
-- [ ] 11. [测试] `web/src/features/admin/components/__tests__/UserTable.spec.ts`
-- [ ] 12. [测试] `web/src/router/__tests__/adminGuard.spec.ts`
+- [ ] 1. [核心] `src/pages/SettingsScene.vue` — 设置面板：分区平滑展开（通用/LLM/备份/关于）
+- [ ] 2. [核心] `src/features/settings/LLMConfig.vue` — LLM 配置表单：添加/编辑/删除 provider，设为默认
+- [ ] 3. [核心] `src/features/settings/BackupManager.vue` — 备份管理：手动备份、自动备份开关、备份列表、恢复
+- [ ] 4. [核心] `src/features/settings/ThemeToggle.vue` — 主题切换：日/夜/跟随系统
+- [ ] 5. [核心] `src/pages/OnboardingScene.vue` — 首次使用叙事式引导（非表单！）：AI 引擎下载进度、设置昵称/偏好、介绍核心功能
+- [ ] 6. [核心] `src/stores/settings.ts` — Pinia store：应用设置持久化（通过 Tauri 文件 API 或 localStorage）
+- [ ] 7. [核心] `src/shared/api/settings.ts` — API 模块：models CRUD, backup, stats
+- [ ] 8. [核心] `src/composables/useTheme.ts` — 主题 composable：日/夜/auto，平滑过渡
+- [ ] 9. [核心] `src/composables/useSound.ts` — 音效 composable：Web Audio API，默认关闭
+- [ ] 10. [路由] 注册 `/settings` → SettingsScene, `/settings/llm`, `/settings/backup`, `/onboarding` → OnboardingScene
+- [ ] 11. [配置] `src/router/index.ts` — Vue Router 路由配置 + 首次使用重定向（无日记 → onboarding）
 
 #### Verification
 
-1. 管理员账号可进 `/admin`；非管理员 403/重定向
-2. `npm run test` 全绿，用例数 ≥ 50
+1. 设置页面各分区可展开，配置正确保存
+2. 首次运行 → onboarding 引导流程
+3. 日/夜主题切换流畅
 
 ---
 
-## PR: phase-5-1-e2e-tests
+## PR: phase-e-1-delivery
 
-- **Branch**: `test/e2e-tests`
-- **Depends on**: phase-4-3 至少
-- **合并后 main**: `make e2e` 或 CI job 可跑核心流
+- **Branch**: `chore/delivery`
+- **Depends on**: Phase D 全部完成
+- **合并后 main**: 双击 .exe 可运行；README 完整
 
 ### Implementation Plan
 
 #### Overview
 
-Playwright 覆盖注册→登录→日记→分析→反馈。
+PyInstaller 打包 Python → Tauri build 生成 Windows 安装器 → E2E 验证 → 文档。
 
 #### Tasks
 
-- [ ] 1. [核心] `e2e/playwright.config.ts` — baseURL `http://localhost:5173`
-- [ ] 2. [核心] `e2e/fixtures/auth.ts` — 注册/登录 helper
-- [ ] 3. [核心] `e2e/tests/smoke.spec.ts` — 健康检查
-- [ ] 4. [核心] `e2e/tests/diary-analysis.spec.ts` — 完整用户流
-- [ ] 5. [核心] 根 `Makefile` — `e2e` 目标（启动 compose + api + web 或文档化顺序）
-- [ ] 6. [CI] `.github/workflows/ci.yml` — 可选 `e2e` job（`continue-on-error` 或 nightly）
+- [ ] 1. [核心] `server/build.spec` — 最终 PyInstaller spec（含 torch/chromadb/onnxruntime/sentence-transformers/jieba 所有 hidden imports + 二进制依赖）
+- [ ] 2. [核心] Tauri build 配置 — `tauri.conf.json`：bundle 配置，嵌入 Python .exe 为 resource；Windows 安装器（NSIS/Inno Setup）
+- [ ] 3. [核心] 模型下载器 — 首次启动下载 embedding/reranker 模型（从 HuggingFace 镜像），进度条 UI，断点续传
+- [ ] 4. [核心] 自动备份 — Rust 侧应用退出前 copy `night_diary.db` → `backups/YYYY-MM-DDTHHmmss-auto.db`
+- [ ] 5. [测试] E2E 测试 — Playwright（或 Tauri driver）：日记 CRUD → AI 分析 → 反馈完整流程
+- [ ] 6. [测试] 性能验证 — embedding 模型 warmup 时间、LLM 调用延迟、SQLite 查询性能
+- [ ] 7. [文档] `README.md` 最终版
+- [ ] 8. [文档] `docs/user-guide.md` — 用户指南（安装、LLM 配置、备份恢复）
+- [ ] 9. [文档] `docs/dev-guide.md` — 开发者指南（环境搭建、目录结构、构建流程）
 
 #### Verification
 
-1. 本地 `make e2e` 通过（或 README  documented 三步启动后 `npx playwright test`）
-2. PR 附失败截图策略说明
+1. `make build` 生成可双击运行的 .exe（或安装器）
+2. 安装后首次启动 → onboarding → 写日记 → AI 分析 → 反馈 → 回顾 完整通过
+3. 数据文件在 `%APPDATA%/night-diary/` 下正确存储
+4. 所有文档可读、步骤可复现
 
 ---
 
-## PR: phase-5-2-perf-optimizations
+## 附录 A：AI 分析路由决策
 
-- **Branch**: `perf/optimizations`
-- **Depends on**: phase-3-2
-- **合并后 main**: 启动预热钩子实现；LLM 重试可测
+（沿用 V1 的分级设计，迁移时保留）
 
-### Implementation Plan
+| 级别 | 触发条件 | 激活 Agent | 预估 Token |
+|------|----------|-----------|-----------|
+| **Light** | 简短日记（< 100 字）+ 纯记录意图 | Empathy only | 400-600 |
+| **Medium** | 含历史回溯 / 情绪表达 | Retrieval + Empathy | 1000-1500 |
+| **Heavy** | 深度反思长文 / 周月总结请求 | All three Workers | 1500-2500 |
+| **Crisis** | 危机检测（极端负面情绪） | 短路 → 安全模板 | ~200 |
 
-#### Overview
+路由优先级：`Multi-Agent（langgraph 可用）> ReAct Agent（含时间回溯关键词）> Chain（直接 LLM 生成）> Fallback（硬编码安全回应）`
 
-性能与可靠性：重试、断路器、Embedding 预加载。
+## 附录 B：V1 迁移参考
 
-#### Tasks
+（迁移时保持 V1 逻辑正确性的对照表）
 
-- [ ] 1. [核心] `server/app/shared/resilience.py` — `retry_llm`、`CircuitBreaker`
-- [ ] 2. [核心] `server/app/shared/llm.py` — 集成重试/断路器
-- [ ] 3. [核心] `server/app/main.py` — `embedding_warmup()` 实现：启动加载 embedding 模型
-- [ ] 4. [核心] `server/app/domain/rag/retriever.py` — 使用预加载模型句柄
-- [ ] 5. [chore] Alembic — 整理迁移历史（squash 或文档说明，无破坏性变更）
-- [ ] 6. [测试] `server/tests/unit/shared/test_resilience.py`
-
-#### Verification
-
-1. 冷启动后首次分析延迟低于未预热基线（手动记时）
-2. `pytest server/tests/unit/shared/test_resilience.py` 通过
-
----
-
-## PR: phase-5-3-deployment-docs
-
-- **Branch**: `docs/deployment`
-- **Depends on**: phase-0 ~ 4 基本完成
-- **合并后 main**: 按文档从零机器可启动；生产 env 示例可审查
-
-### Implementation Plan
-
-#### Overview
-
-本地排错与云上扩展文档；不交付真实云资源。
-
-#### Tasks
-
-- [ ] 1. [文档] `docs/deployment/local.md` — 端口、迁移、Chroma 首次下载 ~400MB、常见错误
-- [ ] 2. [文档] `docs/deployment/cloud-database.md` — 托管 MySQL：`DATABASE_URL`、SSL、备份
-- [ ] 3. [文档] `docs/deployment/cloud-frontend.md` — `npm run build`、CDN、`VITE_API_BASE_URL`、CORS
-- [ ] 4. [文档] `server/.env.production.example`
-- [ ] 5. [文档] `web/.env.production.example`
-- [ ] 6. [文档] `README.md` — 链接 deployment 文档
-- [ ] 7. [CI] `.github/workflows/deploy.yml` — **disabled** 模板 + 启用说明注释
-
-#### Verification
-
-1. 新环境按 `local.md` 从零启动成功
-2. production example 无真实密钥，仅占位符
+| V1 源文件 | V2 目标 | 迁移方式 |
+|-----------|---------|---------|
+| `agents/intent_classifier.py` | `domain/agents/intent_classifier.py` | **直接迁移**（设计最干净的模块） |
+| `agents/graph.py` | `domain/agents/graph.py` | 迁移 + DI 改造 |
+| `agents/supervisor.py` | `domain/agents/supervisor.py` | 迁移 + 集成 SkillRegistry |
+| `agents/empathy_agent.py` | `domain/agents/empathy_agent.py` | 迁移 + DI 改造 + 共享工具 |
+| `agents/retrieval_agent.py` | `domain/agents/retrieval_agent.py` | 迁移 + DI 改造 + 共享工具 |
+| `agents/insight_agent.py` | `domain/agents/insight_agent.py` | 迁移 + DI 改造 |
+| `services/ai_service.py`（987 行） | `services/ai/` 目录（7 模块） | **拆分为 7 个独立模块** |
+| `services/vector_service.py`（771 行） | `domain/rag/` 目录（4 模块） | **拆分为 4 个独立模块** |
+| `memory/episodic.py` | `domain/memory/episodic.py` | 迁移 + Redis → 进程内 deque |
+| `memory/long_term.py` | `domain/memory/long_term.py` | 迁移 + MySQL JSON → SQLite JSON |
+| `memory/working.py` | `domain/memory/working.py` | 迁移 + **实际集成** |
+| `skills/` 目录（12 文件） | `domain/skills/` 目录 | 迁移 + **实际集成到 Supervisor** |
+| `feedback/thompson_sampling.py` | `domain/feedback/thompson_sampling.py` | 基本不变，消除重复 |
+| `feedback/prompt_tuner.py` | `domain/feedback/prompt_tuner.py` | 迁移 + 调用 ThompsonSampling |
+| `knowledge/domain_store.py` | `domain/knowledge/store.py` | 迁移 + 唯一查询入口 |
+| `knowledge/extractor.py` | `domain/knowledge/extractor.py` | 迁移 + 修复 bug |
+| `routers/diary.py` | `api/v1/diary.py` | **重写**（去 auth/user_id） |
+| `routers/analysis.py` | `api/v1/analysis.py` | **重写**（去 auth） |
+| `routers/auth.py` | — | **删除** |
+| `routers/admin.py` | — | **删除** |
+| `routers/public_column.py` | — | **删除** |
+| 前端 `DiaryPage.vue` 等 | `src/pages/` | 参考业务逻辑，UI **完全重写** |
 
 ---
 
-## 附录 A. AI 分析路由决策（Light / Medium / Heavy）
-
-**流程**（Phase 3 `ExecutionPlanner`）：
-
-```text
-日记正文 → CrisisHandler? → Supervisor.classify() → execution_tier
-                              ↓
-                    light / medium / heavy executor
-                              ↓
-              失败时: heavy → medium → light → FALLBACK
-```
-
-### 意图 → 档位 → LLM 次数目标
-
-| Intent | execution_tier | LLM 调用目标 | 执行器 |
-|--------|----------------|--------------|--------|
-| `pure_record` | `light` | ≤1 | `ai_executors/light.py` |
-| `emotional_support` | `medium` | 2~3 | `ai_executors/medium.py` |
-| `retrospective_review` | `heavy` | 4~6 | `ai_executors/heavy.py` |
-| `habit_tracking` | `heavy` | 4~6 | `ai_executors/heavy.py` |
-| 危机命中 | `light` + 安全模板 | 0~1 | `CrisisHandler`（图外） |
-
-### 与 V1 差异
-
-| V1 | V2 |
-|----|-----|
-| `chain` / `agent` / `multi_agent` 三模式用户选 | 用户不选；Supervisor + Skill 决定 tier |
-| `agent.py` executor | **删除**；medium = 单 Worker |
-| 硬编码 `DEFAULT_INTENT_ROUTING` | SkillRegistry 驱动 |
-
----
-
-## 附录 B. V1 迁移对照速查
-
-### 可原样迁移（评审后）
-
-| V1 路径 | V2 目标 |
-|---------|---------|
-| `agents/intent_classifier.py` | `domain/agents/intent.py` |
-| `agents/graph.py` | `domain/agents/graph.py` |
-| `core/distributed_lock.py` | `infrastructure/distributed_lock.py` |
-| `core/rate_limiter.py` | `infrastructure/rate_limiter.py` |
-| `feedback/thompson_sampling.py` | `domain/feedback/thompson.py` |
-| `memory/episodic.py`, `long_term.py` | `domain/memory/` |
-| `skills/base.py`, `registry.py` + 10 implementations | `domain/skills/` |
-| `frontend/.../useImplicitFeedback.ts` | `web/src/features/analysis/composables/` |
-
-### 必须重写
-
-| V1 文件 | V2 策略 |
-|---------|---------|
-| `services/ai_service.py` | `ai_router.py` + `ai_executors/{light,medium,heavy}.py` + `ai_prompts.py` + `ai_tools.py` |
-| `services/vector_service.py` | `domain/rag/{chunker,bm25,retriever,reranker}.py` |
-| `routers/admin.py` | `admin_service` + `api/v1/admin.py` |
-| `routers/token_stats.py` | `token_stats_service` |
-| `core/security.py` | `infrastructure/security.py` + 启动校验 |
-| `pages/AdminPage.vue` | `features/admin/*` + 类型 |
-| `pages/DiaryPage.vue` | composables + 子组件 |
-
-### 删除不迁移
-
-`_TEMPORAL_KEYWORDS`、`ai_service._fetch_weather_from_api()`、三 Agent 重复 Chroma 查询、PromptTuner 内重复 Thompson、empathy/crisis 重复情感关键词、`formatDate`/`formatTime` 前端重复、`err.response?.data?.detail` 重复处理。
-
----
-
-## 执行顺序一览
-
-| 顺序 | PR 章节 | Branch |
-|------|---------|--------|
-| 1 | phase-0-project-scaffold | `chore/project-scaffold` |
-| 2 | phase-1-infrastructure-layer | `feature/infrastructure-layer` |
-| 3 | phase-2-1-domain-knowledge | `feature/domain-knowledge` |
-| 4 | phase-2-2-domain-rag | `feature/domain-rag` |
-| 5 | phase-2-3-domain-memory | `feature/domain-memory` |
-| 6 | phase-2-4-domain-feedback | `feature/domain-feedback` |
-| 7 | phase-2-5-domain-skills | `feature/domain-skills` |
-| 8 | phase-2-6-domain-agents | `feature/domain-agents` |
-| 9 | phase-3-1-services-layer | `feature/services-layer` |
-| 10 | phase-3-2-api-routes | `feature/api-routes` |
-| 11 | phase-4-1-frontend-foundation | `feature/frontend-foundation` |
-| 12 | phase-4-2-frontend-auth | `feature/frontend-auth` |
-| 13 | phase-4-3-frontend-diary | `feature/frontend-diary` |
-| 14 | phase-4-4-frontend-dashboard | `feature/frontend-dashboard` |
-| 15 | phase-4-5-frontend-admin | `feature/frontend-admin` |
-| 16 | phase-5-1-e2e-tests | `test/e2e-tests` |
-| 17 | phase-5-2-perf-optimizations | `perf/optimizations` |
-| 18 | phase-5-3-deployment-docs | `docs/deployment` |
+> **施工顺序**：Phase A → E，每 PR 合并后 `main` 必须可运行。当前进度见 `.cursor/rules/current_phase.mdc`。
