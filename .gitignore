@@ -19,6 +19,7 @@ coverage.xml
 # Node
 node_modules/
 dist/
+src-tauri/target/
 .vite/
 coverage/
 *.log

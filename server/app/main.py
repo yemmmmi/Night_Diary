@@ -53,11 +53,11 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
         return {"status": "ok"}
 
     @app.post("/shutdown", tags=["meta"])
-    def shutdown() -> dict[str, str]:
+    async def shutdown() -> dict[str, str]:
         """Graceful shutdown — Tauri calls this before sending SIGTERM."""
         import asyncio
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         loop.call_later(0.3, lambda: os._exit(0))
         return {"status": "shutting_down"}
 

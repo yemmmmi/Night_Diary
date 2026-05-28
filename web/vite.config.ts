@@ -4,6 +4,8 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [vue()],
+  clearScreen: false,
+  envPrefix: ['VITE_', 'TAURI_'],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -11,6 +13,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    strictPort: true,
     // Optional dev proxy when the backend has not enabled CORS.
     // proxy: { '/api': 'http://localhost:8000' },
   },
