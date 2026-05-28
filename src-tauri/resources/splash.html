@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>夜记</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        background: linear-gradient(160deg, #0f172a 0%, #1e293b 45%, #312e81 100%);
+        color: #e2e8f0;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        overflow: hidden;
+      }
+
+      .logo {
+        width: 72px;
+        height: 72px;
+        border-radius: 20px;
+        background: linear-gradient(135deg, #6366f1, #818cf8);
+        display: grid;
+        place-items: center;
+        font-size: 2rem;
+        box-shadow: 0 12px 40px rgba(99, 102, 241, 0.35);
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+      }
+
+      p {
+        font-size: 0.95rem;
+        color: #94a3b8;
+      }
+
+      .progress-track {
+        width: min(280px, 80vw);
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.25);
+        overflow: hidden;
+      }
+
+      .progress-bar {
+        height: 100%;
+        width: 35%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #6366f1, #a78bfa, #6366f1);
+        background-size: 200% 100%;
+        animation: slide 1.4s ease-in-out infinite;
+      }
+
+      @keyframes slide {
+        0% {
+          transform: translateX(-120%);
+          background-position: 0% 50%;
+        }
+        100% {
+          transform: translateX(320%);
+          background-position: 100% 50%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="logo" aria-hidden="true">🌙</div>
+    <h1>夜记</h1>
+    <p>正在准备 AI 引擎...</p>
+    <div class="progress-track" role="progressbar" aria-label="加载中">
+      <div class="progress-bar"></div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,34 @@
+# Night Diary V2
+
+本地桌面应用。Tauri v2 + Vue 3 + Python FastAPI sidecar，SQLite + ChromaDB，无 Docker/Redis/JWT。
+
+## Git 规范
+
+- **永远不直接 push main**，所有改动走 PR
+- 从 main 开新分支前：`git checkout main && git pull`
+- 分支命名：`feature/` / `fix/` / `refactor/` / `chore/` / `docs/`
+- 提交用约定式提交：`feat:` `fix:` `chore:` `docs:` 等，原子化
+- 提交时不要跳过 hook（不用 `--no-verify`）
+- **不 amend 已推送的提交**；pre-commit hook 失败后修复并新建 commit，不 amend
+- 每次提交附带：`Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`
+
+## PR 规范
+
+- 完成后创建 PR，用 `gh pr create`；描述含 Summary + Test plan
+- PR 标题 ≤70 字符，说明做了什么
+- 合并前确认 CI 全绿 + `main` 可运行
+
+## 常用命令
+
+```bash
+make dev-api      # Python 后端 → 127.0.0.1:8000
+make dev-web      # Vite 前端 → localhost:5173
+make test         # pytest + vitest
+make lint         # ruff + mypy + eslint + vue-tsc
+```
+
+## 当前状态
+
+Phase A（新地基）进行中。已完成 PR #3/#4/#5。下一步：phase-a-2 `feature/tauri-shell`。
+
+规则文件在 `.cursor/rules/`（Cursor 使用），`task.md` 是施工蓝图。
