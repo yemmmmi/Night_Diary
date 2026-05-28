@@ -13,10 +13,9 @@ jobs:
       run:
         working-directory: server
     env:
-      DATABASE_URL: sqlite:///./test.db
-      JWT_SECRET_KEY: ci-test-secret-key-1234567890
-      MODEL_KEY_SECRET: ci-test-model-secret-1234567890
       APP_ENV: test
+      DATA_DIR: /tmp/night-diary-test
+      MODEL_KEY_SECRET: ci-test-model-secret-1234567890
     steps:
       - uses: actions/checkout@v4
 

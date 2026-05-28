@@ -1,8 +1,11 @@
 # Night Diary V2
 
-夜间日记 V2 —— 在新仓库中从零重建的版本。
+夜间日记 V2 —— AI 心理陪伴日记系统，**本地桌面应用**。
 
-- **完整施工蓝图**：[`task.md`](./task.md)（18 个 PR 章节）
+双击 `.exe` 即可打开，所有数据存储在本地。无需登录、无需 Docker、无需联网（LLM API 调用除外）。
+
+> **架构转型说明**: V2 已从 Web 多用户架构转为本地桌面端。详细方案见 [`docs/本地化桌面端重构方案.md`](./docs/本地化桌面端重构方案.md)。
+
 - **架构与规范**：[`.cursor/rules/`](./.cursor/rules/)
 - **当前进度**：[`.cursor/rules/current_phase.mdc`](./.cursor/rules/current_phase.mdc)
 
@@ -10,104 +13,61 @@
 
 | 层 | 技术 |
 |----|------|
-| 后端（`server/`） | Python 3.11 · FastAPI · SQLAlchemy 2 · Alembic · pydantic-settings · Redis |
-| 前端（`web/`） | Vue 3 · TypeScript · Vite · Tailwind CSS · Vitest |
-| 基础设施 | MySQL 8 · Redis 7（本地通过 Docker Compose） |
-| AI | LangChain / LangGraph · Chroma · BM25 · jieba（Phase 2 起接入） |
+| 桌面壳 | Tauri v2 (Rust) + 系统 WebView2 |
+| 前端 | Vue 3 · TypeScript · Vite · Tailwind CSS · Vitest |
+| AI 引擎 | Python 3.11 · FastAPI · LangChain / LangGraph · ChromaDB |
+| 数据存储 | SQLite（结构化数据）· ChromaDB（向量存储） |
+| AI 模型 | text2vec-base-chinese · bge-reranker-base · DeepSeek / OpenAI 兼容 API |
 
 ## 目录结构
 
 ```
 night-diary-v2/
-├── server/                  # 后端
-│   ├── app/
-│   │   ├── api/v1/          # 路由层（薄层，Phase 3 实现）
-│   │   ├── services/        # 服务层（业务编排，Phase 3）
-│   │   ├── domain/          # 领域层（agents / memory / skills / feedback / knowledge / rag，Phase 2）
-│   │   ├── shared/          # 错误类型、LLM 工厂等
-│   │   ├── infrastructure/  # DB / Redis / 安全（Phase 1）
-│   │   ├── config.py        # pydantic-settings 配置
-│   │   └── main.py          # FastAPI 入口
-│   ├── tests/
-│   ├── .env.example
-│   └── pyproject.toml
-├── web/                     # 前端
-│   ├── src/
-│   │   ├── pages/
-│   │   ├── features/        # 按业务领域组织（Phase 4）
-│   │   ├── shared/          # 类型/工具/composables
-│   │   └── router/
-│   ├── package.json
-│   └── vite.config.ts
-├── alembic/                 # 数据库迁移
-├── .github/workflows/ci.yml # CI（pytest / vitest / mypy / vue-tsc / ruff / eslint）
-├── docker-compose.yml       # 本地 MySQL + Redis
-└── Makefile                 # 常用任务入口
+├── src-tauri/              # Tauri (Rust) 桌面壳
+├── src/                    # Vue 3 前端（Tauri WebView 内运行）
+│   ├── pages/              # 场景级页面
+│   ├── features/           # 按业务领域组织
+│   ├── shared/             # API / 组件 / composables / stores / types
+│   └── styles/             # 主题 + 动画
+├── server/                 # Python AI 引擎（FastAPI sidecar）
+│   └── app/
+│       ├── main.py         # 入口（127.0.0.1，无 CORS，无 auth）
+│       ├── config.py       # pydantic-settings + CLI 参数
+│       ├── domain/         # agents / memory / skills / feedback / knowledge / rag
+│       ├── services/       # 业务编排
+│       ├── api/v1/         # 路由层
+│       ├── shared/         # 错误类型、LLM 工厂
+│       └── infrastructure/ # DB / 模型
+├── docs/                   # 文档
+├── .github/workflows/      # CI
+└── Makefile
 ```
 
-## 快速开始（本地）
+## 快速开始（开发）
 
-> 要求：Python 3.11+、Node.js 20+、Docker（含 Compose 插件）、GNU Make。
-
-### 1. 配置环境变量
+> 要求：Python 3.11+、Node.js 20+、Rust 工具链。
 
 ```bash
-cp server/.env.example server/.env
-cp web/.env.example web/.env
-```
-
-⚠️ 编辑 `server/.env`，把 `JWT_SECRET_KEY` 与 `MODEL_KEY_SECRET` 替换为强随机值。
-缺失或长度不足 16 字符时，FastAPI 启动会失败（这是设计上的安全 fail-fast）。
-
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-```
-
-### 2. 启动基础设施
-
-```bash
-make up           # docker compose up -d  (mysql + redis)
-```
-
-### 3. 安装依赖
-
-```bash
-# 后端
+# 1. 后端
 cd server
-python -m venv .venv
-.venv\Scripts\activate     # PowerShell: .venv\Scripts\Activate.ps1
+python -m venv .venv && .venv\Scripts\activate  # Windows
 pip install -e ".[dev]"
-cd ..
 
-# 前端
-cd web
+# 2. 前端
+cd ..
 npm install
-cd ..
-```
 
-### 4. 数据库迁移
-
-```bash
-make migrate      # Phase 0 为空 schema，Phase 1 起会创建业务表
-```
-
-### 5. 启动开发服务
-
-打开两个终端：
-
-```bash
-make dev-api      # http://localhost:8000   →  /health 返回 {"status":"ok"}
-make dev-web      # http://localhost:5173   →  Vue 占位首页
+# 3. 启动（两个终端）
+make dev-api      # Python AI 引擎 → http://127.0.0.1:8000
+make dev-web      # Vite 开发服务器 → http://localhost:5173
 ```
 
 ## 常用 Make 目标
 
 | 目标 | 作用 |
 |------|------|
-| `make up` / `make down` | 启停 Docker 基础设施 |
-| `make logs` | 跟踪 Docker 日志 |
-| `make migrate` | Alembic 迁移到 head |
-| `make dev-api` / `make dev-web` | 启动开发服务 |
+| `make dev-api` | 启动 Python 后端（热重载，仅 127.0.0.1） |
+| `make dev-web` | 启动 Vite 开发服务器 |
 | `make test` | 跑 pytest + vitest |
 | `make lint` | ruff + mypy + eslint + vue-tsc |
 | `make format` | ruff format |
@@ -116,20 +76,32 @@ make dev-web      # http://localhost:5173   →  Vue 占位首页
 
 详见 [`.cursor/rules/`](./.cursor/rules/)：
 
-- [`architecture.mdc`](./.cursor/rules/architecture.mdc) — V2 分层与目录约定
+- [`architecture.mdc`](./.cursor/rules/architecture.mdc) — V2 分层与目录约定（已更新为桌面端架构）
 - [`coding-standards.mdc`](./.cursor/rules/coding-standards.mdc) — Python / TypeScript 规范
 - [`collaboration.mdc`](./.cursor/rules/collaboration.mdc) — Git / 分支 / PR 规范
-- [`execution-plan.mdc`](./.cursor/rules/execution-plan.mdc) — 分阶段执行计划与迁移策略
-- [`task.md`](./task.md) — 完整 18 个 PR 的施工蓝图
+- [`execution-plan.mdc`](./.cursor/rules/execution-plan.mdc) — 新版分阶段执行计划
 
 **核心原则**：
 
 - 禁止直接 push 到 `main`；所有改动通过 PR 合并
 - 后端分层方向单向：`api → services → domain → shared + infrastructure`
 - 服务层不抛 `HTTPException`，统一抛 `AppError` 由路由层转换
-- Agent / Skill 通过 DI 接收 LLM 和 DB，不在内部 `SessionLocal()` 或 `ChatOpenAI()`
-- 无硬编码密钥，所有 secret 走环境变量
+- Agent / Skill 通过 DI 接收 LLM 和 DB，不在内部自行创建
+- 无硬编码密钥，所有 secret 走环境变量或 CLI 参数
+
+## 数据存储
+
+所有数据存储在 `%APPDATA%/night-diary/`（Windows）：
+
+```
+night-diary/
+├── night_diary.db      # SQLite 主数据库
+├── chroma_data/        # ChromaDB 向量库
+├── models/             # AI 模型文件
+├── backups/            # 自动备份
+└── logs/               # 运行日志
+```
 
 ## V1 参考
 
-V1 项目位于 `D:\work\night_diary`（只读参考），V2 **绝不** import V1 代码。迁移对照表见 `task.md` 附录 B。
+V1 项目位于 `D:\work\night_diary`（只读参考），V2 **绝不** import V1 代码。
