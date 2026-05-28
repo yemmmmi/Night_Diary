@@ -1,17 +1,31 @@
-"""Application configuration loaded from environment variables.
+"""Application configuration.
 
-All sensitive secrets MUST be provided via environment variables or a `.env`
-file. No hardcoded fallback values are allowed for required fields, so the
-application fails fast at startup if a required secret is missing.
+All sensitive secrets MUST be provided via environment variables or a ``.env``
+file. The application fails fast at startup if a required secret is missing.
+
+Since this is a single-user local desktop app, there is no Redis, no JWT, and
+no multi-tenant infrastructure.  The database is SQLite stored under
+``DATA_DIR``.
 """
 
 from __future__ import annotations
 
+import os
+import sys
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_data_dir() -> str:
+    if sys.platform == "win32":
+        base = os.getenv("APPDATA", os.path.expanduser("~"))
+    else:
+        base = os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    return str(Path(base) / "night-diary")
 
 
 class Settings(BaseSettings):
@@ -26,47 +40,46 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     app_name: str = "night-diary-v2"
 
-    # ---- Database ----
-    database_url: str = Field(
-        ...,
-        description="SQLAlchemy URL, e.g. mysql+pymysql://user:pass@host:3306/db",
+    # ---- Paths ----
+    data_dir: str = Field(default_factory=_default_data_dir)
+    port: int = Field(default=8000, description="TCP port to listen on (--port)")
+
+    @property
+    def database_url(self) -> str:
+        return f"sqlite:///{self.data_dir}/night_diary.db"
+
+    @property
+    def chroma_persist_dir(self) -> str:
+        return str(Path(self.data_dir) / "chroma_data")
+
+    @property
+    def models_dir(self) -> str:
+        return str(Path(self.data_dir) / "models")
+
+    @property
+    def backups_dir(self) -> str:
+        return str(Path(self.data_dir) / "backups")
+
+    @property
+    def logs_dir(self) -> str:
+        return str(Path(self.data_dir) / "logs")
+
+    # ---- Security ----
+    model_key_secret: str = Field(
+        default="",
+        min_length=0,
+        description="Fernet key for encrypting LLM API keys at rest",
     )
 
-    # ---- Redis ----
-    redis_url: str = Field(default="redis://localhost:6379/0")
-
-    # ---- Security (required, no fallback) ----
-    jwt_secret_key: str = Field(..., min_length=16)
-    jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 60 * 24
-    model_key_secret: str = Field(..., min_length=16)
-
-    # ---- CORS ----
-    allowed_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:5173"],
+    # ---- LLM defaults (can be overridden per provider via ModelProvider table) ----
+    llm_api_key: str = Field(default="", description="Default LLM API key")
+    llm_base_url: str = Field(
+        default="https://api.deepseek.com/v1",
+        description="Default LLM base URL",
     )
-
-    @field_validator("allowed_origins", mode="before")
-    @classmethod
-    def _split_origins(cls, value: object) -> object:
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        return value
-
-    # ---- Trusted proxies (used by Phase 1 rate limiter / lock) ----
-    trusted_proxy_ips: list[str] = Field(default_factory=list)
-
-    @field_validator("trusted_proxy_ips", mode="before")
-    @classmethod
-    def _split_proxies(cls, value: object) -> object:
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        return value
-
-    # ---- RAG / Knowledge ----
-    chroma_persist_dir: str = "./chroma_data"
+    llm_model: str = Field(default="deepseek-chat", description="Default LLM model name")
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

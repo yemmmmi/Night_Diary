@@ -1,7 +1,7 @@
 [project]
 name = "night-diary-server"
 version = "0.0.1"
-description = "Night Diary V2 backend (FastAPI)."
+description = "Night Diary V2 — local AI engine (FastAPI sidecar)."
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi>=0.115,<1.0",
@@ -10,9 +10,7 @@ dependencies = [
     "alembic>=1.13",
     "pydantic>=2.7,<3.0",
     "pydantic-settings>=2.4",
-    "pymysql>=1.1",
-    "cryptography>=43",
-    "redis>=5.0",
+    "aiosqlite>=0.20",
 ]
 
 [project.optional-dependencies]
@@ -22,7 +20,6 @@ dev = [
     "httpx>=0.27",
     "ruff>=0.6",
     "mypy>=1.11",
-    "types-redis>=4.6",
 ]
 
 [build-system]
