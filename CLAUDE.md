@@ -59,6 +59,6 @@ make lint         # ruff + mypy + eslint + vue-tsc
 
 ## 当前状态
 
-Phase A（新地基）进行中。已完成 PR #3–#6。当前：phase-a-3 前端迁移（`web/` → `src/`）。
+Phase A（新地基）进行中。已完成 PR #3–#7。下一步：phase-a-4 构建收尾 → phase-a-5 PyInstaller sidecar 打包。
 
 规则文件在 `.cursor/rules/`（Cursor 使用），`task.md` 是施工蓝图。
