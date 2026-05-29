@@ -7,6 +7,6 @@
     },
     "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src/**/*", "src/**/*.vue", "vite.config.ts"],
+  "include": ["src/**/*", "src/**/*.vue", "vite.config.ts", "eslint.config.js"],
   "exclude": ["dist", "node_modules"]
 }

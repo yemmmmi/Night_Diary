@@ -4,10 +4,10 @@
   "version": "0.0.1",
   "identifier": "com.nightdiary.app",
   "build": {
-    "beforeDevCommand": "npm run dev --prefix web",
-    "beforeBuildCommand": "npm run build --prefix web",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:5173",
-    "frontendDist": "../web/dist"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [

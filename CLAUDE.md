@@ -22,13 +22,13 @@
 
 ```bash
 make dev-api      # Python 后端 → 127.0.0.1:8000
-make dev-web      # Vite 前端 → localhost:5173
+make dev-web      # Tauri 桌面应用（npm run tauri dev）
 make test         # pytest + vitest
 make lint         # ruff + mypy + eslint + vue-tsc
 ```
 
 ## 当前状态
 
-Phase A（新地基）进行中。已完成 PR #3/#4/#5。下一步：phase-a-2 `feature/tauri-shell`。
+Phase A（新地基）进行中。已完成 PR #3–#6。当前：phase-a-3 前端迁移（`web/` → `src/`）。
 
 规则文件在 `.cursor/rules/`（Cursor 使用），`task.md` 是施工蓝图。

@@ -4,7 +4,13 @@ import vue from 'eslint-plugin-vue'
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      'server/.venv/**',
+      'src-tauri/target/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

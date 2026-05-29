@@ -3,12 +3,11 @@
 PY ?= python
 NPM ?= npm
 SERVER_DIR := server
-WEB_DIR := web
 
 help:
 	@echo "Night Diary V2 — common targets"
 	@echo "  dev-api    Run FastAPI dev server (http://127.0.0.1:8000)"
-	@echo "  dev-web    Run Vite dev server (http://localhost:5173)"
+	@echo "  dev-web    Run Tauri desktop app (npm run tauri dev)"
 	@echo "  test       Run pytest + vitest"
 	@echo "  lint       Run ruff + mypy + eslint + vue-tsc"
 	@echo "  format     Run ruff format"
@@ -17,7 +16,7 @@ dev-api:
 	cd $(SERVER_DIR) && $(PY) -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 dev-web:
-	cd $(WEB_DIR) && $(NPM) run dev
+	$(NPM) run tauri dev
 
 test: test-server test-web
 
@@ -25,7 +24,7 @@ test-server:
 	cd $(SERVER_DIR) && $(PY) -m pytest -q
 
 test-web:
-	cd $(WEB_DIR) && $(NPM) run test
+	$(NPM) run test
 
 lint: lint-server lint-web
 
@@ -33,7 +32,7 @@ lint-server:
 	cd $(SERVER_DIR) && $(PY) -m ruff check . && $(PY) -m mypy app
 
 lint-web:
-	cd $(WEB_DIR) && $(NPM) run lint && $(NPM) run type-check
+	$(NPM) run lint && $(NPM) run type-check
 
 format:
 	cd $(SERVER_DIR) && $(PY) -m ruff format .

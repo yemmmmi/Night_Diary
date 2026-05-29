@@ -1,6 +1,6 @@
 # Night Diary V2
 
-夜间日记 V2 —— AI 心理陪伴日记系统，**本地桌面应用**。
+夜记 V2 —— AI 心理陪伴日记系统，**本地桌面应用**。
 
 双击 `.exe` 即可打开，所有数据存储在本地。无需登录、无需 Docker、无需联网（LLM API 调用除外）。
 
@@ -57,9 +57,12 @@ pip install -e ".[dev]"
 cd ..
 npm install
 
-# 3. 启动（两个终端）
+# 3. 启动桌面应用（Tauri 会自动拉起 Python sidecar）
+make dev-web      # npm run tauri dev → 桌面窗口 + 动态后端端口
+
+# 仅调试后端时（浏览器/Vitest，非 Tauri）
 make dev-api      # Python AI 引擎 → http://127.0.0.1:8000
-make dev-web      # Vite 开发服务器 → http://localhost:5173
+npm run dev       # Vite → http://localhost:5173（需配合 dev-api）
 ```
 
 ## 常用 Make 目标
@@ -67,7 +70,7 @@ make dev-web      # Vite 开发服务器 → http://localhost:5173
 | 目标 | 作用 |
 |------|------|
 | `make dev-api` | 启动 Python 后端（热重载，仅 127.0.0.1） |
-| `make dev-web` | 启动 Vite 开发服务器 |
+| `make dev-web` | 启动 Tauri 桌面应用（`npm run tauri dev`） |
 | `make test` | 跑 pytest + vitest |
 | `make lint` | ruff + mypy + eslint + vue-tsc |
 | `make format` | ruff format |
