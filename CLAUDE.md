@@ -27,6 +27,36 @@ make test         # pytest + vitest
 make lint         # ruff + mypy + eslint + vue-tsc
 ```
 
+## AI 工程质量标准
+
+本项目核心是 Multi-Agent 系统。以下标准与 Git/PR 规范同等重要。
+
+### 可观测性
+
+每次 LLM 调用必须可追溯，存储于本地 SQLite，不上传外部服务：
+
+| 记录类型 | 存储表 | 关键字段 |
+|----------|--------|----------|
+| LLM 调用 | `llm_call_logs` | agent_name, call_type, prompt, response, latency_ms, tokens_in/out, model, tier |
+| Agent 决策 | `agent_decisions` | agent_name, decision_type, input_summary, output, reason |
+
+- Agent 通过 DI 接收 `LLMCallTracer`，与 LLM、DB session 同级
+- 写入异步完成，不阻塞 Agent 主流程
+
+### 测试理念
+
+- **单元测试 mock LLM**：验证 Agent 控制流（路由、fan-out、合成）
+- **Eval 测试真实 LLM**：`server/tests/eval/` 下 10-20 条固定日记输入 + 结构化评判标准，prompt 改动后手动跑 `make eval`
+- **统计测试**：Thompson Sampling 跑 N≥1000 验证 Beta 分布，不依赖单次断言
+- **级联失败测试**：RetrievalAgent 多跳检索的漂移场景、Worker 超时降级
+
+### 降级与韧性
+
+- LLM API 不可达：返回预设安全模板，不白屏或抛异常
+- Crisis 检测命中：短路到安全模板，不送 LLM
+- 每个 Agent 独立超时：Supervisor 最长，Worker 较短
+- Supervisor 容忍部分 Worker 失败：如 Retrieval 挂了，用剩余 Worker 结果降级合成
+
 ## 当前状态
 
 Phase A（新地基）进行中。已完成 PR #3/#4/#5。下一步：phase-a-2 `feature/tauri-shell`。
