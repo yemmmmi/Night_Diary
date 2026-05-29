@@ -1,6 +1,9 @@
 mod process;
 
-use process::{allocate_port, default_data_dir, graceful_shutdown, health_poll, spawn_backend, BackendProcess};
+use process::{
+    allocate_port, default_data_dir, graceful_shutdown, health_check_once, health_poll,
+    spawn_backend, BackendProcess,
+};
 use std::sync::Mutex;
 use tauri::{Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
 
@@ -23,6 +26,12 @@ fn get_data_dir(state: State<'_, AppState>) -> String {
 #[tauri::command]
 fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
+}
+
+/// Probe backend /health via native HTTP (avoids WebView CORS on localhost ↔ 127.0.0.1).
+#[tauri::command]
+fn check_backend_health(state: State<'_, AppState>) -> bool {
+    health_check_once(state.backend_port)
 }
 
 fn splash_path() -> std::path::PathBuf {
@@ -116,7 +125,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_backend_port,
             get_data_dir,
-            get_app_version
+            get_app_version,
+            check_backend_health
         ])
         .setup(move |app| {
             open_splash(app.handle())?;

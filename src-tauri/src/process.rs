@@ -213,14 +213,31 @@ fn spawn_release_backend(sidecar: &Path, port: u16, data_dir: &str) -> Result<Ch
         .map_err(|err| format!("spawn sidecar binary: {err}"))
 }
 
-/// Poll GET /health until success or timeout.
-pub fn health_poll(port: u16) -> Result<(), String> {
-    let url = format!("http://127.0.0.1:{port}/health");
-    let client = reqwest::blocking::Client::builder()
+fn health_client() -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
         .no_proxy()
         .build()
-        .map_err(|err| format!("create HTTP client: {err}"))?;
+        .map_err(|err| format!("create HTTP client: {err}"))
+}
+
+/// Single GET /health probe (used by Tauri invoke — bypasses WebView CORS).
+pub fn health_check_once(port: u16) -> bool {
+    let url = format!("http://127.0.0.1:{port}/health");
+    let Ok(client) = health_client() else {
+        return false;
+    };
+    client
+        .get(&url)
+        .send()
+        .ok()
+        .is_some_and(|response| response.status().is_success())
+}
+
+/// Poll GET /health until success or timeout.
+pub fn health_poll(port: u16) -> Result<(), String> {
+    let client = health_client()?;
+    let url = format!("http://127.0.0.1:{port}/health");
 
     for attempt in 1..=HEALTH_MAX_ATTEMPTS {
         match client.get(&url).send() {
