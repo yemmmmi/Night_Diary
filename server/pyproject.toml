@@ -12,6 +12,8 @@ dependencies = [
     "pydantic-settings>=2.4",
     "aiosqlite>=0.20",
     "chromadb>=0.5,<0.6",
+    "jieba>=0.42",
+    "langchain-text-splitters>=0.3",
 ]
 
 [project.optional-dependencies]
