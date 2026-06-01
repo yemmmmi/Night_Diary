@@ -291,11 +291,11 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/rag/retriever.py` — `HybridRetriever`：向量 + BM25 融合；依赖 B-1 `DomainKnowledgeStore` + B-2 `BM25Index`
-- [ ] 2. [核心] `server/app/domain/rag/reranker.py` — `Reranker`：懒加载模型（首次调用时加载）；**实例级**配置，禁止 `os.environ` 全局写入；加载失败时 `fallback()` 返回原始融合结果
-- [ ] 3. [可观测性] `HybridRetriever.retrieve()` 记录混合检索 trace（vector_results_count, bm25_results_count, fused_results_count, latency_ms）
-- [ ] 4. [测试] `tests/unit/domain/rag/` — test_retriever / test_reranker
-- [ ] 5. [韧性] Reranker 降级测试：模拟模型加载失败，验证返回原始结果且不抛异常
+- [x] 1. [核心] `server/app/domain/rag/retriever.py` — `HybridRetriever`：向量 + BM25 融合；依赖 B-1 `DomainKnowledgeStore` + B-2 `BM25Index`
+- [x] 2. [核心] `server/app/domain/rag/reranker.py` — `Reranker`：懒加载模型（首次调用时加载）；**实例级**配置，禁止 `os.environ` 全局写入；加载失败时 `fallback()` 返回原始融合结果
+- [x] 3. [可观测性] `HybridRetriever.retrieve()` 记录混合检索 trace（vector_results_count, bm25_results_count, fused_results_count, latency_ms）
+- [x] 4. [测试] `tests/unit/domain/rag/` — test_retriever / test_reranker
+- [x] 5. [韧性] Reranker 降级测试：模拟模型加载失败，验证返回原始结果且不抛异常
 
 #### Verification
 
