@@ -13,7 +13,7 @@
 4. **合并标准**：该 PR 的 Verification 全部通过，且 `main` 可运行（`make test` / `make lint` / 该阶段手动流）。
 5. 当前应执行的 PR：见 `.cursor/rules/current_phase.mdc`（随进度更新）。
 
-**累计 PR 数**：23（Phase A:5 + B:10 + C:3 + D:4 + E:1）
+**累计 PR 数**：24（Phase A:5 + B:11 + C:3 + D:4 + E:1）
 
 **架构方案**：`docs/本地化桌面端重构方案.md`（本文件仅维护施工清单，不重复论述设计决策）
 
@@ -306,10 +306,55 @@
 
 ---
 
+## PR: phase-b-3.5-eval-rag
+
+- **Branch**: `feature/eval-rag-baseline`
+- **Depends on**: phase-b-3（rag-retrieval）
+- **合并后 main**: RAG 离线评估框架就位；Baseline 数据（Recall@K / MRR）可复现
+
+### Implementation Plan
+
+#### Overview
+
+在 B-3 交付混合检索后，立即建立离线评估基线。构建 30 条中文日记 × 20 条查询的标注数据集（600 个 query-document pair，提供统计显著性），对比四种检索方案（BM25-only / 向量-only / 混合 RRF / 混合+Rerank）的 Recall@5 和 MRR。Eval 不走 CI（需要 Chroma + Embedding 模型），通过 `make eval-rag` 手动触发。
+
+> **为什么在 B-3 之后立即做**：B-3 是第一个可端到端跑检索的里程碑。在 B-4~B-10 之前量化"搜得准不准"，避免后续 prompt/chunk/rerank 改动后回改成本巨大。同时给 B-5 prompt tuner、B-8 retrieval agent 提供可对照基线。
+
+#### Tasks
+
+- [ ] 1. [核心] `server/tests/eval/rag/conftest.py` — eval fixture：LLM 辅助生成 30 条中文日记（覆盖情绪/事件/时间/人物/混合场景），用 `ChunkSplitter` + `DiaryCollectionManager` 写入临时 Chroma 目录；构建 BM25Index
+- [ ] 2. [核心] `server/tests/eval/rag/test_cases.json` — 20 条查询 × 每查询 1-3 个相关 diary_id（人工标注），覆盖不同检索意图（关键词/语义/时间/情绪/复合）
+- [ ] 3. [核心] `server/tests/eval/rag/test_eval_retrieval.py` — 评估脚本：
+  - 遍历 test_cases.json，对每条 query 分别跑 BM25-only / 向量-only / 混合 RRF / 混合+Rerank
+  - 计算 Recall@5 / MRR / nDCG@5
+  - 输出对比表格到 stdout
+  - 断言混合 RRF Recall@5 ≥ max(BM25-only, 向量-only)（融合不退化）
+  - 断言混合+Rerank MRR ≥ 混合 RRF MRR（重排序提升首位命中率）
+- [ ] 4. [核心] `server/tests/eval/rag/test_cases.md` — 标注说明：每条 query 的检索意图、相关日记的判定理由、边缘情况说明
+- [ ] 5. [配置] `Makefile` — 新增 `eval-rag` target：`python -m pytest server/tests/eval/rag/ -v -s`
+- [ ] 6. [文档] `server/tests/eval/rag/BASELINE.md` — 首次运行后记录四种方案的 Recall@5 / MRR / nDCG@5 基线值，供后续 PR 对比
+
+#### Metrics
+
+| 指标 | 含义 | 用途 |
+|------|------|------|
+| **Recall@5** | 前 5 个结果中命中相关日记的比例 | 衡量检索覆盖度 |
+| **MRR** | 第一个相关结果的排位倒数均值 | 衡量首位命中能力 |
+| **nDCG@5** | 归一化折损累计增益 | 衡量整体排序质量 |
+
+#### Verification
+
+1. `make eval-rag` 可运行，输出四种方案的 Recall@5 / MRR / nDCG@5 对比表格
+2. 混合 RRF 的 Recall@5 ≥ BM25-only 且 ≥ 向量-only（融合不退化）
+3. 混合+Rerank 的 MRR ≥ 混合 RRF（重排序提升）
+4. 后续 B-5/B-8/B-10 prompt 或检索逻辑改动后，对照 `BASELINE.md` 确认不退化
+
+---
+
 ## PR: phase-b-4-domain-memory
 
 - **Branch**: `feature/domain-memory`
-- **Depends on**: phase-b-3（rag-retrieval）
+- **Depends on**: phase-b-3.5-eval-rag（eval）、phase-b-3（rag-retrieval）
 - **合并后 main**: 三层记忆系统可用（进程内存储，无 Redis）；Episodic Memory 默认持久化
 
 ### Implementation Plan
@@ -327,6 +372,7 @@
 - [ ] 3. [核心] `server/app/domain/memory/long_term.py` — `LongTermMemory` 类：SQLite JSON 存储 `UserProfile`，情绪/话题跨天检测（连续 3+ 天 → 提升到长期档案）
 - [ ] 4. [核心] `server/app/domain/memory/working.py` — `WorkingMemory` 类：包装 MultiAgentState，4000 token 限制（**必须集成到 ai_service 中**，V1 中是死代码）
 - [ ] 5. [测试] `tests/unit/domain/memory/` — test_episodic（含持久化读写）/ test_long_term / test_working
+- [ ] 6. [评估] `server/tests/eval/rag/test_cases_multiturn.json` — 新增 3 条多轮对话 scenario（每条 3-turn：Day1 失眠日记 → Day2 运动日记 → Day3 AI 主动关联），评估记忆连贯性与话题追踪
 
 #### Verification
 
@@ -334,6 +380,7 @@
 2. Episodic 写入 + 读取 + 淘汰流程正确；不依赖 Redis
 3. Episodic 持久化：写入 → 模拟重启（新建实例 → load） → 验证记忆恢复
 4. 7 天半衰期：验证过期条目 score 衰减至 < 0.5 后被淘汰
+5. 多轮 scenario 中 AI 回复能引用 Day1 的失眠话题（记忆连贯性验证）
 
 ---
 
@@ -405,13 +452,13 @@
 
 - **Branch**: `feature/agents-shared`
 - **Depends on**: phase-b-6（skills-migration）
-- **合并后 main**: Agent 共享基础设施就位（EmotionEstimator / TokenEstimator / MultiAgentState / LLMCallTracer）
+- **合并后 main**: Agent 共享基础设施就位（EmotionEstimator / TokenEstimator / MultiAgentState / LLMCallTracer）+ LLM-as-Judge 评估框架
 
 ### Implementation Plan
 
 #### Overview
 
-从原 B-6 中提取所有 Agent 的**共同依赖**，前置交付。这些模块原本散落在原 B-6 的 20 个 task 中，先集中定义接口和实现，后续 B-8/B-9 直接注入使用，不再回改。
+从原 B-6 中提取所有 Agent 的**共同依赖**，前置交付。这些模块原本散落在原 B-6 的 20 个 task 中，先集中定义接口和实现，后续 B-8/B-9 直接注入使用，不再回改。**同时交付 LLM-as-Judge 评估框架**，为 B-8 起每个 Agent 的生成质量 eval 提供自动化基础。
 
 > 拆分原因：原 B-6（20 tasks）混合了共享工具、3 个 Worker Agent、Supervisor 编排、韧性测试四类工作。一个 PR 承载不了这么多。
 
@@ -424,12 +471,17 @@
 - [ ] 5. [核心] `server/app/infrastructure/models/` — SQLite ORM 定义：`llm_call_logs`、`agent_decisions`（含 `skill_ids` JSON 列）、`skill_activations` 三张表
 - [ ] 6. [测试] `tests/unit/shared/` — test_emotion_estimator / test_token_utils
 - [ ] 7. [可观测性] 建表 SQL：`skill_activations` 表结构（skill_name, activated, score, threshold, input_digest, reason, latency_ms, decision_id FK）
+- [ ] 8. [核心] `server/tests/eval/judge.py` — `LLMJudge` 类：用配置的 LLM 作为裁判，读 `(日记, AI回复, rubric)` 打分（1-5）。rubric 维度：共情度 / 上下文忠实度 / 相关性 / 安全性。支持 `strict` 模式（要求引用原文证据）和 `lenient` 模式（快速扫描）。
+- [ ] 9. [核心] `server/tests/eval/rubric.py` — `EvalRubric` 类：定义评分维度和锚点描述（1=完全不符合 … 5=完美符合）。每个维度含 2 个示例（正例/反例）。
+- [ ] 10. [配置] `Makefile` — 新增 `eval` target：`python -m pytest server/tests/eval/ -v -s`（包含 `eval-rag` 检索评估 + 生成质量评估）；输出含 token 总量 + 平均延迟，与上次基线对比
 
 #### Verification
 
 1. `pytest server/tests/unit/shared -v` 通过
 2. `EmotionEstimator` 与 `estimate_tokens()` 在 `shared/` 中有唯一定义（不在 Agent 中重复实现）
 3. `llm_call_logs` / `agent_decisions` / `skill_activations` 三张表的 ORM 模型可通过 SQLite 创建
+4. `make eval` 可运行（即使 Agent 尚未实现，Judge 框架可独立验证：给定 mock 数据 → 返回评分 JSON）
+5. `make eval` 输出含 token 总量 + 平均延迟，caller 可据此做成本回归判断
 
 ---
 
@@ -437,13 +489,13 @@
 
 - **Branch**: `feature/agents-workers`
 - **Depends on**: phase-b-7（agents-shared）+ B-1~B-5（全部领域模块）
-- **合并后 main**: 3 个 Worker Agent + IntentClassifier 可独立单元测试（mock LLM）
+- **合并后 main**: 3 个 Worker Agent + IntentClassifier 可独立单元测试（mock LLM）；Agent 生成质量基线已建立
 
 ### Implementation Plan
 
 #### Overview
 
-迁移 V1 的 3 个 Worker Agent（Empathy / Retrieval / Insight）+ IntentClassifier。全部通过 DI 接收 LLM / DB session / KnowledgeStore / EmotionEstimator / TokenEstimator / Tracer。每个 Agent 实现 `fallback()` 方法。
+迁移 V1 的 3 个 Worker Agent（Empathy / Retrieval / Insight）+ IntentClassifier。全部通过 DI 接收 LLM / DB session / KnowledgeStore / EmotionEstimator / TokenEstimator / Tracer。每个 Agent 实现 `fallback()` 方法。**Agent 写好的当天即用 B-7 交付的 LLM-as-Judge 建立生成质量基线**，不推迟到 B-10。
 
 #### Tasks
 
@@ -455,6 +507,8 @@
 - [ ] 6. [测试] `tests/unit/domain/agents/` — test_intent_classifier / test_empathy_agent / test_retrieval_agent / test_insight_agent（全部 mock LLM）
 - [ ] 7. [测试] Agent fallback 测试：模拟 LLM API 不可达，验证各 Worker 返回 `fallback()` 安全回复，管线不崩溃
 - [ ] 8. [可观测性] Agent 调用 LLM 时通过 DI 的 `LLMCallTracer` 写入 `llm_call_logs`
+- [ ] 9. [评估] `server/tests/eval/generation/test_cases_empathy.json` — 15 条 eval case（10 条 happy path + 5 条 edge case：极短日记/矛盾情绪/用户否定 AI/中英混杂/边界危机），用 B-7 的 `LLMJudge` 对 EmpathyAgent 回复打分（1-5）；首次运行写入 `BASELINE.md`
+- [ ] 10. [评估] `server/tests/eval/generation/test_cases_insight.json` — 5 条 eval case（常规分析+周报/月报），对 InsightAgent 回复打分
 
 #### Verification
 
@@ -463,6 +517,7 @@
 3. 3 个 Worker Agent 共享 `DomainKnowledgeStore`/`EmotionEstimator`/`TokenEstimator`
 4. 每次 LLM 调用有 trace 记录（`llm_call_logs` 表有对应行）
 5. LLM API 不可达时各 Agent 返回 fallback，不抛异常
+6. `make eval` 跑通生成质量评估，EmpathyAgent 共情度 ≥ 3.5（1-5 分），InsightAgent 忠实度 ≥ 3.5；结果写入 `BASELINE.md` 供后续 PR 对照
 
 ---
 
@@ -488,6 +543,7 @@
 - [ ] 6. [可观测性] Supervisor 决策记录到 `AgentDecisionLogger`（intent_classification, tier_routing, skill_activation, worker_routing）
 - [ ] 7. [测试] `tests/unit/domain/agents/` — test_supervisor / test_graph（mock 全部 Worker + mock SkillRegistry）
 - [ ] 8. [测试] Worker 超时降级测试：模拟单个 Worker 超时（`asyncio.wait_for` timeout）→ 验证 Supervisor 降级合成剩余结果
+- [ ] 9. [评估] `server/tests/eval/generation/test_eval_multiturn.py` — 用 B-4 的 3 条多轮 scenario，经完整编排管线（Supervisor → Worker → 记忆），评估第 3 轮回复是否引用了第 1 轮的话题（记忆连贯性）：断言 `LLMJudge` 评分 ≥ 基线
 
 #### Verification
 
@@ -497,6 +553,7 @@
 4. `skill_activations` 表记录完整（每次 can_activate 调用，含激活和抑制）
 5. Supervisor 决策路径可追溯（intent + tier + skills + routing）
 6. Worker 超时降级测试通过：单个 Worker 超时 → 用剩余结果合成，不抛异常
+7. 多轮 eval 通过：3-turn scenario 中 AI 能跨天引用历史话题，评分不退化
 
 ---
 
@@ -504,28 +561,38 @@
 
 - **Branch**: `feature/agents-resilience`
 - **Depends on**: phase-b-9（agents-orchestration）
-- **合并后 main**: Context Compressor 集成 + 韧性测试体系完整 + Eval 基线建立
+- **合并后 main**: Context Compressor 集成 + 韧性测试体系完整 + 边缘/对抗性 Eval 就位
 
 ### Implementation Plan
 
 #### Overview
 
-Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降级测试体系、追加 Eval 用例。本 PR 不引入新的 Agent 逻辑——专注在「已有管线在异常条件下的行为正确性」。
+Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降级测试体系、追加**边缘/对抗性 Eval 用例**（生成质量 eval 已在 B-8 交付，此处只补边界压力场景）。本 PR 不引入新的 Agent 逻辑——专注在「已有管线在异常条件下的行为正确性」。
 
 #### Tasks
 
 - [ ] 1. [核心] `server/app/domain/agents/context_compressor.py` — 迁移 V1，**实际集成**到 multi_agent 流程：在 WorkingMemory 4000 token 窗口内，用语义相似度选择性保留相关上下文，压缩至 ~1500 token
 - [ ] 2. [测试] 多跳检索漂移测试：构造首轮检索返回不相关结果的场景 → 验证 RetrievalAgent 锚定机制生效，第二轮不无限漂移
 - [ ] 3. [测试] Context Compressor 正确性测试：验证压缩后上下文保留 query 相关部分，丢弃无关部分
-- [ ] 4. [测试] Eval 用例：追加 5 条日记输入 + 结构化评判标准到 `tests/eval/test_cases.json`
+- [ ] 4. [测试] 边缘/对抗性 Eval：追加 8 条压力场景到 `tests/eval/generation/test_cases_adversarial.json`：
+  - 极短日记（≤5 字）→ Agent 不崩、不做过度解读
+  - 超长流水账（2000+ 字）→ ChunkSplitter + ContextCompressor 协同正常
+  - 逻辑矛盾情绪（"我很开心，因为分手了"）→ 情绪分类不误判
+  - 用户否定 Agent（"你上次说的不对"）→ Agent 承认而非辩解
+  - 边界危机（"活着好累"）→ crisis_detector 不误触发也不漏
+  - 中英混杂 → Tokenizer 正确理解
+  - 极短间隔连续写入（5 分钟 3 条）→ EpisodicMemory 不溢出
+  - 空输入 → 全链路不抛异常
+  用 `LLMJudge` 评估安全性/鲁棒性，断言无崩溃 + 安全分 ≥ 基线
 - [ ] 5. [文档] 更新 `README.md` / `.cursor/rules/current_phase.mdc` — 标记 Phase B 完成
 
 #### Verification
 
 1. `pytest server/tests/unit/domain/agents/test_context_compressor -v` 通过
 2. 多跳检索漂移测试通过（锚定机制生效）
-3. 改 prompt 后 `make eval` 不退化（评分无明显下降）
-4. Phase B 全部 10 个 PR 合并后 `main` 可运行（`make test` + `make lint` 通过）
+3. `make eval` 全量通过：检索（B-3.5）+ 生成（B-8）+ 多轮（B-9）+ 对抗（B-10）四项评分均不退化
+4. 8 条对抗性场景零崩溃，安全分 ≥ baseline
+5. Phase B 全部 11 个 PR 合并后 `main` 可运行（`make test` + `make lint` 通过）
 
 ## PR: phase-c-1-services-layer
 
