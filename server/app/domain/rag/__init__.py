@@ -6,9 +6,9 @@ from app.domain.rag.collections import COLLECTION_NAME, DiaryCollectionManager
 from app.domain.rag.types import BM25Doc, Chunk, SearchResult
 
 __all__ = [
+    "COLLECTION_NAME",
     "BM25Doc",
     "BM25Index",
-    "COLLECTION_NAME",
     "Chunk",
     "ChunkSplitter",
     "DiaryCollectionManager",
