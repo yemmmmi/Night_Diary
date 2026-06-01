@@ -68,16 +68,22 @@ app = create_app()
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Entry point for ``uvicorn`` (programmatic) — used by PyInstaller builds."""
+    """Entry point for uvicorn and PyInstaller ``nightdiary-backend`` builds."""
     import uvicorn
+
+    from app.config import get_settings
 
     args = _parse_args(argv)
 
     if args.data_dir:
         os.environ["DATA_DIR"] = args.data_dir
 
+    get_settings.cache_clear()
+    application = create_app()
+
+    # Pass the app object directly — string imports break inside frozen executables.
     uvicorn.run(
-        "app.main:app",
+        application,
         host="127.0.0.1",
         port=args.port,
         log_level="info",
@@ -85,4 +91,7 @@ def main(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     main()
