@@ -262,12 +262,12 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/rag/types.py` — `Chunk`、`BM25Doc`、`SearchResult` 数据类
-- [ ] 2. [核心] `server/app/domain/rag/chunker.py` — `ChunkSplitter`；合并 V1 `ParentChildChunker` 逻辑
-- [ ] 3. [核心] `server/app/domain/rag/bm25.py` — `BM25Index` **类实例**（非模块级 dict）；支持增量 `add_document()` / `remove_document()`；`tokenize` + `df` + `avgdl` 增量维护，不每次全量重建
-- [ ] 4. [核心] `server/app/domain/rag/collections.py` — `DiaryCollectionManager`：日记 chunk 的 collection 生命周期（创建、更新、删除）
-- [ ] 5. [测试] `tests/unit/domain/rag/` — test_chunker / test_bm25 / test_collections
-- [ ] 6. [性能] BM25 `add_document()` 增量更新计时验证：O(1) 而非 O(n)
+- [x] 1. [核心] `server/app/domain/rag/types.py` — `Chunk`、`BM25Doc`、`SearchResult` 数据类
+- [x] 2. [核心] `server/app/domain/rag/chunker.py` — `ChunkSplitter`；合并 V1 `ParentChildChunker` 逻辑
+- [x] 3. [核心] `server/app/domain/rag/bm25.py` — `BM25Index` **类实例**（非模块级 dict）；支持增量 `add_document()` / `remove_document()`；`tokenize` + `df` + `avgdl` 增量维护，不每次全量重建
+- [x] 4. [核心] `server/app/domain/rag/collections.py` — `DiaryCollectionManager`：日记 chunk 的 collection 生命周期（创建、更新、删除）
+- [x] 5. [测试] `tests/unit/domain/rag/` — test_chunker / test_bm25 / test_collections
+- [x] 6. [性能] BM25 `add_document()` 增量更新计时验证：O(1) 而非 O(n)
 
 #### Verification
 
