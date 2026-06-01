@@ -24,7 +24,7 @@
 ```
 night-diary-v2/
 ├── src-tauri/              # Tauri (Rust) 桌面壳
-├── src/                    # Vue 3 前端（Tauri WebView 内运行）
+├── src/                    # Vue 3 前端（原 web/，Tauri 标准布局，WebView 内运行）
 │   ├── pages/              # 场景级页面
 │   ├── features/           # 按业务领域组织
 │   ├── shared/             # API / 组件 / composables / stores / types
