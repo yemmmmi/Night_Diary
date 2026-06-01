@@ -51,6 +51,8 @@ ignore = ["E501"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["N802", "N803", "S101"]
 "app/domain/knowledge/extractor.py" = ["RUF001"]
+"app/domain/rag/chunker.py" = ["RUF001"]
+"tests/unit/domain/rag/test_chunker.py" = ["RUF001"]
 
 # ---- Mypy ----
 [tool.mypy]
