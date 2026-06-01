@@ -233,7 +233,7 @@
 
 - [ ] 1. [核心] `server/app/domain/knowledge/types.py` — `KnowledgeHit`、`EntityRecord` dataclass/TypedDict
 - [ ] 2. [核心] `server/app/domain/knowledge/store.py` — `DomainKnowledgeStore`：迁移 V1 `domain_store.py`；`query()`/`add()`/`delete()`；读 `Settings.chroma_persist_dir`；单例 Chroma client
-- [ ] 3. [核心] `server/app/domain/knowledge/extractor.py` — 迁移 V1 extractor；修复 `entity_type` 文档与实现不一致
+- [ ] 3. [核心] `server/app/domain/knowledge/extractor.py` — 迁移 V1 extractor；修复 `entity_type` 文档与实现不一致（V1 只列 4 种但实际存 5 种，含 MOOD）；`mood_score=0.0`（中性情绪）不创建 EntityRecord，避免存储无意义数据
 - [ ] 4. [测试] `tests/unit/domain/knowledge/test_store.py` — mock Chroma client
 - [ ] 5. [测试] `tests/unit/domain/knowledge/test_extractor.py`
 - [ ] 6. [可观测性] `DomainKnowledgeStore.query()` 记录检索 trace（query_text, hit_count, top_score, latency_ms）
