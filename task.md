@@ -109,17 +109,17 @@
 
 #### Tasks
 
-- [ ] 1. [核心] 安装 Tauri CLI：`npm install -D @tauri-apps/cli@latest`；`npm run tauri init`，生成 `src-tauri/`
-- [ ] 2. [核心] `src-tauri/Cargo.toml` — 依赖 `tauri` v2、`tauri-plugin-shell`、`tokio`、`serde`、`serde_json`
-- [ ] 3. [核心] `src-tauri/tauri.conf.json` — 窗口标题 "夜记"、无边框（`decorations: false`）、最小尺寸 900×600、默认 1200×800；identifier `com.nightdiary.app`
-- [ ] 4. [核心] `src-tauri/resources/splash.html` — 启动画面：Logo 居中 + "正在准备 AI 引擎..." + 进度条动画
-- [ ] 5. [核心] `src-tauri/src/main.rs` — 入口：加载 splash → 启动 Python sidecar → 健康检查 → 关闭 splash → 打开主窗口
-- [ ] 6. [核心] `src-tauri/src/lib.rs` — Tauri commands：`get_backend_port()`、`get_data_dir()`、`get_app_version()`
-- [ ] 7. [核心] `src-tauri/src/process.rs` — Python 子进程管理：`spawn_backend()`、`health_poll()`、`graceful_shutdown()`
-- [ ] 8. [核心] `src-tauri/capabilities/default.json` — Tauri v2 权限声明（shell 执行、窗口管理）
-- [ ] 9. [核心] `src-tauri/icons/` — 应用图标（ico + png）
-- [ ] 10. [配置] 更新 `package.json` scripts — `tauri dev`、`tauri build`
-- [ ] 11. [配置] 更新 `vite.config.ts` — Tauri 适配（`server.strictPort = true`）
+- [x] 1. [核心] 安装 Tauri CLI：`npm install -D @tauri-apps/cli@latest`；`npm run tauri init`，生成 `src-tauri/`
+- [x] 2. [核心] `src-tauri/Cargo.toml` — 依赖 `tauri` v2、`tauri-plugin-shell`、`tokio`、`serde`、`serde_json`
+- [x] 3. [核心] `src-tauri/tauri.conf.json` — 窗口标题 "夜记"、无边框（`decorations: false`）、最小尺寸 900×600、默认 1200×800；identifier `com.nightdiary.app`
+- [x] 4. [核心] `src-tauri/resources/splash.html` — 启动画面：Logo 居中 + "正在准备 AI 引擎..." + 进度条动画
+- [x] 5. [核心] `src-tauri/src/main.rs` — 入口：加载 splash → 启动 Python sidecar → 健康检查 → 关闭 splash → 打开主窗口
+- [x] 6. [核心] `src-tauri/src/lib.rs` — Tauri commands：`get_backend_port()`、`get_data_dir()`、`get_app_version()`
+- [x] 7. [核心] `src-tauri/src/process.rs` — Python 子进程管理：`spawn_backend()`、`health_poll()`、`graceful_shutdown()`
+- [x] 8. [核心] `src-tauri/capabilities/default.json` — Tauri v2 权限声明（shell 执行、窗口管理）
+- [x] 9. [核心] `src-tauri/icons/` — 应用图标（ico + png）
+- [x] 10. [配置] 更新 `package.json` scripts — `tauri dev`、`tauri build`
+- [x] 11. [配置] 更新 `vite.config.ts` — Tauri 适配（`server.strictPort = true`）
 
 #### Verification
 
@@ -144,14 +144,14 @@
 
 #### Tasks
 
-- [ ] 1. [核心] 移动 `web/` 所有文件到 `src/`（保留 `web/` 为兼容期软链接或直接删除）
-- [ ] 2. [核心] 更新 `vite.config.ts` — 根目录改为 `./`，`@` alias 保持指向 `src/`
-- [ ] 3. [核心] 更新 `index.html` — 位于项目根目录
-- [ ] 4. [核心] `src/shared/api/http.ts` — 新增 `useBackend()` composable：通过 `invoke('get_backend_port')` 获取端口，动态设置 axios `baseURL`
-- [ ] 5. [核心] `src/App.vue` — 改造为 Tauri 感知：启动时等待后端端口就绪，显示加载状态
-- [ ] 6. [配置] 更新 `Makefile` — `dev-web` 目标指向 `npm run tauri dev`
-- [ ] 7. [配置] 更新 CI — web job 的 `working-directory` 仍为 `web/` 或更新为根目录
-- [ ] 8. [清理] 删除 `web/` 目录中已迁移的冗余文件
+- [x] 1. [核心] 移动 `web/` 所有文件到 `src/`（保留 `web/` 为兼容期软链接或直接删除）
+- [x] 2. [核心] 更新 `vite.config.ts` — 根目录改为 `./`，`@` alias 保持指向 `src/`
+- [x] 3. [核心] 更新 `index.html` — 位于项目根目录
+- [x] 4. [核心] `src/shared/api/http.ts` — 新增 `useBackend()` composable：通过 `invoke('get_backend_port')` 获取端口，动态设置 axios `baseURL`
+- [x] 5. [核心] `src/App.vue` — 改造为 Tauri 感知：启动时等待后端端口就绪，显示加载状态
+- [x] 6. [配置] 更新 `Makefile` — `dev-web` 目标指向 `npm run tauri dev`
+- [x] 7. [配置] 更新 CI — web job 的 `working-directory` 仍为 `web/` 或更新为根目录
+- [x] 8. [清理] 删除 `web/` 目录中已迁移的冗余文件
 
 #### Verification
 
@@ -176,11 +176,11 @@
 
 #### Tasks
 
-- [ ] 1. [清理] 删除 `web/` 目录
-- [ ] 2. [配置] 验证 `package.json`、`vite.config.ts`、`tsconfig.json` 路径均指向 `src/`
-- [ ] 3. [配置] 更新 CI — web job 的 working-directory 改为根目录
-- [ ] 4. [配置] 更新 `.gitignore` — 移除 `web/` 专属忽略规则
-- [ ] 5. [文档] 更新 `README.md` 目录结构图
+- [x] 1. [清理] 删除 `web/` 目录
+- [x] 2. [配置] 验证 `package.json`、`vite.config.ts`、`tsconfig.json` 路径均指向 `src/`
+- [x] 3. [配置] 更新 CI — web job 的 working-directory 改为根目录
+- [x] 4. [配置] 更新 `.gitignore` — 移除 `web/` 专属忽略规则
+- [x] 5. [文档] 更新 `README.md` 目录结构图
 
 #### Verification
 
@@ -204,10 +204,10 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/build.spec` — PyInstaller spec 文件：hidden imports（chromadb、onnxruntime、sentence_transformers、jieba、torch、tokenizers）
-- [ ] 2. [核心] 处理二进制依赖 — ChromaDB 的 onnxruntime DLL、sentence-transformers 的模型文件路径
-- [ ] 3. [核心] `server/app/main.py` 的 `main()` 函数 — 确保 PyInstaller 入口正确
-- [ ] 4. [文档] `server/README.md` 或 `docs/` — 打包说明（命令、常见问题）
+- [x] 1. [核心] `server/build.spec` — PyInstaller spec 文件：hidden imports（chromadb、onnxruntime、sentence_transformers、jieba、torch、tokenizers）
+- [x] 2. [核心] 处理二进制依赖 — ChromaDB 的 onnxruntime DLL、sentence-transformers 的模型文件路径
+- [x] 3. [核心] `server/app/main.py` 的 `main()` 函数 — 确保 PyInstaller 入口正确
+- [x] 4. [文档] `server/README.md` 或 `docs/` — 打包说明（命令、常见问题）
 
 #### Verification
 
