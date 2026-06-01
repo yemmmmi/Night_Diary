@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.domain.rag.reranker import Reranker
 from app.domain.rag.types import RetrievalResult
 
@@ -91,6 +93,20 @@ def test_predict_failure_degrades_to_fallback() -> None:
     result = reranker.rerank("query", candidates)
 
     assert result == candidates[:2]
+
+
+def test_score_count_mismatch_logs_warning_and_pairs_min_length(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    model = MagicMock()
+    model.predict.return_value = [0.9, 0.1]
+    reranker = Reranker(top_k=5, model_loader=lambda: model)
+
+    with caplog.at_level("WARNING"):
+        result = reranker.rerank("query", _candidates(3))
+
+    assert len(result) == 2
+    assert any("score count mismatch" in record.message for record in caplog.records)
 
 
 def test_no_global_env_mutation_on_construction(monkeypatch) -> None:

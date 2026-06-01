@@ -84,14 +84,23 @@ class Reranker:
 
         try:
             pairs = [(query, candidate.content) for candidate in candidates]
-            scores = model.predict(pairs)
+            raw_scores = model.predict(pairs)
+            score_values = [float(s) for s in raw_scores]
+            if len(score_values) != len(candidates):
+                logger.warning(
+                    "Reranker score count mismatch: candidates=%d scores=%d; "
+                    "pairing min length only",
+                    len(candidates),
+                    len(score_values),
+                )
+            pair_count = min(len(candidates), len(score_values))
             scored = [
                 dataclasses.replace(
-                    candidate,
-                    rerank_score=float(score),
-                    score=float(score),
+                    candidates[i],
+                    rerank_score=score_values[i],
+                    score=score_values[i],
                 )
-                for candidate, score in zip(candidates, scores, strict=False)
+                for i in range(pair_count)
             ]
             scored.sort(key=lambda result: result.rerank_score or 0.0, reverse=True)
             return scored[: self.top_k]
