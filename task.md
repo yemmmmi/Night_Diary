@@ -13,7 +13,7 @@
 4. **合并标准**：该 PR 的 Verification 全部通过，且 `main` 可运行（`make test` / `make lint` / 该阶段手动流）。
 5. 当前应执行的 PR：见 `.cursor/rules/current_phase.mdc`（随进度更新）。
 
-**累计 PR 数**：23（Phase A:5 + B:10 + C:3 + D:4 + E:1）
+**累计 PR 数**：24（Phase A:5 + B:11 + C:3 + D:4 + E:1）
 
 **架构方案**：`docs/本地化桌面端重构方案.md`（本文件仅维护施工清单，不重复论述设计决策）
 
@@ -306,10 +306,55 @@
 
 ---
 
+## PR: phase-b-3.5-eval-rag
+
+- **Branch**: `feature/eval-rag-baseline`
+- **Depends on**: phase-b-3（rag-retrieval）
+- **合并后 main**: RAG 离线评估框架就位；Baseline 数据（Recall@K / MRR）可复现
+
+### Implementation Plan
+
+#### Overview
+
+在 B-3 交付混合检索后，立即建立离线评估基线。构建 10 条日记 × 10 条查询的标注数据集，对比四种检索方案（BM25-only / 向量-only / 混合 RRF / 混合+Rerank）的 Recall@5 和 MRR。Eval 不走 CI（需要 Chroma + Embedding 模型），通过 `make eval-rag` 手动触发。
+
+> **为什么在 B-3 之后立即做**：B-3 是第一个可端到端跑检索的里程碑。在 B-4~B-10 之前量化"搜得准不准"，避免后续 prompt/chunk/rerank 改动后回改成本巨大。同时给 B-5 prompt tuner、B-8 retrieval agent 提供可对照基线。
+
+#### Tasks
+
+- [ ] 1. [核心] `server/tests/eval/rag/conftest.py` — eval fixture：用 `ChunkSplitter` + `DiaryCollectionManager` 写入 10 条中文日记到临时 Chroma 目录；构建 BM25Index
+- [ ] 2. [核心] `server/tests/eval/rag/test_cases.json` — 10 条查询 × 每查询 1-3 个相关 diary_id（人工标注），包含不同检索场景（情绪/事件/时间/人物）
+- [ ] 3. [核心] `server/tests/eval/rag/test_eval_retrieval.py` — 评估脚本：
+  - 遍历 test_cases.json，对每条 query 分别跑 BM25-only / 向量-only / 混合 RRF / 混合+Rerank
+  - 计算 Recall@5 / MRR / nDCG@5
+  - 输出对比表格到 stdout
+  - 断言混合 RRF Recall@5 ≥ max(BM25-only, 向量-only)（融合不退化）
+  - 断言混合+Rerank MRR ≥ 混合 RRF MRR（重排序提升首位命中率）
+- [ ] 4. [核心] `server/tests/eval/rag/test_cases.md` — 标注说明：每条 query 的检索意图、相关日记的判定理由、边缘情况说明
+- [ ] 5. [配置] `Makefile` — 新增 `eval-rag` target：`python -m pytest server/tests/eval/rag/ -v -s`
+- [ ] 6. [文档] `server/tests/eval/rag/BASELINE.md` — 首次运行后记录四种方案的 Recall@5 / MRR / nDCG@5 基线值，供后续 PR 对比
+
+#### Metrics
+
+| 指标 | 含义 | 用途 |
+|------|------|------|
+| **Recall@5** | 前 5 个结果中命中相关日记的比例 | 衡量检索覆盖度 |
+| **MRR** | 第一个相关结果的排位倒数均值 | 衡量首位命中能力 |
+| **nDCG@5** | 归一化折损累计增益 | 衡量整体排序质量 |
+
+#### Verification
+
+1. `make eval-rag` 可运行，输出四种方案的 Recall@5 / MRR / nDCG@5 对比表格
+2. 混合 RRF 的 Recall@5 ≥ BM25-only 且 ≥ 向量-only（融合不退化）
+3. 混合+Rerank 的 MRR ≥ 混合 RRF（重排序提升）
+4. 后续 B-5/B-8/B-10 prompt 或检索逻辑改动后，对照 `BASELINE.md` 确认不退化
+
+---
+
 ## PR: phase-b-4-domain-memory
 
 - **Branch**: `feature/domain-memory`
-- **Depends on**: phase-b-3（rag-retrieval）
+- **Depends on**: phase-b-3.5-eval-rag（eval）、phase-b-3（rag-retrieval）
 - **合并后 main**: 三层记忆系统可用（进程内存储，无 Redis）；Episodic Memory 默认持久化
 
 ### Implementation Plan
@@ -517,15 +562,15 @@ Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降�
 - [ ] 1. [核心] `server/app/domain/agents/context_compressor.py` — 迁移 V1，**实际集成**到 multi_agent 流程：在 WorkingMemory 4000 token 窗口内，用语义相似度选择性保留相关上下文，压缩至 ~1500 token
 - [ ] 2. [测试] 多跳检索漂移测试：构造首轮检索返回不相关结果的场景 → 验证 RetrievalAgent 锚定机制生效，第二轮不无限漂移
 - [ ] 3. [测试] Context Compressor 正确性测试：验证压缩后上下文保留 query 相关部分，丢弃无关部分
-- [ ] 4. [测试] Eval 用例：追加 5 条日记输入 + 结构化评判标准到 `tests/eval/test_cases.json`
+- [ ] 4. [测试] Eval 用例：追加 5 条日记输入 + **生成质量**结构化评判标准到 `tests/eval/test_cases.json`（context relevance / faithfulness / empathy；检索质量 eval 已在 B-3.5 完成，此处仅覆盖生成端）
 - [ ] 5. [文档] 更新 `README.md` / `.cursor/rules/current_phase.mdc` — 标记 Phase B 完成
 
 #### Verification
 
 1. `pytest server/tests/unit/domain/agents/test_context_compressor -v` 通过
 2. 多跳检索漂移测试通过（锚定机制生效）
-3. 改 prompt 后 `make eval` 不退化（评分无明显下降）
-4. Phase B 全部 10 个 PR 合并后 `main` 可运行（`make test` + `make lint` 通过）
+3. `make eval` 生成质量不退化（context relevance / faithfulness 评分无明显下降；检索质量已由 B-3.5 的 `make eval-rag` 覆盖）
+4. Phase B 全部 11 个 PR 合并后 `main` 可运行（`make test` + `make lint` 通过）
 
 ## PR: phase-c-1-services-layer
 
