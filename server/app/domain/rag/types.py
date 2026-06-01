@@ -45,3 +45,23 @@ class SearchResult:
     chunk_total: int = 1
     date: str = ""
     tags: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalResult:
+    """A fused/reranked retrieval hit produced by :class:`HybridRetriever`.
+
+    ``score`` carries the most recent stage score (RRF or rerank). Stages are
+    annotated separately so callers can inspect the pipeline.
+    """
+
+    doc_id: str
+    content: str
+    diary_id: str
+    score: float = 0.0
+    rrf_score: float | None = None
+    rerank_score: float | None = None
+    chunk_index: int = 0
+    chunk_total: int = 1
+    date: str = ""
+    tags: str = ""
