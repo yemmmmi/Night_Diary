@@ -19,6 +19,9 @@ coverage.xml
 # Node
 node_modules/
 dist/
+build/
+server/dist/
+server/build/
 src-tauri/target/
 .vite/
 coverage/
