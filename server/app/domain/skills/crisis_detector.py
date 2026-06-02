@@ -7,47 +7,9 @@ from typing import Any
 
 from app.domain.skills.base import BaseSkill
 from app.domain.skills.types import SkillCategory, SkillMetadata, SkillProfileContext
+from app.shared.emotion_estimator import EmotionEstimator
 
 logger = logging.getLogger(__name__)
-
-CRISIS_EMOTION_THRESHOLD = -0.7
-
-_SEVERE_NEGATIVE_KEYWORDS = (
-    "想死",
-    "不想活",
-    "自杀",
-    "结束生命",
-    "活着没意思",
-    "我不想活了",
-    "绝望",
-    "崩溃",
-    "撑不下去",
-    "没有希望",
-    "生不如死",
-    "伤害自己",
-    "自残",
-    "割腕",
-    "跳楼",
-)
-
-_NEGATIVE_KEYWORDS = (
-    "难过",
-    "痛苦",
-    "焦虑",
-    "抑郁",
-    "孤独",
-    "害怕",
-    "愤怒",
-    "失望",
-    "无助",
-    "悲伤",
-    "压抑",
-    "烦躁",
-    "失眠",
-    "哭",
-    "受不了",
-    "太累了",
-)
 
 CRISIS_RESOURCES = (
     "如果你正在经历极度痛苦，请记住你并不孤单。"
@@ -59,43 +21,13 @@ CRISIS_RESOURCES = (
 )
 
 
-def estimate_emotion_from_content(content: str) -> float:
-    """Keyword-based emotion score in [-1.0, 1.0]. B-7 will centralize this."""
-    if not content:
-        return 0.0
-
-    score = 0.0
-    for word in _SEVERE_NEGATIVE_KEYWORDS:
-        if word in content:
-            score -= 0.4
-
-    for word in _NEGATIVE_KEYWORDS:
-        if word in content:
-            score -= 0.15
-
-    positive_keywords = (
-        "开心",
-        "快乐",
-        "幸福",
-        "感恩",
-        "满足",
-        "期待",
-        "兴奋",
-        "温暖",
-        "感动",
-        "自豪",
-        "放松",
-        "愉快",
-    )
-    for word in positive_keywords:
-        if word in content:
-            score += 0.15
-
-    return max(-1.0, min(1.0, score))
-
-
 class CrisisDetectorSkill(BaseSkill):
-    """Detect crisis-level negative emotion and return supportive resources."""
+    """Detect crisis-level negative emotion and return supportive resources.
+
+    Emotion scoring is delegated to the shared :class:`EmotionEstimator` (the
+    single source of truth for the keyword heuristic) instead of a skill-local
+    copy of the lexicon.
+    """
 
     metadata = SkillMetadata(
         name="crisis_detector",
@@ -106,6 +38,9 @@ class CrisisDetectorSkill(BaseSkill):
         token_cost_estimate=50,
     )
 
+    def __init__(self, emotion_estimator: EmotionEstimator | None = None) -> None:
+        self._emotion = emotion_estimator or EmotionEstimator()
+
     def activation_score(
         self,
         text: str,
@@ -113,12 +48,12 @@ class CrisisDetectorSkill(BaseSkill):
     ) -> float:
         intent = (profile or {}).get("intent", "pure_record")
 
-        if any(keyword in text for keyword in _SEVERE_NEGATIVE_KEYWORDS):
+        if self._emotion.has_severe_signal(text):
             return 1.0
         if intent == "emotional_support":
             return 0.8
 
-        negative_count = sum(1 for keyword in _NEGATIVE_KEYWORDS if keyword in text)
+        negative_count = self._emotion.count_negative_signals(text)
         if negative_count >= 3:
             return 0.7
         if negative_count >= 1:
@@ -132,19 +67,18 @@ class CrisisDetectorSkill(BaseSkill):
         if not diary_content:
             return "未检测到危机信号。"
 
-        emotion_score = estimate_emotion_from_content(diary_content)
-        if emotion_score < CRISIS_EMOTION_THRESHOLD:
+        estimate = self._emotion.estimate(diary_content)
+        if estimate.score < self._emotion.crisis_threshold:
             logger.warning(
                 "Crisis detected score=%.2f threshold=%.2f user_id=%s",
-                emotion_score,
-                CRISIS_EMOTION_THRESHOLD,
+                estimate.score,
+                self._emotion.crisis_threshold,
                 user_id,
             )
-            triggered_severe = [w for w in _SEVERE_NEGATIVE_KEYWORDS if w in diary_content]
-            parts = [f"⚠️ 危机情绪检测触发（情绪分数: {emotion_score:.2f}）"]
-            if triggered_severe:
-                parts.append(f"检测到严重负面信号关键词: {', '.join(triggered_severe)}")
+            parts = [f"⚠️ 危机情绪检测触发（情绪分数: {estimate.score:.2f}）"]
+            if estimate.matched_severe:
+                parts.append(f"检测到严重负面信号关键词: {', '.join(estimate.matched_severe)}")
             parts.extend(["", "【升级响应协议已触发】", CRISIS_RESOURCES])
             return "\n".join(parts)
 
-        return f"情绪状态正常（情绪分数: {emotion_score:.2f}），未检测到危机信号。"
+        return f"情绪状态正常（情绪分数: {estimate.score:.2f}），未检测到危机信号。"
