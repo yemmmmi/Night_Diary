@@ -324,18 +324,18 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/tests/eval/rag/diaries.json` — 固定 30 条中文日记语料（覆盖情绪/事件/时间/人物/混合场景），人工检查后提交到仓库，禁止 eval 运行时随机生成
-- [ ] 2. [核心] `server/tests/eval/rag/conftest.py` — eval fixture：加载固定日记语料，用 `ChunkSplitter` + `DiaryCollectionManager` 写入临时 Chroma 目录；构建 BM25Index；测试结束清理临时目录
-- [ ] 3. [核心] `server/tests/eval/rag/test_cases.json` — 20 条查询 × 每查询 1-3 个相关 diary_id（人工标注），覆盖不同检索意图（关键词/语义/时间/情绪/复合）
-- [ ] 4. [核心] `server/tests/eval/rag/test_eval_retrieval.py` — 评估脚本：
-  - 遍历 test_cases.json，对每条 query 分别跑 BM25-only / 向量-only / 混合 RRF / 混合+Rerank
+- [x] 1. [核心] `server/tests/eval/rag/diaries.json` — 固定 30 条中文日记语料（覆盖情绪/事件/时间/人物/混合场景），人工检查后提交到仓库，禁止 eval 运行时随机生成
+- [x] 2. [核心] `server/tests/eval/rag/conftest.py` — eval fixture：加载固定日记语料，用 `ChunkSplitter` + `DiaryCollectionManager` 写入临时 Chroma 目录；构建 BM25Index；测试结束清理临时目录（向量/reranker 模型不可用时降级跳过，BM25 始终运行）
+- [x] 3. [核心] `server/tests/eval/rag/test_cases.json` — 20 条查询 × 每查询 1-3 个相关 diary_id（人工标注），覆盖不同检索意图（关键词/语义/时间/情绪/复合）
+- [x] 4. [核心] `server/tests/eval/rag/test_eval_retrieval.py` — 评估脚本：
+  - 遍历 test_cases.json，对每条 query 分别跑 BM25-only / 向量-only / 混合 RRF / 混合+Rerank（四分支统一走生产 `HybridRetriever`）
   - 计算 Recall@5 / MRR / nDCG@5
   - 输出对比表格到 stdout
-  - 对混合 RRF 和混合+Rerank 使用 baseline/软阈值检查：允许小样本波动，但若 Recall@5、MRR、nDCG@5 相比 `BASELINE.md` 明显下降，必须在 PR 中解释原因
+  - 对各分支使用 `baseline.json` 软阈值检查（容差 0.05）：允许小样本波动，明显下降则失败，须在 PR 中解释原因
   - 输出失败样例（query、expected diary_id、actual top5）以便定位 chunk/rerank 问题
-- [ ] 5. [核心] `server/tests/eval/rag/test_cases.md` — 标注说明：每条 query 的检索意图、相关日记的判定理由、边缘情况说明
-- [ ] 6. [配置] `Makefile` — 新增 `eval-rag` target：`python -m pytest server/tests/eval/rag/ -v -s`
-- [ ] 7. [文档] `server/tests/eval/rag/BASELINE.md` — 首次运行后记录四种方案的 Recall@5 / MRR / nDCG@5 基线值、模型版本、运行日期、允许波动范围，供后续 PR 对比
+- [x] 5. [核心] `server/tests/eval/rag/test_cases.md` — 标注说明：每条 query 的检索意图、相关日记的判定理由、边缘情况说明
+- [x] 6. [配置] `Makefile` — 新增 `eval-rag` target（`pytest tests/eval/rag/ -v -s -m eval`）；`eval` marker 将 eval 套件排除出默认/CI 运行
+- [x] 7. [文档] `server/tests/eval/rag/BASELINE.md` — 记录模型版本/前缀策略/运行方式/容差，及 BM25 基线值；向量/混合/rerank 三行待在具备 chromadb+模型的机器上首次完整运行（`EVAL_UPDATE_BASELINE=1 make eval-rag`）补齐
 
 #### Metrics
 
