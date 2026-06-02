@@ -467,16 +467,16 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/shared/emotion_estimator.py` — `EmotionEstimator` 类：统一的情感估计接口（消除 V1 坏味 3：empathy_agent 和 crisis_detector 的重复实现）
-- [ ] 2. [核心] `server/app/shared/token_utils.py` — `estimate_tokens()`：统一的 token 估算（消除 V1 坏味 3：retrieval_agent 和 context_compressor 的重复实现）
-- [ ] 3. [核心] `server/app/domain/agents/state.py` — `MultiAgentState` TypedDict + reducer
-- [ ] 4. [核心] `server/app/shared/tracing.py` — `LLMCallTracer` / `AgentDecisionLogger` 接口与记录类型：Agent 通过 DI 接收；具体 SQLite 写入实现放在 infrastructure，避免 domain 直接耦合 ORM
-- [ ] 5. [核心] `server/app/infrastructure/models/` — SQLite ORM 定义：`llm_call_logs`、`agent_decisions`（含 `skill_ids` JSON 列）、`skill_activations` 三张表
-- [ ] 6. [测试] `tests/unit/shared/` — test_emotion_estimator / test_token_utils
-- [ ] 7. [可观测性] 建表 SQL：`skill_activations` 表结构（skill_name, activated, score, threshold, input_digest, reason, latency_ms, decision_id FK）
-- [ ] 8. [核心] `server/tests/eval/judge.py` — `LLMJudge` 类：用配置的 LLM 作为裁判，读 `(日记, AI回复, rubric)` 打分（1-5）。rubric 维度：共情度 / 上下文忠实度 / 相关性 / 安全性。支持 `strict` 模式（要求引用原文证据）和 `lenient` 模式（快速扫描）。
-- [ ] 9. [核心] `server/tests/eval/rubric.py` — `EvalRubric` 类：定义评分维度和锚点描述（1=完全不符合 … 5=完美符合）。每个维度含 2 个示例（正例/反例）。
-- [ ] 10. [配置] `Makefile` — 新增 `eval` target：`python -m pytest server/tests/eval/ -v -s`（包含 `eval-rag` 检索评估 + 生成质量评估）；输出含 token 总量 + 平均延迟，与上次基线对比
+- [x] 1. [核心] `server/app/shared/emotion_estimator.py` — `EmotionEstimator` 类：统一的情感估计接口（消除 V1 坏味 3：empathy_agent 和 crisis_detector 的重复实现）；crisis_detector 已改为复用，删除本地词典副本
+- [x] 2. [核心] `server/app/shared/token_utils.py` — `estimate_tokens()`：统一的 token 估算（B-4 已落地并被 WorkingMemory 复用，满足本任务要求）
+- [x] 3. [核心] `server/app/domain/agents/state.py` — `MultiAgentState` TypedDict + reducer（`merge_unique` 去重 + `operator.add`）；新增 `activated_skills`；V2 去 user_id 改 `diary_id: str`；无 langgraph 依赖
+- [x] 4. [核心] `server/app/shared/tracing.py` — `LLMCallTracer` / `AgentDecisionLogger` 接口与记录类型：Agent 通过 DI 接收；具体 SQLite 写入实现放在 infrastructure，避免 domain 直接耦合 ORM
+- [x] 5. [核心] `server/app/infrastructure/models/` — SQLite ORM 定义：`llm_call_logs`、`agent_decisions`（含 `skill_ids` JSON 列）、`skill_activations` 三张表（已注册进 `init_db`）
+- [x] 6. [测试] `tests/unit/shared/` — test_emotion_estimator / test_token_utils（另含 test_state / test_judge / 三表 round-trip）
+- [x] 7. [可观测性] 建表 SQL：`skill_activations` 表结构（skill_name, activated, score, threshold, input_digest, reason, latency_ms, decision_id FK）
+- [x] 8. [核心] `server/tests/eval/judge.py` — `LLMJudge` 类：用配置的 LLM 作为裁判，读 `(日记, AI回复, rubric)` 打分（1-5）。rubric 维度：共情度 / 上下文忠实度 / 相关性 / 安全性。支持 `strict` 模式（要求引用原文证据）和 `lenient` 模式（快速扫描）。
+- [x] 9. [核心] `server/tests/eval/rubric.py` — `EvalRubric` 类：定义评分维度和锚点描述（1=完全不符合 … 5=完美符合）。每个维度含 2 个示例（正例/反例）。
+- [x] 10. [配置] `Makefile` — 新增 `eval` target：`python -m pytest server/tests/eval/ -v -s -m eval`（包含 `eval-rag` 检索评估 + 生成质量评估）；输出含 token 总量 + 平均延迟，与上次基线对比
 
 #### Verification
 
