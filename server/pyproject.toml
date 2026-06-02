@@ -67,6 +67,13 @@ ignore = ["E501"]
 "app/domain/skills/sentiment_skill.py" = ["RUF001"]
 "tests/unit/domain/skills/**" = ["RUF001"]
 "tests/unit/domain/rag/test_chunker.py" = ["RUF001"]
+"tests/unit/shared/test_emotion_estimator.py" = ["RUF001"]
+"tests/unit/shared/test_token_utils.py" = ["RUF001"]
+"tests/unit/eval/test_judge.py" = ["RUF001"]
+"tests/eval/judge.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/eval/rubric.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/eval/generation/**" = ["RUF001", "RUF002", "RUF003"]
+"app/shared/emotion_estimator.py" = ["RUF001"]
 
 # ---- Mypy ----
 [tool.mypy]

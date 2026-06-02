@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval-rag
+.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval eval-rag
 
 PY ?= python
 NPM ?= npm
@@ -23,7 +23,13 @@ test: test-server test-web
 test-server:
 	cd $(SERVER_DIR) && $(PY) -m pytest -q
 
-# Offline RAG retrieval eval (out of CI; needs the [eval] extra + models).
+# Full offline eval: RAG retrieval (B-3.5) + generation quality (B-7+).
+# Out of CI; needs the [eval] extra + models/LLM. Prints per-suite token total
+# and average latency (-s shows the [EVAL SUMMARY] lines) for cost regression.
+eval:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/ -v -s -m eval
+
+# Offline RAG retrieval eval only (out of CI; needs the [eval] extra + models).
 # Seed/refresh the baseline with: EVAL_UPDATE_BASELINE=1 make eval-rag
 eval-rag:
 	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/rag/ -v -s -m eval
