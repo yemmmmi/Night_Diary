@@ -77,5 +77,10 @@ exclude = ["tests/", "alembic/"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-ra"
+# Exclude the offline eval suite from the default run (it needs the [eval]
+# extra + model downloads); `make eval-rag` overrides with `-m eval`.
+addopts = "-ra -m 'not eval'"
 asyncio_mode = "auto"
+markers = [
+    "eval: offline RAG/generation eval; excluded from the default test run",
+]

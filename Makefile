@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format
+.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval-rag
 
 PY ?= python
 NPM ?= npm
@@ -22,6 +22,11 @@ test: test-server test-web
 
 test-server:
 	cd $(SERVER_DIR) && $(PY) -m pytest -q
+
+# Offline RAG retrieval eval (out of CI; needs the [eval] extra + models).
+# Seed/refresh the baseline with: EVAL_UPDATE_BASELINE=1 make eval-rag
+eval-rag:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/rag/ -v -s -m eval
 
 test-web:
 	$(NPM) run test
