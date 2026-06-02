@@ -1,0 +1,122 @@
+[
+  {
+    "query_id": "q01",
+    "query": "失眠",
+    "intent": "keyword",
+    "relevant_diary_ids": ["d01"]
+  },
+  {
+    "query_id": "q02",
+    "query": "红烧肉",
+    "intent": "keyword",
+    "relevant_diary_ids": ["d17"]
+  },
+  {
+    "query_id": "q03",
+    "query": "健身房撸铁",
+    "intent": "keyword",
+    "relevant_diary_ids": ["d04"]
+  },
+  {
+    "query_id": "q04",
+    "query": "领养猫咪",
+    "intent": "keyword",
+    "relevant_diary_ids": ["d21"]
+  },
+  {
+    "query_id": "q05",
+    "query": "晚上总是睡不着觉",
+    "intent": "semantic",
+    "relevant_diary_ids": ["d01", "d02"]
+  },
+  {
+    "query_id": "q06",
+    "query": "和家里人发生了矛盾",
+    "intent": "semantic",
+    "relevant_diary_ids": ["d05"]
+  },
+  {
+    "query_id": "q07",
+    "query": "失去一段感情的痛苦",
+    "intent": "semantic",
+    "relevant_diary_ids": ["d09"]
+  },
+  {
+    "query_id": "q08",
+    "query": "独自在异乡感到寂寞",
+    "intent": "semantic",
+    "relevant_diary_ids": ["d19"]
+  },
+  {
+    "query_id": "q09",
+    "query": "运动锻炼让人精神变好",
+    "intent": "semantic",
+    "relevant_diary_ids": ["d03", "d04"]
+  },
+  {
+    "query_id": "q10",
+    "query": "最近特别焦虑",
+    "intent": "emotion",
+    "relevant_diary_ids": ["d08", "d25", "d01"]
+  },
+  {
+    "query_id": "q11",
+    "query": "感到开心快乐的时候",
+    "intent": "emotion",
+    "relevant_diary_ids": ["d07", "d18", "d27"]
+  },
+  {
+    "query_id": "q12",
+    "query": "心情低落很难过",
+    "intent": "emotion",
+    "relevant_diary_ids": ["d09", "d26"]
+  },
+  {
+    "query_id": "q13",
+    "query": "压力大想要放松一下",
+    "intent": "emotion",
+    "relevant_diary_ids": ["d12", "d30", "d23"]
+  },
+  {
+    "query_id": "q14",
+    "query": "周末是怎么度过的",
+    "intent": "time",
+    "relevant_diary_ids": ["d23"]
+  },
+  {
+    "query_id": "q15",
+    "query": "春天的好心情",
+    "intent": "time",
+    "relevant_diary_ids": ["d27"]
+  },
+  {
+    "query_id": "q16",
+    "query": "工作压力大到睡不好觉",
+    "intent": "compound",
+    "relevant_diary_ids": ["d01"]
+  },
+  {
+    "query_id": "q17",
+    "query": "和妈妈和好之后一起吃饭",
+    "intent": "compound",
+    "relevant_diary_ids": ["d06"]
+  },
+  {
+    "query_id": "q18",
+    "query": "出去旅行看风景放松心情",
+    "intent": "compound",
+    "relevant_diary_ids": ["d11", "d12"]
+  },
+  {
+    "query_id": "q19",
+    "query": "生病了一个人在家休息",
+    "intent": "compound",
+    "relevant_diary_ids": ["d15"]
+  },
+  {
+    "query_id": "q20",
+    "query": "学习编程这门新技能",
+    "intent": "compound",
+    "relevant_diary_ids": ["d24"]
+  }
+]

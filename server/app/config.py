@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     )
     llm_model: str = Field(default="deepseek-chat", description="Default LLM model name")
 
+    # ---- Embedding ----
+    # Chinese-first default: the diary corpus is Chinese, so a Chinese retrieval
+    # model is required for meaningful vector search. Built lazily via
+    # ``app.shared.embeddings.build_embedding_function`` and injected through DI;
+    # never imported or read with ``os.getenv`` inside domain code.
+    embedding_model_name: str = Field(
+        default="BAAI/bge-small-zh-v1.5",
+        description="Sentence-transformers model name for vector embeddings.",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
