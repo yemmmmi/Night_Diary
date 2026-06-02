@@ -26,6 +26,10 @@ def build_embedding_function(settings: Settings | None = None) -> Any:
     used for both indexing and query embedding within a single process.
     """
     resolved = settings or get_settings()
-    from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+    # chromadb lazily exposes this class via __getattr__, so it is importable at
+    # runtime but invisible to mypy's static analysis.
+    from chromadb.utils.embedding_functions import (  # type: ignore[attr-defined]
+        SentenceTransformerEmbeddingFunction,
+    )
 
     return SentenceTransformerEmbeddingFunction(model_name=resolved.embedding_model_name)
