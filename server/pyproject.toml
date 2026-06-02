@@ -63,6 +63,9 @@ ignore = ["E501"]
 "app/domain/knowledge/extractor.py" = ["RUF001"]
 "app/domain/rag/chunker.py" = ["RUF001"]
 "app/domain/feedback/prompt_tuner.py" = ["RUF001"]
+"app/domain/skills/crisis_detector.py" = ["RUF001"]
+"app/domain/skills/sentiment_skill.py" = ["RUF001"]
+"tests/unit/domain/skills/**" = ["RUF001"]
 "tests/unit/domain/rag/test_chunker.py" = ["RUF001"]
 
 # ---- Mypy ----

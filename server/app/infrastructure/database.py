@@ -30,6 +30,7 @@ def init_db(engine: Engine) -> None:
     # Import models so metadata is populated before create_all().
     from app.infrastructure.models import feedback as _feedback_models  # noqa: F401
     from app.infrastructure.models import memory as _memory_models  # noqa: F401
+    from app.infrastructure.models import skill_activation as _skill_activation_models  # noqa: F401
 
     Base.metadata.create_all(engine)
 
