@@ -320,19 +320,22 @@
 
 > **为什么在 B-3 之后立即做**：B-3 是第一个可端到端跑检索的里程碑。在 B-4~B-10 之前量化"搜得准不准"，避免后续 prompt/chunk/rerank 改动后回改成本巨大。同时给 B-5 prompt tuner、B-8 retrieval agent 提供可对照基线。
 
+> **Eval 约束**：评估语料与标注必须固定、可复现。30 条中文日记和 20 条查询应作为静态 JSON/Markdown 数据提交；fixture 只负责加载、建索引、清理临时 Chroma 目录，不在运行时随机生成语料。检索指标用于 baseline 对比，避免把小数据集上的“融合/重排必然提升”写成不可动摇的硬断言。
+
 #### Tasks
 
-- [ ] 1. [核心] `server/tests/eval/rag/conftest.py` — eval fixture：LLM 辅助生成 30 条中文日记（覆盖情绪/事件/时间/人物/混合场景），用 `ChunkSplitter` + `DiaryCollectionManager` 写入临时 Chroma 目录；构建 BM25Index
-- [ ] 2. [核心] `server/tests/eval/rag/test_cases.json` — 20 条查询 × 每查询 1-3 个相关 diary_id（人工标注），覆盖不同检索意图（关键词/语义/时间/情绪/复合）
-- [ ] 3. [核心] `server/tests/eval/rag/test_eval_retrieval.py` — 评估脚本：
+- [ ] 1. [核心] `server/tests/eval/rag/diaries.json` — 固定 30 条中文日记语料（覆盖情绪/事件/时间/人物/混合场景），人工检查后提交到仓库，禁止 eval 运行时随机生成
+- [ ] 2. [核心] `server/tests/eval/rag/conftest.py` — eval fixture：加载固定日记语料，用 `ChunkSplitter` + `DiaryCollectionManager` 写入临时 Chroma 目录；构建 BM25Index；测试结束清理临时目录
+- [ ] 3. [核心] `server/tests/eval/rag/test_cases.json` — 20 条查询 × 每查询 1-3 个相关 diary_id（人工标注），覆盖不同检索意图（关键词/语义/时间/情绪/复合）
+- [ ] 4. [核心] `server/tests/eval/rag/test_eval_retrieval.py` — 评估脚本：
   - 遍历 test_cases.json，对每条 query 分别跑 BM25-only / 向量-only / 混合 RRF / 混合+Rerank
   - 计算 Recall@5 / MRR / nDCG@5
   - 输出对比表格到 stdout
-  - 断言混合 RRF Recall@5 ≥ max(BM25-only, 向量-only)（融合不退化）
-  - 断言混合+Rerank MRR ≥ 混合 RRF MRR（重排序提升首位命中率）
-- [ ] 4. [核心] `server/tests/eval/rag/test_cases.md` — 标注说明：每条 query 的检索意图、相关日记的判定理由、边缘情况说明
-- [ ] 5. [配置] `Makefile` — 新增 `eval-rag` target：`python -m pytest server/tests/eval/rag/ -v -s`
-- [ ] 6. [文档] `server/tests/eval/rag/BASELINE.md` — 首次运行后记录四种方案的 Recall@5 / MRR / nDCG@5 基线值，供后续 PR 对比
+  - 对混合 RRF 和混合+Rerank 使用 baseline/软阈值检查：允许小样本波动，但若 Recall@5、MRR、nDCG@5 相比 `BASELINE.md` 明显下降，必须在 PR 中解释原因
+  - 输出失败样例（query、expected diary_id、actual top5）以便定位 chunk/rerank 问题
+- [ ] 5. [核心] `server/tests/eval/rag/test_cases.md` — 标注说明：每条 query 的检索意图、相关日记的判定理由、边缘情况说明
+- [ ] 6. [配置] `Makefile` — 新增 `eval-rag` target：`python -m pytest server/tests/eval/rag/ -v -s`
+- [ ] 7. [文档] `server/tests/eval/rag/BASELINE.md` — 首次运行后记录四种方案的 Recall@5 / MRR / nDCG@5 基线值、模型版本、运行日期、允许波动范围，供后续 PR 对比
 
 #### Metrics
 
@@ -345,8 +348,8 @@
 #### Verification
 
 1. `make eval-rag` 可运行，输出四种方案的 Recall@5 / MRR / nDCG@5 对比表格
-2. 混合 RRF 的 Recall@5 ≥ BM25-only 且 ≥ 向量-only（融合不退化）
-3. 混合+Rerank 的 MRR ≥ 混合 RRF（重排序提升）
+2. Eval 数据集固定提交到仓库，重复运行不会改变语料或标注
+3. 混合 RRF 与混合+Rerank 指标写入 `BASELINE.md`；若相对 baseline 明显退化，PR 必须解释原因或修复
 4. 后续 B-5/B-8/B-10 prompt 或检索逻辑改动后，对照 `BASELINE.md` 确认不退化
 
 ---
@@ -370,7 +373,7 @@
 - [ ] 1. [核心] `server/app/domain/memory/types.py` — `EpisodicEntry`、`UserProfile`、`WorkingContext` dataclass/TypedDict
 - [ ] 2. [核心] `server/app/domain/memory/episodic.py` — `EpisodicMemory` 类：基于 `deque[EpisodicEntry]`，max 100 条，LRU 淘汰，重要性分数过滤（> 0.5），7 天半衰期时间衰减；**SQLite 持久化默认开启**（启动时 `load()`，写入时 `upsert()`）
 - [ ] 3. [核心] `server/app/domain/memory/long_term.py` — `LongTermMemory` 类：SQLite JSON 存储 `UserProfile`，情绪/话题跨天检测（连续 3+ 天 → 提升到长期档案）
-- [ ] 4. [核心] `server/app/domain/memory/working.py` — `WorkingMemory` 类：包装 MultiAgentState，4000 token 限制（**必须集成到 ai_service 中**，V1 中是死代码）
+- [ ] 4. [核心] `server/app/domain/memory/working.py` — `WorkingMemory` 类：包装 MultiAgentState，4000 token 限制；本 PR 先交付 domain-level integration contract 和单元测试，实际接入 Supervisor/Multi-Agent 管线放到 B-9/C-1，避免 Phase B-4 前向依赖服务层
 - [ ] 5. [测试] `tests/unit/domain/memory/` — test_episodic（含持久化读写）/ test_long_term / test_working
 - [ ] 6. [评估] `server/tests/eval/rag/test_cases_multiturn.json` — 新增 3 条多轮对话 scenario（每条 3-turn：Day1 失眠日记 → Day2 运动日记 → Day3 AI 主动关联），评估记忆连贯性与话题追踪
 
@@ -437,7 +440,7 @@
   - `summary_generator` / `search_diary_skill`（生成与检索）
   - `weather_skill` / `address_skill`（外部信息增强）
 - [ ] 6. [测试] `tests/unit/domain/skills/` — test_registry / test_crisis_detector / test_sentiment_skill
-- [ ] 7. [可观测性] `server/app/infrastructure/tracer.py` 中定义 `SkillActivationTracer` — 记录每次 `can_activate()` 的调用（skill_name, score, threshold, activated, reason），为 B-9 写入 `skill_activations` 表做准备
+- [ ] 7. [可观测性] `server/app/shared/tracing.py` 中定义 `SkillActivationTracer` 接口/记录类型，SQLite ORM 放在 `server/app/infrastructure/models/`；记录每次 `can_activate()` 的调用（skill_name, score, threshold, activated, reason），为 B-9 写入 `skill_activations` 表做准备
 
 #### Verification
 
@@ -467,7 +470,7 @@
 - [ ] 1. [核心] `server/app/shared/emotion_estimator.py` — `EmotionEstimator` 类：统一的情感估计接口（消除 V1 坏味 3：empathy_agent 和 crisis_detector 的重复实现）
 - [ ] 2. [核心] `server/app/shared/token_utils.py` — `estimate_tokens()`：统一的 token 估算（消除 V1 坏味 3：retrieval_agent 和 context_compressor 的重复实现）
 - [ ] 3. [核心] `server/app/domain/agents/state.py` — `MultiAgentState` TypedDict + reducer
-- [ ] 4. [核心] `server/app/infrastructure/tracer.py` — `LLMCallTracer`：Agent 通过 DI 接收，每次 LLM 调用写入 `llm_call_logs` 表
+- [ ] 4. [核心] `server/app/shared/tracing.py` — `LLMCallTracer` / `AgentDecisionLogger` 接口与记录类型：Agent 通过 DI 接收；具体 SQLite 写入实现放在 infrastructure，避免 domain 直接耦合 ORM
 - [ ] 5. [核心] `server/app/infrastructure/models/` — SQLite ORM 定义：`llm_call_logs`、`agent_decisions`（含 `skill_ids` JSON 列）、`skill_activations` 三张表
 - [ ] 6. [测试] `tests/unit/shared/` — test_emotion_estimator / test_token_utils
 - [ ] 7. [可观测性] 建表 SQL：`skill_activations` 表结构（skill_name, activated, score, threshold, input_digest, reason, latency_ms, decision_id FK）
@@ -554,6 +557,7 @@
 5. Supervisor 决策路径可追溯（intent + tier + skills + routing）
 6. Worker 超时降级测试通过：单个 Worker 超时 → 用剩余结果合成，不抛异常
 7. 多轮 eval 通过：3-turn scenario 中 AI 能跨天引用历史话题，评分不退化
+8. B-6 迁移的 Skill 系统不得停留在死代码状态：若本 PR 未完成 Supervisor 集成，不允许合并
 
 ---
 
