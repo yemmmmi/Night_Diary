@@ -318,9 +318,9 @@
 
 在 B-3 交付混合检索后，立即建立离线评估基线。构建 30 条中文日记 × 20 条查询的标注数据集（600 个 query-document pair，提供统计显著性），对比四种检索方案（BM25-only / 向量-only / 混合 RRF / 混合+Rerank）的 Recall@5 和 MRR。Eval 不走 CI（需要 Chroma + Embedding 模型），通过 `make eval-rag` 手动触发。
 
-> **为什么在 B-3 之后立即做**：B-3 是第一个可端到端跑检索的里程碑。在 B-4~B-10 之前量化"搜得准不准"，避免后续 prompt/chunk/rerank 改动后回改成本巨大。同时给 B-5 prompt tuner、B-8 retrieval agent 提供可对照基线。
+> **为什么在 B-3 之后立即做**：B-3 是第一个可端到端跑检索的里程碑。在 B-4~B-10 之前量化”搜得准不准”，避免后续 prompt/chunk/rerank 改动后回改成本巨大。同时给 B-5 prompt tuner、B-8 retrieval agent 提供可对照基线。
 
-> **Eval 约束**：评估语料与标注必须固定、可复现。30 条中文日记和 20 条查询应作为静态 JSON/Markdown 数据提交；fixture 只负责加载、建索引、清理临时 Chroma 目录，不在运行时随机生成语料。检索指标用于 baseline 对比，避免把小数据集上的“融合/重排必然提升”写成不可动摇的硬断言。
+> **Eval 约束**：评估语料与标注必须固定、可复现。30 条中文日记和 20 条查询应作为静态 JSON/Markdown 数据提交；fixture 只负责加载、建索引、清理临时 Chroma 目录，不在运行时随机生成语料。检索指标用于 baseline 对比，避免把小数据集上的”融合/重排必然提升”写成不可动摇的硬断言。
 
 #### Tasks
 
@@ -335,7 +335,7 @@
   - 输出失败样例（query、expected diary_id、actual top5）以便定位 chunk/rerank 问题
 - [x] 5. [核心] `server/tests/eval/rag/test_cases.md` — 标注说明：每条 query 的检索意图、相关日记的判定理由、边缘情况说明
 - [x] 6. [配置] `Makefile` — 新增 `eval-rag` target（`pytest tests/eval/rag/ -v -s -m eval`）；`eval` marker 将 eval 套件排除出默认/CI 运行
-- [x] 7. [文档] `server/tests/eval/rag/BASELINE.md` — 记录模型版本/前缀策略/运行方式/容差，及 BM25 基线值；向量/混合/rerank 三行待在具备 chromadb+模型的机器上首次完整运行（`EVAL_UPDATE_BASELINE=1 make eval-rag`）补齐
+- [x] 7. [文档] `server/tests/eval/rag/BASELINE.md` — 记录模型版本/前缀策略/运行方式/容差，四分支基线值已全部记录
 
 #### Metrics
 
@@ -349,7 +349,7 @@
 
 1. `make eval-rag` 可运行，输出四种方案的 Recall@5 / MRR / nDCG@5 对比表格
 2. Eval 数据集固定提交到仓库，重复运行不会改变语料或标注
-3. 混合 RRF 与混合+Rerank 指标写入 `BASELINE.md`；若相对 baseline 明显退化，PR 必须解释原因或修复
+3. 四分支指标已写入 `BASELINE.md` 与 `baseline.json`；若相对 baseline 明显退化，PR 必须解释原因或修复
 4. 后续 B-5/B-8/B-10 prompt 或检索逻辑改动后，对照 `BASELINE.md` 确认不退化
 
 ---
