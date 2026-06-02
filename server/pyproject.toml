@@ -26,6 +26,15 @@ dev = [
     "pyinstaller>=6.0",
     "pytest-asyncio>=0.24",
 ]
+# Heavy ML deps needed ONLY to run the offline RAG eval (server/tests/eval/rag).
+# Kept out of the core runtime so CI and unit-test dev stay lightweight (unit
+# tests mock the models). The eval gracefully skips model-dependent branches
+# when these are absent. They will graduate to runtime deps when the reranker /
+# embedding are wired into production (Phase C-1 / E).
+eval = [
+    "sentence-transformers>=3.0",
+    "torch>=2.0",
+]
 
 [project.scripts]
 nightdiary-backend = "app.main:main"
