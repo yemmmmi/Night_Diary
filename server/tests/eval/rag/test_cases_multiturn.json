@@ -1,0 +1,125 @@
+[
+  {
+    "scenario_id": "mt01",
+    "title": "失眠话题跨天追踪",
+    "turns": [
+      {
+        "day": 1,
+        "date": "2026-06-01",
+        "diary_id": "d01",
+        "content": "连续加班一周，今晚又失眠了。脑子里全是没做完的项目，翻来覆去到凌晨两点还没睡着。",
+        "tags": ["失眠", "工作", "焦虑"],
+        "memory_seed": {
+          "event": "失眠",
+          "emotion": "焦虑",
+          "importance": 0.85
+        }
+      },
+      {
+        "day": 2,
+        "date": "2026-06-02",
+        "diary_id": "d02",
+        "content": "今天开始晨跑，沿着河边跑了三公里。跑完出了一身汗，整个人神清气爽。",
+        "tags": ["运动", "健康"],
+        "memory_seed": {
+          "event": "晨跑",
+          "emotion": "振奋",
+          "importance": 0.75
+        }
+      },
+      {
+        "day": 3,
+        "date": "2026-06-03",
+        "diary_id": "d03",
+        "content": "昨晚稍微好了一点，但还是担心项目进度。",
+        "tags": ["睡眠", "工作"],
+        "expect": {
+          "must_reference_topics": ["失眠"],
+          "memory_coherence": true
+        }
+      }
+    ]
+  },
+  {
+    "scenario_id": "mt02",
+    "title": "家庭矛盾情绪追踪",
+    "turns": [
+      {
+        "day": 1,
+        "date": "2026-06-01",
+        "diary_id": "d05",
+        "content": "又因为催婚的事和妈妈吵架了。她不停地念叨，我越听越烦，最后摔门而出。",
+        "tags": ["家人", "冲突"],
+        "memory_seed": {
+          "event": "和妈妈吵架",
+          "emotion": "愤怒",
+          "importance": 0.82
+        }
+      },
+      {
+        "day": 2,
+        "date": "2026-06-02",
+        "diary_id": "d06",
+        "content": "今天主动给妈妈发了消息，气氛缓和了一些，但还是有点尴尬。",
+        "tags": ["家人", "和解"],
+        "memory_seed": {
+          "event": "与妈妈缓和",
+          "emotion": "复杂",
+          "importance": 0.7
+        }
+      },
+      {
+        "day": 3,
+        "date": "2026-06-03",
+        "diary_id": "d07",
+        "content": "想到昨天聊得还可以，但心里还是担心下次又吵起来。",
+        "tags": ["家人", "焦虑"],
+        "expect": {
+          "must_reference_topics": ["妈妈", "催婚"],
+          "memory_coherence": true
+        }
+      }
+    ]
+  },
+  {
+    "scenario_id": "mt03",
+    "title": "运动习惯与睡眠改善",
+    "turns": [
+      {
+        "day": 1,
+        "date": "2026-06-01",
+        "diary_id": "d03",
+        "content": "凌晨三点又醒了，盯着天花板怎么都睡不安稳。最近睡眠质量越来越差。",
+        "tags": ["睡眠", "情绪"],
+        "memory_seed": {
+          "event": "睡眠差",
+          "emotion": "疲惫",
+          "importance": 0.8
+        }
+      },
+      {
+        "day": 2,
+        "date": "2026-06-02",
+        "diary_id": "d04",
+        "content": "第一次去健身房撸铁，教练带我做了卧推和深蹲。虽然累，但感觉很有成就感。",
+        "tags": ["运动", "健康"],
+        "memory_seed": {
+          "event": "健身房训练",
+          "emotion": "充实",
+          "importance": 0.78
+        }
+      },
+      {
+        "day": 3,
+        "date": "2026-06-03",
+        "diary_id": "d08",
+        "content": "昨晚 eleven 点就困了，不知道是不是昨天运动的原因。",
+        "tags": ["睡眠", "运动"],
+        "expect": {
+          "must_reference_topics": ["睡眠", "运动"],
+          "memory_coherence": true
+        }
+      }
+    ]
+  }
+]
