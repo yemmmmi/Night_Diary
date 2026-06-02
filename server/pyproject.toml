@@ -25,6 +25,7 @@ dev = [
     "mypy>=1.11",
     "pyinstaller>=6.0",
     "pytest-asyncio>=0.24",
+    "scipy>=1.11",
 ]
 # Heavy ML deps needed ONLY to run the offline RAG eval (server/tests/eval/rag).
 # Kept out of the core runtime so CI and unit-test dev stay lightweight (unit
@@ -61,6 +62,7 @@ ignore = ["E501"]
 "tests/**" = ["N802", "N803", "S101"]
 "app/domain/knowledge/extractor.py" = ["RUF001"]
 "app/domain/rag/chunker.py" = ["RUF001"]
+"app/domain/feedback/prompt_tuner.py" = ["RUF001"]
 "tests/unit/domain/rag/test_chunker.py" = ["RUF001"]
 
 # ---- Mypy ----
