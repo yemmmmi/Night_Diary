@@ -502,16 +502,16 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/agents/intent_classifier.py` — 迁移 V1（两级分类，设计最干净的模块，基本不变）
-- [ ] 2. [核心] `server/app/domain/agents/empathy_agent.py` — 迁移 V1；通过 DI 接收 LLM；共享 `DomainKnowledgeStore`/`EmotionEstimator`/`TokenEstimator`/`LLMCallTracer`；删除自行创建 `SessionLocal()`/`ChatOpenAI()`
-- [ ] 3. [核心] `server/app/domain/agents/retrieval_agent.py` — 迁移 V1；多跳检索（最多 3 次）；时间范围推断；共享 `DomainKnowledgeStore`；锚定机制：每轮 query 与原始 query 语义相似度 < 0.3 时停止
-- [ ] 4. [核心] `server/app/domain/agents/insight_agent.py` — 迁移 V1；支持常规分析 + 周报/月报；DI 改造
-- [ ] 5. [韧性] 每个 Worker Agent 实现 `fallback()` 方法：LLM 超时/不可用时返回预设安全回复（EmpathyAgent → 共情模板；RetrievalAgent → 空上下文标记；InsightAgent → "暂时无法生成分析"）
-- [ ] 6. [测试] `tests/unit/domain/agents/` — test_intent_classifier / test_empathy_agent / test_retrieval_agent / test_insight_agent（全部 mock LLM）
-- [ ] 7. [测试] Agent fallback 测试：模拟 LLM API 不可达，验证各 Worker 返回 `fallback()` 安全回复，管线不崩溃
-- [ ] 8. [可观测性] Agent 调用 LLM 时通过 DI 的 `LLMCallTracer` 写入 `llm_call_logs`
-- [ ] 9. [评估] `server/tests/eval/generation/test_cases_empathy.json` — 15 条 eval case（10 条 happy path + 5 条 edge case：极短日记/矛盾情绪/用户否定 AI/中英混杂/边界危机），用 B-7 的 `LLMJudge` 对 EmpathyAgent 回复打分（1-5）；首次运行写入 `BASELINE.md`
-- [ ] 10. [评估] `server/tests/eval/generation/test_cases_insight.json` — 5 条 eval case（常规分析+周报/月报），对 InsightAgent 回复打分
+- [x] 1. [核心] `server/app/domain/agents/intent_classifier.py` — 迁移 V1（两级分类）；LLM 经 `LLMClient` Protocol DI 注入，`classify()` 异步，LLM 层调用经 `LLMCallTracer` 记录
+- [x] 2. [核心] `server/app/domain/agents/empathy_agent.py` — 迁移 V1；通过 DI 接收 LLM；共享 `DomainKnowledgeStore`/`EmotionEstimator`/`TokenEstimator`/`LLMCallTracer`；删除自行创建 `SessionLocal()`/`ChatOpenAI()`
+- [x] 3. [核心] `server/app/domain/agents/retrieval_agent.py` — 迁移 V1；多跳检索（最多 3 次）；共享 `DomainKnowledgeStore`；锚定机制：refined query 与原始 query 相似度 < 0.3 时停止（默认 jieba 词重叠，可注入语义相似度）。**说明（Q4-A）**：丢弃 V1 的结构化 `KnowledgeEntry` SQL 分支（V2 无此表）；`time_range` 参数预留（`HybridRetriever` 暂无日期过滤，客户端事后过滤无法改善召回，B-8 内保持 None）
+- [x] 4. [核心] `server/app/domain/agents/insight_agent.py` — 迁移 V1；支持常规分析 + 周报/月报；DI 改造
+- [x] 5. [韧性] 每个 Worker Agent 实现 `fallback()` 方法：LLM 超时/不可用时返回预设安全回复（EmpathyAgent → 共情模板；RetrievalAgent → 空上下文标记；InsightAgent → "暂时无法生成分析"）
+- [x] 6. [测试] `tests/unit/domain/agents/` — test_intent_classifier / test_empathy_agent / test_retrieval_agent / test_insight_agent（全部 mock LLM，35 passed）
+- [x] 7. [测试] Agent fallback 测试：模拟 LLM API 不可达，验证各 Worker 返回 `fallback()` 安全回复，管线不崩溃
+- [x] 8. [可观测性] Agent 调用 LLM 时通过 DI 的 `LLMCallTracer` 写入 `llm_call_logs`
+- [x] 9. [评估] `server/tests/eval/generation/test_cases_empathy.json` — 15 条 eval case（10 条 happy path + 5 条 edge case：极短日记/矛盾情绪/用户否定 AI/中英混杂/边界危机），用 B-7 的 `LLMJudge` 对 EmpathyAgent 回复打分（1-5）；`EVAL_UPDATE_BASELINE=1` 时写入 `BASELINE.md`
+- [x] 10. [评估] `server/tests/eval/generation/test_cases_insight.json` — 5 条 eval case（常规分析+周报/月报），对 InsightAgent 回复打分
 
 #### Verification
 
