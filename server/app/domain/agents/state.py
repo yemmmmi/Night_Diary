@@ -78,6 +78,7 @@ class MultiAgentState(TypedDict, total=False):
 
     # ---- Supervisor output ----
     intent: str  # pure_record | emotional_support | retrospective_review | habit_tracking
+    tier: str  # light | medium | heavy | crisis (derived from intent + crisis signal)
     token_budget: int
     activated_agents: Annotated[list[str], merge_unique]
     activated_skills: Annotated[list[str], merge_unique]

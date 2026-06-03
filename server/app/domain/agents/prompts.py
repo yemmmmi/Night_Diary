@@ -134,6 +134,40 @@ INTENT_CLASSIFY_PROMPT = """你是一个日记意图分类器。请分析以下�
 判断 need_analysis: 内容是否需要深度情感/行为分析"""
 
 
+# ─────────────────────────── Supervisor ───────────────────────────
+
+# prompt-version: supervisor_synthesize_v2.0 (2026-06-03) — migrated from V1 supervisor
+SUPERVISOR_SYNTHESIZE_PROMPT = """你是「夜记助手」的回应整合器。请将以下多个分析模块的输出整合为一个统一、连贯、自然的回应。
+
+用户意图类型：{intent}
+
+各模块输出：
+{outputs_text}
+
+整合要求：
+1. 将各模块输出融合为一段自然流畅的中文回应，不要出现模块分隔标记
+2. 情感回应部分应作为主体，洞察和历史参考作为补充自然融入
+3. 保持温暖、支持性的语调
+4. 回应长度控制在 {max_chars} 字以内
+5. 不要重复相同的信息
+6. 不要使用「根据分析」「综合来看」等机械化表达
+
+请直接输出整合后的回应，不要添加任何前缀或解释："""
+
+# Display labels for each worker output inside the synthesis prompt.
+SUPERVISOR_WORKER_LABELS = {
+    "retrieval": "历史参考",
+    "empathy": "情感回应",
+    "insight": "洞察分析",
+}
+
+# Used when every worker failed (no non-empty output to synthesize).
+SUPERVISOR_FALLBACK_RESPONSE = (
+    "感谢你今天的记录！坚持写日记是一件很棒的事，"
+    "每一天的记录都是珍贵的回忆。继续加油，期待明天的故事！"
+)
+
+
 __all__ = [
     "EMPATHY_BASE",
     "EMPATHY_CRISIS_BLOCK",
@@ -146,4 +180,7 @@ __all__ = [
     "INSIGHT_REPORT_SYSTEM",
     "INSIGHT_SYSTEM",
     "INTENT_CLASSIFY_PROMPT",
+    "SUPERVISOR_FALLBACK_RESPONSE",
+    "SUPERVISOR_SYNTHESIZE_PROMPT",
+    "SUPERVISOR_WORKER_LABELS",
 ]
