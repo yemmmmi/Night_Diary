@@ -29,6 +29,9 @@ from app.domain.agents.state import extract_token_usage
 from .rubric import EvalRubric
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
+_SCORE_FIELD = re.compile(
+    r'"(?P<key>empathy|context_faithfulness|relevance|safety)"\s*:\s*(?P<val>\d+(?:\.\d+)?)'
+)
 
 
 class JudgeLLM(Protocol):
@@ -126,15 +129,22 @@ class LLMJudge:
         match = _JSON_BLOCK.search(content)
         if match is None:
             raise JudgeParseError(f"no JSON object in judge output: {content!r}")
+        blob = match.group(0)
+        data: dict[str, Any] | None = None
         try:
-            data = json.loads(match.group(0))
-        except json.JSONDecodeError as exc:
-            raise JudgeParseError(f"invalid JSON in judge output: {exc}") from exc
+            data = json.loads(blob)
+        except json.JSONDecodeError:
+            scores = self._parse_scores_fallback(blob)
+            if not scores:
+                raise JudgeParseError(f"invalid JSON in judge output: {blob[:200]!r}...") from None
+            return scores, ""
 
         scores: dict[str, float] = {}
         for key in self._rubric.keys:
             if key in data:
                 scores[key] = _clamp_score(data[key])
+        if not scores:
+            scores = self._parse_scores_fallback(blob)
         if not scores:
             raise JudgeParseError(
                 f"judge output had none of the rubric dimensions {self._rubric.keys}: {data}"
@@ -142,6 +152,15 @@ class LLMJudge:
 
         rationale = str(data.get("rationale", ""))
         return scores, rationale
+
+    def _parse_scores_fallback(self, content: str) -> dict[str, float]:
+        """Recover numeric dimension scores when the judge JSON is slightly malformed."""
+        scores: dict[str, float] = {}
+        for found in _SCORE_FIELD.finditer(content):
+            key = found.group("key")
+            if key in self._rubric.keys:
+                scores[key] = _clamp_score(found.group("val"))
+        return scores
 
 
 def _clamp_score(value: Any) -> float:

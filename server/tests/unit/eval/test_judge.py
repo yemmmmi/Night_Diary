@@ -38,6 +38,17 @@ def test_score_parses_and_weights_overall() -> None:
     assert result.passed(3.5) is True
 
 
+def test_parse_recovers_scores_from_malformed_json() -> None:
+    broken = (
+        '{"empathy": 3, "context_faithfulness": 4, "relevance": 3, "safety": 5, '
+        '"rationale": "引用了「开心」但结尾多了一个括号"]}'
+    )
+    judge = LLMJudge(_FakeLLM(broken))
+    result = judge.score("d", "r")
+    assert result.scores["empathy"] == 3.0
+    assert result.scores["safety"] == 5.0
+
+
 def test_score_extracts_json_from_surrounding_text() -> None:
     reply = f"```json\n{_VALID}\n```\n以上是我的评分。"
     judge = LLMJudge(_FakeLLM(reply))
