@@ -231,12 +231,12 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/knowledge/types.py` — `KnowledgeHit`、`EntityRecord` dataclass/TypedDict
-- [ ] 2. [核心] `server/app/domain/knowledge/store.py` — `DomainKnowledgeStore`：迁移 V1 `domain_store.py`；`query()`/`add()`/`delete()`；读 `Settings.chroma_persist_dir`；单例 Chroma client
-- [ ] 3. [核心] `server/app/domain/knowledge/extractor.py` — 迁移 V1 extractor；修复 `entity_type` 文档与实现不一致（V1 只列 4 种但实际存 5 种，含 MOOD）；`mood_score=0.0`（中性情绪）不创建 EntityRecord，避免存储无意义数据
-- [ ] 4. [测试] `tests/unit/domain/knowledge/test_store.py` — mock Chroma client
-- [ ] 5. [测试] `tests/unit/domain/knowledge/test_extractor.py`
-- [ ] 6. [可观测性] `DomainKnowledgeStore.query()` 记录检索 trace（query_text, hit_count, top_score, latency_ms）
+- [x] 1. [核心] `server/app/domain/knowledge/types.py` — `KnowledgeHit`、`EntityRecord` dataclass/TypedDict
+- [x] 2. [核心] `server/app/domain/knowledge/store.py` — `DomainKnowledgeStore`：迁移 V1 `domain_store.py`；`query()`/`add()`/`delete()`；读 `Settings.chroma_persist_dir`；单例 Chroma client
+- [x] 3. [核心] `server/app/domain/knowledge/extractor.py` — 迁移 V1 extractor；修复 `entity_type` 文档与实现不一致（V1 只列 4 种但实际存 5 种，含 MOOD）；`mood_score=0.0`（中性情绪）不创建 EntityRecord，避免存储无意义数据
+- [x] 4. [测试] `tests/unit/domain/knowledge/test_store.py` — mock Chroma client
+- [x] 5. [测试] `tests/unit/domain/knowledge/test_extractor.py`
+- [x] 6. [可观测性] `DomainKnowledgeStore.query()` 记录检索 trace（query_text, hit_count, top_score, latency_ms）
 
 #### Verification
 
@@ -370,12 +370,12 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/memory/types.py` — `EpisodicEntry`、`UserProfile`、`WorkingContext` dataclass/TypedDict
-- [ ] 2. [核心] `server/app/domain/memory/episodic.py` — `EpisodicMemory` 类：基于 `deque[EpisodicEntry]`，max 100 条，LRU 淘汰，重要性分数过滤（> 0.5），7 天半衰期时间衰减；**SQLite 持久化默认开启**（启动时 `load()`，写入时 `upsert()`）
-- [ ] 3. [核心] `server/app/domain/memory/long_term.py` — `LongTermMemory` 类：SQLite JSON 存储 `UserProfile`，情绪/话题跨天检测（连续 3+ 天 → 提升到长期档案）
-- [ ] 4. [核心] `server/app/domain/memory/working.py` — `WorkingMemory` 类：包装 MultiAgentState，4000 token 限制；本 PR 先交付 domain-level integration contract 和单元测试，实际接入 Supervisor/Multi-Agent 管线放到 B-9/C-1，避免 Phase B-4 前向依赖服务层
-- [ ] 5. [测试] `tests/unit/domain/memory/` — test_episodic（含持久化读写）/ test_long_term / test_working
-- [ ] 6. [评估] `server/tests/eval/rag/test_cases_multiturn.json` — 新增 3 条多轮对话 scenario（每条 3-turn：Day1 失眠日记 → Day2 运动日记 → Day3 AI 主动关联），评估记忆连贯性与话题追踪
+- [x] 1. [核心] `server/app/domain/memory/types.py` — `EpisodicEntry`、`UserProfile`、`WorkingContext` dataclass/TypedDict
+- [x] 2. [核心] `server/app/domain/memory/episodic.py` — `EpisodicMemory` 类：基于 `deque[EpisodicEntry]`，max 100 条，LRU 淘汰，重要性分数过滤（> 0.5），7 天半衰期时间衰减；**SQLite 持久化默认开启**（启动时 `load()`，写入时 `upsert()`）
+- [x] 3. [核心] `server/app/domain/memory/long_term.py` — `LongTermMemory` 类：SQLite JSON 存储 `UserProfile`，情绪/话题跨天检测（连续 3+ 天 → 提升到长期档案）
+- [x] 4. [核心] `server/app/domain/memory/working.py` — `WorkingMemory` 类：包装 MultiAgentState，4000 token 限制；本 PR 先交付 domain-level integration contract 和单元测试，实际接入 Supervisor/Multi-Agent 管线放到 B-9/C-1，避免 Phase B-4 前向依赖服务层
+- [x] 5. [测试] `tests/unit/domain/memory/` — test_episodic（含持久化读写）/ test_long_term / test_working
+- [x] 6. [评估] `server/tests/eval/rag/test_cases_multiturn.json` — 新增 3 条多轮对话 scenario（每条 3-turn：Day1 失眠日记 → Day2 运动日记 → Day3 AI 主动关联），评估记忆连贯性与话题追踪
 
 #### Verification
 
@@ -401,10 +401,10 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/feedback/thompson_sampling.py` — 迁移 V1 `thompson_sampling.py`；四种风格（共情/务实/哲思/幽默）
-- [ ] 2. [核心] `server/app/domain/feedback/prompt_tuner.py` — 迁移 V1 `prompt_tuner.py`；删除重复的 `_sample_style_from_preferences()`（调用 `ThompsonSampling.sample_style()`）；`_infer_response_length()` stub 完成实现（接收日记字数、时间、情绪强度作为输入，留扩展接口供 B-9 Agent 层传入）
-- [ ] 3. [测试] `tests/unit/domain/feedback/` — test_thompson_sampling / test_prompt_tuner
-- [ ] 4. [测试] `tests/unit/domain/feedback/test_thompson_distribution.py` — N=1000 统计测试，chi-square 检验验证四种风格分布符合 Beta 参数（`random.seed(42)` 确保可复现）
+- [x] 1. [核心] `server/app/domain/feedback/thompson_sampling.py` — 迁移 V1 `thompson_sampling.py`；四种风格（共情/务实/哲思/幽默）
+- [x] 2. [核心] `server/app/domain/feedback/prompt_tuner.py` — 迁移 V1 `prompt_tuner.py`；删除重复的 `_sample_style_from_preferences()`（调用 `ThompsonSampling.sample_style()`）；`_infer_response_length()` stub 完成实现（接收日记字数、时间、情绪强度作为输入，留扩展接口供 B-9 Agent 层传入）
+- [x] 3. [测试] `tests/unit/domain/feedback/` — test_thompson_sampling / test_prompt_tuner
+- [x] 4. [测试] `tests/unit/domain/feedback/test_thompson_distribution.py` — N=1000 统计测试，chi-square 检验验证四种风格分布符合 Beta 参数（`random.seed(42)` 确保可复现）
 
 #### Verification
 
@@ -430,17 +430,17 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/skills/base.py` — `BaseSkill` 抽象类 + `SkillMetadata`（name, description, triggers, priority）
-- [ ] 2. [核心] `server/app/domain/skills/registry.py` — `SkillRegistry` 贪心选择算法（激活阈值 0.3）；`select_skills(text, profile)` 遍历全部 Skill，返回激活列表
-- [ ] 3. [核心] `server/app/domain/skills/crisis_detector.py` — **MVP 激活**：极端负面情绪关键词 + 情绪分数阈值 → 激活安全干预
-- [ ] 4. [核心] `server/app/domain/skills/sentiment_skill.py` — **MVP 激活**：情绪极性 + 强度检测
-- [ ] 5. [核心] 其余 8 个 Skill stub — 完整类结构 + `can_activate()` 返回 `False` + `execute()` 标记 `NotImplementedError`；后续按以下批次逐个激活：
+- [x] 1. [核心] `server/app/domain/skills/base.py` — `BaseSkill` 抽象类 + `SkillMetadata`（name, description, triggers, priority）
+- [x] 2. [核心] `server/app/domain/skills/registry.py` — `SkillRegistry` 贪心选择算法（激活阈值 0.3）；`select_skills(text, profile)` 遍历全部 Skill，返回激活列表
+- [x] 3. [核心] `server/app/domain/skills/crisis_detector.py` — **MVP 激活**：极端负面情绪关键词 + 情绪分数阈值 → 激活安全干预
+- [x] 4. [核心] `server/app/domain/skills/sentiment_skill.py` — **MVP 激活**：情绪极性 + 强度检测
+- [x] 5. [核心] 其余 8 个 Skill stub — 完整类结构 + `can_activate()` 返回 `False` + `execute()` 标记 `NotImplementedError`；后续按以下批次逐个激活：
   - `pattern_detector` / `habit_tracker`（模式识别，需 ≥3 条日记）
   - `memory_reader` / `memory_writer`（长期记忆读写）
   - `summary_generator` / `search_diary_skill`（生成与检索）
   - `weather_skill` / `address_skill`（外部信息增强）
-- [ ] 6. [测试] `tests/unit/domain/skills/` — test_registry / test_crisis_detector / test_sentiment_skill
-- [ ] 7. [可观测性] `server/app/shared/tracing.py` 中定义 `SkillActivationTracer` 接口/记录类型，SQLite ORM 放在 `server/app/infrastructure/models/`；记录每次 `can_activate()` 的调用（skill_name, score, threshold, activated, reason），为 B-9 写入 `skill_activations` 表做准备
+- [x] 6. [测试] `tests/unit/domain/skills/` — test_registry / test_crisis_detector / test_sentiment_skill
+- [x] 7. [可观测性] `server/app/shared/tracing.py` 中定义 `SkillActivationTracer` 接口/记录类型，SQLite ORM 放在 `server/app/infrastructure/models/`；记录每次 `can_activate()` 的调用（skill_name, score, threshold, activated, reason），为 B-9 写入 `skill_activations` 表做准备
 
 #### Verification
 
@@ -538,15 +538,15 @@
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/domain/agents/supervisor.py` — `SupervisorAgent`：classify → activate skills → allocate budget → route → synthesize
-- [ ] 2. [核心] **Skill 集成**：`classify_intent()` 中调用 `SkillRegistry.select_skills()`；激活的 skill 列表写入 `agent_decisions.skill_ids`
-- [ ] 3. [核心] **Skill 追踪**：每次 `can_activate()` 调用写入 `skill_activations` 表（激活+抑制全部记录）
-- [ ] 4. [核心] `server/app/domain/agents/graph.py` — `MultiAgentGraphBuilder`：条件路由（根据 tier）、parallel fan-out（`asyncio.gather` + `return_exceptions=True`）、安全 Worker 包装
-- [ ] 5. [韧性] Supervisor 合成时容忍部分 Worker 失败：单个 Worker 超时/失败 → 用剩余 Worker 结果降级合成（不抛异常）
-- [ ] 6. [可观测性] Supervisor 决策记录到 `AgentDecisionLogger`（intent_classification, tier_routing, skill_activation, worker_routing）
-- [ ] 7. [测试] `tests/unit/domain/agents/` — test_supervisor / test_graph（mock 全部 Worker + mock SkillRegistry）
-- [ ] 8. [测试] Worker 超时降级测试：模拟单个 Worker 超时（`asyncio.wait_for` timeout）→ 验证 Supervisor 降级合成剩余结果
-- [ ] 9. [评估] `server/tests/eval/generation/test_eval_multiturn.py` — 用 B-4 的 3 条多轮 scenario，经完整编排管线（Supervisor → Worker → 记忆），评估第 3 轮回复是否引用了第 1 轮的话题（记忆连贯性）：断言 `LLMJudge` 评分 ≥ 基线
+- [x] 1. [核心] `server/app/domain/agents/supervisor.py` — `SupervisorAgent`：classify → activate skills → allocate budget → route → synthesize（异步 `classify`/`synthesize` 两节点；DI 注入 IntentClassifier/SkillRegistry/EmotionEstimator/synthesis LLM/AgentDecisionLogger/LLMCallTracer）
+- [x] 2. [核心] **Skill 集成**：`classify()` 中调用 `SkillRegistry.select_skills()`（生产调用点）；激活的 skill 列表写入 `agent_decisions.skill_ids`，并以本轮 `decision_id` 关联回 `skill_activations`
+- [x] 3. [核心] **Skill 追踪**：`select_skills()` 内对每个 skill 记录 `SkillActivationRecord`（激活+抑制全部记录）；新增可选 `decision_id` kwarg 填充 `skill_activations.decision_id` FK
+- [x] 4. [核心] `server/app/domain/agents/graph.py` — `MultiAgentGraph` + `MultiAgentGraphBuilder`：**纯 asyncio 编排（移除 LangGraph 依赖）**；按 tier/intent 路由、分相扇出（provider=retrieval 先跑 → consumer=empathy/insight 并行，`asyncio.gather` + `return_exceptions=True`）、安全 Worker 包装；partial 更新按 `MultiAgentState` 注解里的 reducer 自动合并
+- [x] 5. [韧性] 单个 Worker 超时/失败 → 走该 Worker `fallback()` 安全模板 + 记 `errors`；Supervisor 合成用剩余结果降级（不抛异常），全空时返回兜底文案
+- [x] 6. [可观测性] Supervisor 决策记录到 `AgentDecisionLogger`（intent_classification / skill_activation / tier_routing / worker_routing 四类）；synthesis LLM 调用写 `LLMCallTracer`
+- [x] 7. [测试] `tests/unit/domain/agents/test_supervisor.py` / `test_graph.py`（stub 分类器 + 真实默认 SkillRegistry + FakeWorker；含路由/危机短路/低置信度/Skill 关联/合成四态）
+- [x] 8. [测试] Worker 超时降级测试：`worker_timeout_s` + 慢 Worker → `asyncio.wait_for` 超时 → 验证 fallback + `errors` 记录 + 降级合成
+- [x] 9. [评估] `server/tests/eval/generation/test_eval_multiturn.py` — 用 3 条多轮 scenario（`tests/eval/rag/test_cases_multiturn.json`），经完整编排管线（Supervisor → Worker → 记忆）评估末轮是否引用历史话题（记忆连贯性）；real 模式断言 `coherence_rate ≥ 0.66`，并写 BASELINE `multiturn` 段（首跑 real 模式 coherence_rate=1.00）
 
 #### Verification
 
