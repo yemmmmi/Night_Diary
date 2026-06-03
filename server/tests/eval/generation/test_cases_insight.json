@@ -1,0 +1,45 @@
+[
+  {
+    "id": "ins_regular_01",
+    "category": "analysis",
+    "intent": "retrospective_review",
+    "diary": "我发现自己最近一个月总是拖延，明明列好了计划，到了晚上又什么都没做，然后陷入自责，第二天继续拖。为什么我总是这样？",
+    "episodic_context": [
+      {"event": "项目延期", "emotion": "焦虑", "ai_suggestion": "把大任务拆成小步骤", "importance": 0.8},
+      {"event": "周末计划落空", "emotion": "失落", "importance": 0.6}
+    ]
+  },
+  {
+    "id": "ins_regular_02",
+    "category": "analysis",
+    "intent": "emotional_support",
+    "diary": "每次和家人吃饭都会吵架，话题总是绕到我的工作和收入上，我很想找到一个能平和沟通的方式，而不是每次都不欢而散。",
+    "episodic_context": [
+      {"event": "家庭聚餐冲突", "emotion": "愤怒", "importance": 0.7}
+    ]
+  },
+  {
+    "id": "ins_regular_03",
+    "category": "analysis",
+    "intent": "retrospective_review",
+    "diary": "这半年我换了三份工作，每份都干不过两个月就觉得不合适想离开。我开始怀疑是不是自己的问题，到底想要什么样的生活。",
+    "long_term_profile": {"recurring_topics": ["职业焦虑", "自我怀疑"], "emotion_baseline": {"average_sentiment": -0.2}}
+  },
+  {
+    "id": "ins_report_weekly",
+    "category": "report",
+    "intent": "retrospective_review",
+    "diary": "帮我生成这周的周报吧。这一周整体压力很大，周一到周三都在赶项目，周四终于上线，周五和朋友聚餐放松了一下，周末补了很多觉。",
+    "episodic_context": [
+      {"event": "项目上线", "emotion": "如释重负", "importance": 0.9},
+      {"event": "朋友聚餐", "emotion": "开心", "importance": 0.5}
+    ]
+  },
+  {
+    "id": "ins_report_monthly",
+    "category": "report",
+    "intent": "retrospective_review",
+    "diary": "想看看这个月的月报。这个月情绪起伏挺大的，月初因为分手很难过，中旬开始投入工作慢慢走出来，月底报了个画画班，感觉生活在重新有了盼头。",
+    "long_term_profile": {"emotion_baseline": {"average_sentiment": 0.1, "dominant_emotion": "平静"}}
+  }
+]
