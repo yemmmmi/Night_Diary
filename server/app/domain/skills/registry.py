@@ -56,8 +56,14 @@ class SkillRegistry:
         profile: SkillProfileContext | None = None,
         *,
         token_budget: int = 4000,
+        decision_id: str = "",
     ) -> list[BaseSkill]:
-        """Greedy selection by activation_score * priority within token budget."""
+        """Greedy selection by activation_score * priority within token budget.
+
+        ``decision_id`` (when given) is stamped onto every
+        :class:`SkillActivationRecord` so the rows link back to the owning
+        ``agent_decisions`` entry (the Supervisor passes its decision id in B-9).
+        """
         if not self._skills or token_budget <= 0:
             return []
 
@@ -81,6 +87,7 @@ class SkillRegistry:
                         reason=f"activation_error: {exc}",
                         input_digest=digest,
                         latency_ms=latency_ms,
+                        decision_id=decision_id,
                     )
                 )
                 logger.warning(
@@ -100,6 +107,7 @@ class SkillRegistry:
                     reason=reason,
                     input_digest=digest,
                     latency_ms=latency_ms,
+                    decision_id=decision_id,
                 )
             )
 
