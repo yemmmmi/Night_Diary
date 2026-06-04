@@ -17,6 +17,7 @@ import logging
 import time
 from typing import Any
 
+from app.domain.agents.context_compressor import memory_context_from_state
 from app.domain.agents.prompts import (
     INSIGHT_FALLBACK,
     INSIGHT_REPORT_SYSTEM,
@@ -83,6 +84,7 @@ class InsightAgent:
             diary_content=diary_content,
             retrieval_context=retrieval_context,
             episodic=episodic,
+            memory_context=memory_context_from_state(state),
             profile=profile,
             domain_knowledge=domain_knowledge,
             deviation=deviation,
@@ -177,13 +179,16 @@ class InsightAgent:
         diary_content: str,
         retrieval_context: str,
         episodic: list[dict[str, Any]],
+        memory_context: str,
         profile: dict[str, Any],
         domain_knowledge: str,
         deviation: dict[str, Any] | None,
     ) -> str:
         parts = [f"【当前日记】\n{diary_content}"]
 
-        context_summary = self._context_summary(retrieval_context, episodic, profile)
+        context_summary = self._context_summary(
+            retrieval_context, episodic, profile, memory_context=memory_context
+        )
         if context_summary:
             parts.append(context_summary)
         if domain_knowledge:
@@ -203,23 +208,28 @@ class InsightAgent:
         retrieval_context: str,
         episodic: list[dict[str, Any]],
         profile: dict[str, Any],
+        *,
+        memory_context: str = "",
     ) -> str:
         parts: list[str] = []
         if retrieval_context:
             parts.append(f"【历史日记摘要】\n{retrieval_context}")
 
-        memory_lines: list[str] = []
-        for entry in episodic[:_MAX_EPISODIC_ENTRIES]:
-            if not isinstance(entry, dict) or not entry.get("event"):
-                continue
-            line = f"- {entry['event']}"
-            if entry.get("emotion"):
-                line += f"（情绪: {entry['emotion']}）"
-            if entry.get("ai_suggestion"):
-                line += f" → 建议: {entry['ai_suggestion']}"
-            memory_lines.append(line)
-        if memory_lines:
-            parts.append("【近期重要记忆】\n" + "\n".join(memory_lines))
+        if memory_context.strip():
+            parts.append(f"【近期重要记忆】\n{memory_context.strip()}")
+        else:
+            memory_lines: list[str] = []
+            for entry in episodic[:_MAX_EPISODIC_ENTRIES]:
+                if not isinstance(entry, dict) or not entry.get("event"):
+                    continue
+                line = f"- {entry['event']}"
+                if entry.get("emotion"):
+                    line += f"（情绪: {entry['emotion']}）"
+                if entry.get("ai_suggestion"):
+                    line += f" → 建议: {entry['ai_suggestion']}"
+                memory_lines.append(line)
+            if memory_lines:
+                parts.append("【近期重要记忆】\n" + "\n".join(memory_lines))
 
         profile_parts: list[str] = []
         topics = profile.get("recurring_topics", [])

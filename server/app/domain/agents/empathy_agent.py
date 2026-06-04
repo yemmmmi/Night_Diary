@@ -20,6 +20,7 @@ import logging
 import time
 from typing import Any
 
+from app.domain.agents.context_compressor import memory_context_from_state
 from app.domain.agents.prompts import (
     EMPATHY_BASE,
     EMPATHY_CRISIS_BLOCK,
@@ -71,7 +72,6 @@ class EmpathyAgent:
         diary_content = state.get("diary_content", "")
         intent = state.get("intent", "pure_record")
         profile = state.get("long_term_profile", {}) or {}
-        episodic = state.get("episodic_context", []) or []
 
         is_crisis = self._is_crisis(diary_content, profile)
         preferred_style = str(profile.get("preferred_response_style", _DEFAULT_STYLE))
@@ -84,7 +84,7 @@ class EmpathyAgent:
         system_prompt = self._build_system_prompt(
             intent=intent,
             preferred_style=preferred_style,
-            episodic_context=self._format_episodic(episodic),
+            episodic_context=memory_context_from_state(state),
             domain_knowledge=domain_knowledge,
             is_crisis=is_crisis,
         )
