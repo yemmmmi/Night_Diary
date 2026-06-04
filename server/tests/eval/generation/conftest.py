@@ -55,6 +55,20 @@ _BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
 _MODEL = os.getenv("LLM_MODEL", "deepseek-v4-flash")
 _REAL_MODE = bool(_API_KEY)
 
+# Auth/authorization failures (invalid/expired key, no access) won't recover by
+# retrying, and a dead key would otherwise crash the whole suite mid-run. We
+# detect these to (a) skip retries and (b) skip the eval with a clear message.
+_AUTH_ERROR_STATUSES = frozenset({401, 403})
+
+
+def _is_auth_error(exc: BaseException) -> bool:
+    import httpx
+
+    return (
+        isinstance(exc, httpx.HTTPStatusError)
+        and exc.response.status_code in _AUTH_ERROR_STATUSES
+    )
+
 
 @dataclass
 class _Message:
@@ -130,7 +144,7 @@ class _HttpLLM:
                     return self._parse_response(resp.json())
             except (httpx.HTTPError, KeyError, IndexError) as exc:
                 last_exc = exc
-                if attempt + 1 >= self._max_retries:
+                if _is_auth_error(exc) or attempt + 1 >= self._max_retries:
                     break
                 # Exponential backoff: a bare retry loop fires in milliseconds and
                 # burns every attempt during a transient TLS reset / network blip.
@@ -151,7 +165,7 @@ class _HttpLLM:
                     return self._parse_response(resp.json())
             except (httpx.HTTPError, KeyError, IndexError) as exc:
                 last_exc = exc
-                if attempt + 1 >= self._max_retries:
+                if _is_auth_error(exc) or attempt + 1 >= self._max_retries:
                     break
                 await asyncio.sleep(_RETRY_BASE_DELAY_S * (2**attempt))
         assert last_exc is not None
@@ -198,6 +212,25 @@ class StubKnowledgeStore:
         return []
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _llm_auth_preflight() -> None:
+    """Skip the whole generation eval (with a clear message) on a dead key.
+
+    A single cheap call in real mode: if the LLM rejects the key (401/403),
+    every downstream judge call would otherwise raise mid-suite and abort the
+    remaining cases. We turn that into a clean ``skip`` instead of cascading
+    failures. Stub mode never hits the network, so it is a no-op there.
+    """
+    if not _REAL_MODE:
+        return
+    try:
+        _HttpLLM(max_tokens=1, max_retries=1).invoke("ping")
+    except Exception as exc:
+        if _is_auth_error(exc):
+            pytest.skip(f"LLM auth failed (check LLM_API_KEY in server/.env): {exc}")
+        # Other transient errors: let the tests run and surface the real failure.
+
+
 @pytest.fixture(scope="session")
 def real_mode() -> bool:
     return _REAL_MODE
@@ -240,3 +273,8 @@ def empathy_cases() -> list[dict[str, Any]]:
 @pytest.fixture(scope="session")
 def insight_cases() -> list[dict[str, Any]]:
     return json.loads((DATA_DIR / "test_cases_insight.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="session")
+def adversarial_cases() -> list[dict[str, Any]]:
+    return json.loads((DATA_DIR / "test_cases_adversarial.json").read_text(encoding="utf-8"))
