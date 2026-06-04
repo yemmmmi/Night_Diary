@@ -28,6 +28,7 @@ import logging
 from copy import deepcopy
 from typing import Any
 
+from app.domain.agents.context_compressor import ContextCompressor
 from app.domain.memory.types import UserProfile, WorkingContext
 from app.shared.token_utils import estimate_tokens
 
@@ -47,8 +48,9 @@ class WorkingMemory:
 
     MAX_CONTEXT_TOKENS = MAX_CONTEXT_TOKENS
 
-    def __init__(self) -> None:
+    def __init__(self, *, context_compressor: ContextCompressor | None = None) -> None:
         self._context: WorkingContext | None = None
+        self._compressor = context_compressor or ContextCompressor()
 
     @property
     def context(self) -> WorkingContext | None:
@@ -88,6 +90,15 @@ class WorkingMemory:
                 merged[key] = self._enforce_token_limit(merged, key, value)  # type: ignore[literal-required]
             else:
                 merged[key] = value  # type: ignore[literal-required]
+
+        episodic = merged.get("episodic_context")
+        diary_content = str(merged.get("diary_content") or "")
+        if isinstance(episodic, list) and episodic and diary_content.strip():
+            compressed = self._compressor.compress(diary_content, episodic=episodic)
+            if compressed:
+                merged["compressed_history"] = self._enforce_token_limit(
+                    merged, "compressed_history", compressed
+                )
 
         merged["turn"] = int(merged.get("turn", 0)) + 1
         merged["total_tokens_used"] = self._context_tokens_used(merged)

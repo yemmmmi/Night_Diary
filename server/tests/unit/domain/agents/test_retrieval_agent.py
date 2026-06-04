@@ -64,6 +64,36 @@ async def test_anchor_guard_stops_on_query_drift(knowledge_store: StubKnowledgeS
     assert len(retriever.queries) == 1
 
 
+async def test_irrelevant_first_hop_does_not_drift_unbounded(
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """First hop returns irrelevant hits; anchor guard caps further hops."""
+    retriever = StubRetriever(
+        [
+            [_hit("d1", "完全无关的体育新闻", score=0.02)],
+            [_hit("d2", "另一篇无关内容", score=0.01)],
+            [_hit("d3", "第三篇无关内容", score=0.01)],
+        ]
+    )
+    drift_calls: list[tuple[str, str]] = []
+
+    def track_drift(original: str, refined: str) -> float:
+        drift_calls.append((original, refined))
+        # Refined query diverges heavily from the original diary topic.
+        return 0.05
+
+    agent = RetrievalAgent(
+        retriever,  # type: ignore[arg-type]
+        knowledge_store,
+        max_hops=3,
+        query_similarity=track_drift,
+    )
+    await agent.run({"diary_content": "最近工作压力很大，经常失眠。"})
+
+    assert len(retriever.queries) == 1
+    assert drift_calls, "anchor similarity should be evaluated before stopping"
+
+
 async def test_multi_hop_runs_until_max_hops(knowledge_store: StubKnowledgeStore) -> None:
     retriever = StubRetriever(
         [

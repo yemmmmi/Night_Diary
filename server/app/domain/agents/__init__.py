@@ -8,6 +8,7 @@ integration + tier routing + synthesis) and the pure-asyncio
 
 from __future__ import annotations
 
+from app.domain.agents.context_compressor import ContextCompressor
 from app.domain.agents.empathy_agent import EmpathyAgent
 from app.domain.agents.graph import (
     MultiAgentGraph,
@@ -22,6 +23,7 @@ from app.domain.agents.supervisor import SupervisorAgent, allocate_token_budget
 from app.domain.agents.types import IntentCategory, IntentResult
 
 __all__ = [
+    "ContextCompressor",
     "EmpathyAgent",
     "InsightAgent",
     "IntentCategory",

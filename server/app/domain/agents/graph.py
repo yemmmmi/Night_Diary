@@ -38,6 +38,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, cast, get_origin, get_type_hints
 
+from app.domain.agents.context_compressor import ContextCompressor, prepare_compressed_history
 from app.domain.agents.state import MultiAgentState
 from app.domain.agents.supervisor import SupervisorAgent
 
@@ -95,15 +96,18 @@ class MultiAgentGraph:
         phases: dict[str, int],
         *,
         worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
+        context_compressor: ContextCompressor | None = None,
     ) -> None:
         self._supervisor = supervisor
         self._workers = workers
         self._fallbacks = fallbacks
         self._phases = phases
         self._timeout = worker_timeout_s
+        self._compressor = context_compressor
 
     async def invoke(self, state: MultiAgentState) -> MultiAgentState:
         merged: dict[str, Any] = dict(state)
+        _merge(merged, prepare_compressed_history(merged, self._compressor))
 
         classify_update = await self._supervisor.classify(cast(MultiAgentState, merged))
         _merge(merged, classify_update)
@@ -155,12 +159,18 @@ class MultiAgentGraph:
 class MultiAgentGraphBuilder:
     """Fluent builder for :class:`MultiAgentGraph`."""
 
-    def __init__(self, *, worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S) -> None:
+    def __init__(
+        self,
+        *,
+        worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
+        context_compressor: ContextCompressor | None = None,
+    ) -> None:
         self._supervisor: SupervisorAgent | None = None
         self._workers: dict[str, WorkerRunner] = {}
         self._fallbacks: dict[str, WorkerFallback] = {}
         self._phases: dict[str, int] = {}
         self._timeout = worker_timeout_s
+        self._compressor = context_compressor
 
     def set_supervisor(self, supervisor: SupervisorAgent) -> MultiAgentGraphBuilder:
         self._supervisor = supervisor
@@ -188,6 +198,7 @@ class MultiAgentGraphBuilder:
             self._fallbacks,
             self._phases,
             worker_timeout_s=self._timeout,
+            context_compressor=self._compressor,
         )
 
 
@@ -198,6 +209,7 @@ def create_multi_agent_graph(
     insight_agent: Any,
     *,
     worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
+    context_compressor: ContextCompressor | None = None,
 ) -> MultiAgentGraph:
     """Wire the three Worker agents into a graph with correct phases/fallbacks.
 
@@ -205,7 +217,10 @@ def create_multi_agent_graph(
     (phase 1) so they observe the retrieval context. Each worker's ``fallback``
     is adapted to the uniform ``(state) -> dict`` signature the graph expects.
     """
-    builder = MultiAgentGraphBuilder(worker_timeout_s=worker_timeout_s)
+    builder = MultiAgentGraphBuilder(
+        worker_timeout_s=worker_timeout_s,
+        context_compressor=context_compressor,
+    )
     builder.set_supervisor(supervisor)
     builder.add_worker(
         "retrieval",

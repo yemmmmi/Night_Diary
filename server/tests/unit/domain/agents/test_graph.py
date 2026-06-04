@@ -221,3 +221,29 @@ async def test_crisis_routes_only_empathy_and_returns_verbatim() -> None:
     assert empathy.ran
     assert not retrieval.ran and not insight.ran
     assert result["final_response"] == "我在,请拨打 400-161-9995"
+
+
+async def test_graph_compresses_episodic_before_workers() -> None:
+    empathy = FakeWorker("empathy_response", "ok", observe_key="compressed_history")
+    retrieval = FakeWorker("retrieval_context", "历史")
+    insight = FakeWorker("insight_response", "x")
+    graph = _make_graph(
+        IntentCategory.EMOTIONAL_SUPPORT.value,
+        empathy=empathy,
+        retrieval=retrieval,
+        insight=insight,
+    )
+
+    state = {
+        "diary_id": "d1",
+        "diary_content": "今天又失眠了。",
+        "episodic_context": [
+            {"event": "连续三天失眠", "content": "连续三天失眠到凌晨两点，白天无法集中"},
+            {"event": "周末爬山", "content": "周末爬山心情不错，拍了好多照片"},
+        ],
+    }
+    result = await graph.invoke(state)
+
+    assert result.get("compressed_history")
+    assert "失眠" in result["compressed_history"]
+    assert empathy.observed and "失眠" in str(empathy.observed)

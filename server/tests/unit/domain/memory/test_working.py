@@ -47,6 +47,25 @@ def test_update_context_enforces_token_limit() -> None:
     assert estimate_tokens(active["retrieval_context"]) <= WorkingMemory.MAX_CONTEXT_TOKENS
 
 
+def test_update_context_compresses_episodic_history() -> None:
+    wm = WorkingMemory()
+    ctx = wm.load_context("d03", UserProfile())
+    wm.update_context(
+        ctx,
+        {
+            "diary_content": "今天又失眠了。",
+            "episodic_context": [
+                {"event": "连续三天失眠", "content": "连续三天失眠到凌晨两点，白天无法集中"},
+                {"event": "周末爬山", "content": "周末爬山心情不错，拍了好多照片"},
+            ],
+        },
+    )
+    active = wm.context
+    assert active is not None
+    assert active.get("compressed_history")
+    assert "失眠" in active["compressed_history"]
+
+
 def test_clear_resets_session() -> None:
     wm = WorkingMemory()
     wm.load_context("d03", UserProfile())
