@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.services.ai.router import ExecutionMode, ExecutionPlanner
 from app.shared.llm_factory import StubLLMClient
 from app.shared.tracing import InMemoryAgentDecisionLogger

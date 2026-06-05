@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 
 from app.config import Settings
-from app.services.container import ServiceContainer
 from app.services.ai.router import ExecutionPlanner
+from app.services.container import ServiceContainer
 
 
 @pytest.fixture()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.infrastructure.database import Base, create_db_engine, init_db
+from app.infrastructure.database import create_db_engine, init_db
 from app.shared.llm_factory import StubLLMClient
 
 
