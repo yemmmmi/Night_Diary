@@ -612,10 +612,10 @@ Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降�
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/services/__init__.py`
-- [ ] 2. [核心] `server/app/services/diary_service.py` — 日记 CRUD；创建/更新时同步向量库（调用 `DiaryCollectionManager`）；不再有 `user_id` 参数
-- [ ] 3. [核心] `server/app/services/analysis_service.py` — 编排：条目所有权检查 → 7 天历史查询 → AI router 调用 → 结果存储。消除重复 7 天逻辑（V1 坏味 3）
-- [ ] 4. [核心] `server/app/services/ai/` — 从 V1 拆分为：
+- [x] 1. [核心] `server/app/services/__init__.py`
+- [x] 2. [核心] `server/app/services/diary_service.py` — 日记 CRUD；创建/更新时同步向量库（调用 `DiaryCollectionManager`）；不再有 `user_id` 参数
+- [x] 3. [核心] `server/app/services/analysis_service.py` — 编排：条目所有权检查 → 7 天历史查询 → AI router 调用 → 结果存储。消除重复 7 天逻辑（V1 坏味 3）
+- [x] 4. [核心] `server/app/services/ai/` — 从 V1 拆分为：
   - `router.py` — `ExecutionPlanner`：light/medium/heavy 路由决策（~80 行）
   - `prompts.py` — System Prompt 模板（~80 行）
   - `tool_factory.py` — 工具工厂函数（~200 行）
@@ -623,12 +623,12 @@ Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降�
   - `agent_executor.py` — ReAct Agent 模式（~100 行）
   - `multi_agent_executor.py` — Multi-Agent 模式，调用 WorkingMemory（~150 行）
   - `utils.py` — 缓存判断、结果过滤、Token 提取（~60 行）
-- [ ] 5. [核心] `server/app/services/feedback_service.py` — 反馈写入 + 异步更新 Thompson Sampling
-- [ ] 6. [核心] `server/app/services/tag_service.py` — 标签 CRUD
-- [ ] 7. [核心] `server/app/services/model_service.py` — LLM 提供商 CRUD + Fernet 加密 API Key
-- [ ] 8. [测试] `tests/unit/services/` — test_diary_service / test_analysis_service / test_ai_router
-- [ ] 9. [可观测性] `ExecutionPlanner` 记录路由决策 trace（diary_length, detected_intent, selected_tier, activated_skills, estimated_tokens）— 写入 `agent_decisions` 表
-- [ ] 10. [性能] `ExecutionPlanner` 支持 per-tier model selection：用户可为 light/medium/heavy 分别配置不同 LLM model（读取 `ModelProvider.tier` 字段）
+- [x] 5. [核心] `server/app/services/feedback_service.py` — 反馈写入 + 异步更新 Thompson Sampling
+- [x] 6. [核心] `server/app/services/tag_service.py` — 标签 CRUD
+- [x] 7. [核心] `server/app/services/model_service.py` — LLM 提供商 CRUD + Fernet 加密 API Key
+- [x] 8. [测试] `tests/unit/services/` — test_diary_service / test_analysis_service / test_ai_router
+- [x] 9. [可观测性] `ExecutionPlanner` 记录路由决策 trace（diary_length, detected_intent, selected_tier, activated_skills, estimated_tokens）— 写入 `agent_decisions` 表
+- [x] 10. [性能] `ExecutionPlanner` 支持 per-tier model selection：用户可为 light/medium/heavy 分别配置不同 LLM model（读取 `ModelProvider.tier` 字段）
 
 #### Verification
 

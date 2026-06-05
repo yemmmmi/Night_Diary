@@ -29,10 +29,16 @@ def init_db(engine: Engine) -> None:
     """Create all registered ORM tables."""
     # Import models so metadata is populated before create_all().
     from app.infrastructure.models import agent_decision as _agent_decision_models  # noqa: F401
+    from app.infrastructure.models import analysis as _analysis_models  # noqa: F401
+    from app.infrastructure.models import app_config as _app_config_models  # noqa: F401
+    from app.infrastructure.models import diary_entry as _diary_entry_models  # noqa: F401
     from app.infrastructure.models import feedback as _feedback_models  # noqa: F401
+    from app.infrastructure.models import feedback_record as _feedback_record_models  # noqa: F401
     from app.infrastructure.models import llm_call_log as _llm_call_log_models  # noqa: F401
     from app.infrastructure.models import memory as _memory_models  # noqa: F401
+    from app.infrastructure.models import model_provider as _model_provider_models  # noqa: F401
     from app.infrastructure.models import skill_activation as _skill_activation_models  # noqa: F401
+    from app.infrastructure.models import tag as _tag_models  # noqa: F401
 
     Base.metadata.create_all(engine)
 
