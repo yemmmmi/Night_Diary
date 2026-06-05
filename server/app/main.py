@@ -34,8 +34,13 @@ def _ensure_dirs(settings) -> None:  # type: ignore[no-untyped-def]
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    # Phase B+ : init SQLite engine, seed domain knowledge, warm up embeddings
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    from app.services.container import ServiceContainer
+
+    container = ServiceContainer.create()
+    app.state.container = container
+    logger = __import__("logging").getLogger(__name__)
+    logger.info("Service container ready (SQLite + RAG + multi-agent graph)")
     yield
 
 
