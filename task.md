@@ -653,16 +653,16 @@ Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降�
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/api/v1/__init__.py` + `router.py` — 注册所有子路由
-- [ ] 2. [核心] `server/app/api/v1/diary.py` — 5 个端点（list/create/get/update/delete）
-- [ ] 3. [核心] `server/app/api/v1/analysis.py` — 2 个端点（trigger/get）
-- [ ] 4. [核心] `server/app/api/v1/feedback.py` — 1 个端点（submit 👍/👎）
-- [ ] 5. [核心] `server/app/api/v1/tags.py` — 3 个端点（list/create/delete）
-- [ ] 6. [核心] `server/app/api/v1/models.py` — 4 个端点（list/create/update/delete）— LLM 配置管理
-- [ ] 7. [核心] `server/app/api/v1/stats.py` — 1 个端点（日记数、Token 用量等统计）
-- [ ] 8. [核心] `server/app/shared/errors.py` — `AppError` 基类 + `DiaryError`/`AnalysisError`/`ValidationError` 子类 + `http_status` 映射
-- [ ] 9. [核心] `server/app/api/v1/error_handlers.py` — FastAPI exception handlers：`AppError` → HTTP 状态码映射
-- [ ] 10. [测试] `tests/unit/api/` — test_diary_routes / test_analysis_routes
+- [x] 1. [核心] `server/app/api/v1/__init__.py` + `router.py` — 注册所有子路由
+- [x] 2. [核心] `server/app/api/v1/diary.py` — 5 个端点（list/create/get/update/delete）
+- [x] 3. [核心] `server/app/api/v1/analysis.py` — 2 个端点（trigger/get）
+- [x] 4. [核心] `server/app/api/v1/feedback.py` — 1 个端点（submit 👍/👎）
+- [x] 5. [核心] `server/app/api/v1/tags.py` — 3 个端点（list/create/delete）
+- [x] 6. [核心] `server/app/api/v1/models.py` — 4 个端点（list/create/update/delete）— LLM 配置管理
+- [x] 7. [核心] `server/app/api/v1/stats.py` — 1 个端点（日记数、Token 用量等统计）
+- [x] 8. [核心] `server/app/shared/errors.py` — `AppError` 基类 + `DiaryError`/`AnalysisError`/`ValidationError` 子类 + `http_status` 映射
+- [x] 9. [核心] `server/app/api/v1/error_handlers.py` — FastAPI exception handlers：`AppError` → HTTP 状态码映射
+- [x] 10. [测试] `tests/unit/api/` — test_diary_routes / test_analysis_routes / test_tags_and_stats_routes
 
 #### Verification
 
