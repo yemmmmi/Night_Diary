@@ -53,6 +53,12 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     app = FastAPI(title=cfg.app_name, version="0.0.1", lifespan=lifespan)
 
+    from app.api.v1.error_handlers import register_error_handlers
+    from app.api.v1.router import api_router
+
+    register_error_handlers(app)
+    app.include_router(api_router)
+
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
