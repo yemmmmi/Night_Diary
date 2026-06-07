@@ -15,6 +15,7 @@ from app.services.ai.prompts import FALLBACK_FEEDBACK, TEMPORAL_KEYWORDS
 from app.services.ai.tool_factory import build_tool_map
 from app.shared.errors import AIServiceUnavailableError
 from app.shared.llm import LLMClient
+from app.shared.llm_factory import LLMFactory
 from app.shared.tracing import AgentDecisionLogger, AgentDecisionRecord, NoOpAgentDecisionLogger
 
 logger = logging.getLogger(__name__)
@@ -264,7 +265,7 @@ class ExecutionPlanner:
 def resolve_llm_clients_by_tier(
     db: Session,
     *,
-    llm_factory: Any,
+    llm_factory: LLMFactory,
     tracer: Any | None = None,
     prefer_active: bool = True,
 ) -> dict[str, LLMClient]:
