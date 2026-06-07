@@ -1,19 +1,18 @@
-"""LLMFactory — creates tier-aware LLM clients from ModelProvider rows.
-
-Full Fernet + user Settings integration lands in Phase C-3; this module provides
-the service-layer wiring contract used by :class:`ExecutionPlanner`.
-"""
+"""LLMFactory — creates tier-aware LLM clients from ModelProvider rows."""
 
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from app.config import Settings, get_settings
 from app.infrastructure.models.model_provider import ModelProviderRow
 from app.infrastructure.security import decrypt_api_key
 from app.shared.errors import AIServiceUnavailableError
 from app.shared.llm import LLMClient
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +65,53 @@ class LLMFactory:
             base_url=self._settings.llm_base_url,
             model_name=self._settings.llm_model,
         )
+
+    def create_for_tier(self, db: Session, tier: str) -> LLMClient:
+        """Return an LLM client for ``tier``, falling back to ``default`` then env."""
+        from app.services import model_service
+
+        provider = model_service.get_active_provider_for_tier(db, tier)
+        if provider is None and tier != "default":
+            provider = model_service.get_active_provider_for_tier(db, "default")
+        if provider is not None:
+            return self.create_from_provider(provider)
+        return self.create_default()
+
+    def resolve_by_tier(
+        self,
+        db: Session,
+        *,
+        tracer: Any | None = None,
+        prefer_active: bool = True,
+    ) -> dict[str, LLMClient]:
+        """Build one client per tier from active ``model_providers`` rows."""
+        from app.shared.tracing_llm import TracingLLMClient
+
+        query = db.query(ModelProviderRow).filter(ModelProviderRow.api_key_encrypted.isnot(None))
+        if prefer_active:
+            query = query.filter(ModelProviderRow.is_active.is_(True))
+        providers = query.order_by(ModelProviderRow.id.asc()).all()
+
+        clients: dict[str, LLMClient] = {}
+        for provider in providers:
+            tier = provider.tier or "default"
+            if tier in clients:
+                continue
+            try:
+                inner = self.create_from_provider(provider)
+                model_name = provider.model_name
+                if tracer is not None:
+                    clients[tier] = TracingLLMClient(
+                        inner,
+                        model=model_name,
+                        tier=tier,
+                        tracer=tracer,
+                    )
+                else:
+                    clients[tier] = inner
+            except Exception as exc:
+                logger.warning("Skip provider id=%s tier=%s: %s", provider.id, tier, exc)
+        return clients
 
     def _build_client(self, *, api_key: str, base_url: str, model_name: str) -> LLMClient:
         try:
