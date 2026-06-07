@@ -105,7 +105,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
 
-def __getattr__(name: str):  # PEP 562 lazy export for tests
+def __getattr__(name: str) -> FastAPI:  # PEP 562 lazy export for tests
     if name == "app":
         return create_app()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
