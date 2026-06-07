@@ -13,6 +13,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 describe('useBackend helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('resolveBackendBaseUrl uses Tauri port when invoke succeeds', async () => {
@@ -25,15 +26,16 @@ describe('useBackend helpers', () => {
     await expect(resolveBackendBaseUrl()).resolves.toBe('http://127.0.0.1:8000')
   })
 
-  it('waitForBackendHealth succeeds via Tauri invoke', async () => {
+  it('waitForBackendHealth succeeds via Tauri is_backend_ready', async () => {
+    vi.stubGlobal('__TAURI_INTERNALS__', {})
     vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === 'check_backend_health') {
+      if (cmd === 'is_backend_ready') {
         return Promise.resolve(true)
       }
       return Promise.reject(new Error(`unexpected: ${cmd}`))
     })
     await expect(waitForBackendHealth('http://127.0.0.1:1')).resolves.toBeUndefined()
-    expect(invoke).toHaveBeenCalledWith('check_backend_health')
+    expect(invoke).toHaveBeenCalledWith('is_backend_ready')
   })
 
   it('waitForBackendHealth falls back to fetch when invoke unavailable', async () => {
@@ -46,8 +48,9 @@ describe('useBackend helpers', () => {
   })
 
   it('waitForBackendHealth throws after max attempts', async () => {
+    vi.stubGlobal('__TAURI_INTERNALS__', {})
     vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === 'check_backend_health') {
+      if (cmd === 'is_backend_ready' || cmd === 'check_backend_health') {
         return Promise.resolve(false)
       }
       return Promise.reject(new Error(`unexpected: ${cmd}`))

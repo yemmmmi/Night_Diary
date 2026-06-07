@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-const HEALTH_INTERVAL_MS: u64 = 200;
+use tauri::Emitter;
+
+const HEALTH_INTERVAL_MS: u64 = 100;
 const HEALTH_MAX_ATTEMPTS: u32 = 150;
 const SHUTDOWN_GRACE_SECS: u64 = 3;
 
@@ -146,6 +148,9 @@ pub fn spawn_backend(port: u16, data_dir: &str) -> Result<BackendProcess, String
         spawn_dev_backend(port, data_dir)?
     };
 
+    // Log spawn immediately; health polling begins while Python imports modules.
+    eprintln!("[tauri] backend process spawned, waiting for /health on port {port}");
+
     Ok(BackendProcess { child })
 }
 
@@ -170,6 +175,11 @@ fn spawn_dev_backend(port: u16, data_dir: &str) -> Result<Child, String> {
             "--data-dir",
             data_dir,
         ])
+        .env("NO_PROXY", "127.0.0.1,localhost")
+        .env("no_proxy", "127.0.0.1,localhost")
+        .env("HTTP_PROXY", "")
+        .env("HTTPS_PROXY", "")
+        .env("PYTHONUNBUFFERED", "1")
         .current_dir(&server)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -215,7 +225,8 @@ fn spawn_release_backend(sidecar: &Path, port: u16, data_dir: &str) -> Result<Ch
 
 fn health_client() -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
-        .timeout(Duration::from_millis(500))
+        .timeout(Duration::from_millis(300))
+        .connect_timeout(Duration::from_millis(200))
         .no_proxy()
         .build()
         .map_err(|err| format!("create HTTP client: {err}"))
@@ -235,11 +246,14 @@ pub fn health_check_once(port: u16) -> bool {
 }
 
 /// Poll GET /health until success or timeout.
-pub fn health_poll(port: u16) -> Result<(), String> {
+pub fn health_poll(port: u16, app: Option<&tauri::AppHandle>) -> Result<(), String> {
     let client = health_client()?;
     let url = format!("http://127.0.0.1:{port}/health");
 
     for attempt in 1..=HEALTH_MAX_ATTEMPTS {
+        if let Some(handle) = app {
+            let _ = handle.emit("backend-startup-progress", attempt);
+        }
         match client.get(&url).send() {
             Ok(response) if response.status().is_success() => return Ok(()),
             Ok(response) => eprintln!(
