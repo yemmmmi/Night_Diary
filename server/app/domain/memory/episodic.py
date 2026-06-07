@@ -83,7 +83,6 @@ class EpisodicMemory:
 
         self._entries.append(entry)
         self.upsert(entry)
-        self.purge_stale()
         self._enforce_capacity()
         return True
 

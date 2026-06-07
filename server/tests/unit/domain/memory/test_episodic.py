@@ -93,8 +93,10 @@ def test_decay_purges_entries_below_threshold(episodic_store: SqliteEpisodicMemo
     now = time.time()
     fourteen_days = 14 * 24 * 3600
     memory.store(_entry(importance=0.8, timestamp=now - fourteen_days, event="过期事件"))
+    assert memory.size == 1  # stored before purge
 
-    # store() triggers purge_stale(); 14-day decay drops effective score below 0.5.
+    # evict_lowest() triggers purge_stale(); 14-day decay drops score below 0.5.
+    memory.evict_lowest(now=now)
     assert memory.size == 0
 
 
