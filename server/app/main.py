@@ -38,13 +38,9 @@ def _ensure_dirs(settings) -> None:  # type: ignore[no-untyped-def]
 
 
 def _bootstrap_sync(app: FastAPI) -> None:
-    """Load API routes + ServiceContainer (heavy — run off the event loop)."""
-    from app.api.v1.error_handlers import register_error_handlers
-    from app.api.v1.router import api_router
+    """Load ServiceContainer (heavy — run off the event loop)."""
     from app.services.container import ServiceContainer
 
-    register_error_handlers(app)
-    app.include_router(api_router)
     app.state.container = ServiceContainer.create()
     app.state.bootstrap_done = True
     logger.info("Service container ready (SQLite + RAG + multi-agent graph)")
@@ -68,6 +64,12 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
     _ensure_dirs(cfg)
 
     app = FastAPI(title=cfg.app_name, version="0.0.1", lifespan=lifespan)
+
+    from app.api.v1.error_handlers import register_error_handlers
+    from app.api.v1.router import api_router
+
+    register_error_handlers(app)
+    app.include_router(api_router)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
