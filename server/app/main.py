@@ -7,12 +7,16 @@ and ``--data-dir`` CLI arguments so the Tauri shell can control them.
 from __future__ import annotations
 
 import argparse
+import asyncio
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -33,15 +37,23 @@ def _ensure_dirs(settings) -> None:  # type: ignore[no-untyped-def]
         p.mkdir(parents=True, exist_ok=True)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+def _bootstrap_sync(app: FastAPI) -> None:
+    """Load ServiceContainer (heavy — run off the event loop)."""
     from app.services.container import ServiceContainer
 
-    container = ServiceContainer.create()
-    app.state.container = container
-    logger = __import__("logging").getLogger(__name__)
+    app.state.container = ServiceContainer.create()
+    app.state.bootstrap_done = True
     logger.info("Service container ready (SQLite + RAG + multi-agent graph)")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    app.state.container = None
+    app.state.bootstrap_done = False
+    bootstrap_task = asyncio.create_task(asyncio.to_thread(_bootstrap_sync, app))
+    app.state.bootstrap_task = bootstrap_task
     yield
+    await bootstrap_task
 
 
 def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
@@ -66,16 +78,11 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
     @app.post("/shutdown", tags=["meta"])
     async def shutdown() -> dict[str, str]:
         """Graceful shutdown — Tauri calls this before sending SIGTERM."""
-        import asyncio
-
         loop = asyncio.get_running_loop()
         loop.call_later(0.3, lambda: os._exit(0))
         return {"status": "shutting_down"}
 
     return app
-
-
-app = create_app()
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -92,13 +99,18 @@ def main(argv: list[str] | None = None) -> None:
     get_settings.cache_clear()
     application = create_app()
 
-    # Pass the app object directly — string imports break inside frozen executables.
     uvicorn.run(
         application,
         host="127.0.0.1",
         port=args.port,
         log_level="info",
     )
+
+
+def __getattr__(name: str) -> FastAPI:  # PEP 562 lazy export for tests
+    if name == "app":
+        return create_app()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 if __name__ == "__main__":

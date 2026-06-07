@@ -10,14 +10,25 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }))
 
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({
+    minimize: vi.fn(),
+    maximize: vi.fn(),
+    unmaximize: vi.fn(),
+    isMaximized: vi.fn().mockResolvedValue(false),
+    close: vi.fn(),
+  }),
+}))
+
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('__TAURI_INTERNALS__', {})
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === 'get_backend_port') {
         return Promise.resolve(18000)
       }
-      if (cmd === 'check_backend_health') {
+      if (cmd === 'is_backend_ready' || cmd === 'check_backend_health') {
         return Promise.resolve(true)
       }
       return Promise.reject(new Error(`unexpected: ${cmd}`))
@@ -27,7 +38,11 @@ describe('App', () => {
   it('shows loading then ready state', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/', component: HomeScene }],
+      routes: [
+        { path: '/', component: HomeScene },
+        { path: '/design-system', component: HomeScene },
+        { path: '/settings', component: HomeScene },
+      ],
     })
     const wrapper = mount(App, {
       global: { plugins: [router] },
@@ -36,7 +51,7 @@ describe('App', () => {
 
     await flushPromises()
     await router.isReady()
-    expect(wrapper.text()).toContain('Night Diary V2')
+    expect(wrapper.text()).toContain('夜记')
     expect(wrapper.text()).toContain('http://127.0.0.1:18000')
   })
 })

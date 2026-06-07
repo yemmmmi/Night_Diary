@@ -1,9 +1,10 @@
 import { invoke } from '@tauri-apps/api/core'
-import { onMounted, ref, type Ref } from 'vue'
+import { listen } from '@tauri-apps/api/event'
+import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 
 const DEFAULT_DEV_BASE_URL = 'http://127.0.0.1:8000'
 const HEALTH_PATH = '/health'
-const HEALTH_INTERVAL_MS = 200
+const HEALTH_INTERVAL_MS = 150
 const HEALTH_MAX_ATTEMPTS = 150
 
 export interface BackendState {
@@ -11,7 +12,16 @@ export interface BackendState {
   loading: Ref<boolean>
   error: Ref<string | null>
   baseUrl: Ref<string>
+  startupProgress: Ref<number | null>
   init: () => Promise<void>
+}
+
+function isTauriRuntime(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export async function resolveBackendBaseUrl(): Promise<string> {
@@ -24,17 +34,23 @@ export async function resolveBackendBaseUrl(): Promise<string> {
 }
 
 async function probeBackendHealth(baseUrl: string): Promise<boolean> {
-  try {
-    return await invoke<boolean>('check_backend_health')
-  } catch {
-    // Browser-only dev (vite without Tauri): fetch fallback
+  if (isTauriRuntime()) {
     try {
-      const url = new URL(HEALTH_PATH, baseUrl).toString()
-      const response = await fetch(url)
-      return response.ok
+      if (await invoke<boolean>('is_backend_ready')) {
+        return true
+      }
+      return await invoke<boolean>('check_backend_health')
     } catch {
       return false
     }
+  }
+
+  try {
+    const url = new URL(HEALTH_PATH, baseUrl).toString()
+    const response = await fetch(url)
+    return response.ok
+  } catch {
+    return false
   }
 }
 
@@ -47,7 +63,7 @@ export async function waitForBackendHealth(
     if (await probeBackendHealth(baseUrl)) {
       return
     }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    await sleep(intervalMs)
   }
 
   throw new Error('Backend health check timed out')
@@ -58,11 +74,26 @@ export function useBackend(): BackendState {
   const loading = ref(true)
   const error = ref<string | null>(null)
   const baseUrl = ref('')
+  const startupProgress = ref<number | null>(null)
+
+  let unlistenProgress: (() => void) | undefined
 
   async function init(): Promise<void> {
     loading.value = true
     error.value = null
     ready.value = false
+    startupProgress.value = null
+
+    if (isTauriRuntime()) {
+      try {
+        unlistenProgress?.()
+        unlistenProgress = await listen<number>('backend-startup-progress', (event) => {
+          startupProgress.value = event.payload
+        })
+      } catch {
+        // ignore if event API unavailable
+      }
+    }
 
     try {
       const url = await resolveBackendBaseUrl()
@@ -73,6 +104,7 @@ export function useBackend(): BackendState {
       error.value = err instanceof Error ? err.message : String(err)
     } finally {
       loading.value = false
+      startupProgress.value = null
     }
   }
 
@@ -80,5 +112,9 @@ export function useBackend(): BackendState {
     void init()
   })
 
-  return { ready, loading, error, baseUrl, init }
+  onUnmounted(() => {
+    unlistenProgress?.()
+  })
+
+  return { ready, loading, error, baseUrl, startupProgress, init }
 }

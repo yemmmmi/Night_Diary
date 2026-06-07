@@ -4,13 +4,16 @@ use process::{
     allocate_port, default_data_dir, graceful_shutdown, health_check_once, health_poll,
     spawn_backend, BackendProcess,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use tauri::{Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
 
 pub struct AppState {
     pub backend_port: u16,
     pub data_dir: String,
     pub backend: Mutex<Option<BackendProcess>>,
+    /// Set after the first successful /health poll in the startup thread.
+    pub backend_ready: AtomicBool,
 }
 
 #[tauri::command]
@@ -31,7 +34,15 @@ fn get_app_version(app: tauri::AppHandle) -> String {
 /// Probe backend /health via native HTTP (avoids WebView CORS on localhost ↔ 127.0.0.1).
 #[tauri::command]
 fn check_backend_health(state: State<'_, AppState>) -> bool {
+    if state.backend_ready.load(Ordering::SeqCst) {
+        return true;
+    }
     health_check_once(state.backend_port)
+}
+
+#[tauri::command]
+fn is_backend_ready(state: State<'_, AppState>) -> bool {
+    state.backend_ready.load(Ordering::SeqCst)
 }
 
 fn splash_path() -> std::path::PathBuf {
@@ -69,7 +80,12 @@ fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
                 return Err("application state unavailable".to_string());
             }
 
-            health_poll(port)?;
+            health_poll(port, Some(&app))?;
+
+            if let Some(state) = app.try_state::<AppState>() {
+                state.backend_ready.store(true, Ordering::SeqCst);
+            }
+            let _ = app.emit("backend-ready", port);
 
             let app_ui = app.clone();
             let handle = app_ui.clone();
@@ -78,7 +94,6 @@ fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
                     let _ = splash.close();
                 }
                 if let Some(main) = handle.get_webview_window("main") {
-                    let _ = main.show();
                     let _ = main.set_focus();
                 }
             });
@@ -121,15 +136,20 @@ pub fn run() {
             backend_port,
             data_dir: data_dir.clone(),
             backend: Mutex::new(None),
+            backend_ready: AtomicBool::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             get_backend_port,
             get_data_dir,
             get_app_version,
-            check_backend_health
+            check_backend_health,
+            is_backend_ready
         ])
         .setup(move |app| {
             open_splash(app.handle())?;
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.show();
+            }
             start_backend(app.handle().clone(), backend_port, data_dir);
             Ok(())
         })

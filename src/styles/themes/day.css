@@ -1,0 +1,14 @@
+[data-theme='day'] {
+  --color-bg: #ede6dc;
+  --color-bg-elevated: #f5f0e8;
+  --color-bg-elevated-2: #e8e0d5;
+  --color-text-primary: #3d3429;
+  --color-text-secondary: #6f6358;
+  --color-accent: #c4956a;
+  --color-accent-muted: #b0845a;
+  --color-border: rgba(61, 52, 41, 0.14);
+  --glass-bg: rgba(245, 240, 232, 0.88);
+  --glass-border: rgba(61, 52, 41, 0.14);
+  --particle-primary: rgba(196, 149, 106, 0.32);
+  --particle-secondary: rgba(123, 167, 201, 0.12);
+}

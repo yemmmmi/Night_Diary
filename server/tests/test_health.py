@@ -2,20 +2,33 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import create_app
+
+
+def _wait_for_bootstrap(client: TestClient, timeout_s: float = 30.0) -> None:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        app = client.app
+        if getattr(app.state, "bootstrap_done", False):
+            return
+        time.sleep(0.05)
+    raise TimeoutError("backend bootstrap did not complete")
 
 
 def test_health_returns_ok() -> None:
-    client = TestClient(app)
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    with TestClient(create_app()) as client:
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
 
 
 def test_openapi_schema_available() -> None:
-    client = TestClient(app)
-    response = client.get("/openapi.json")
-    assert response.status_code == 200
-    assert response.json()["info"]["title"] == "night-diary-v2"
+    with TestClient(create_app()) as client:
+        _wait_for_bootstrap(client)
+        response = client.get("/openapi.json")
+        assert response.status_code == 200
+        assert response.json()["info"]["title"] == "night-diary-v2"
