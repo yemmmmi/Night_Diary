@@ -32,10 +32,13 @@ yarn-debug.log*
 # IDE
 .vscode/
 .idea/
-.cursor/
+.cursor/*
+!.cursor/skills/
+!.cursor/skills/**
 
 # Project-local (not tracked)
 night-diary-v2-cursor-rules.md
+前端参考图/
 
 # System
 .DS_Store
@@ -43,7 +46,6 @@ Thumbs.db
 
 # Docs
 架构诊断与重构蓝图.md
-
 # Application data (local volumes / runtime)
 chroma_data/
 mysql_data/
