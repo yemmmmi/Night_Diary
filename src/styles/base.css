@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=LXGW+WenKai&display=swap');
+
+@import './themes/day.css';
+@import './themes/night.css';
+@import './animations/transitions.css';
+@import './animations/particles.css';
+@import './animations/glow.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius-outer: 2rem;
+    --radius-inner: calc(2rem - 6px);
+    --radius-button: 0.875rem;
+    --font-ui: 'Plus Jakarta Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-diary: 'LXGW WenKai', 'KaiTi', serif;
+    --motion-duration: 220ms;
+    --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --color-success: #5a8f6a;
+    --color-warning: #c49a3c;
+    --color-danger: #b85450;
+  }
+
+  html {
+    font-family: var(--font-ui);
+    color: var(--color-text-primary);
+    background-color: var(--color-bg);
+  }
+
+  body {
+    @apply antialiased;
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
+  }
+
+  #app {
+    min-height: 100vh;
+    background-color: var(--color-bg);
+  }
+}
+
+@layer components {
+  .glass-panel {
+    border-radius: var(--radius-outer);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+  }
+
+  .glass-panel--elevated {
+    background: var(--color-bg-elevated);
+    border-color: var(--color-border);
+  }
+
+  .glass-panel__inner {
+    border-radius: var(--radius-inner);
+    padding: 1.25rem;
+  }
+
+  .glass-panel--blur {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .font-diary {
+    font-family: var(--font-diary);
+  }
+}

@@ -1,0 +1,43 @@
+.glow-accent {
+  box-shadow: 0 0 24px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+.glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--color-accent) 25%, transparent);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 20px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+}
+
+.spotlight-border {
+  position: relative;
+}
+
+.spotlight-border::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--motion-duration) var(--motion-ease);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent) 50%, transparent),
+    transparent 60%
+  );
+  z-index: -1;
+}
+
+.spotlight-border:hover::before,
+.spotlight-border.is-selected::before {
+  opacity: 1;
+}

@@ -1,0 +1,17 @@
+[data-theme='night'] {
+  --color-bg: #121212;
+  --color-bg-elevated: #1e1e1e;
+  --color-bg-elevated-2: #2c2c2c;
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #9e9e9e;
+  --color-accent: #c4956a;
+  --color-accent-muted: #a67b52;
+  --color-border: rgba(255, 255, 255, 0.12);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --color-success: #6aaf7a;
+  --color-warning: #d4a84a;
+  --color-danger: #cf6679;
+  --particle-primary: rgba(196, 149, 106, 0.35);
+  --particle-secondary: rgba(255, 255, 255, 0.12);
+}
