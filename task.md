@@ -15,7 +15,7 @@
 
 **累计 PR 数**：24（Phase A:5 + B:11 + C:3 + D:4 + E:1）
 
-**当前进度**：17/24 PR 已合并（Phase C：C-1 ✅ #26、C-2 ✅ #27）。下一步 **C-3** `feature/llm-management`。
+**当前进度**：18/24 PR 已合并（Phase C ✅ 全部完成：C-1 #26、C-2 #27、C-3 #28）。下一步 **D-1** `feature/design-system`。
 
 **架构方案**：`docs/本地化桌面端重构方案.md`（本文件仅维护施工清单，不重复论述设计决策）
 
@@ -676,9 +676,10 @@ Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降�
 
 ---
 
-## PR: phase-c-3-llm-management ▶
+## PR: phase-c-3-llm-management ✅
 
 - **Branch**: `feature/llm-management`
+- **Status**: 已合并（#28 → `feature/services-layer` 栈）
 - **Depends on**: phase-c-2（api-routes）✅
 - **合并后 main**: 用户可通过 Settings 页面配置 LLM 提供商
 
@@ -706,10 +707,10 @@ LLM 配置管理：ModelProvider CRUD + Fernet 加密 + LLMFactory。统一所�
 
 ---
 
-## PR: phase-d-1-design-system
+## PR: phase-d-1-design-system ▶
 
 - **Branch**: `feature/design-system`
-- **Depends on**: Phase C 全部完成
+- **Depends on**: Phase C 全部完成 ✅
 - **合并后 main**: 游戏化 UI 设计系统就位，Storybook 或临时 demo 页面可预览所有组件
 
 ### Implementation Plan
@@ -718,25 +719,33 @@ LLM 配置管理：ModelProvider CRUD + Fernet 加密 + LLMFactory。统一所�
 
 构建游戏化 UI 组件库：玻璃态面板、动画按钮、粒子背景、页面过渡动画。
 
+**审美规范**（施工前必读）：
+- `docs/DESIGN.md` — 双主题 token、禁止清单、场景映射
+- `.cursor/skills/night-diary-design/` — Vue 3 复合 Skill
+- **白天**：暖奶油 `#FDF8F3` + 琥珀 `#D4A574`
+- **夜间**：Material B「沉稳灰阶」`#121212` / `#1E1E1E`（定稿身份板 B 版）
+- **首页布局**：周视图 kanban（周一～周日 + 收纳箱），参考 `前端参考图/参考图片3.png`（借布局，不借暗棕配色）
+- **文案**：UI 仅简体中文；字体 Plus Jakarta Sans + LXGW WenKai（禁止 Inter）
+
 #### Tasks
 
-- [ ] 1. [核心] `src/shared/components/GlassPanel.vue` — 毛玻璃容器：`backdrop-blur-xl bg-white/10 dark:bg-black/20 border border-white/20 rounded-2xl shadow-2xl`
-- [ ] 2. [核心] `src/shared/components/GameButton.vue` — 动画按钮：hover 微放大 + 阴影提升；click 微缩小 + 涟漪；variants（primary/secondary/ghost）
-- [ ] 3. [核心] `src/shared/components/ParticleBackground.vue` — Canvas 粒子系统：日间暖色浮尘；夜间星空视差；主题切换平滑过渡
-- [ ] 4. [核心] `src/shared/components/PageTransition.vue` — Vue `<Transition>` 包装：当前页 fade-out + scale-down；下一页 fade-in + scale-up
-- [ ] 5. [核心] `src/shared/components/AITypingIndicator.vue` — 三个脉动光点 + "正在思考..." 标签
-- [ ] 6. [核心] `src/shared/components/MoodSelector.vue` — 情绪 emoji 网格（非下拉框）：hover 光晕 + 选中弹跳动画
-- [ ] 7. [核心] `src/shared/components/CustomTitlebar.vue` — 自定义标题栏：可拖拽区域 + 窗口控制按钮（最小化/最大化/关闭）
-- [ ] 8. [样式] `src/styles/base.css` — Tailwind base + CSS 变量（`--color-primary`、`--glass-bg` 等）
-- [ ] 9. [样式] `src/styles/themes/day.css` + `night.css` — 日间暖色系 / 夜间深色星空系
-- [ ] 10. [样式] `src/styles/animations/` — `transitions.css` / `particles.css` / `glow.css`
-- [ ] 11. [配置] 安装 GSAP（`npm install gsap`）用于复杂编排动画
+- [x] 1. [核心] `src/shared/components/GlassPanel.vue` — Double-Bezel + Liquid Glass；夜间 Material 抬升面，blur 仅 fixed 层（见 DESIGN.md）
+- [x] 2. [核心] `src/shared/components/GameButton.vue` — 动画按钮：hover 微放大 + 阴影提升；click 微缩小 + 涟漪；variants（primary/secondary/ghost）
+- [x] 3. [核心] `src/shared/components/ParticleBackground.vue` — Canvas 粒子系统：日间暖色浮尘；夜间稀疏星点；主题切换平滑过渡
+- [x] 4. [核心] `src/shared/components/PageTransition.vue` — Vue `<Transition>` + GSAP 进出场
+- [x] 5. [核心] `src/shared/components/AITypingIndicator.vue` — 三个脉动光点 + "正在思考..." 标签
+- [x] 6. [核心] `src/shared/components/MoodSelector.vue` — 情绪 emoji 网格（非下拉框）：hover 光晕 + 选中弹跳动画
+- [x] 7. [核心] `src/shared/components/CustomTitlebar.vue` — 自定义标题栏：可拖拽区域 + 窗口控制按钮（最小化/最大化/关闭）
+- [x] 8. [样式] `src/styles/base.css` — Tailwind base + CSS 变量
+- [x] 9. [样式] `src/styles/themes/day.css` + `night.css` — 日间暖奶油 / 夜间 Material 沉稳灰阶
+- [x] 10. [样式] `src/styles/animations/` — `transitions.css` / `particles.css` / `glow.css`
+- [x] 11. [配置] 安装 GSAP + `@phosphor-icons/vue`；`#/design-system` demo 路由
 
 #### Verification
 
-1. `npm run tauri dev` → 设计系统 demo 页面所有组件正确渲染
+1. `npm run tauri dev` → `#/design-system` 所有组件正确渲染
 2. 日/夜主题切换平滑，粒子背景跟随变化
-3. `vue-tsc --noEmit` 零错误
+3. `npm run type-check` 零错误 · `npm test` · `npm run lint` 通过
 
 ---
 
