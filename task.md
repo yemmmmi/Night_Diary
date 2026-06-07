@@ -15,6 +15,8 @@
 
 **累计 PR 数**：24（Phase A:5 + B:11 + C:3 + D:4 + E:1）
 
+**当前进度**：17/24 PR 已合并（Phase C：C-1 ✅ #26、C-2 ✅ #27）。下一步 **C-3** `feature/llm-management`。
+
 **架构方案**：`docs/本地化桌面端重构方案.md`（本文件仅维护施工清单，不重复论述设计决策）
 
 ---
@@ -598,9 +600,10 @@ Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降�
 4. 8 条对抗性场景零崩溃，安全分 ≥ baseline
 5. Phase B 全部 11 个 PR 合并后 `main` 可运行（`make test` + `make lint` 通过）
 
-## PR: phase-c-1-services-layer
+## PR: phase-c-1-services-layer ✅
 
 - **Branch**: `feature/services-layer`
+- **Status**: 已合并（#26 → `main`）
 - **Depends on**: Phase B 全部完成
 - **合并后 main**: 服务层就位，AI 分析端到端可调用
 
@@ -639,9 +642,10 @@ Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降�
 
 ---
 
-## PR: phase-c-2-api-routes
+## PR: phase-c-2-api-routes ✅
 
 - **Branch**: `feature/api-routes`
+- **Status**: 已合并（#27 → `feature/services-layer` 栈）
 - **Depends on**: phase-c-1（services-layer）
 - **合并后 main**: API 路由全部就位，`/docs` 可查看完整 Swagger
 
@@ -653,16 +657,16 @@ Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降�
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/api/v1/__init__.py` + `router.py` — 注册所有子路由
-- [ ] 2. [核心] `server/app/api/v1/diary.py` — 5 个端点（list/create/get/update/delete）
-- [ ] 3. [核心] `server/app/api/v1/analysis.py` — 2 个端点（trigger/get）
-- [ ] 4. [核心] `server/app/api/v1/feedback.py` — 1 个端点（submit 👍/👎）
-- [ ] 5. [核心] `server/app/api/v1/tags.py` — 3 个端点（list/create/delete）
-- [ ] 6. [核心] `server/app/api/v1/models.py` — 4 个端点（list/create/update/delete）— LLM 配置管理
-- [ ] 7. [核心] `server/app/api/v1/stats.py` — 1 个端点（日记数、Token 用量等统计）
-- [ ] 8. [核心] `server/app/shared/errors.py` — `AppError` 基类 + `DiaryError`/`AnalysisError`/`ValidationError` 子类 + `http_status` 映射
-- [ ] 9. [核心] `server/app/api/v1/error_handlers.py` — FastAPI exception handlers：`AppError` → HTTP 状态码映射
-- [ ] 10. [测试] `tests/unit/api/` — test_diary_routes / test_analysis_routes
+- [x] 1. [核心] `server/app/api/v1/__init__.py` + `router.py` — 注册所有子路由
+- [x] 2. [核心] `server/app/api/v1/diary.py` — 5 个端点（list/create/get/update/delete）
+- [x] 3. [核心] `server/app/api/v1/analysis.py` — 2 个端点（trigger/get）
+- [x] 4. [核心] `server/app/api/v1/feedback.py` — 1 个端点（submit 👍/👎）
+- [x] 5. [核心] `server/app/api/v1/tags.py` — 3 个端点（list/create/delete）
+- [x] 6. [核心] `server/app/api/v1/models.py` — 4 个端点（list/create/update/delete）— LLM 配置管理
+- [x] 7. [核心] `server/app/api/v1/stats.py` — 1 个端点（日记数、Token 用量等统计）
+- [x] 8. [核心] `server/app/shared/errors.py` — `AppError` 基类 + `DiaryError`/`AnalysisError`/`ValidationError` 子类 + `http_status` 映射
+- [x] 9. [核心] `server/app/api/v1/error_handlers.py` — FastAPI exception handlers：`AppError` → HTTP 状态码映射
+- [x] 10. [测试] `tests/unit/api/` — test_diary_routes / test_analysis_routes / test_tags_and_stats_routes
 
 #### Verification
 
@@ -672,10 +676,10 @@ Phase B 的最后一块拼图。集成 Context Compressor、建立完整的降�
 
 ---
 
-## PR: phase-c-3-llm-management
+## PR: phase-c-3-llm-management ▶
 
 - **Branch**: `feature/llm-management`
-- **Depends on**: phase-c-2（api-routes）
+- **Depends on**: phase-c-2（api-routes）✅
 - **合并后 main**: 用户可通过 Settings 页面配置 LLM 提供商
 
 ### Implementation Plan
@@ -686,12 +690,12 @@ LLM 配置管理：ModelProvider CRUD + Fernet 加密 + LLMFactory。统一所�
 
 #### Tasks
 
-- [ ] 1. [核心] `server/app/shared/llm.py` — `LLMFactory.create(provider, settings)`：支持用户配置的 `ModelProvider`；兼容 OpenAI API 格式
-- [ ] 2. [核心] `server/app/infrastructure/security.py` — Fernet 加解密：`encrypt_api_key()`/`decrypt_api_key()`；密钥从 `Settings.model_key_secret` 或 `secrets.key` 文件
-- [ ] 3. [核心] 更新 `model_service.py` — API Key 存储前加密，读取时解密，API 响应绝不返回原始密钥
-- [ ] 4. [配置] `ModelProvider` 支持 `tier` 字段（light/medium/heavy/default），允许 per-tier 模型选择；`LLMFactory.create(tier)` 按 tier 查找对应模型
-- [ ] 5. [配置] 前端 Settings 场景：LLM 配置表单（base_url / api_key / model_name / tier / 设为默认）
-- [ ] 6. [测试] `tests/unit/test_llm.py` — LLMFactory + 加解密 + per-tier 模型查找
+- [x] 1. [核心] `server/app/shared/llm_factory.py` — `create_from_provider` / `create_for_tier` / `resolve_by_tier`：支持用户配置的 `ModelProvider`；兼容 OpenAI API 格式
+- [x] 2. [核心] `server/app/infrastructure/security.py` — Fernet 加解密：`encrypt_api_key()`/`decrypt_api_key()`；密钥从 `Settings.model_key_secret` 或 `secrets.key` 文件（C-1 已交付，C-3 补测试）
+- [x] 3. [核心] 更新 `model_service.py` — API Key 存储前加密，读取时解密，API 响应绝不返回原始密钥（C-1 已交付）
+- [x] 4. [配置] `ModelProvider` 支持 `tier` 字段（light/medium/heavy/default），允许 per-tier 模型选择；`LLMFactory.create_for_tier(db, tier)` 按 tier 查找对应模型
+- [x] 5. [配置] 前端 Settings 场景：LLM 配置表单（`SettingsScene.vue` + `/settings` 路由 + `shared/api/models.ts`）
+- [x] 6. [测试] `tests/unit/test_llm.py` — LLMFactory + 加解密 + per-tier 模型查找（7 tests）
 
 #### Verification
 

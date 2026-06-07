@@ -17,11 +17,11 @@ text via ``getattr(response, "content", response)`` and pull token usage with
 ``response.response_metadata``). A bare ``str`` therefore also satisfies the
 content extraction path (usage degrades to zeros).
 
-The concrete implementation — a LangChain ``BaseChatModel`` (which natively
-provides both ``invoke`` and ``ainvoke``) wired from a per-tier model config —
-arrives with the :class:`LLMFactory` in Phase C-3. Until then this Protocol
-keeps ``langchain-openai`` out of the runtime dependency set: unit tests inject
-a mock and the offline eval injects a thin HTTP adapter.
+The concrete implementation — a LangChain ``BaseChatModel`` wired from a
+per-tier :class:`~app.shared.llm_factory.LLMFactory` config — lives in
+``llm_factory.py``. This Protocol keeps domain code decoupled from
+``langchain-openai``: unit tests inject stubs and the offline eval injects a
+thin HTTP adapter.
 """
 
 from __future__ import annotations
