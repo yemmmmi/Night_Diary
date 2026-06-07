@@ -10,14 +10,13 @@ from typing import Any, ClassVar
 
 from sqlalchemy.orm import Session
 
-from app.infrastructure.models.model_provider import ModelProviderRow
 from app.services.ai import agent_executor, chain_executor, multi_agent_executor
 from app.services.ai.prompts import FALLBACK_FEEDBACK, TEMPORAL_KEYWORDS
 from app.services.ai.tool_factory import build_tool_map
 from app.shared.errors import AIServiceUnavailableError
 from app.shared.llm import LLMClient
+from app.shared.llm_factory import LLMFactory
 from app.shared.tracing import AgentDecisionLogger, AgentDecisionRecord, NoOpAgentDecisionLogger
-from app.shared.tracing_llm import TracingLLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -266,33 +265,9 @@ class ExecutionPlanner:
 def resolve_llm_clients_by_tier(
     db: Session,
     *,
-    llm_factory: Any,
+    llm_factory: LLMFactory,
     tracer: Any | None = None,
     prefer_active: bool = True,
 ) -> dict[str, LLMClient]:
     """Build per-tier LLM clients from ``model_providers`` table."""
-    query = db.query(ModelProviderRow).filter(ModelProviderRow.api_key_encrypted.isnot(None))
-    if prefer_active:
-        query = query.filter(ModelProviderRow.is_active.is_(True))
-    providers = query.order_by(ModelProviderRow.id.asc()).all()
-
-    clients: dict[str, LLMClient] = {}
-    for provider in providers:
-        tier = provider.tier or "default"
-        if tier in clients:
-            continue
-        try:
-            inner = llm_factory.create_from_provider(provider)
-            model_name = provider.model_name
-            if tracer is not None:
-                clients[tier] = TracingLLMClient(
-                    inner,
-                    model=model_name,
-                    tier=tier,
-                    tracer=tracer,
-                )
-            else:
-                clients[tier] = inner
-        except Exception as exc:
-            logger.warning("Skip provider id=%s tier=%s: %s", provider.id, tier, exc)
-    return clients
+    return llm_factory.resolve_by_tier(db, tracer=tracer, prefer_active=prefer_active)
