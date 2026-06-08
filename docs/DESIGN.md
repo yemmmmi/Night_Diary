@@ -30,6 +30,7 @@
 | `--color-border` | `rgba(61, 52, 41, 0.10)` | 发丝线 |
 | `--glass-bg` | `rgba(255, 255, 255, 0.72)` | 固定层玻璃 |
 | `--glass-border` | `rgba(61, 52, 41, 0.12)` | 玻璃描边 |
+| `--color-diary-surface` | `#F4F4F2` | 写作区底色（方案 A 定稿） |
 
 ### 3.2 夜间 · 沉稳灰阶（Night，Material B 定稿）
 
@@ -47,6 +48,7 @@
 | `--color-border` | `rgba(255, 255, 255, 0.12)` | 发丝线 |
 | `--glass-bg` | `rgba(255, 255, 255, 0.05)` | 固定层（白叠层感） |
 | `--glass-border` | `rgba(255, 255, 255, 0.08)` | 玻璃描边 |
+| `--color-diary-surface` | `#1A1A1A` | 写作区底色（中性；见 §9.1） |
 
 ### 3.3 语义色（双主题共用）
 
@@ -61,7 +63,7 @@
 | 角色 | 字体 | 用途 |
 |------|------|------|
 | UI | **Plus Jakarta Sans** | 按钮、标签、kanban、设置 |
-| 日记展示 | **LXGW WenKai（霞鹜文楷）** | 日记正文预览、信纸区 |
+| 日记展示 | **LXGW WenKai（霞鹜文楷）** | 日记正文、写作区（靠字体表达日记感，不靠暖色纸张） |
 
 **禁止**：Inter 作为 UI 字体。
 
@@ -86,7 +88,7 @@
 - 英文 UI 文案
 - 滚动容器上的 `backdrop-blur`（仅 fixed 标题栏 / GlassPanel 外壳）
 - DOM 粒子（须 Canvas）
-- 除 `MoodSelector` 外使用 emoji（其余用 Phosphor 图标）
+- UI 使用 emoji（统一 `@phosphor-icons/vue`；情绪由 AI 从正文推断，不提供用户自选 emoji 控件）
 - 夜间主题的装饰性 bokeh / 品红光斑 / 摩天轮式氛围图
 
 ## 8. Tauri 性能护栏
@@ -101,17 +103,37 @@
 |------|----------|------|
 | 启动 | Logo + 能量条进度 + 粒子 | 品牌板 Panel 3 变体 |
 | **首页 / 日记管理** | **周视图 kanban：周一～周日 + 收纳箱** | `前端参考图/参考图片3.png`（借布局，不借其暗棕低对比配色） |
-| 日记写作 | 全屏羊皮纸 / 信纸 + MoodSelector | 品牌板白天版 |
+| 日记写作 | 全屏中性书写面 + 霞鹜文楷正文 | 见 §9.1（**不用**暖黄羊皮纸叠层） |
 | AI 分析 | 来信样式 + AITypingIndicator | — |
 | 回顾 | 月历 / 书架时间线 | 与 weekly kanban 互补 |
 | 设置 | 分区折叠面板，非密集表单 | Material 抬升卡片 |
 
 ### Kanban 卡片语义（非任务管理）
 
-- 去掉任务勾选 → **情绪 emoji + 摘要一行**
+- 去掉任务勾选 → **摘要一行**（首句或截断标题，无 emoji）
 - 状态 chip：`已有回信` / `待分析` / `续写`
 - 列底 `[+]` → 当天新建日记
 - 顶栏：`‹ 上周` · `YYYY年M月D日 - M月D日` · `下周 ›`
+
+### 9.1 日记写作场景（DiaryScene）
+
+**产品决策（2026-06）**：不提供「此刻心情」emoji 选择器；情绪标签由后端 AI 从正文抽取（`mood_score` / 实体抽取），UI 不重复暴露。
+
+**色调原则**：写作页避免「暖奶油背景 + 暖黄信纸 + 琥珀按钮」三层暖色叠加。温暖感保留在首页环境（粒子、accent CTA），写作区偏**中性、低干扰**。
+
+| 方案 | 白天写作面 | 气质 | 备注 |
+|------|------------|------|------|
+| **A · 跟随抬升面（✅ 定稿）** | `--color-diary-surface` ≈ `#F4F4F2` | 像干净笔记页，与 kanban 卡片同级 | 夜间 `#1A1A1A` |
+| ~~B · 冷灰编辑区~~ | — | — | 未选用 |
+| ~~C · 夜间优先~~ | — | — | 未选用 |
+
+**布局要素**：
+
+- 顶栏：日期 · 字数 · 返回 / 保存（`GameButton`）
+- 主区：无边框 `textarea` 或 contenteditable，字号略大、`font-diary`
+- 可选：标签 chip、天气（Phosphor 图标，非 emoji）
+- **禁止**：独立暖黄 parchment 纹理层、心情 emoji 网格
+- 环境：首页保留暖奶油 + 粒子；写作页粒子减弱或关闭（待 D-2 施工）
 
 ## 10. 组件库（D-1）
 
@@ -122,7 +144,7 @@
 | `ParticleBackground` | Canvas 环境粒子（日：暖尘；夜：稀疏星点） |
 | `PageTransition` | 路由级 stagger 进出场 |
 | `AITypingIndicator` | 三光点脉动 +「正在思考…」 |
-| `MoodSelector` | emoji 网格（唯一允许 emoji 的场景） |
+| ~~`MoodSelector`~~ | **已废弃** — 不再用于产品 UI；D-2 从 demo 移除 |
 | `CustomTitlebar` | 无 decorations 窗口：拖拽 + 最小化 / 最大化 / 关闭 |
 
 ## 11. 主题切换
@@ -133,4 +155,4 @@
 
 ## 12. 场景构图参考
 
-完整场景 mock 以品牌身份板 + `前端参考图/参考图片3.png` 为准；施工阶段见 `#/design-system` demo 页。
+完整场景 mock 以品牌身份板 + 文件夹：前端参考图 为准；施工阶段见 `#/design-system` demo 页。

@@ -8,7 +8,7 @@
 |------|----------------|----------|------|
 | 启动 | 居中 Logo + 能量条 | ParticleBackground, GlassPanel | 无 nav |
 | 首页 | 8 列 kanban（7 天 + 收纳箱） | GlassPanel, GameButton | 见参考图片3 |
-| 日记 | 全屏信纸 | MoodSelector, GlassPanel | emoji 仅此处 |
+| 日记 | 全屏中性书写面 | GlassPanel, GameButton | 霞鹜文楷；见 DESIGN.md §9.1 |
 | 分析 | 来信卡片 | AITypingIndicator, GameButton | 打字光点 |
 | 回顾 | 书架 / 月历 | PageTransition, GlassPanel | 与首页互补 |
 | 设置 | 折叠分区 | GlassPanel, GameButton | 非密集表单 |

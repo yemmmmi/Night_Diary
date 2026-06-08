@@ -23,6 +23,7 @@
 --radius-button: 0.875rem;
 --font-ui: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
 --font-diary: "LXGW WenKai", "KaiTi", serif;
+--color-diary-surface: #F4F4F2;  /* 写作区；方案 A 定稿 */
 --motion-duration: 220ms;
 --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
 ```
@@ -43,6 +44,7 @@
 --color-success: #6aaf7a;
 --color-warning: #d4a84a;
 --color-danger: #cf6679;
+--color-diary-surface: #1A1A1A;  /* 写作区；方案 A 定稿 */
 ```
 
 ## Dial

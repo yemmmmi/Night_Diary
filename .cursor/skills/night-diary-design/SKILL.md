@@ -33,7 +33,7 @@ description: >-
 | 框架 | Vue 3 SFC + Tailwind v3 |
 | 主题 | `data-theme="day"\|"night"` on `<html>` |
 | 动效 | CSS transition 默认；GSAP 仅 `PageTransition` 编排 |
-| 图标 | `@phosphor-icons/vue`；**MoodSelector 外禁止 emoji** |
+| 图标 | `@phosphor-icons/vue`；**UI 禁止 emoji** |
 | 文案 | **仅简体中文** |
 | 字体 | Plus Jakarta Sans（UI）+ LXGW WenKai（日记）— **禁止 Inter** |
 
@@ -53,12 +53,14 @@ description: >-
 | `ParticleBackground` | Canvas；日=暖尘，夜=稀疏星点（低噪音） |
 | `PageTransition` | stagger entry；非 scroll-hijack |
 | `AITypingIndicator` | 三光点 perpetual pulse |
-| `MoodSelector` | emoji 网格 + spotlight border（**唯一 emoji 场景**） |
+| ~~`MoodSelector`~~ | **已废弃** — 不提供用户自选心情 emoji |
 | `CustomTitlebar` | `data-tauri-drag-region` + 窗口控制 |
 
 ## 首页布局（D-2 预埋）
 
-HomeScene 核心：**周视图 kanban**（周一～周日 + 收纳箱），布局参考 `前端参考图/参考图片3.png`，配色用 DESIGN.md token（不借参考图暗棕色）。
+HomeScene 核心：**周视图 kanban**（周一～周日 + 收纳箱），布局参考 `前端参考图/参考图片3.png`，配色用 DESIGN.md token（不借参考图暗棕色）。卡片仅摘要一行 + 状态 chip，无 emoji。
+
+DiaryScene：**方案 A 中性书写面**（`--color-diary-surface`），霞鹜文楷正文；不用暖黄羊皮纸、不用心情 emoji；写作页粒子减弱/关闭。
 
 ## output-skill 约束
 
