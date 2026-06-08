@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 
 import CustomTitlebar from '@/shared/components/CustomTitlebar.vue'
 import GameButton from '@/shared/components/GameButton.vue'
@@ -7,11 +8,14 @@ import PageTransition from '@/shared/components/PageTransition.vue'
 import ParticleBackground from '@/shared/components/ParticleBackground.vue'
 import { useBackend } from '@/shared/composables/useBackend'
 
+const route = useRoute()
 const { ready, loading, error, startupProgress, init } = useBackend()
 
 const isTauri = computed(
   () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window,
 )
+
+const subtleParticles = computed(() => route.path.startsWith('/write'))
 
 const loadingHint = computed(() => {
   if (startupProgress.value != null) {
@@ -23,7 +27,7 @@ const loadingHint = computed(() => {
 
 <template>
   <div class="app-root">
-    <ParticleBackground />
+    <ParticleBackground :subtle="subtleParticles" />
 
     <CustomTitlebar v-if="isTauri" />
 

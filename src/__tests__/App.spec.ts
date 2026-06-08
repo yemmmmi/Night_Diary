@@ -1,4 +1,5 @@
 import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { invoke } from '@tauri-apps/api/core'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -17,6 +18,21 @@ vi.mock('@tauri-apps/api/window', () => ({
     unmaximize: vi.fn(),
     isMaximized: vi.fn().mockResolvedValue(false),
     close: vi.fn(),
+  }),
+}))
+
+vi.mock('@/shared/api/diary', () => ({
+  listDiaryEntries: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/shared/api/stats', () => ({
+  getStats: vi.fn().mockResolvedValue({
+    diary_count: 0,
+    analysis_count: 0,
+    total_token_cost: 0,
+    llm_call_count: 0,
+    total_tokens_in: 0,
+    total_tokens_out: 0,
   }),
 }))
 
@@ -45,13 +61,13 @@ describe('App', () => {
       ],
     })
     const wrapper = mount(App, {
-      global: { plugins: [router] },
+      global: { plugins: [createPinia(), router] },
     })
     expect(wrapper.text()).toContain('正在连接 AI 引擎')
 
     await flushPromises()
     await router.isReady()
     expect(wrapper.text()).toContain('夜记')
-    expect(wrapper.text()).toContain('http://127.0.0.1:18000')
+    expect(wrapper.text()).toContain('写日记')
   })
 })

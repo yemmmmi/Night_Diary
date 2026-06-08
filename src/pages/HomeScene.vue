@@ -1,22 +1,184 @@
 <script setup lang="ts">
-import { useBackend } from '@/shared/composables/useBackend'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { PhCaretLeft, PhCaretRight, PhGearSix } from '@phosphor-icons/vue'
 
-const { baseUrl } = useBackend()
+import GameButton from '@/shared/components/GameButton.vue'
+import { getStats, type AppStats } from '@/shared/api/stats'
+import type { DiaryEntry } from '@/shared/api/diary'
+import { useDiaryStore } from '@/stores/diary'
+import {
+  computeWritingStreak,
+  diaryStatus,
+  diaryStatusLabel,
+  diarySummary,
+  endOfWeekSunday,
+  formatWeekRangeLabel,
+  groupEntriesForWeek,
+  startOfWeekMonday,
+  toIsoDate,
+  weekdayLabel,
+} from '@/shared/utils/diaryFormat'
+
+const router = useRouter()
+const route = useRoute()
+const diaryStore = useDiaryStore()
+
+const weekOffset = ref(0)
+const stats = ref<AppStats | null>(null)
+
+const weekStart = computed(() => startOfWeekMonday(new Date(), weekOffset.value))
+const weekEnd = computed(() => endOfWeekSunday(weekStart.value))
+const weekLabel = computed(() => formatWeekRangeLabel(weekStart.value, weekEnd.value))
+
+const weekColumns = computed(() => {
+  const { dayColumns, inbox } = groupEntriesForWeek(
+    diaryStore.entries,
+    weekStart.value,
+    weekEnd.value,
+  )
+
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart.value)
+    date.setDate(date.getDate() + index)
+    const iso = toIsoDate(date)
+    return {
+      key: iso,
+      label: weekdayLabel(date),
+      dayNumber: date.getDate(),
+      entries: dayColumns.get(iso) ?? [],
+    }
+  })
+
+  return [...days, { key: 'inbox', label: '收纳箱', dayNumber: null, entries: inbox }]
+})
+
+const streak = computed(() => computeWritingStreak(diaryStore.entries))
+
+function statusClass(status: ReturnType<typeof diaryStatus>) {
+  return `kanban-card__chip--${status}`
+}
+
+function openEntry(entry: DiaryEntry) {
+  router.push(`/write/${entry.id}`)
+}
+
+function writeToday() {
+  createForDate(toIsoDate(new Date()))
+}
+
+function createForDate(isoDate: string | null) {
+  if (isoDate) {
+    router.push({ path: '/write', query: { date: isoDate } })
+    return
+  }
+  router.push('/write')
+}
+
+async function refreshHome() {
+  await Promise.all([diaryStore.loadEntries(), loadStats()])
+}
+
+async function loadStats() {
+  try {
+    stats.value = await getStats()
+  } catch {
+    stats.value = null
+  }
+}
+
+onMounted(() => {
+  void refreshHome()
+})
+
+watch(
+  () => route.path,
+  (path) => {
+    if (path === '/') void refreshHome()
+  },
+)
 </script>
 
 <template>
   <main class="home-scene">
-    <div class="home-scene__inner stagger-item">
-      <h1 class="home-scene__title">夜记</h1>
-      <p class="home-scene__subtitle">桌面端已就绪 · Phase D-1 设计系统</p>
-      <code class="home-scene__code">API = {{ baseUrl }}</code>
-      <div class="home-scene__actions">
-        <RouterLink to="/design-system" class="home-link home-link--primary">
-          设计系统预览
+    <header class="home-scene__header stagger-item">
+      <div class="home-scene__brand">
+        <h1 class="home-scene__title">夜记</h1>
+        <p class="home-scene__subtitle">本周日记</p>
+      </div>
+      <div class="home-scene__header-actions">
+        <RouterLink to="/settings" class="home-scene__icon-link" aria-label="设置">
+          <PhGearSix :size="18" />
         </RouterLink>
-        <RouterLink to="/settings" class="home-link home-link--secondary">
-          LLM 设置
-        </RouterLink>
+        <GameButton class="glow-pulse" @click="writeToday">
+          写日记
+        </GameButton>
+      </div>
+    </header>
+
+    <section class="home-scene__stats stagger-item">
+      <div class="stat-card">
+        <span class="stat-card__label">连续天数</span>
+        <strong class="stat-card__value">{{ streak }}</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-card__label">日记总数</span>
+        <strong class="stat-card__value">{{ stats?.diary_count ?? '—' }}</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-card__label">已分析</span>
+        <strong class="stat-card__value">{{ stats?.analysis_count ?? '—' }}</strong>
+      </div>
+    </section>
+
+    <section class="home-scene__week-nav stagger-item">
+      <button type="button" class="week-nav__btn" @click="weekOffset -= 1">
+        <PhCaretLeft :size="14" />
+        上周
+      </button>
+      <span class="week-nav__label">{{ weekLabel }}</span>
+      <button type="button" class="week-nav__btn" @click="weekOffset += 1">
+        下周
+        <PhCaretRight :size="14" />
+      </button>
+    </section>
+
+    <div v-if="diaryStore.error" class="home-scene__error-banner stagger-item">
+      <span>{{ diaryStore.error }}</span>
+      <GameButton variant="ghost" @click="refreshHome">重试</GameButton>
+    </div>
+    <p v-if="diaryStore.loading && diaryStore.entries.length === 0" class="home-scene__hint">
+      加载中…
+    </p>
+
+    <div class="home-scene__kanban stagger-item" :class="{ 'is-loading': diaryStore.loading }">
+      <div v-for="column in weekColumns" :key="column.key" class="kanban-col">
+        <div class="kanban-col__head">
+          <span>{{ column.label }}</span>
+          <span v-if="column.dayNumber != null" class="kanban-col__day">{{ column.dayNumber }}</span>
+        </div>
+
+        <button
+          v-for="entry in column.entries"
+          :key="entry.id"
+          type="button"
+          class="kanban-card"
+          @click="openEntry(entry)"
+        >
+          <span class="kanban-card__summary">{{ diarySummary(entry.content) }}</span>
+          <span class="kanban-card__chip" :class="statusClass(diaryStatus(entry))">
+            {{ diaryStatusLabel(diaryStatus(entry)) }}
+          </span>
+        </button>
+
+        <button
+          v-if="column.key !== 'inbox'"
+          type="button"
+          class="kanban-add"
+          @click="createForDate(column.key)"
+        >
+          +
+        </button>
       </div>
     </div>
   </main>
@@ -25,73 +187,231 @@ const { baseUrl } = useBackend()
 <style scoped>
 .home-scene {
   min-height: calc(100vh - 2.5rem);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1.5rem;
+  padding: 1.25rem 1rem 1.5rem;
+  max-width: 90rem;
+  margin: 0 auto;
 }
 
-.home-scene__inner {
-  text-align: center;
-  max-width: 28rem;
+.home-scene__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .home-scene__title {
-  font-size: 2.25rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--color-text-primary);
 }
 
 .home-scene__subtitle {
-  margin-top: 0.5rem;
-  color: var(--color-text-secondary);
-}
-
-.home-scene__code {
-  display: inline-block;
-  margin-top: 1rem;
-  padding: 0.375rem 0.75rem;
-  border-radius: 0.5rem;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  margin-top: 0.125rem;
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
 }
 
-.home-scene__actions {
+.home-scene__header-actions {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 0.75rem;
-  justify-content: center;
-  margin-top: 1.5rem;
 }
 
-.home-link {
+.home-scene__icon-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.625rem 1.25rem;
-  border-radius: var(--radius-button);
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  transition: color var(--motion-duration) var(--motion-ease);
+}
+
+.home-scene__icon-link:hover {
+  color: var(--color-text-primary);
+}
+
+.home-scene__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.stat-card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 0.875rem;
+  padding: 0.75rem 0.875rem;
+}
+
+.stat-card__label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.stat-card__value {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 1.25rem;
+  color: var(--color-text-primary);
+}
+
+.home-scene__week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.875rem;
+}
+
+.week-nav__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  padding: 0.25rem 0.375rem;
+}
+
+.week-nav__btn:hover {
+  color: var(--color-text-primary);
+}
+
+.week-nav__label {
   font-size: 0.875rem;
   font-weight: 600;
-  text-decoration: none;
-  transition:
-    transform var(--motion-duration) var(--motion-ease),
-    background-color var(--motion-duration) var(--motion-ease);
-}
-
-.home-link:hover {
-  transform: scale(1.02);
-}
-
-.home-link--primary {
-  background: var(--color-accent);
-  color: var(--color-bg);
-}
-
-.home-link--secondary {
-  background: var(--color-bg-elevated);
   color: var(--color-text-primary);
+}
+
+.home-scene__hint {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.home-scene__error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-bg-elevated));
+  font-size: 0.8125rem;
+  color: var(--color-danger);
+}
+
+.home-scene__kanban.is-loading {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.home-scene__kanban {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.kanban-col {
+  min-width: 8.5rem;
+  flex: 1;
+  flex-shrink: 0;
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
+  border-radius: 0.875rem;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kanban-col__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  padding: 0 0.125rem;
+}
+
+.kanban-col__day {
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+}
+
+.kanban-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: 0.625rem;
+  background: var(--color-bg-elevated-2);
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: transform var(--motion-duration) var(--motion-ease);
+}
+
+.kanban-card:hover {
+  transform: translateY(-1px);
+}
+
+.kanban-card__summary {
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--color-text-primary);
+}
+
+.kanban-card__chip {
+  display: inline-block;
+  margin-top: 0.375rem;
+  border-radius: 999px;
+  padding: 0.125rem 0.45rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+.kanban-card__chip--reply {
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  color: var(--color-success);
+}
+
+.kanban-card__chip--pending {
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+}
+
+.kanban-card__chip--draft {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent-muted);
+}
+
+.kanban-add {
+  width: 100%;
+  border: 1px dashed var(--color-border);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding: 0.25rem;
+  cursor: pointer;
+  margin-top: auto;
+}
+
+.kanban-add:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-muted);
 }
 </style>
