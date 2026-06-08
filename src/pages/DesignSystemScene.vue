@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { PhMoon, PhSun } from '@phosphor-icons/vue'
 
 import AITypingIndicator from '@/shared/components/AITypingIndicator.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
-import MoodSelector from '@/shared/components/MoodSelector.vue'
 import { useTheme } from '@/shared/composables/useTheme'
 
 const { theme, setTheme } = useTheme()
@@ -13,7 +11,6 @@ const { theme, setTheme } = useTheme()
 function toggleTheme() {
   setTheme(theme.value === 'day' ? 'night' : 'day')
 }
-const mood = ref('calm')
 </script>
 
 <template>
@@ -47,12 +44,6 @@ const mood = ref('calm')
         </GlassPanel>
 
         <GlassPanel class="stagger-item" elevated>
-          <h2 class="section-title">MoodSelector</h2>
-          <p class="section-copy">唯一允许 emoji 的场景。</p>
-          <MoodSelector v-model="mood" class="mt-4" />
-        </GlassPanel>
-
-        <GlassPanel class="stagger-item" elevated>
           <h2 class="section-title">AITypingIndicator</h2>
           <p class="section-copy">组件演示 · 分析场景占位动画（会一直循环，并非卡住）</p>
           <AITypingIndicator class="mt-2" />
@@ -71,7 +62,7 @@ const mood = ref('calm')
           <div class="kanban-preview">
             <div v-for="day in ['周一', '周二', '周三', '收纳箱']" :key="day" class="kanban-col">
               <div class="kanban-col__head">{{ day }}</div>
-              <div class="kanban-card">😌 今天想早点睡</div>
+              <div class="kanban-card">今天想早点睡</div>
               <button type="button" class="kanban-add">+</button>
             </div>
           </div>
@@ -148,8 +139,8 @@ const mood = ref('calm')
 }
 
 .diary-sample {
-  font-size: 1.125rem;
-  line-height: 1.8;
+  font-size: 0.9375rem;
+  line-height: 1.75;
   color: var(--color-text-primary);
 }
 

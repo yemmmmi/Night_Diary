@@ -3,6 +3,15 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { useTheme } from '@/shared/composables/useTheme'
 
+const props = withDefaults(
+  defineProps<{
+    subtle?: boolean
+  }>(),
+  {
+    subtle: false,
+  },
+)
+
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const { theme } = useTheme()
 
@@ -66,7 +75,7 @@ function tick() {
 
     ctx.beginPath()
     ctx.fillStyle = Math.random() > 0.7 ? secondary : primary
-    ctx.globalAlpha = p.alpha
+    ctx.globalAlpha = props.subtle ? p.alpha * 0.35 : p.alpha
     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
     ctx.fill()
   }
@@ -79,7 +88,13 @@ function start() {
   const canvas = canvasRef.value
   if (!canvas) return
   resizeCanvas(canvas)
-  initParticles(theme.value === 'day' ? 32 : 24, window.innerWidth, window.innerHeight)
+  const dayCount = props.subtle ? 10 : 32
+  const nightCount = props.subtle ? 8 : 24
+  initParticles(
+    theme.value === 'day' ? dayCount : nightCount,
+    window.innerWidth,
+    window.innerHeight,
+  )
   cancelAnimationFrame(animationId)
   animationId = window.requestAnimationFrame(tick)
 }
@@ -101,6 +116,13 @@ onUnmounted(() => {
 watch(theme, () => {
   start()
 })
+
+watch(
+  () => props.subtle,
+  () => {
+    start()
+  },
+)
 </script>
 
 <template>

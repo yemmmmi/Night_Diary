@@ -734,7 +734,7 @@ LLM 配置管理：ModelProvider CRUD + Fernet 加密 + LLMFactory。统一所�
 - [x] 3. [核心] `src/shared/components/ParticleBackground.vue` — Canvas 粒子系统：日间暖色浮尘；夜间稀疏星点；主题切换平滑过渡
 - [x] 4. [核心] `src/shared/components/PageTransition.vue` — Vue `<Transition>` + GSAP 进出场
 - [x] 5. [核心] `src/shared/components/AITypingIndicator.vue` — 三个脉动光点 + "正在思考..." 标签
-- [x] 6. [核心] `src/shared/components/MoodSelector.vue` — 情绪 emoji 网格（非下拉框）：hover 光晕 + 选中弹跳动画
+- [x] 6. [核心] ~~`MoodSelector.vue`~~ — **已废弃**（不提供用户自选心情 emoji；D-2 从 demo 移除）
 - [x] 7. [核心] `src/shared/components/CustomTitlebar.vue` — 自定义标题栏：可拖拽区域 + 窗口控制按钮（最小化/最大化/关闭）
 - [x] 8. [样式] `src/styles/base.css` — Tailwind base + CSS 变量
 - [x] 9. [样式] `src/styles/themes/day.css` + `night.css` — 日间暖奶油 / 夜间 Material 沉稳灰阶
@@ -763,13 +763,13 @@ LLM 配置管理：ModelProvider CRUD + Fernet 加密 + LLMFactory。统一所�
 
 #### Tasks
 
-- [ ] 1. [核心] `src/pages/HomeScene.vue` — "桌面"隐喻首页：日历贴纸视图、脉冲光晕"写日记"按钮、连续天数卡片、快速统计
-- [ ] 2. [核心] `src/pages/DiaryScene.vue` — 全屏沉浸式书写区：羊皮纸/信纸风格、日期显示、情绪选择器、字数统计、可选的天气显示
-- [ ] 3. [核心] `src/features/diary/DiaryEditor.vue` — 日记编辑器组件：watch content debounce 1s（隐式反馈信号）、标签选择
-- [ ] 4. [核心] `src/features/diary/DiaryList.vue` — 日记列表组件：分页、`refresh()` expose
-- [ ] 5. [核心] `src/stores/diary.ts` — Pinia store：当前日记状态、CRUD 操作
-- [ ] 6. [核心] `src/shared/api/diary.ts` — API 模块：list/create/get/update/delete
-- [ ] 7. [路由] 注册 `/` → HomeScene, `/write` → DiaryScene, `/write/:id` → DiaryScene
+- [x] 1. [核心] `src/pages/HomeScene.vue` — 周视图 kanban + 脉冲「写日记」+ 连续天数 / 快速统计
+- [x] 2. [核心] `src/pages/DiaryScene.vue` — 方案 A 中性书写区：日期、字数、标签；无心情 emoji
+- [x] 3. [核心] `src/features/diary/DiaryEditor.vue` — debounce 1s autosave、标签选择
+- [x] 4. [核心] `src/features/diary/DiaryList.vue` — 分页、`refresh()` expose
+- [x] 5. [核心] `src/stores/diary.ts` — Pinia store：CRUD
+- [x] 6. [核心] `src/shared/api/diary.ts` — list/create/get/update/delete
+- [x] 7. [路由] `/` → HomeScene, `/write` → DiaryScene, `/write/:id` → DiaryScene
 
 #### Verification
 

@@ -65,6 +65,17 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     app = FastAPI(title=cfg.app_name, version="0.0.1", lifespan=lifespan)
 
+    # WebView (Vite dev / Tauri) runs on a different origin than the sidecar.
+    # Loopback-only CORS so POST/PUT preflight succeeds; not exposed to the LAN.
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://tauri\.localhost$|^tauri://localhost$",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     from app.api.v1.error_handlers import register_error_handlers
     from app.api.v1.router import api_router
 

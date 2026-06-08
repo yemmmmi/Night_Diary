@@ -11,6 +11,16 @@ const router = createRouter({
       component: () => import('@/pages/HomeScene.vue'),
     },
     {
+      path: '/write',
+      name: 'write-new',
+      component: () => import('@/pages/DiaryScene.vue'),
+    },
+    {
+      path: '/write/:id',
+      name: 'write-edit',
+      component: () => import('@/pages/DiaryScene.vue'),
+    },
+    {
       path: '/design-system',
       name: 'design-system',
       component: () => import('@/pages/DesignSystemScene.vue'),
