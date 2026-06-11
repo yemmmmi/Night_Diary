@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhCaretLeft, PhCaretRight, PhGearSix } from '@phosphor-icons/vue'
+import { PhCaretLeft, PhCaretRight, PhCalendarBlank } from '@phosphor-icons/vue'
 
+import BrandMark from '@/shared/components/BrandMark.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import { getStats, type AppStats } from '@/shared/api/stats'
 import type { DiaryEntry } from '@/shared/api/diary'
@@ -55,6 +56,20 @@ const weekColumns = computed(() => {
 
 const streak = computed(() => computeWritingStreak(diaryStore.entries))
 
+const replyCount = computed(() =>
+  diaryStore.entries.filter((e) => e.ai_ans && e.ai_ans.trim()).length,
+)
+
+const todayIso = computed(() => toIsoDate(new Date()))
+
+const hasTodayEntry = computed(() =>
+  diaryStore.entries.some((e) => e.date === todayIso.value),
+)
+
+const isEmpty = computed(
+  () => !diaryStore.loading && diaryStore.entries.length === 0,
+)
+
 function statusClass(status: ReturnType<typeof diaryStatus>) {
   return `kanban-card__chip--${status}`
 }
@@ -64,7 +79,7 @@ function openEntry(entry: DiaryEntry) {
 }
 
 function writeToday() {
-  createForDate(toIsoDate(new Date()))
+  router.push({ path: '/write', query: { date: todayIso.value } })
 }
 
 function createForDate(isoDate: string | null) {
@@ -73,6 +88,10 @@ function createForDate(isoDate: string | null) {
     return
   }
   router.push('/write')
+}
+
+function goReview() {
+  router.push('/review')
 }
 
 async function refreshHome() {
@@ -101,37 +120,42 @@ watch(
 
 <template>
   <main class="home-scene">
-    <header class="home-scene__header stagger-item">
+    <!-- 品牌头 -->
+    <header class="home-scene__header">
       <div class="home-scene__brand">
-        <h1 class="home-scene__title">夜记</h1>
-        <p class="home-scene__subtitle">本周日记</p>
+        <BrandMark class="home-scene__mark" />
+        <div class="home-scene__brand-text">
+          <h1 class="home-scene__title">夜记</h1>
+          <p class="home-scene__streak" v-if="streak > 0">已连续记录 {{ streak }} 天</p>
+        </div>
       </div>
       <div class="home-scene__header-actions">
         <RouterLink to="/settings" class="home-scene__icon-link" aria-label="设置">
-          <PhGearSix :size="18" />
+          <PhCalendarBlank :size="18" />
         </RouterLink>
         <GameButton class="glow-pulse" @click="writeToday">
-          写日记
+          {{ hasTodayEntry ? '继续写' : '写日记' }}
         </GameButton>
       </div>
     </header>
 
-    <section class="home-scene__stats stagger-item">
-      <div class="stat-card">
-        <span class="stat-card__label">连续天数</span>
-        <strong class="stat-card__value">{{ streak }}</strong>
-      </div>
-      <div class="stat-card">
-        <span class="stat-card__label">日记总数</span>
-        <strong class="stat-card__value">{{ stats?.diary_count ?? '—' }}</strong>
-      </div>
-      <div class="stat-card">
-        <span class="stat-card__label">已分析</span>
-        <strong class="stat-card__value">{{ stats?.analysis_count ?? '—' }}</strong>
-      </div>
+    <!-- AI 陪伴提示区 -->
+    <div v-if="replyCount > 0" class="home-scene__companion">
+      <p v-if="replyCount > 0">你有 {{ replyCount }} 封 AI 回信可以查看</p>
+      <p v-if="!hasTodayEntry && !isEmpty" class="home-scene__nudge">今天还没写日记，想说点什么？</p>
+    </div>
+
+    <!-- 空状态 -->
+    <section v-if="isEmpty" class="home-scene__empty">
+      <p class="home-scene__empty-title">今天想记录些什么？</p>
+      <p class="home-scene__empty-desc">夜记会认真听你说，并在你需要的时候给你回信</p>
+      <GameButton variant="primary" class="home-scene__empty-cta" @click="writeToday">
+        开始写第一篇日记
+      </GameButton>
     </section>
 
-    <section class="home-scene__week-nav stagger-item">
+    <!-- 周导航 -->
+    <section v-if="!isEmpty" class="home-scene__week-nav">
       <button type="button" class="week-nav__btn" @click="weekOffset -= 1">
         <PhCaretLeft :size="14" />
         上周
@@ -143,15 +167,14 @@ watch(
       </button>
     </section>
 
-    <div v-if="diaryStore.error" class="home-scene__error-banner stagger-item">
+    <!-- 错误条 -->
+    <div v-if="diaryStore.error" class="home-scene__error-banner">
       <span>{{ diaryStore.error }}</span>
       <GameButton variant="ghost" @click="refreshHome">重试</GameButton>
     </div>
-    <p v-if="diaryStore.loading && diaryStore.entries.length === 0" class="home-scene__hint">
-      加载中…
-    </p>
 
-    <div class="home-scene__kanban stagger-item" :class="{ 'is-loading': diaryStore.loading }">
+    <!-- Kanban -->
+    <div v-if="!isEmpty" class="home-scene__kanban" :class="{ 'is-loading': diaryStore.loading }">
       <div v-for="column in weekColumns" :key="column.key" class="kanban-col">
         <div class="kanban-col__head">
           <span>{{ column.label }}</span>
@@ -181,6 +204,16 @@ watch(
         </button>
       </div>
     </div>
+
+    <!-- 底部信息 + 回顾入口 -->
+    <div v-if="!isEmpty" class="home-scene__footer">
+      <span class="home-scene__footer-stats">
+        共 {{ stats?.diary_count ?? '—' }} 篇日记 · {{ stats?.analysis_count ?? '—' }} 篇已收到回信
+      </span>
+      <button type="button" class="home-scene__review-link" @click="goReview">
+        查看更多日记 →
+      </button>
+    </div>
   </main>
 </template>
 
@@ -192,6 +225,7 @@ watch(
   margin: 0 auto;
 }
 
+/* 品牌头 */
 .home-scene__header {
   display: flex;
   flex-wrap: wrap;
@@ -200,17 +234,30 @@ watch(
   gap: 1rem;
   margin-bottom: 1rem;
 }
-
+.home-scene__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.home-scene__mark {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+}
+.home-scene__brand-text {
+  display: flex;
+  flex-direction: column;
+}
 .home-scene__title {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
   color: var(--color-text-primary);
+  line-height: 1.2;
 }
-
-.home-scene__subtitle {
-  margin-top: 0.125rem;
+.home-scene__streak {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
+  margin-top: 0.125rem;
 }
 
 .home-scene__header-actions {
@@ -218,7 +265,6 @@ watch(
   align-items: center;
   gap: 0.75rem;
 }
-
 .home-scene__icon-link {
   display: inline-flex;
   align-items: center;
@@ -231,38 +277,52 @@ watch(
   background: var(--color-bg-elevated);
   transition: color var(--motion-duration) var(--motion-ease);
 }
-
 .home-scene__icon-link:hover {
   color: var(--color-text-primary);
 }
 
-.home-scene__stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.stat-card {
+/* AI 陪伴提示 */
+.home-scene__companion {
+  margin-bottom: 0.875rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.75rem;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: 0.875rem;
-  padding: 0.75rem 0.875rem;
-}
-
-.stat-card__label {
-  display: block;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--color-text-secondary);
 }
-
-.stat-card__value {
-  display: block;
+.home-scene__nudge {
   margin-top: 0.25rem;
-  font-size: 1.25rem;
-  color: var(--color-text-primary);
+  color: var(--color-accent);
 }
 
+/* 空状态 */
+.home-scene__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  min-height: 40vh;
+}
+.home-scene__empty-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 0.5rem;
+}
+.home-scene__empty-desc {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 1.5rem;
+  max-width: 20rem;
+}
+.home-scene__empty-cta {
+  font-size: 0.9375rem;
+}
+
+/* 周导航 */
 .home-scene__week-nav {
   display: flex;
   align-items: center;
@@ -270,7 +330,6 @@ watch(
   gap: 0.75rem;
   margin-bottom: 0.875rem;
 }
-
 .week-nav__btn {
   display: inline-flex;
   align-items: center;
@@ -282,23 +341,16 @@ watch(
   cursor: pointer;
   padding: 0.25rem 0.375rem;
 }
-
 .week-nav__btn:hover {
   color: var(--color-text-primary);
 }
-
 .week-nav__label {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
-.home-scene__hint {
-  font-size: 0.875rem;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.5rem;
-}
-
+/* 错误条 */
 .home-scene__error-banner {
   display: flex;
   align-items: center;
@@ -313,18 +365,17 @@ watch(
   color: var(--color-danger);
 }
 
+/* Kanban */
 .home-scene__kanban.is-loading {
   opacity: 0.65;
   pointer-events: none;
 }
-
 .home-scene__kanban {
   display: flex;
   gap: 0.5rem;
   overflow-x: auto;
   padding-bottom: 0.5rem;
 }
-
 .kanban-col {
   min-width: 8.5rem;
   flex: 1;
@@ -337,7 +388,6 @@ watch(
   flex-direction: column;
   gap: 0.5rem;
 }
-
 .kanban-col__head {
   display: flex;
   align-items: baseline;
@@ -347,12 +397,10 @@ watch(
   color: var(--color-text-secondary);
   padding: 0 0.125rem;
 }
-
 .kanban-col__day {
   font-size: 0.875rem;
   color: var(--color-text-primary);
 }
-
 .kanban-card {
   width: 100%;
   text-align: left;
@@ -363,18 +411,15 @@ watch(
   cursor: pointer;
   transition: transform var(--motion-duration) var(--motion-ease);
 }
-
 .kanban-card:hover {
   transform: translateY(-1px);
 }
-
 .kanban-card__summary {
   display: block;
   font-size: 0.75rem;
   line-height: 1.45;
   color: var(--color-text-primary);
 }
-
 .kanban-card__chip {
   display: inline-block;
   margin-top: 0.375rem;
@@ -383,22 +428,18 @@ watch(
   font-size: 0.625rem;
   font-weight: 600;
 }
-
 .kanban-card__chip--reply {
   background: color-mix(in srgb, var(--color-success) 18%, transparent);
   color: var(--color-success);
 }
-
 .kanban-card__chip--pending {
   background: color-mix(in srgb, var(--color-warning) 18%, transparent);
   color: var(--color-warning);
 }
-
 .kanban-card__chip--draft {
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   color: var(--color-accent-muted);
 }
-
 .kanban-add {
   width: 100%;
   border: 1px dashed var(--color-border);
@@ -409,9 +450,33 @@ watch(
   cursor: pointer;
   margin-top: auto;
 }
-
 .kanban-add:hover {
   color: var(--color-text-primary);
   border-color: var(--color-accent-muted);
+}
+
+/* 底部信息 */
+.home-scene__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.25rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--color-border);
+}
+.home-scene__footer-stats {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+.home-scene__review-link {
+  font-size: 0.75rem;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.home-scene__review-link:hover {
+  color: var(--color-accent-muted);
 }
 </style>
