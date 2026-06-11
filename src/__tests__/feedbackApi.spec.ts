@@ -11,6 +11,7 @@ vi.mock('axios', () => {
 
 vi.mock('@/shared/composables/useBackend', () => ({
   resolveBackendBaseUrl: vi.fn(async () => 'http://127.0.0.1:8000'),
+  waitForBootstrapReady: vi.fn(async () => undefined),
 }))
 
 describe('feedback API', () => {
