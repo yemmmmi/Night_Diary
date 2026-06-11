@@ -7,7 +7,7 @@ SERVER_DIR := server
 help:
 	@echo "Night Diary V2 — common targets"
 	@echo "  dev-api        Run FastAPI dev server (http://127.0.0.1:8000, keep running)"
-	@echo "  dev-web        Run Tauri desktop app (spawns Python sidecar)"
+  @echo "  dev-web        Run Tauri desktop (auto-starts backend on :8000, then attaches)"
 	@echo "  dev-web-fast   Tauri dev attaching to dev-api (no Python respawn)"
 	@echo "  test           Run pytest + vitest"
 	@echo "  lint           Run ruff + mypy + eslint + vue-tsc"

@@ -48,10 +48,10 @@ fn is_backend_ready(state: State<'_, AppState>) -> bool {
 
 #[tauri::command]
 fn is_core_ready(state: State<'_, AppState>) -> bool {
-    if state.external_backend.load(Ordering::SeqCst) {
+    if state.external_backend.load(Ordering::SeqCst) || state.backend_ready.load(Ordering::SeqCst) {
         return ready_check_once(state.backend_port);
     }
-    state.backend_ready.load(Ordering::SeqCst)
+    false
 }
 
 fn ready_check_once(port: u16) -> bool {

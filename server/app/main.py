@@ -63,15 +63,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.bootstrap_ai_done = False
 
     core_task = asyncio.create_task(asyncio.to_thread(_bootstrap_core_sync, app))
-
-    async def _run_ai_bootstrap() -> None:
-        await core_task
-        await asyncio.to_thread(_bootstrap_ai_sync, app)
-
-    ai_task = asyncio.create_task(_run_ai_bootstrap())
-    app.state.bootstrap_ai_task = ai_task
     yield
-    await ai_task
+    await core_task
 
 
 def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
