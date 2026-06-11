@@ -168,6 +168,25 @@ def delete_analysis(db: Session, analysis_id: int) -> bool:
     return True
 
 
+def delete_analysis_for_diary(db: Session, diary_id: int) -> bool:
+    """Remove analysis (and diary ai_ans) for a diary entry."""
+    analysis = db.query(AnalysisRow).filter(AnalysisRow.diary_id == diary_id).first()
+    if analysis is None:
+        return False
+    return delete_analysis(db, analysis.id)
+
+
+def regenerate_analysis(
+    db: Session,
+    diary_id: int,
+    container: ServiceContainer,
+) -> AnalysisRow:
+    """Force a fresh AI reply — replaces any existing analysis."""
+    delete_analysis_for_diary(db, diary_id)
+    planner = container.build_execution_planner(db)
+    return create_analysis(db, diary_id, planner=planner)
+
+
 def trigger_analysis(db: Session, diary_id: int, container: ServiceContainer) -> AnalysisRow:
     """End-to-end entry: build planner from container and create analysis."""
     planner = container.build_execution_planner(db)

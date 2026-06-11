@@ -68,3 +68,61 @@ def test_delete_model(db_session) -> None:
     model_service.delete_model(db_session, row.id)
     with pytest.raises(ModelProviderNotFoundError):
         model_service.get_model(db_session, row.id)
+
+
+def test_models_probe_candidates_deepseek() -> None:
+    urls = model_service._models_probe_candidates("https://api.deepseek.com/v1")
+    assert urls[0] == "https://api.deepseek.com/models"
+    assert "https://api.deepseek.com/v1/models" in urls
+
+
+def test_validate_model_connection_deepseek_405_then_root_ok() -> None:
+    base = "https://api.deepseek.com/v1"
+    key = "sk-test"
+
+    def fake_get(url: str, headers: dict[str, str]) -> object:  # noqa: ARG001
+        class Resp:
+            status_code = 405 if "/v1/models" in url else 200
+
+        return Resp()
+
+    with patch.object(model_service, "_external_http_client") as mock_client:
+        mock_client.return_value.__enter__.return_value.get.side_effect = fake_get
+        assert model_service.validate_model_connection(base, key) is None
+
+
+def test_validate_model_connection_falls_back_to_chat() -> None:
+    base = "https://api.deepseek.com/v1"
+    key = "sk-test"
+
+    def fake_get(url: str, headers: dict[str, str]) -> object:  # noqa: ARG001
+        class Resp:
+            status_code = 405
+
+        return Resp()
+
+    def fake_post(url: str, headers: dict[str, str], json: dict) -> object:  # noqa: ARG001
+        class Resp:
+            status_code = 200
+
+        return Resp()
+
+    with patch.object(model_service, "_external_http_client") as mock_client:
+        client = mock_client.return_value.__enter__.return_value
+        client.get.side_effect = fake_get
+        client.post.side_effect = fake_post
+        assert model_service.validate_model_connection(base, key) is None
+
+
+def test_validate_model_connection_rejects_401() -> None:
+    class Resp:
+        status_code = 401
+
+    with patch.object(model_service, "_external_http_client") as mock_client:
+        mock_client.return_value.__enter__.return_value.get.return_value = Resp()
+        err = model_service.validate_model_connection(
+            "https://api.deepseek.com/v1",
+            "bad-key",
+        )
+    assert err is not None
+    assert "401" in err

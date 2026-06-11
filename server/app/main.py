@@ -20,6 +20,25 @@ from fastapi.responses import JSONResponse
 logger = logging.getLogger(__name__)
 
 
+def _app_build_version() -> str:
+    """Best-effort git short hash for dev stale-backend detection."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "unknown"
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Night Diary backend")
     parser.add_argument("--port", type=int, default=8000)
@@ -107,6 +126,11 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
             {"status": "bootstrapping"},
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
+
+    @app.get("/meta/version", tags=["meta"])
+    def meta_version() -> dict[str, str]:
+        """Dev helper — lets the frontend detect a stale sidecar process."""
+        return {"version": _app_build_version()}
 
     @app.post("/shutdown", tags=["meta"])
     async def shutdown() -> dict[str, str]:
