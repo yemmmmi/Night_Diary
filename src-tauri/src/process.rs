@@ -9,6 +9,8 @@ use tauri::Emitter;
 
 const HEALTH_INTERVAL_MS: u64 = 100;
 const HEALTH_MAX_ATTEMPTS: u32 = 150;
+const READY_INTERVAL_MS: u64 = 150;
+const READY_MAX_ATTEMPTS: u32 = 200;
 const SHUTDOWN_GRACE_SECS: u64 = 3;
 
 pub struct BackendProcess {
@@ -270,6 +272,49 @@ pub fn health_poll(port: u16, app: Option<&tauri::AppHandle>) -> Result<(), Stri
     Err(format!(
         "backend health check timed out after {} ms",
         HEALTH_MAX_ATTEMPTS as u64 * HEALTH_INTERVAL_MS
+    ))
+}
+
+/// Single GET /ready probe (ServiceContainer bootstrap complete).
+pub fn ready_check_once(port: u16) -> bool {
+    let url = format!("http://127.0.0.1:{port}/ready");
+    let Ok(client) = health_client() else {
+        return false;
+    };
+    client
+        .get(&url)
+        .send()
+        .ok()
+        .is_some_and(|response| response.status().is_success())
+}
+
+/// Poll GET /ready until bootstrap completes or timeout.
+pub fn ready_poll(port: u16, app: Option<&tauri::AppHandle>) -> Result<(), String> {
+    let client = health_client()?;
+    let url = format!("http://127.0.0.1:{port}/ready");
+
+    for attempt in 1..=READY_MAX_ATTEMPTS {
+        match client.get(&url).send() {
+            Ok(response) if response.status().is_success() => return Ok(()),
+            Ok(response) => eprintln!(
+                "backend ready attempt {attempt}/{READY_MAX_ATTEMPTS}: HTTP {}",
+                response.status()
+            ),
+            Err(err) => eprintln!(
+                "backend ready attempt {attempt}/{READY_MAX_ATTEMPTS}: {err}"
+            ),
+        }
+        if attempt == 1 || attempt % 20 == 0 {
+            if let Some(handle) = app {
+                let _ = handle.emit("backend-bootstrap-progress", attempt);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(READY_INTERVAL_MS));
+    }
+
+    Err(format!(
+        "backend bootstrap timed out after {} ms",
+        READY_MAX_ATTEMPTS as u64 * READY_INTERVAL_MS
     ))
 }
 

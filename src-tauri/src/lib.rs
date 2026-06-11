@@ -2,7 +2,7 @@ mod process;
 
 use process::{
     allocate_port, default_data_dir, graceful_shutdown, health_check_once, health_poll,
-    spawn_backend, BackendProcess,
+    ready_check_once, ready_poll, spawn_backend, BackendProcess,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -12,8 +12,10 @@ pub struct AppState {
     pub backend_port: u16,
     pub data_dir: String,
     pub backend: Mutex<Option<BackendProcess>>,
-    /// Set after the first successful /health poll in the startup thread.
+    /// Uvicorn listening (/health OK) — frontend shell may show.
     pub backend_ready: AtomicBool,
+    /// ServiceContainer bootstrap complete (/ready OK) — API calls safe.
+    pub bootstrap_ready: AtomicBool,
 }
 
 #[tauri::command]
@@ -43,6 +45,19 @@ fn check_backend_health(state: State<'_, AppState>) -> bool {
 #[tauri::command]
 fn is_backend_ready(state: State<'_, AppState>) -> bool {
     state.backend_ready.load(Ordering::SeqCst)
+}
+
+#[tauri::command]
+fn is_bootstrap_ready(state: State<'_, AppState>) -> bool {
+    state.bootstrap_ready.load(Ordering::SeqCst)
+}
+
+#[tauri::command]
+fn check_backend_bootstrap(state: State<'_, AppState>) -> bool {
+    if state.bootstrap_ready.load(Ordering::SeqCst) {
+        return true;
+    }
+    ready_check_once(state.backend_port)
 }
 
 fn splash_path() -> std::path::PathBuf {
@@ -98,6 +113,18 @@ fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
                 }
             });
 
+            let app_boot = app.clone();
+            std::thread::spawn(move || {
+                if ready_poll(port, Some(&app_boot)).is_ok() {
+                    if let Some(state) = app_boot.try_state::<AppState>() {
+                        state.bootstrap_ready.store(true, Ordering::SeqCst);
+                    }
+                    let _ = app_boot.emit("backend-bootstrap-ready", port);
+                } else {
+                    eprintln!("backend bootstrap poll timed out");
+                }
+            });
+
             Ok(())
         })();
 
@@ -137,13 +164,16 @@ pub fn run() {
             data_dir: data_dir.clone(),
             backend: Mutex::new(None),
             backend_ready: AtomicBool::new(false),
+            bootstrap_ready: AtomicBool::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             get_backend_port,
             get_data_dir,
             get_app_version,
             check_backend_health,
-            is_backend_ready
+            is_backend_ready,
+            is_bootstrap_ready,
+            check_backend_bootstrap
         ])
         .setup(move |app| {
             open_splash(app.handle())?;
