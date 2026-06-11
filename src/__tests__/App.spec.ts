@@ -36,22 +36,36 @@ vi.mock('@/shared/api/stats', () => ({
   }),
 }))
 
+vi.mock('axios', () => {
+  const interceptors = {
+    request: { use: vi.fn() },
+    response: { use: vi.fn() },
+  }
+  return {
+    default: {
+      create: vi.fn(() => ({ get: vi.fn(), post: vi.fn(), interceptors })),
+    },
+    isAxiosError: () => false,
+  }
+})
+
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('__TAURI_INTERNALS__', {})
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }))
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === 'get_backend_port') {
         return Promise.resolve(18000)
       }
-      if (cmd === 'is_backend_ready' || cmd === 'check_backend_health') {
+      if (cmd === 'is_backend_ready' || cmd === 'check_backend_health' || cmd === 'is_core_ready') {
         return Promise.resolve(true)
       }
       return Promise.reject(new Error(`unexpected: ${cmd}`))
     })
   })
 
-  it('shows loading then ready state', async () => {
+  it('shows shell immediately then connects to backend', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
@@ -63,12 +77,9 @@ describe('App', () => {
     const wrapper = mount(App, {
       global: { plugins: [createPinia(), router] },
     })
-    expect(wrapper.text()).toContain('正在准备夜记')
-    expect(wrapper.text()).toContain('首次启动约需 3–5 秒，请稍候')
-
-    await flushPromises()
     await router.isReady()
-    expect(wrapper.text()).toContain('夜记')
+    await flushPromises()
     expect(wrapper.text()).toContain('写日记')
+    expect(wrapper.text()).toContain('夜记')
   })
 })

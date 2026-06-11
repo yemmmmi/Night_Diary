@@ -53,6 +53,8 @@ class AnalysisResponse(BaseModel):
     execution_tier: str | None
     activated_agents: str | None
     ai_ans: str | None = None
+    model_name: str | None = None
+    status_detail: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -106,6 +108,17 @@ class ModelUpdateRequest(BaseModel):
     is_active: bool | None = None
 
 
+class ModelTestConnectionRequest(BaseModel):
+    model_name: str = Field(default="deepseek-chat", min_length=1, max_length=100)
+    api_key: str = Field(min_length=1)
+    base_url: str = Field(min_length=1)
+
+
+class ModelTestConnectionResponse(BaseModel):
+    ok: bool
+    message: str | None = None
+
+
 class ModelResponse(BaseModel):
     id: int
     model_name: str
@@ -114,6 +127,20 @@ class ModelResponse(BaseModel):
     is_active: bool
     is_default: bool
     has_api_key: bool
+
+
+class ModelTierStatus(BaseModel):
+    tier: str
+    configured: bool
+    model_name: str | None = None
+    base_url: str | None = None
+    is_active: bool = False
+
+
+class ModelStatusResponse(BaseModel):
+    tiers: list[ModelTierStatus]
+    env_fallback: bool = False
+    env_model_name: str | None = None
 
 
 class StatsResponse(BaseModel):

@@ -14,9 +14,29 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
+
+
+def _app_build_version() -> str:
+    """Best-effort git short hash for dev stale-backend detection."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "unknown"
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -37,23 +57,33 @@ def _ensure_dirs(settings) -> None:  # type: ignore[no-untyped-def]
         p.mkdir(parents=True, exist_ok=True)
 
 
-def _bootstrap_sync(app: FastAPI) -> None:
-    """Load ServiceContainer (heavy — run off the event loop)."""
+def _bootstrap_core_sync(app: FastAPI) -> None:
+    """SQLite + session factory — fast enough for ``/ready`` and diary CRUD."""
     from app.services.container import ServiceContainer
 
-    app.state.container = ServiceContainer.create()
+    app.state.container = ServiceContainer.create_core()
     app.state.bootstrap_done = True
-    logger.info("Service container ready (SQLite + RAG + multi-agent graph)")
+    logger.info("Core bootstrap ready (SQLite + diary CRUD)")
+
+
+def _bootstrap_ai_sync(app: FastAPI) -> None:
+    """RAG / agents — runs after core; first AI call may trigger if still pending."""
+    container = app.state.container
+    if container is not None:
+        container.ensure_ai_stack()
+    app.state.bootstrap_ai_done = True
+    logger.info("AI bootstrap complete")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.container = None
     app.state.bootstrap_done = False
-    bootstrap_task = asyncio.create_task(asyncio.to_thread(_bootstrap_sync, app))
-    app.state.bootstrap_task = bootstrap_task
+    app.state.bootstrap_ai_done = False
+
+    core_task = asyncio.create_task(asyncio.to_thread(_bootstrap_core_sync, app))
     yield
-    await bootstrap_task
+    await core_task
 
 
 def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
@@ -84,7 +114,23 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
+        """Uvicorn is listening."""
         return {"status": "ok"}
+
+    @app.get("/ready", tags=["meta"])
+    def ready() -> JSONResponse:
+        """Core bootstrap complete — diary CRUD safe."""
+        if getattr(app.state, "bootstrap_done", False) and app.state.container is not None:
+            return JSONResponse({"status": "ok"})
+        return JSONResponse(
+            {"status": "bootstrapping"},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    @app.get("/meta/version", tags=["meta"])
+    def meta_version() -> dict[str, str]:
+        """Dev helper — lets the frontend detect a stale sidecar process."""
+        return {"version": _app_build_version()}
 
     @app.post("/shutdown", tags=["meta"])
     async def shutdown() -> dict[str, str]:

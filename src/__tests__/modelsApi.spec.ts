@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
 import { resetHttpClient } from '@/shared/api/http'
 import { createModel, listModels } from '@/shared/api/models'
 
@@ -11,6 +12,7 @@ vi.mock('axios', () => {
 
 vi.mock('@/shared/composables/useBackend', () => ({
   resolveBackendBaseUrl: vi.fn(async () => 'http://127.0.0.1:8000'),
+  waitForCoreReady: vi.fn(async () => undefined),
 }))
 
 describe('models API', () => {
@@ -23,7 +25,7 @@ describe('models API', () => {
   })
 
   it('lists models from /api/v1/models', async () => {
-    vi.mocked(axios.create).mockReturnValue({ get, post } as never)
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post }) as never)
     get.mockResolvedValue({
       data: [
         {
@@ -45,7 +47,7 @@ describe('models API', () => {
   })
 
   it('creates a model via POST', async () => {
-    vi.mocked(axios.create).mockReturnValue({ get, post } as never)
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post }) as never)
     post.mockResolvedValue({
       data: {
         id: 2,

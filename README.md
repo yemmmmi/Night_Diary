@@ -57,20 +57,31 @@ pip install -e ".[dev]"
 cd ..
 npm install
 
-# 3. 启动桌面应用（Tauri 会自动拉起 Python sidecar）
-make dev-web      # npm run tauri dev → 桌面窗口 + 动态后端端口
+# 3. 启动桌面应用（推荐单终端，后端随 Tauri 一起启停）
+npm run tauri dev   # Ctrl+C 会同时关闭 Tauri 与 :8000 后端
 
-# 仅调试后端时（浏览器/Vitest，非 Tauri）
-make dev-api      # Python AI 引擎 → http://127.0.0.1:8000
+# 双终端（后端独立热重载，Tauri 只 attach，退出时不关后端）
+# 终端 1: cd server && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+# 终端 2 (PowerShell): $env:NIGHTDIARY_DEV_BACKEND_ATTACH=1; npm run tauri dev
+
+# 仅调试前端（浏览器，非 Tauri）
 npm run dev       # Vite → http://localhost:5173（需配合 dev-api）
 ```
+
+### LLM 配置（`.env` 与设置页）
+
+- 开发时在 `server/.env` 可设置 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 作为默认回退。
+- **设置页保存的模型优先级更高**；推荐在应用内「设置 → AI 模型」配置 DeepSeek。
+- DeepSeek Base URL 填 `https://api.deepseek.com/v1`；模型名用 `deepseek-chat` 或 `deepseek-reasoner`（不要用不存在的模型 id）。
+- 修改 Python 后端代码后，若 API 报 405/404，请重启 `make dev-api` 或确认 uvicorn 已 `--reload`。
 
 ## 常用 Make 目标
 
 | 目标 | 作用 |
 |------|------|
 | `make dev-api` | 启动 Python 后端（热重载，仅 127.0.0.1） |
-| `make dev-web` | 启动 Tauri 桌面应用（`npm run tauri dev`） |
+| `make dev-web` | 启动 Tauri（自动启停 :8000 后端，Ctrl+C 一并退出） |
+| `make dev-web-fast` | Tauri + 已有 `dev-api`（attach 模式，不关闭后端） |
 | `make test` | 跑 pytest + vitest |
 | `make lint` | ruff + mypy + eslint + vue-tsc |
 | `make format` | ruff format |

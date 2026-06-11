@@ -73,3 +73,8 @@ class ModelProviderNotFoundError(AppError):
 class AIServiceUnavailableError(AppError):
     def __init__(self, message: str = "AI 服务未配置或不可用") -> None:
         super().__init__(message=message, http_status=503)
+
+
+class BootstrapNotReadyError(AppError):
+    def __init__(self) -> None:
+        super().__init__(message="AI 引擎仍在初始化，请稍候", http_status=503)

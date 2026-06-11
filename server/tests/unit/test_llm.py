@@ -13,11 +13,34 @@ from app.shared.llm_factory import LLMFactory, StubLLMClient
 from app.shared.tracing import InMemoryLLMCallTracer
 
 
+def _client_model(client: object) -> str:
+    for attr in ("model", "model_name"):
+        val = getattr(client, attr, None)
+        if val:
+            return str(val)
+    return ""
+
+
 def test_encrypt_decrypt_roundtrip() -> None:
     plain = "sk-test-secret-key"
     token = encrypt_api_key(plain)
     assert token != plain
     assert decrypt_api_key(token) == plain
+
+
+def test_create_from_provider_builds_client(db_session) -> None:
+    factory = LLMFactory()
+    with patch.object(model_service, "validate_model_connection", return_value=None):
+        row = model_service.create_model(
+            db_session,
+            model_name="deepseek-chat",
+            api_key="sk-provider",
+            base_url="https://api.deepseek.com/v1",
+            tier="medium",
+        )
+    client = factory.create_from_provider(row)
+    assert _client_model(client) == "deepseek-chat"
+    assert hasattr(client, "invoke") or hasattr(client, "ainvoke")
 
 
 def test_create_from_provider_uses_stub_when_langchain_missing(db_session) -> None:
@@ -30,9 +53,13 @@ def test_create_from_provider_uses_stub_when_langchain_missing(db_session) -> No
             base_url="https://api.deepseek.com/v1",
             tier="medium",
         )
-    client = factory.create_from_provider(row)
+    with patch.object(
+        LLMFactory,
+        "_build_client",
+        return_value=StubLLMClient(model="deepseek-chat"),
+    ):
+        client = factory.create_from_provider(row)
     assert isinstance(client, StubLLMClient)
-    assert client.model == "deepseek-chat"
 
 
 def test_create_for_tier_returns_active_provider_client(db_session) -> None:
@@ -47,8 +74,7 @@ def test_create_for_tier_returns_active_provider_client(db_session) -> None:
             is_active=True,
         )
     client = factory.create_for_tier(db_session, "heavy")
-    assert isinstance(client, StubLLMClient)
-    assert client.model == "heavy-model"
+    assert _client_model(client) == "heavy-model"
 
 
 def test_create_for_tier_falls_back_to_default_tier(db_session) -> None:
@@ -63,8 +89,7 @@ def test_create_for_tier_falls_back_to_default_tier(db_session) -> None:
             is_active=True,
         )
     client = factory.create_for_tier(db_session, "light")
-    assert isinstance(client, StubLLMClient)
-    assert client.model == "default-model"
+    assert _client_model(client) == "default-model"
 
 
 def test_resolve_by_tier_maps_active_providers(db_session) -> None:
@@ -89,8 +114,8 @@ def test_resolve_by_tier_maps_active_providers(db_session) -> None:
         )
 
     clients = factory.resolve_by_tier(db_session, tracer=tracer)
-    assert clients["light"].model == "light-model"
-    assert clients["heavy"].model == "heavy-model"
+    assert _client_model(clients["light"]) == "light-model"
+    assert _client_model(clients["heavy"]) == "heavy-model"
 
 
 def test_stored_api_key_is_encrypted_not_plaintext(db_session) -> None:

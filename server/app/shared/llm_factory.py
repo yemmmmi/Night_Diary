@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
+from pydantic import SecretStr
+
 from app.config import Settings, get_settings
 from app.infrastructure.models.model_provider import ModelProviderRow
 from app.infrastructure.security import decrypt_api_key
@@ -92,6 +94,19 @@ class LLMFactory:
             query = query.filter(ModelProviderRow.is_active.is_(True))
         providers = query.order_by(ModelProviderRow.id.asc()).all()
 
+        if not providers and prefer_active:
+            providers = (
+                db.query(ModelProviderRow)
+                .filter(ModelProviderRow.api_key_encrypted.isnot(None))
+                .order_by(ModelProviderRow.id.asc())
+                .all()
+            )
+            if providers:
+                logger.warning(
+                    "No active model providers; falling back to %d inactive row(s)",
+                    len(providers),
+                )
+
         clients: dict[str, LLMClient] = {}
         for provider in providers:
             tier = provider.tier or "default"
@@ -120,10 +135,13 @@ class LLMFactory:
             logger.warning("langchain-openai unavailable; using StubLLMClient")
             return StubLLMClient(model=model_name)
 
-        return cast(LLMClient, ChatOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            model=model_name,
-            temperature=0.7,
-            max_tokens=300,
-        ))
+        return cast(
+            LLMClient,
+            ChatOpenAI(
+                api_key=SecretStr(api_key),
+                base_url=base_url,
+                model=model_name,
+                temperature=0.7,
+                max_completion_tokens=300,
+            ),
+        )

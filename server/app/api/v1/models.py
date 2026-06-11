@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import APIRouter, Response, status
 
 from app.api.deps import DbDep
 from app.api.mappers import model_to_response
-from app.api.schemas import ModelCreateRequest, ModelResponse, ModelUpdateRequest
+from app.api.schemas import (
+    ModelCreateRequest,
+    ModelResponse,
+    ModelStatusResponse,
+    ModelTestConnectionRequest,
+    ModelTestConnectionResponse,
+    ModelTierStatus,
+    ModelUpdateRequest,
+)
 from app.services import model_service
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -16,6 +26,29 @@ router = APIRouter(prefix="/models", tags=["models"])
 def list_models(db: DbDep) -> list[ModelResponse]:
     rows = model_service.list_models(db)
     return [model_to_response(row) for row in rows]
+
+
+@router.get("/status", response_model=ModelStatusResponse)
+def models_status(db: DbDep) -> ModelStatusResponse:
+    payload = model_service.get_models_status(db)
+    tiers = cast(list[dict[str, object]], payload["tiers"])
+    return ModelStatusResponse(
+        tiers=[ModelTierStatus.model_validate(item) for item in tiers],
+        env_fallback=bool(payload["env_fallback"]),
+        env_model_name=cast(str | None, payload["env_model_name"]),
+    )
+
+
+@router.post("/test-connection", response_model=ModelTestConnectionResponse)
+def test_model_connection(body: ModelTestConnectionRequest) -> ModelTestConnectionResponse:
+    error = model_service.validate_model_connection(
+        body.base_url,
+        body.api_key,
+        model_name=body.model_name,
+    )
+    if error:
+        return ModelTestConnectionResponse(ok=False, message=error)
+    return ModelTestConnectionResponse(ok=True, message="连接成功")
 
 
 @router.post("", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)

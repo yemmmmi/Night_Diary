@@ -1,6 +1,6 @@
-"""ORM → API response mappers (keeps routes thin)."""
-
 from __future__ import annotations
+
+from sqlalchemy.orm import Session
 
 from app.api.schemas import (
     AnalysisResponse,
@@ -31,7 +31,24 @@ def diary_to_response(row: DiaryEntryRow) -> DiaryResponse:
     )
 
 
-def analysis_to_response(row: AnalysisRow, *, ai_ans: str | None = None) -> AnalysisResponse:
+def analysis_to_response(
+    row: AnalysisRow,
+    *,
+    ai_ans: str | None = None,
+    db: Session | None = None,
+) -> AnalysisResponse:
+    model_name: str | None = None
+    if db is not None and row.execution_tier:
+        provider = model_service.get_active_provider_for_tier(db, row.execution_tier)
+        if provider is None and row.execution_tier != "default":
+            provider = model_service.get_active_provider_for_tier(db, "default")
+        if provider is not None:
+            model_name = provider.model_name
+
+    status_detail: str | None = None
+    if row.agent_mode == "fallback" and row.log:
+        status_detail = row.log.removeprefix("[Fallback] ").removeprefix("[降级] ").strip()
+
     return AnalysisResponse(
         id=row.id,
         diary_id=row.diary_id,
@@ -44,6 +61,8 @@ def analysis_to_response(row: AnalysisRow, *, ai_ans: str | None = None) -> Anal
         execution_tier=row.execution_tier,
         activated_agents=row.activated_agents,
         ai_ans=ai_ans,
+        model_name=model_name,
+        status_detail=status_detail,
     )
 
 
