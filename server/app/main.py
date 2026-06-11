@@ -14,7 +14,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,18 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
+        """Uvicorn is listening — used by Tauri splash / frontend shell."""
         return {"status": "ok"}
+
+    @app.get("/ready", tags=["meta"])
+    def ready() -> JSONResponse:
+        """ServiceContainer bootstrap complete — safe for /api/v1 calls."""
+        if getattr(app.state, "bootstrap_done", False) and app.state.container is not None:
+            return JSONResponse({"status": "ok"})
+        return JSONResponse(
+            {"status": "bootstrapping"},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
     @app.post("/shutdown", tags=["meta"])
     async def shutdown() -> dict[str, str]:

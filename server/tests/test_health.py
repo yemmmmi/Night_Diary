@@ -26,6 +26,21 @@ def test_health_returns_ok() -> None:
         assert response.json() == {"status": "ok"}
 
 
+def test_ready_returns_ok_after_bootstrap() -> None:
+    with TestClient(create_app()) as client:
+        _wait_for_bootstrap(client)
+        response = client.get("/ready")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
+
+def test_ready_returns_503_while_bootstrapping() -> None:
+    with TestClient(create_app()) as client:
+        response = client.get("/ready")
+        assert response.status_code == 503
+        assert response.json()["status"] == "bootstrapping"
+
+
 def test_openapi_schema_available() -> None:
     with TestClient(create_app()) as client:
         _wait_for_bootstrap(client)
