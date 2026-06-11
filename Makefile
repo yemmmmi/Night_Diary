@@ -17,11 +17,12 @@ dev-api:
 	cd $(SERVER_DIR) && $(PY) -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 dev-web:
+	@echo "Tip: single terminal — backend starts with Tauri and stops on Ctrl+C"
 	$(NPM) run tauri dev
 
 dev-web-fast:
 	@echo "Start dev-api in another terminal first: make dev-api"
-	$(NPM) run tauri dev
+	NIGHTDIARY_DEV_BACKEND_ATTACH=1 $(NPM) run tauri dev
 
 test: test-server test-web
 

@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "identifier": "com.nightdiary.app",
   "build": {
-    "beforeDevCommand": "node scripts/ensure-dev-backend.mjs && npm run dev",
+    "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
