@@ -84,6 +84,12 @@ const tierLabel = computed(() => {
           <FeedbackButtons :analysis-id="analysis!.id" />
         </div>
 
+        <p v-if="analysis?.agent_mode === 'fallback'" class="analysis-panel__fallback-hint">
+          本次未成功调用 AI 模型（可能是未配置或未启用模型）。请前往
+          <RouterLink to="/settings">设置</RouterLink>
+          添加 DeepSeek API 并勾选「设为该层级的当前使用模型」，然后重新获取回信。
+        </p>
+
         <div v-if="analysis?.token_cost != null" class="analysis-panel__tokens">
           <button type="button" class="analysis-panel__tokens-toggle" @click="showTokenDetail = !showTokenDetail">
             <span>消耗 {{ analysis.token_cost }} tokens</span>
@@ -172,6 +178,20 @@ const tierLabel = computed(() => {
   line-height: 1.75;
   color: var(--color-text-primary);
   white-space: pre-wrap;
+}
+
+.analysis-panel__fallback-hint {
+  margin-top: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+}
+
+.analysis-panel__fallback-hint a {
+  color: var(--color-accent);
 }
 
 .analysis-panel__feedback {

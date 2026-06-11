@@ -34,10 +34,18 @@ def _validate_tier(tier: str) -> str:
     return normalized
 
 
+def _models_probe_url(base_url: str) -> str:
+    """Build OpenAI-compatible ``/models`` probe URL without duplicating ``/v1``."""
+    root = base_url.rstrip("/")
+    if root.endswith("/v1"):
+        return f"{root}/models"
+    return f"{root}/v1/models"
+
+
 def validate_model_connection(base_url: str, api_key: str) -> str | None:
     if not base_url.startswith(("http://", "https://")):
         return "Base URL 格式错误"
-    test_url = base_url.rstrip("/") + "/v1/models"
+    test_url = _models_probe_url(base_url)
     headers = {"Authorization": f"Bearer {api_key}"}
     try:
         with httpx.Client(timeout=10.0) as client:
@@ -77,6 +85,9 @@ def create_model(
     )
     if is_active:
         _deactivate_others(db, tier=tier, exclude_id=None)
+    elif not get_active_provider_for_tier(db, tier):
+        row.is_active = True
+        logger.info("Auto-activated first model for tier=%s (id pending commit)", tier)
     db.add(row)
     db.commit()
     db.refresh(row)
