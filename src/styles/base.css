@@ -1,5 +1,45 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=LXGW+WenKai&display=swap');
+/*
+ * 字体声明 — 本地自托管
+ * 字体文件下载后放入 src/assets/fonts/，取消下方 @font-face 注释即可
+ * 当前 fallback 至系统字体保证离线可用
+ */
+/* === 本地字体（下载后取消注释）===
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@/assets/fonts/PlusJakartaSans-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('@/assets/fonts/PlusJakartaSans-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('@/assets/fonts/PlusJakartaSans-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('@/assets/fonts/PlusJakartaSans-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'LXGW WenKai';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@/assets/fonts/LXGWWenKai-Regular.woff2') format('woff2');
+}
+=== 本地字体结束 === */
 
 @import './themes/day.css';
 @import './themes/night.css';
@@ -16,8 +56,8 @@
     --radius-outer: 2rem;
     --radius-inner: calc(2rem - 6px);
     --radius-button: 0.875rem;
-    --font-ui: 'Plus Jakarta Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    --font-diary: 'LXGW WenKai', 'KaiTi', serif;
+    --font-ui: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-diary: 'KaiTi', 'STKaiti', serif;
     --motion-duration: 220ms;
     --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
     --color-success: #5a8f6a;
@@ -40,6 +80,23 @@
   #app {
     min-height: 100vh;
     background-color: var(--color-bg);
+  }
+
+  /* 全局交互可访问性 */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* 尊重系统减少动效偏好 */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
