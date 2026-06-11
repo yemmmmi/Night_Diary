@@ -9,7 +9,7 @@ import ParticleBackground from '@/shared/components/ParticleBackground.vue'
 import { useBackend } from '@/shared/composables/useBackend'
 
 const route = useRoute()
-const { ready, loading, error, startupProgress, init } = useBackend()
+const { ready, coreReady, loading, error, startupProgress, init } = useBackend()
 
 const isTauri = computed(
   () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window,
@@ -58,6 +58,9 @@ const loadingHint = computed(() => {
       class="app-shell particle-layer"
       :class="{ 'app-shell--frameless': isTauri }"
     >
+      <p v-if="!coreReady" class="app-core-banner" role="status">
+        正在加载 AI 引擎组件…
+      </p>
       <PageTransition>
         <RouterView />
       </PageTransition>
@@ -92,5 +95,19 @@ const loadingHint = computed(() => {
 
 .text-secondary {
   color: var(--color-text-secondary);
+}
+
+.app-core-banner {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 0 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  text-align: center;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-raised));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 </style>

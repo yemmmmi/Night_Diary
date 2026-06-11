@@ -1,14 +1,23 @@
 import axios, { type AxiosInstance } from 'axios'
 
-import { resolveBackendBaseUrl } from '@/shared/composables/useBackend'
+import {
+  resolveBackendBaseUrl,
+  waitForCoreReady,
+} from '@/shared/composables/useBackend'
 
-export { resolveBackendBaseUrl, useBackend, waitForBackendHealth } from '@/shared/composables/useBackend'
+export {
+  resolveBackendBaseUrl,
+  useBackend,
+  waitForBackendHealth,
+  waitForCoreReady,
+} from '@/shared/composables/useBackend'
 
 let httpClient: AxiosInstance | null = null
 let httpClientBaseUrl: string | null = null
 
 export async function getHttpClient(): Promise<AxiosInstance> {
   const baseURL = await resolveBackendBaseUrl()
+  await waitForCoreReady(baseURL)
 
   if (httpClient && httpClientBaseUrl === baseURL) {
     return httpClient

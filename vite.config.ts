@@ -11,11 +11,22 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  optimizeDeps: {
+    include: [
+      'vue',
+      'vue-router',
+      'pinia',
+      'axios',
+      'gsap',
+      '@phosphor-icons/vue',
+    ],
+  },
   server: {
     port: 5173,
     strictPort: true,
-    // Optional dev proxy when the backend has not enabled CORS.
-    // proxy: { '/api': 'http://localhost:8000' },
+    warmup: {
+      clientFiles: ['./index.html', './src/main.ts', './src/App.vue'],
+    },
   },
   test: {
     environment: 'happy-dom',
