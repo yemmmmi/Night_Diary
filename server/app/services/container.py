@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -49,20 +50,22 @@ class ServiceContainer:
     engine: Engine
     session_factory: sessionmaker[Session]
     llm_factory: LLMFactory
-    diary_collection: DiaryCollectionManager
-    knowledge_store: DomainKnowledgeStore
-    bm25_index: BM25Index
-    retriever: HybridRetriever
-    episodic_memory: EpisodicMemory
-    long_term_memory: LongTermMemory
-    working_memory: WorkingMemory
     llm_tracer: SqliteLLMCallTracer
     decision_logger: SqliteAgentDecisionLogger
     style_preference_store: SqliteStylePreferenceStore
+    diary_collection: DiaryCollectionManager | None = field(default=None, repr=False)
+    knowledge_store: DomainKnowledgeStore | None = field(default=None, repr=False)
+    bm25_index: BM25Index | None = field(default=None, repr=False)
+    retriever: HybridRetriever | None = field(default=None, repr=False)
+    episodic_memory: EpisodicMemory | None = field(default=None, repr=False)
+    long_term_memory: LongTermMemory | None = field(default=None, repr=False)
+    working_memory: WorkingMemory | None = field(default=None, repr=False)
     _multi_agent_graph: MultiAgentGraph | None = field(default=None, repr=False)
+    _ai_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @classmethod
-    def create(cls, settings: Settings | None = None) -> ServiceContainer:
+    def create_core(cls, settings: Settings | None = None) -> ServiceContainer:
+        """Fast path: SQLite + tracers only (diary CRUD). AI stack loads lazily."""
         cfg = settings or get_settings()
         for path in (
             Path(cfg.data_dir),
@@ -76,40 +79,56 @@ class ServiceContainer:
         init_db(engine)
         factory = create_session_factory(engine)
 
-        diary_collection = DiaryCollectionManager(settings=cfg)
-        knowledge_store = DomainKnowledgeStore(settings=cfg)
-        bm25 = BM25Index()
-        retriever = HybridRetriever(
-            collection_manager=diary_collection,
-            bm25_index=bm25,
-        )
-
-        episodic_store = SqliteEpisodicMemoryStore(factory)
-        episodic = EpisodicMemory(store=episodic_store, user_id="default")
-        try:
-            episodic.load()
-        except Exception as exc:
-            logger.warning("Episodic memory load skipped: %s", exc)
-
-        long_term = LongTermMemory(store=SqliteLongTermProfileStore(factory))
-        working = WorkingMemory()
-
         return cls(
             settings=cfg,
             engine=engine,
             session_factory=factory,
             llm_factory=LLMFactory(cfg),
-            diary_collection=diary_collection,
-            knowledge_store=knowledge_store,
-            bm25_index=bm25,
-            retriever=retriever,
-            episodic_memory=episodic,
-            long_term_memory=long_term,
-            working_memory=working,
             llm_tracer=SqliteLLMCallTracer(factory),
             decision_logger=SqliteAgentDecisionLogger(factory),
             style_preference_store=SqliteStylePreferenceStore(factory),
         )
+
+    def ensure_ai_stack(self) -> None:
+        """Load RAG / memory / agent graph (heavy — defer until first AI call)."""
+        if self.diary_collection is not None:
+            return
+
+        with self._ai_lock:
+            if self.diary_collection is not None:
+                return
+
+            cfg = self.settings
+            diary_collection = DiaryCollectionManager(settings=cfg)
+            knowledge_store = DomainKnowledgeStore(settings=cfg)
+            bm25 = BM25Index()
+            retriever = HybridRetriever(
+                collection_manager=diary_collection,
+                bm25_index=bm25,
+            )
+
+            episodic_store = SqliteEpisodicMemoryStore(self.session_factory)
+            episodic = EpisodicMemory(store=episodic_store, user_id="default")
+            try:
+                episodic.load()
+            except Exception as exc:
+                logger.warning("Episodic memory load skipped: %s", exc)
+
+            self.diary_collection = diary_collection
+            self.knowledge_store = knowledge_store
+            self.bm25_index = bm25
+            self.retriever = retriever
+            self.episodic_memory = episodic
+            self.long_term_memory = LongTermMemory(store=SqliteLongTermProfileStore(self.session_factory))
+            self.working_memory = WorkingMemory()
+            logger.info("AI stack ready (RAG + memory + agents)")
+
+    @classmethod
+    def create(cls, settings: Settings | None = None) -> ServiceContainer:
+        """Full container for tests and production sidecar."""
+        core = cls.create_core(settings)
+        core.ensure_ai_stack()
+        return core
 
     def session(self) -> Session:
         return self.session_factory()
@@ -142,6 +161,9 @@ class ServiceContainer:
             return None
 
     def build_multi_agent_graph(self, db: Session) -> MultiAgentGraph | None:
+        self.ensure_ai_stack()
+        assert self.knowledge_store is not None and self.retriever is not None
+
         if self._multi_agent_graph is not None:
             return self._multi_agent_graph
 
@@ -178,6 +200,14 @@ class ServiceContainer:
         return graph
 
     def build_execution_planner(self, db: Session) -> ExecutionPlanner:
+        self.ensure_ai_stack()
+        assert (
+            self.retriever is not None
+            and self.episodic_memory is not None
+            and self.long_term_memory is not None
+            and self.working_memory is not None
+        )
+
         llm_by_tier = resolve_llm_clients_by_tier(
             db,
             llm_factory=self.llm_factory,

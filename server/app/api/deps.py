@@ -9,10 +9,16 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from app.services.container import ServiceContainer
+from app.shared.errors import BootstrapNotReadyError
 
 
 def get_container(request: Request) -> ServiceContainer:
-    return cast(ServiceContainer, request.app.state.container)
+    if not getattr(request.app.state, "bootstrap_done", False):
+        raise BootstrapNotReadyError()
+    container = request.app.state.container
+    if container is None:
+        raise BootstrapNotReadyError()
+    return cast(ServiceContainer, container)
 
 
 def get_db(
