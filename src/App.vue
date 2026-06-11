@@ -19,9 +19,9 @@ const subtleParticles = computed(() => route.path.startsWith('/write'))
 
 const loadingHint = computed(() => {
   if (startupProgress.value != null) {
-    return `正在启动 Python 引擎（第 ${startupProgress.value} 次探测）…`
+    return `正在唤醒本地 AI（约需 3–5 秒）…`
   }
-  return '等待 Python sidecar 就绪（首次启动约 3–5 秒）'
+  return '首次启动约需 3–5 秒，请稍候'
 })
 </script>
 
@@ -36,7 +36,7 @@ const loadingHint = computed(() => {
       class="app-state particle-layer"
       :class="{ 'app-state--frameless': isTauri }"
     >
-      <p class="text-lg">正在连接 AI 引擎…</p>
+      <p class="text-lg">正在准备夜记…</p>
       <p class="text-sm text-secondary">{{ loadingHint }}</p>
     </div>
 
@@ -45,10 +45,10 @@ const loadingHint = computed(() => {
       class="app-state particle-layer"
       :class="{ 'app-state--frameless': isTauri }"
     >
-      <p class="text-lg font-medium">无法连接后端</p>
+      <p class="text-lg font-medium">无法启动本地 AI 引擎</p>
       <p class="text-sm text-secondary text-center max-w-md">{{ error }}</p>
       <p class="text-xs text-secondary text-center max-w-md mt-1">
-        若开着代理，请确认绕过列表含 127.0.0.0/8
+        请检查网络代理设置，确保本地连接未被拦截
       </p>
       <GameButton class="mt-4" variant="secondary" @click="init">重试连接</GameButton>
     </div>
