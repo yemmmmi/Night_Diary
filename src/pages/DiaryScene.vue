@@ -8,7 +8,7 @@ import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { listTags, type Tag } from '@/shared/api/tags'
 import { useDiaryStore } from '@/stores/diary'
-import { countWordUnits } from '@/shared/utils/diaryFormat'
+import { countWordUnits, diaryStatus } from '@/shared/utils/diaryFormat'
 
 const route = useRoute()
 const router = useRouter()
@@ -57,6 +57,14 @@ const dateLabel = computed(() => {
 })
 
 const canSave = computed(() => hasContent.value && !diaryStore.saving)
+
+const entryStatus = computed(() =>
+  diaryStore.currentEntry ? diaryStatus(diaryStore.currentEntry) : 'draft',
+)
+
+const showAnalysisAction = computed(
+  () => isEditing.value && hasContent.value && entryStatus.value !== 'draft',
+)
 
 let saveStateTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -165,6 +173,11 @@ function goBack() {
   router.push('/')
 }
 
+function goToAnalysis() {
+  if (!diaryId.value) return
+  router.push(`/analysis/${diaryId.value}`)
+}
+
 watch(
   () => route.fullPath,
   () => {
@@ -233,6 +246,14 @@ onMounted(async () => {
 
       <footer class="diary-scene__footer">
         <span v-if="wordCount > 0" class="diary-scene__word-count">{{ wordCount }} 字</span>
+        <GameButton
+          v-if="showAnalysisAction"
+          variant="secondary"
+          class="diary-scene__analysis-btn"
+          @click="goToAnalysis"
+        >
+          {{ diaryStore.currentEntry?.ai_ans?.trim() ? '查看 AI 回信' : '获取 AI 回信' }}
+        </GameButton>
         <span class="diary-scene__save-dot" :class="`diary-scene__save-dot--${saveState}`" />
       </footer>
     </div>
@@ -370,6 +391,11 @@ onMounted(async () => {
 }
 .diary-scene__word-count {
   opacity: 0.7;
+  margin-right: auto;
+}
+
+.diary-scene__analysis-btn {
+  font-size: 0.8125rem;
 }
 
 /* 保存状态圆点 */

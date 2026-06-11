@@ -34,6 +34,21 @@ const router = createRouter({
       path: '/settings/llm',
       redirect: '/settings',
     },
+    {
+      path: '/analysis/:diaryId',
+      name: 'analysis',
+      component: () => import('@/pages/AnalysisScene.vue'),
+    },
+    {
+      path: '/review',
+      name: 'review',
+      component: () => import('@/pages/ReviewScene.vue'),
+    },
+    {
+      path: '/review/:diaryId',
+      name: 'review-detail',
+      component: () => import('@/pages/ReviewScene.vue'),
+    },
   ],
 })
 
