@@ -35,7 +35,13 @@ const diaryId = computed(() => {
 const isEditing = computed(() => diaryId.value != null)
 const hasContent = computed(() => content.value.trim().length > 0)
 const wordCount = computed(() => countWordUnits(content.value))
-const showWritingPrompt = computed(() => !isEditing.value && !hasContent.value)
+const showWritingHint = computed(() => !isEditing.value && !hasContent.value)
+
+const editorPlaceholder = computed(() =>
+  showWritingHint.value
+    ? '今天发生了什么？不用修饰，说你想说的'
+    : '写下此刻的想法…',
+)
 
 const dateLabel = computed(() => {
   const entryDate = diaryStore.currentEntry?.date
@@ -231,16 +237,12 @@ onMounted(async () => {
 
       <p v-if="loadError" class="diary-scene__error">{{ loadError }}</p>
 
-      <!-- 写作提示 -->
-      <p v-if="showWritingPrompt" class="diary-scene__writing-prompt">
-        今天发生了什么？不用修饰，说你想说的
-      </p>
-
       <DiaryEditor
-        v-else-if="!loadError"
+        v-if="!loadError"
         v-model="content"
         v-model:tag-ids="tagIds"
         :tags="tags"
+        :placeholder="editorPlaceholder"
         @autosave="onAutosave"
       />
 
@@ -355,21 +357,6 @@ onMounted(async () => {
 }
 .more-menu__item--danger {
   color: var(--color-danger);
-}
-
-/* 写作提示 */
-.diary-scene__writing-prompt {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9375rem;
-  color: var(--color-text-secondary);
-  opacity: 0.6;
-  font-family: var(--font-diary);
-  min-height: 12rem;
-  text-align: center;
-  padding: 2rem;
 }
 
 /* 错误 */
