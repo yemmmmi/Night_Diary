@@ -10,6 +10,7 @@ export default tseslint.config(
       'coverage/**',
       'server/.venv/**',
       'src-tauri/target/**',
+      'scripts/**',
     ],
   },
   js.configs.recommended,

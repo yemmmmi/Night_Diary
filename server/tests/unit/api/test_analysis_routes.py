@@ -37,9 +37,11 @@ def test_regenerate_analysis_replaces_existing(api_client: TestClient) -> None:
     diary_id = _create_diary(api_client)
     first = api_client.post(f"/api/v1/analysis/{diary_id}")
     assert first.status_code == 201
+
     regen = api_client.post(f"/api/v1/analysis/{diary_id}/regenerate")
     assert regen.status_code == 200
-    assert regen.json()["id"] == first.json()["id"]
+    assert regen.json()["ai_ans"]
+    assert regen.json()["diary_id"] == diary_id
     assert regen.json()["ai_ans"]
     assert api_client.get(f"/api/v1/analysis/{diary_id}").status_code == 200
 

@@ -112,11 +112,11 @@ async function waitForTauriBackend(maxWaitMs = 30_000): Promise<void> {
   return new Promise((resolve, reject) => {
     let settled = false
     let unlistenReady: (() => void) | undefined
-    let pollTimer: ReturnType<typeof setInterval> | undefined
+    const timers: { poll?: ReturnType<typeof setInterval> } = {}
 
     const cleanup = () => {
       unlistenReady?.()
-      if (pollTimer) clearInterval(pollTimer)
+      if (timers.poll !== undefined) clearInterval(timers.poll)
     }
 
     const finish = () => {
@@ -147,7 +147,7 @@ async function waitForTauriBackend(maxWaitMs = 30_000): Promise<void> {
         // fall back to polling
       }
 
-      pollTimer = setInterval(() => {
+      timers.poll = setInterval(() => {
         void isTauriBackendReady().then((ready) => {
           if (ready) finish()
         })
@@ -209,10 +209,10 @@ async function createCoreWait(
 
   return new Promise((resolve, reject) => {
     let settled = false
-    let pollTimer: ReturnType<typeof setInterval> | undefined
+    const timers: { poll?: ReturnType<typeof setInterval> } = {}
 
     const cleanup = () => {
-      if (pollTimer) clearInterval(pollTimer)
+      if (timers.poll !== undefined) clearInterval(timers.poll)
     }
 
     const finish = () => {
@@ -237,7 +237,7 @@ async function createCoreWait(
       maxWaitMs,
     )
 
-    pollTimer = setInterval(() => {
+    timers.poll = setInterval(() => {
       void probeCoreReady(url).then((ready) => {
         if (ready) finish()
       })

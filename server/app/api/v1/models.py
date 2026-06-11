@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import APIRouter, Response, status
 
 from app.api.deps import DbDep
@@ -29,10 +31,11 @@ def list_models(db: DbDep) -> list[ModelResponse]:
 @router.get("/status", response_model=ModelStatusResponse)
 def models_status(db: DbDep) -> ModelStatusResponse:
     payload = model_service.get_models_status(db)
+    tiers = cast(list[dict[str, object]], payload["tiers"])
     return ModelStatusResponse(
-        tiers=[ModelTierStatus.model_validate(item) for item in payload["tiers"]],
+        tiers=[ModelTierStatus.model_validate(item) for item in tiers],
         env_fallback=bool(payload["env_fallback"]),
-        env_model_name=payload["env_model_name"],  # type: ignore[arg-type]
+        env_model_name=cast(str | None, payload["env_model_name"]),
     )
 
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
+from pydantic import SecretStr
+
 from app.config import Settings, get_settings
 from app.infrastructure.models.model_provider import ModelProviderRow
 from app.infrastructure.security import decrypt_api_key
@@ -133,10 +135,13 @@ class LLMFactory:
             logger.warning("langchain-openai unavailable; using StubLLMClient")
             return StubLLMClient(model=model_name)
 
-        return cast(LLMClient, ChatOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            model=model_name,
-            temperature=0.7,
-            max_tokens=300,
-        ))
+        return cast(
+            LLMClient,
+            ChatOpenAI(
+                api_key=SecretStr(api_key),
+                base_url=base_url,
+                model=model_name,
+                temperature=0.7,
+                max_completion_tokens=300,
+            ),
+        )

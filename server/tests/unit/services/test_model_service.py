@@ -80,9 +80,10 @@ def test_validate_model_connection_deepseek_405_then_root_ok() -> None:
     base = "https://api.deepseek.com/v1"
     key = "sk-test"
 
-    def fake_get(_url: str, _headers: dict[str, str]) -> object:
+    def fake_get(url: str, **kwargs: object) -> object:
+        _ = kwargs
         class Resp:
-            status_code = 405 if "/v1/models" in _url else 200
+            status_code = 405 if "/v1/models" in url else 200
 
         return Resp()
 
@@ -95,13 +96,15 @@ def test_validate_model_connection_falls_back_to_chat() -> None:
     base = "https://api.deepseek.com/v1"
     key = "sk-test"
 
-    def fake_get(_url: str, _headers: dict[str, str]) -> object:
+    def fake_get(url: str, **kwargs: object) -> object:
+        _ = url, kwargs
         class Resp:
             status_code = 405
 
         return Resp()
 
-    def fake_post(_url: str, _headers: dict[str, str], _json: dict) -> object:
+    def fake_post(url: str, **kwargs: object) -> object:
+        _ = url, kwargs
         class Resp:
             status_code = 200
 

@@ -7,7 +7,6 @@ import AIAnalysisPanel from '@/features/analysis/AIAnalysisPanel.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import { useAnalysisStore } from '@/stores/analysis'
 import { useDiaryStore } from '@/stores/diary'
-import { diaryStatus } from '@/shared/utils/diaryFormat'
 
 const route = useRoute()
 const router = useRouter()
