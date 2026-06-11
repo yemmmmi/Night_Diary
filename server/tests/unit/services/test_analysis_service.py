@@ -23,7 +23,7 @@ class _FakeContainer:
     def __init__(self, planner: ExecutionPlanner) -> None:
         self._planner = planner
 
-    def build_execution_planner(self, db) -> ExecutionPlanner:  # noqa: ARG002
+    def build_execution_planner(self, _db) -> ExecutionPlanner:
         return self._planner
 
 

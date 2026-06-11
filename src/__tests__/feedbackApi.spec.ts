@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
 import { submitFeedback } from '@/shared/api/feedback'
 import { resetHttpClient } from '@/shared/api/http'
 
@@ -23,7 +24,7 @@ describe('feedback API', () => {
   })
 
   it('submits positive feedback', async () => {
-    vi.mocked(axios.create).mockReturnValue({ post } as never)
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ post }) as never)
     post.mockResolvedValue({
       data: {
         id: 1,
@@ -42,7 +43,7 @@ describe('feedback API', () => {
   })
 
   it('submits negative feedback with reason', async () => {
-    vi.mocked(axios.create).mockReturnValue({ post } as never)
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ post }) as never)
     post.mockResolvedValue({
       data: {
         id: 2,

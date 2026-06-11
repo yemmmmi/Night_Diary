@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
 import { createDiaryEntry, listDiaryEntries } from '@/shared/api/diary'
 import { resetHttpClient } from '@/shared/api/http'
 
@@ -24,7 +25,7 @@ describe('diary API', () => {
   })
 
   it('lists diary entries', async () => {
-    vi.mocked(axios.create).mockReturnValue({ get, post } as never)
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post }) as never)
     get.mockResolvedValue({
       data: [
         {
@@ -46,7 +47,7 @@ describe('diary API', () => {
   })
 
   it('creates a diary entry', async () => {
-    vi.mocked(axios.create).mockReturnValue({ get, post } as never)
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post }) as never)
     post.mockResolvedValue({
       data: {
         id: 2,

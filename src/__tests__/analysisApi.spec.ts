@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
 import { getAnalysis, triggerAnalysis } from '@/shared/api/analysis'
 import { resetHttpClient } from '@/shared/api/http'
 
@@ -17,10 +18,6 @@ vi.mock('@/shared/composables/useBackend', () => ({
 describe('analysis API', () => {
   const get = vi.fn()
   const post = vi.fn()
-  const interceptors = {
-    request: { use: vi.fn() },
-    response: { use: vi.fn() },
-  }
 
   afterEach(() => {
     vi.clearAllMocks()
@@ -28,7 +25,7 @@ describe('analysis API', () => {
   })
 
   it('triggers analysis for a diary entry', async () => {
-    vi.mocked(axios.create).mockReturnValue({ get, post, interceptors } as never)
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post }) as never)
     post.mockResolvedValue({
       data: {
         id: 10,
@@ -51,7 +48,7 @@ describe('analysis API', () => {
   })
 
   it('fetches analysis by diary id', async () => {
-    vi.mocked(axios.create).mockReturnValue({ get, post, interceptors } as never)
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post }) as never)
     get.mockResolvedValue({
       data: {
         id: 10,
