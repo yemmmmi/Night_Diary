@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhArrowLeft, PhTrash } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhDotsThree } from '@phosphor-icons/vue'
 
 import DiaryEditor from '@/features/diary/DiaryEditor.vue'
 import GameButton from '@/shared/components/GameButton.vue'
+import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { listTags, type Tag } from '@/shared/api/tags'
 import { useDiaryStore } from '@/stores/diary'
 import { countWordUnits } from '@/shared/utils/diaryFormat'
@@ -16,8 +17,11 @@ const diaryStore = useDiaryStore()
 const content = ref('')
 const tagIds = ref<number[]>([])
 const tags = ref<Tag[]>([])
-const saveHint = ref<string | null>(null)
 const loadError = ref<string | null>(null)
+const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+const showDeleteConfirm = ref(false)
+const showMoreMenu = ref(false)
+const menuRef = ref<HTMLElement | null>(null)
 
 const diaryId = computed(() => {
   const raw = route.params.id
@@ -29,8 +33,9 @@ const diaryId = computed(() => {
 })
 
 const isEditing = computed(() => diaryId.value != null)
-
+const hasContent = computed(() => content.value.trim().length > 0)
 const wordCount = computed(() => countWordUnits(content.value))
+const showWritingPrompt = computed(() => !isEditing.value && !hasContent.value)
 
 const dateLabel = computed(() => {
   const entryDate = diaryStore.currentEntry?.date
@@ -51,16 +56,18 @@ const dateLabel = computed(() => {
   })
 })
 
-const canSave = computed(() => content.value.trim().length > 0 && !diaryStore.saving)
+const canSave = computed(() => hasContent.value && !diaryStore.saving)
 
-let hintTimer: ReturnType<typeof setTimeout> | null = null
+let saveStateTimer: ReturnType<typeof setTimeout> | null = null
 
-function showHint(message: string) {
-  saveHint.value = message
-  if (hintTimer) clearTimeout(hintTimer)
-  hintTimer = setTimeout(() => {
-    saveHint.value = null
-  }, 2000)
+function setSaveState(state: 'idle' | 'saving' | 'saved' | 'error') {
+  saveState.value = state
+  if (saveStateTimer) clearTimeout(saveStateTimer)
+  if (state === 'saved') {
+    saveStateTimer = setTimeout(() => {
+      saveState.value = 'idle'
+    }, 2000)
+  }
 }
 
 async function loadTags() {
@@ -77,6 +84,7 @@ async function loadEntry() {
     diaryStore.clearCurrent()
     content.value = ''
     tagIds.value = []
+    saveState.value = 'idle'
     return
   }
 
@@ -84,22 +92,25 @@ async function loadEntry() {
     const entry = await diaryStore.fetchEntry(diaryId.value)
     content.value = entry.content ?? ''
     tagIds.value = entry.tags.map((tag) => tag.id)
+    saveState.value = 'idle'
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : '加载失败'
   }
 }
 
-async function persist(showMessage = true) {
+async function persist(showFeedback = true) {
   const trimmed = content.value.trim()
   if (!trimmed) return
 
+  setSaveState('saving')
   try {
     if (isEditing.value && diaryId.value) {
       await diaryStore.saveEntry(diaryId.value, {
         content: trimmed,
         tag_ids: tagIds.value,
       })
-      if (showMessage) showHint('已保存')
+      if (showFeedback) setSaveState('saved')
+      else setSaveState('idle')
       return
     }
 
@@ -107,10 +118,10 @@ async function persist(showMessage = true) {
       content: trimmed,
       tag_ids: tagIds.value,
     })
-    if (showMessage) showHint('已保存')
+    setSaveState('saved')
     await router.replace(`/write/${created.id}`)
   } catch {
-    showHint('保存失败')
+    setSaveState('error')
   }
 }
 
@@ -124,15 +135,29 @@ async function onSaveClick() {
   await persist(true)
 }
 
-async function onDelete() {
-  if (!diaryId.value) return
-  if (!window.confirm('确定删除这篇日记吗？')) return
+function confirmDelete() {
+  showDeleteConfirm.value = true
+  showMoreMenu.value = false
+}
 
+async function executeDelete() {
+  if (!diaryId.value) return
+  showDeleteConfirm.value = false
   try {
     await diaryStore.removeEntry(diaryId.value)
     await router.push('/')
   } catch {
-    showHint('删除失败')
+    setSaveState('error')
+  }
+}
+
+function toggleMoreMenu() {
+  showMoreMenu.value = !showMoreMenu.value
+}
+
+function closeMoreMenu(e: MouseEvent) {
+  if (menuRef.value && !menuRef.value.contains(e.target as Node)) {
+    showMoreMenu.value = false
   }
 }
 
@@ -156,6 +181,7 @@ watch(tagIds, async (value, oldValue) => {
 onMounted(async () => {
   await loadTags()
   await loadEntry()
+  document.addEventListener('click', closeMoreMenu)
 })
 </script>
 
@@ -170,13 +196,20 @@ onMounted(async () => {
 
         <div class="diary-scene__meta">
           <p class="diary-scene__date">{{ dateLabel }}</p>
-          <p v-if="saveHint" class="diary-scene__hint">{{ saveHint }}</p>
         </div>
 
         <div class="diary-scene__actions">
-          <GameButton v-if="isEditing" variant="ghost" @click="onDelete">
-            <PhTrash :size="16" />
-          </GameButton>
+          <div v-if="isEditing" class="more-menu-wrapper" ref="menuRef">
+            <GameButton variant="ghost" @click.stop="toggleMoreMenu">
+              <PhDotsThree :size="16" />
+            </GameButton>
+            <div v-if="showMoreMenu" class="more-menu">
+              <button type="button" class="more-menu__item more-menu__item--danger" @click="confirmDelete">
+                删除日记
+              </button>
+            </div>
+          </div>
+
           <GameButton variant="primary" :disabled="!canSave" @click="onSaveClick">
             {{ diaryStore.saving ? '保存中…' : '保存' }}
           </GameButton>
@@ -185,8 +218,13 @@ onMounted(async () => {
 
       <p v-if="loadError" class="diary-scene__error">{{ loadError }}</p>
 
+      <!-- 写作提示 -->
+      <p v-if="showWritingPrompt" class="diary-scene__writing-prompt">
+        今天发生了什么？不用修饰，说你想说的
+      </p>
+
       <DiaryEditor
-        v-else
+        v-else-if="!loadError"
         v-model="content"
         v-model:tag-ids="tagIds"
         :tags="tags"
@@ -194,9 +232,26 @@ onMounted(async () => {
       />
 
       <footer class="diary-scene__footer">
-        <span>{{ wordCount }} 字</span>
+        <span v-if="wordCount > 0" class="diary-scene__word-count">{{ wordCount }} 字</span>
+        <span class="diary-scene__save-dot" :class="`diary-scene__save-dot--${saveState}`" />
       </footer>
     </div>
+
+    <!-- 删除确认对话框 -->
+    <Teleport to="body">
+      <div v-if="showDeleteConfirm" class="confirm-overlay" @click.self="showDeleteConfirm = false">
+        <GlassPanel elevated class="confirm-dialog">
+          <p class="confirm-dialog__title">确定删除这篇日记吗？</p>
+          <p class="confirm-dialog__desc">删除后将无法恢复</p>
+          <div class="confirm-dialog__actions">
+            <GameButton variant="secondary" @click="showDeleteConfirm = false">取消</GameButton>
+            <GameButton variant="primary" class="confirm-dialog__danger-btn" @click="executeDelete">
+              确认删除
+            </GameButton>
+          </div>
+        </GlassPanel>
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -231,7 +286,6 @@ onMounted(async () => {
   min-width: 0;
   text-align: center;
 }
-
 .diary-scene__date {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
@@ -240,28 +294,143 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-.diary-scene__hint {
-  margin-top: 0.125rem;
-  font-size: 0.75rem;
-  color: var(--color-success);
-}
-
 .diary-scene__actions {
   display: flex;
   align-items: center;
   gap: 0.375rem;
+  position: relative;
 }
 
+/* 更多菜单 */
+.more-menu-wrapper {
+  position: relative;
+}
+.more-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 0.25rem;
+  min-width: 8rem;
+  padding: 0.375rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  z-index: 50;
+}
+.more-menu__item {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.more-menu__item:hover {
+  background: var(--color-bg-elevated-2);
+}
+.more-menu__item--danger {
+  color: var(--color-danger);
+}
+
+/* 写作提示 */
+.diary-scene__writing-prompt {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9375rem;
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+  font-family: var(--font-diary);
+  min-height: 12rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+/* 错误 */
 .diary-scene__error {
   color: var(--color-danger);
   font-size: 0.875rem;
 }
 
+/* 底部状态条 */
 .diary-scene__footer {
   margin-top: 0.75rem;
-  padding-top: 0.625rem;
-  border-top: 1px solid var(--color-border);
+  padding-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
   font-size: 0.75rem;
   color: var(--color-text-secondary);
+}
+.diary-scene__word-count {
+  opacity: 0.7;
+}
+
+/* 保存状态圆点 */
+.diary-scene__save-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  transition: background-color var(--motion-duration) var(--motion-ease);
+}
+.diary-scene__save-dot--idle {
+  background: transparent;
+}
+.diary-scene__save-dot--saving {
+  background: color-mix(in srgb, var(--color-text-secondary) 50%, transparent);
+}
+.diary-scene__save-dot--saved {
+  background: var(--color-success);
+}
+.diary-scene__save-dot--error {
+  background: var(--color-danger);
+}
+
+/* 删除确认弹窗 */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+}
+.confirm-dialog {
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  text-align: center;
+}
+.confirm-dialog__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.375rem;
+}
+.confirm-dialog__desc {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 1rem;
+}
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+.confirm-dialog__danger-btn {
+  background: var(--color-danger) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--color-danger) 35%, transparent) !important;
+}
+.confirm-dialog__danger-btn:hover {
+  opacity: 0.9;
 }
 </style>
