@@ -63,7 +63,8 @@ describe('App', () => {
     const wrapper = mount(App, {
       global: { plugins: [createPinia(), router] },
     })
-    expect(wrapper.text()).toContain('正在连接 AI 引擎')
+    expect(wrapper.text()).toContain('正在准备夜记')
+    expect(wrapper.text()).toContain('首次启动约需 3–5 秒，请稍候')
 
     await flushPromises()
     await router.isReady()
