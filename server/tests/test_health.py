@@ -36,6 +36,11 @@ def test_ready_returns_ok_after_core_bootstrap() -> None:
 
 def test_ready_returns_503_while_bootstrapping() -> None:
     with TestClient(create_app()) as client:
+        # Core bootstrap may finish before the first request on fast CI runners;
+        # force bootstrapping state to test the /ready contract deterministically.
+        client.app.state.bootstrap_done = False
+        client.app.state.container = None
+
         response = client.get("/ready")
         assert response.status_code == 503
         assert response.json()["status"] == "bootstrapping"
