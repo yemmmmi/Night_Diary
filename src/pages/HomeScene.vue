@@ -7,6 +7,7 @@ import BrandMark from '@/shared/components/BrandMark.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import { getStats, type AppStats } from '@/shared/api/stats'
 import type { DiaryEntry } from '@/shared/api/diary'
+import { homeSceneCopy as copy } from '@/shared/copy/homeScene'
 import { useDiaryStore } from '@/stores/diary'
 import {
   computeWritingStreak,
@@ -51,7 +52,7 @@ const weekColumns = computed(() => {
     }
   })
 
-  return [...days, { key: 'inbox', label: '收纳箱', dayNumber: null, entries: inbox }]
+  return [...days, { key: 'inbox', label: copy.inboxColumn, dayNumber: null, entries: inbox }]
 })
 
 const streak = computed(() => computeWritingStreak(diaryStore.entries))
@@ -70,16 +71,19 @@ const isEmpty = computed(
   () => !diaryStore.loading && diaryStore.entries.length === 0,
 )
 
+const writeButtonLabel = computed(() =>
+  hasTodayEntry.value ? copy.continueWriting : copy.writeDiary,
+)
+
+const footerStatsLabel = computed(() =>
+  copy.footerStats(stats.value?.diary_count ?? '\u2014', stats.value?.analysis_count ?? '\u2014'),
+)
+
 function statusClass(status: ReturnType<typeof diaryStatus>) {
   return `kanban-card__chip--${status}`
 }
 
 function openEntry(entry: DiaryEntry) {
-  const status = diaryStatus(entry)
-  if (status === 'reply' || status === 'pending') {
-    router.push(`/analysis/${entry.id}`)
-    return
-  }
   router.push(`/write/${entry.id}`)
 }
 
@@ -125,60 +129,54 @@ watch(
 
 <template>
   <main class="home-scene">
-    <!-- 品牌头 -->
     <header class="home-scene__header">
       <div class="home-scene__brand">
         <BrandMark class="home-scene__mark" />
         <div class="home-scene__brand-text">
-          <h1 class="home-scene__title">夜记</h1>
-          <p class="home-scene__streak" v-if="streak > 0">已连续记录 {{ streak }} 天</p>
+          <h1 class="home-scene__title">{{ copy.title }}</h1>
+          <p class="home-scene__streak" v-if="streak > 0">{{ copy.streak(streak) }}</p>
         </div>
       </div>
       <div class="home-scene__header-actions">
-        <RouterLink to="/settings" class="home-scene__icon-link" aria-label="设置">
+        <RouterLink to="/settings" class="home-scene__icon-link" :aria-label="copy.settingsAria">
           <PhCalendarBlank :size="18" />
         </RouterLink>
         <GameButton class="glow-pulse" @click="writeToday">
-          {{ hasTodayEntry ? '继续写' : '写日记' }}
+          {{ writeButtonLabel }}
         </GameButton>
       </div>
     </header>
 
-    <!-- AI 陪伴提示区 -->
     <div v-if="replyCount > 0" class="home-scene__companion">
-      <p v-if="replyCount > 0">你有 {{ replyCount }} 封 AI 回信可以查看</p>
-      <p v-if="!hasTodayEntry && !isEmpty" class="home-scene__nudge">今天还没写日记，想说点什么？</p>
+      <p v-if="replyCount > 0">{{ copy.replyBanner(replyCount) }}</p>
+      <p v-if="!hasTodayEntry && !isEmpty" class="home-scene__nudge">{{ copy.nudge }}</p>
     </div>
 
-    <!-- 空状态 -->
     <section v-if="isEmpty" class="home-scene__empty">
-      <p class="home-scene__empty-title">今天想记录些什么？</p>
-      <p class="home-scene__empty-desc">夜记会认真听你说，并在你需要的时候给你回信</p>
+      <p class="home-scene__empty-title">{{ copy.emptyTitle }}</p>
+      <p class="home-scene__empty-desc">{{ copy.emptyDesc }}</p>
       <GameButton variant="primary" class="home-scene__empty-cta" @click="writeToday">
-        开始写第一篇日记
+        {{ copy.emptyCta }}
       </GameButton>
     </section>
 
-    <!-- 周导航 -->
     <section v-if="!isEmpty" class="home-scene__week-nav">
       <button type="button" class="week-nav__btn" @click="weekOffset -= 1">
         <PhCaretLeft :size="14" />
-        上周
+        {{ copy.prevWeek }}
       </button>
       <span class="week-nav__label">{{ weekLabel }}</span>
       <button type="button" class="week-nav__btn" @click="weekOffset += 1">
-        下周
+        {{ copy.nextWeek }}
         <PhCaretRight :size="14" />
       </button>
     </section>
 
-    <!-- 错误条 -->
     <div v-if="diaryStore.error" class="home-scene__error-banner">
       <span>{{ diaryStore.error }}</span>
-      <GameButton variant="ghost" @click="refreshHome">重试</GameButton>
+      <GameButton variant="ghost" @click="refreshHome">{{ copy.retry }}</GameButton>
     </div>
 
-    <!-- Kanban -->
     <div v-if="!isEmpty" class="home-scene__kanban" :class="{ 'is-loading': diaryStore.loading }">
       <div v-for="column in weekColumns" :key="column.key" class="kanban-col">
         <div class="kanban-col__head">
@@ -210,13 +208,10 @@ watch(
       </div>
     </div>
 
-    <!-- 底部信息 + 回顾入口 -->
     <div v-if="!isEmpty" class="home-scene__footer">
-      <span class="home-scene__footer-stats">
-        共 {{ stats?.diary_count ?? '—' }} 篇日记 · {{ stats?.analysis_count ?? '—' }} 篇已收到回信
-      </span>
+      <span class="home-scene__footer-stats">{{ footerStatsLabel }}</span>
       <button type="button" class="home-scene__review-link" @click="goReview">
-        查看更多日记 →
+        {{ copy.reviewLink }}
       </button>
     </div>
   </main>
@@ -230,7 +225,6 @@ watch(
   margin: 0 auto;
 }
 
-/* 品牌头 */
 .home-scene__header {
   display: flex;
   flex-wrap: wrap;
@@ -286,7 +280,6 @@ watch(
   color: var(--color-text-primary);
 }
 
-/* AI 陪伴提示 */
 .home-scene__companion {
   margin-bottom: 0.875rem;
   padding: 0.625rem 0.875rem;
@@ -301,7 +294,6 @@ watch(
   color: var(--color-accent);
 }
 
-/* 空状态 */
 .home-scene__empty {
   display: flex;
   flex-direction: column;
@@ -327,7 +319,6 @@ watch(
   font-size: 0.9375rem;
 }
 
-/* 周导航 */
 .home-scene__week-nav {
   display: flex;
   align-items: center;
@@ -355,7 +346,6 @@ watch(
   color: var(--color-text-primary);
 }
 
-/* 错误条 */
 .home-scene__error-banner {
   display: flex;
   align-items: center;
@@ -370,7 +360,6 @@ watch(
   color: var(--color-danger);
 }
 
-/* Kanban */
 .home-scene__kanban.is-loading {
   opacity: 0.65;
   pointer-events: none;
@@ -460,7 +449,6 @@ watch(
   border-color: var(--color-accent-muted);
 }
 
-/* 底部信息 */
 .home-scene__footer {
   display: flex;
   align-items: center;

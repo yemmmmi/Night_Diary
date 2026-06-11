@@ -3,7 +3,9 @@ import { ref } from 'vue'
 import { isAxiosError } from 'axios'
 
 import {
+  deleteAnalysis,
   getAnalysis,
+  regenerateAnalysis,
   triggerAnalysis,
   type AnalysisRecord,
 } from '@/shared/api/analysis'
@@ -14,6 +16,8 @@ export const useAnalysisStore = defineStore('analysis', () => {
   const loading = ref(false)
   const triggering = ref(false)
   const error = ref<string | null>(null)
+
+  const deleting = ref(false)
 
   async function loadForDiary(diaryId: number): Promise<AnalysisRecord | null> {
     loading.value = true
@@ -47,6 +51,34 @@ export const useAnalysisStore = defineStore('analysis', () => {
     }
   }
 
+  async function regenerateForDiary(diaryId: number): Promise<AnalysisRecord> {
+    triggering.value = true
+    error.value = null
+    try {
+      current.value = await regenerateAnalysis(diaryId)
+      return current.value
+    } catch (err) {
+      error.value = formatApiError(err, '重新生成回信失败')
+      throw err
+    } finally {
+      triggering.value = false
+    }
+  }
+
+  async function removeForDiary(diaryId: number): Promise<void> {
+    deleting.value = true
+    error.value = null
+    try {
+      await deleteAnalysis(diaryId)
+      current.value = null
+    } catch (err) {
+      error.value = formatApiError(err, '删除回信失败')
+      throw err
+    } finally {
+      deleting.value = false
+    }
+  }
+
   function clear() {
     current.value = null
     error.value = null
@@ -56,9 +88,12 @@ export const useAnalysisStore = defineStore('analysis', () => {
     current,
     loading,
     triggering,
+    deleting,
     error,
     loadForDiary,
     triggerForDiary,
+    regenerateForDiary,
+    removeForDiary,
     clear,
   }
 })

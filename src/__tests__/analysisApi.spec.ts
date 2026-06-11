@@ -17,6 +17,10 @@ vi.mock('@/shared/composables/useBackend', () => ({
 describe('analysis API', () => {
   const get = vi.fn()
   const post = vi.fn()
+  const interceptors = {
+    request: { use: vi.fn() },
+    response: { use: vi.fn() },
+  }
 
   afterEach(() => {
     vi.clearAllMocks()
@@ -24,7 +28,7 @@ describe('analysis API', () => {
   })
 
   it('triggers analysis for a diary entry', async () => {
-    vi.mocked(axios.create).mockReturnValue({ get, post } as never)
+    vi.mocked(axios.create).mockReturnValue({ get, post, interceptors } as never)
     post.mockResolvedValue({
       data: {
         id: 10,
@@ -47,7 +51,7 @@ describe('analysis API', () => {
   })
 
   it('fetches analysis by diary id', async () => {
-    vi.mocked(axios.create).mockReturnValue({ get, post } as never)
+    vi.mocked(axios.create).mockReturnValue({ get, post, interceptors } as never)
     get.mockResolvedValue({
       data: {
         id: 10,

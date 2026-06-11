@@ -12,12 +12,25 @@ export interface AnalysisRecord {
   execution_tier: string | null
   activated_agents: string | null
   ai_ans: string | null
+  model_name: string | null
+  status_detail: string | null
 }
 
 export async function triggerAnalysis(diaryId: number): Promise<AnalysisRecord> {
   const client = await getHttpClient()
   const { data } = await client.post<AnalysisRecord>(`/api/v1/analysis/${diaryId}`)
   return data
+}
+
+export async function regenerateAnalysis(diaryId: number): Promise<AnalysisRecord> {
+  const client = await getHttpClient()
+  const { data } = await client.post<AnalysisRecord>(`/api/v1/analysis/${diaryId}/regenerate`)
+  return data
+}
+
+export async function deleteAnalysis(diaryId: number): Promise<void> {
+  const client = await getHttpClient()
+  await client.delete(`/api/v1/analysis/${diaryId}`)
 }
 
 export async function getAnalysis(diaryId: number): Promise<AnalysisRecord> {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
 import GameButton from '@/shared/components/GameButton.vue'
@@ -7,11 +7,15 @@ import GlassPanel from '@/shared/components/GlassPanel.vue'
 import {
   createModel,
   deleteModel,
+  getModelsStatus,
   listModels,
+  testModelConnection,
   updateModel,
   type ModelProvider,
+  type ModelStatusResponse,
   type ModelTier,
 } from '@/shared/api/models'
+import { formatApiError } from '@/shared/utils/apiError'
 
 const tierLabels: Record<ModelTier, string> = {
   light: '轻量模型',
@@ -21,10 +25,13 @@ const tierLabels: Record<ModelTier, string> = {
 }
 
 const models = ref<ModelProvider[]>([])
+const modelStatus = ref<ModelStatusResponse | null>(null)
 const loading = ref(true)
 const saving = ref(false)
+const testing = ref(false)
 const error = ref<string | null>(null)
 const success = ref<string | null>(null)
+const testResult = ref<string | null>(null)
 
 const form = reactive({
   model_name: '',
@@ -38,18 +45,35 @@ async function refresh() {
   loading.value = true
   error.value = null
   try {
-    models.value = await listModels()
+    const [list, status] = await Promise.all([listModels(), getModelsStatus()])
+    models.value = list
+    modelStatus.value = status
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '加载模型列表失败'
+    error.value = formatApiError(err, '加载模型列表失败')
   } finally {
     loading.value = false
   }
 }
 
+const activeTierSummary = computed(() => {
+  if (!modelStatus.value) return null
+  const configured = modelStatus.value.tiers.filter((t) => t.configured)
+  if (configured.length === 0) {
+    if (modelStatus.value.env_fallback) {
+      return `当前使用环境变量模型：${modelStatus.value.env_model_name ?? '未命名'}`
+    }
+    return '尚未配置任何 AI 模型，AI 回信将使用降级模板'
+  }
+  return configured
+    .map((t) => `${tierLabels[t.tier] ?? t.tier} → ${t.model_name}`)
+    .join('；')
+})
+
 async function submit() {
   saving.value = true
   error.value = null
   success.value = null
+  testResult.value = null
   try {
     await createModel({ ...form })
     success.value = '模型已保存'
@@ -57,9 +81,33 @@ async function submit() {
     form.api_key = ''
     await refresh()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '保存失败'
+    error.value = formatApiError(err, '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+async function runConnectionTest() {
+  if (!form.api_key.trim() || !form.base_url.trim()) {
+    testResult.value = '请先填写 API 地址和密钥'
+    return
+  }
+  testing.value = true
+  testResult.value = null
+  error.value = null
+  try {
+    const result = await testModelConnection({
+      model_name: form.model_name.trim() || 'deepseek-chat',
+      api_key: form.api_key,
+      base_url: form.base_url,
+    })
+    testResult.value = result.ok
+      ? result.message ?? '连接成功，可以保存'
+      : result.message ?? '连接失败'
+  } catch (err) {
+    testResult.value = formatApiError(err, '连接测试失败')
+  } finally {
+    testing.value = false
   }
 }
 
@@ -69,7 +117,7 @@ async function toggleActive(model: ModelProvider) {
     await updateModel(model.id, { is_active: !model.is_active })
     await refresh()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '更新失败'
+    error.value = formatApiError(err, '更新失败')
   }
 }
 
@@ -80,7 +128,7 @@ async function remove(model: ModelProvider) {
     await deleteModel(model.id)
     await refresh()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '删除失败'
+    error.value = formatApiError(err, '删除失败')
   }
 }
 
@@ -110,6 +158,12 @@ onMounted(() => {
           <p class="privacy-block__title">夜记完全运行在你的电脑上</p>
           <p class="privacy-block__text">日记内容、AI 模型调用、所有数据均不经过第三方服务器。无需注册、无需登录。</p>
         </div>
+      </GlassPanel>
+
+      <!-- 当前生效配置 -->
+      <GlassPanel v-if="activeTierSummary" class="settings-scene__status" elevated>
+        <h2 class="section-heading">当前生效</h2>
+        <p class="settings-scene__status-text">{{ activeTierSummary }}</p>
       </GlassPanel>
 
       <!-- 添加模型表单 -->
@@ -162,9 +216,13 @@ onMounted(() => {
           </label>
 
           <div class="settings-form__actions">
+            <GameButton type="button" variant="secondary" :disabled="testing" @click="runConnectionTest">
+              {{ testing ? '测试中…' : '测试连接' }}
+            </GameButton>
             <GameButton type="submit" variant="primary" :disabled="saving">
               {{ saving ? '保存中…' : '保存' }}
             </GameButton>
+            <p v-if="testResult" class="settings-form__msg settings-form__msg--test">{{ testResult }}</p>
             <p v-if="success" class="settings-form__msg settings-form__msg--ok">{{ success }}</p>
             <p v-if="error" class="settings-form__msg settings-form__msg--err">{{ error }}</p>
           </div>
@@ -342,6 +400,10 @@ onMounted(() => {
 .settings-form__msg--ok {
   color: var(--color-success);
 }
+.settings-form__msg--test {
+  color: var(--color-text-secondary);
+  flex-basis: 100%;
+}
 .settings-form__msg--err {
   color: var(--color-danger);
 }
@@ -396,5 +458,11 @@ onMounted(() => {
 .settings-scene__hint {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
+}
+
+.settings-scene__status-text {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-text-primary);
 }
 </style>

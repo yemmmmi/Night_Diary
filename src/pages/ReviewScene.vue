@@ -9,6 +9,7 @@ import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import type { DiaryEntry } from '@/shared/api/diary'
 import { useDiaryStore } from '@/stores/diary'
+import { formatApiError } from '@/shared/utils/apiError'
 import { diaryStatus, diaryStatusLabel, diarySummary } from '@/shared/utils/diaryFormat'
 
 type ReviewMode = 'calendar' | 'timeline'
@@ -20,6 +21,8 @@ const diaryStore = useDiaryStore()
 const mode = ref<ReviewMode>('timeline')
 const selectedDate = ref<string | null>(null)
 const selectedEntry = ref<DiaryEntry | null>(null)
+const showDeleteConfirm = ref(false)
+const deleteError = ref<string | null>(null)
 
 const entriesOnSelectedDate = computed(() => {
   if (!selectedDate.value) return []
@@ -59,6 +62,20 @@ function openWrite(entry: DiaryEntry) {
 
 function openAnalysis(entry: DiaryEntry) {
   router.push(`/analysis/${entry.id}`)
+}
+
+async function executeDelete() {
+  if (!selectedEntry.value) return
+  showDeleteConfirm.value = false
+  deleteError.value = null
+  const id = selectedEntry.value.id
+  try {
+    await diaryStore.removeEntry(id)
+    selectedEntry.value = null
+    await router.replace({ name: 'review' })
+  } catch (err) {
+    deleteError.value = formatApiError(err, '删除日记失败')
+  }
 }
 
 function goHome() {
@@ -120,6 +137,8 @@ watch(
       </div>
     </header>
 
+    <p v-if="deleteError" class="review-scene__delete-error">{{ deleteError }}</p>
+
     <div class="review-scene__layout">
       <section class="review-scene__main">
         <CalendarView
@@ -156,6 +175,13 @@ watch(
             >
               {{ selectedEntry.ai_ans?.trim() ? '查看回信' : '获取 AI 回信' }}
             </GameButton>
+            <GameButton
+              variant="ghost"
+              class="review-scene__delete-btn"
+              @click="showDeleteConfirm = true"
+            >
+              删除日记
+            </GameButton>
           </div>
         </GlassPanel>
       </aside>
@@ -176,6 +202,25 @@ watch(
         </GlassPanel>
       </aside>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="showDeleteConfirm"
+        class="confirm-overlay"
+        @click.self="showDeleteConfirm = false"
+      >
+        <GlassPanel elevated class="confirm-dialog">
+          <p class="confirm-dialog__title">确定删除这篇日记吗？</p>
+          <p class="confirm-dialog__desc">日记内容及关联的 AI 回信将被永久删除，此操作不可撤销。</p>
+          <div class="confirm-dialog__actions">
+            <GameButton variant="secondary" @click="showDeleteConfirm = false">取消</GameButton>
+            <GameButton variant="primary" class="confirm-dialog__danger-btn" @click="executeDelete">
+              确认删除
+            </GameButton>
+          </div>
+        </GlassPanel>
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -287,6 +332,57 @@ watch(
   font-size: 0.875rem;
   color: var(--color-text-primary);
   cursor: pointer;
+}
+
+.review-scene__delete-error {
+  font-size: 0.8125rem;
+  color: var(--color-danger);
+  margin-bottom: 0.75rem;
+}
+
+.review-scene__delete-btn {
+  color: var(--color-danger) !important;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+.confirm-dialog {
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.confirm-dialog__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.375rem;
+}
+
+.confirm-dialog__desc {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 1rem;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.confirm-dialog__danger-btn {
+  background: var(--color-danger) !important;
+  color: #fff !important;
 }
 
 .review-scene__multi-item:last-child {

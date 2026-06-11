@@ -15,6 +15,7 @@ const diaryStore = useDiaryStore()
 const analysisStore = useAnalysisStore()
 
 const loadError = ref<string | null>(null)
+const showDeleteConfirm = ref(false)
 
 const diaryId = computed(() => {
   const raw = route.params.diaryId
@@ -24,18 +25,22 @@ const diaryId = computed(() => {
 
 const entry = computed(() => diaryStore.currentEntry)
 
-const canTrigger = computed(() => {
-  if (!entry.value) return false
-  const status = diaryStatus(entry.value)
-  return status === 'pending' || status === 'reply'
-})
+const hasAiReply = computed(() =>
+  Boolean(
+    analysisStore.current?.ai_ans?.trim() ||
+      entry.value?.ai_ans?.trim(),
+  ),
+)
 
 const showTriggerButton = computed(
   () =>
-    canTrigger.value &&
-    !analysisStore.current &&
+    !hasAiReply.value &&
     !analysisStore.loading &&
-    !entry.value?.ai_ans?.trim(),
+    !analysisStore.triggering,
+)
+
+const showManageActions = computed(
+  () => hasAiReply.value && !analysisStore.triggering && !analysisStore.loading,
 )
 
 async function loadPage() {
@@ -64,8 +69,34 @@ async function onTrigger() {
   }
 }
 
+async function onRegenerate() {
+  if (!diaryId.value) return
+  try {
+    await analysisStore.regenerateForDiary(diaryId.value)
+    await diaryStore.fetchEntry(diaryId.value)
+  } catch {
+    // error surfaced via analysisStore.error
+  }
+}
+
+async function onDeleteConfirm() {
+  if (!diaryId.value) return
+  showDeleteConfirm.value = false
+  try {
+    await analysisStore.removeForDiary(diaryId.value)
+    await diaryStore.fetchEntry(diaryId.value)
+  } catch {
+    // error surfaced via analysisStore.error
+  }
+}
+
 function goBack() {
   router.push('/')
+}
+
+function goEdit() {
+  if (!diaryId.value) return
+  router.push(`/write/${diaryId.value}`)
 }
 
 onMounted(() => {
@@ -88,7 +119,7 @@ watch(
         返回
       </GameButton>
       <h1 class="analysis-scene__title">AI 回信</h1>
-      <span class="analysis-scene__spacer" />
+      <GameButton v-if="diaryId" variant="ghost" @click="goEdit">编辑日记</GameButton>
     </header>
 
     <p v-if="loadError" class="analysis-scene__error">{{ loadError }}</p>
@@ -113,8 +144,42 @@ watch(
           </GameButton>
           <p class="analysis-scene__hint">夜记会认真阅读你的日记，并写一封回信给你</p>
         </div>
+
+        <div v-if="showManageActions" class="analysis-scene__actions analysis-scene__actions--row">
+          <GameButton
+            variant="secondary"
+            :disabled="analysisStore.triggering || analysisStore.deleting"
+            @click="onRegenerate"
+          >
+            {{ analysisStore.triggering ? '重新生成中…' : '重新生成回信' }}
+          </GameButton>
+          <GameButton
+            variant="ghost"
+            :disabled="analysisStore.triggering || analysisStore.deleting"
+            @click="showDeleteConfirm = true"
+          >
+            删除回信
+          </GameButton>
+        </div>
       </template>
     </AIAnalysisPanel>
+
+    <Teleport to="body">
+      <div
+        v-if="showDeleteConfirm"
+        class="confirm-overlay"
+        @click.self="showDeleteConfirm = false"
+      >
+        <div class="confirm-dialog">
+          <p class="confirm-dialog__title">确定删除这封 AI 回信吗？</p>
+          <p class="confirm-dialog__desc">删除后可重新获取回信，日记内容不受影响</p>
+          <div class="confirm-dialog__actions">
+            <GameButton variant="secondary" @click="showDeleteConfirm = false">取消</GameButton>
+            <GameButton variant="primary" @click="onDeleteConfirm">确认删除</GameButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -162,9 +227,54 @@ watch(
   margin-top: 0.5rem;
 }
 
+.analysis-scene__actions--row {
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .analysis-scene__hint {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
   text-align: center;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+.confirm-dialog {
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border-radius: var(--radius-outer);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  text-align: center;
+}
+
+.confirm-dialog__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.375rem;
+}
+
+.confirm-dialog__desc {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 1rem;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
 }
 </style>

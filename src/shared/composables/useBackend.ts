@@ -252,7 +252,8 @@ function startCoreWatch(baseUrl: string): void {
 export function useBackend(): BackendState {
   const ready = ref(false)
   const coreReady = ref(false)
-  const loading = ref(true)
+  /** True only during the first health handshake; UI stays visible meanwhile. */
+  const loading = ref(false)
   const error = ref<string | null>(null)
   const baseUrl = ref('')
   const startupProgress = ref<number | null>(null)
@@ -260,10 +261,10 @@ export function useBackend(): BackendState {
   let unlistenProgress: (() => void) | undefined
 
   async function init(): Promise<void> {
-    loading.value = true
     error.value = null
     ready.value = false
     coreReady.value = false
+    loading.value = true
     startupProgress.value = null
     resetCoreReady()
 

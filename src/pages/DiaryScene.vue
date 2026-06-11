@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhArrowLeft, PhDotsThree } from '@phosphor-icons/vue'
+import { PhArrowLeft } from '@phosphor-icons/vue'
 
 import DiaryEditor from '@/features/diary/DiaryEditor.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { listTags, type Tag } from '@/shared/api/tags'
+import { diarySceneCopy as copy } from '@/shared/copy/diaryScene'
 import { useDiaryStore } from '@/stores/diary'
+import { formatApiError } from '@/shared/utils/apiError'
 import { countWordUnits, diaryStatus } from '@/shared/utils/diaryFormat'
 
 const route = useRoute()
@@ -18,10 +20,9 @@ const content = ref('')
 const tagIds = ref<number[]>([])
 const tags = ref<Tag[]>([])
 const loadError = ref<string | null>(null)
+const deleteError = ref<string | null>(null)
 const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const showDeleteConfirm = ref(false)
-const showMoreMenu = ref(false)
-const menuRef = ref<HTMLElement | null>(null)
 
 const diaryId = computed(() => {
   const raw = route.params.id
@@ -38,9 +39,7 @@ const wordCount = computed(() => countWordUnits(content.value))
 const showWritingHint = computed(() => !isEditing.value && !hasContent.value)
 
 const editorPlaceholder = computed(() =>
-  showWritingHint.value
-    ? '今天发生了什么？不用修饰，说你想说的'
-    : '写下此刻的想法…',
+  showWritingHint.value ? copy.placeholderNew : copy.placeholderContinue,
 )
 
 const dateLabel = computed(() => {
@@ -70,6 +69,12 @@ const entryStatus = computed(() =>
 
 const showAnalysisAction = computed(
   () => isEditing.value && hasContent.value && entryStatus.value !== 'draft',
+)
+
+const saveLabel = computed(() => (diaryStore.saving ? copy.saving : copy.save))
+
+const analysisLabel = computed(() =>
+  diaryStore.currentEntry?.ai_ans?.trim() ? copy.viewAiReply : copy.getAiReply,
 )
 
 let saveStateTimer: ReturnType<typeof setTimeout> | null = null
@@ -108,7 +113,7 @@ async function loadEntry() {
     tagIds.value = entry.tags.map((tag) => tag.id)
     saveState.value = 'idle'
   } catch (err) {
-    loadError.value = err instanceof Error ? err.message : '加载失败'
+    loadError.value = formatApiError(err, copy.loadFailed)
   }
 }
 
@@ -151,27 +156,18 @@ async function onSaveClick() {
 
 function confirmDelete() {
   showDeleteConfirm.value = true
-  showMoreMenu.value = false
 }
 
 async function executeDelete() {
   if (!diaryId.value) return
   showDeleteConfirm.value = false
+  deleteError.value = null
   try {
     await diaryStore.removeEntry(diaryId.value)
     await router.push('/')
-  } catch {
+  } catch (err) {
+    deleteError.value = formatApiError(err, copy.deleteFailed)
     setSaveState('error')
-  }
-}
-
-function toggleMoreMenu() {
-  showMoreMenu.value = !showMoreMenu.value
-}
-
-function closeMoreMenu(e: MouseEvent) {
-  if (menuRef.value && !menuRef.value.contains(e.target as Node)) {
-    showMoreMenu.value = false
   }
 }
 
@@ -200,7 +196,6 @@ watch(tagIds, async (value, oldValue) => {
 onMounted(async () => {
   await loadTags()
   await loadEntry()
-  document.addEventListener('click', closeMoreMenu)
 })
 </script>
 
@@ -210,7 +205,7 @@ onMounted(async () => {
       <header class="diary-scene__header">
         <GameButton variant="ghost" @click="goBack">
           <PhArrowLeft :size="16" />
-          返回
+          {{ copy.back }}
         </GameButton>
 
         <div class="diary-scene__meta">
@@ -218,24 +213,24 @@ onMounted(async () => {
         </div>
 
         <div class="diary-scene__actions">
-          <div v-if="isEditing" class="more-menu-wrapper" ref="menuRef">
-            <GameButton variant="ghost" @click.stop="toggleMoreMenu">
-              <PhDotsThree :size="16" />
-            </GameButton>
-            <div v-if="showMoreMenu" class="more-menu">
-              <button type="button" class="more-menu__item more-menu__item--danger" @click="confirmDelete">
-                删除日记
-              </button>
-            </div>
-          </div>
+          <GameButton
+            v-if="isEditing"
+            variant="ghost"
+            class="diary-scene__delete-btn"
+            @click="confirmDelete"
+          >
+            {{ copy.deleteDiary }}
+          </GameButton>
 
           <GameButton variant="primary" :disabled="!canSave" @click="onSaveClick">
-            {{ diaryStore.saving ? '保存中…' : '保存' }}
+            {{ saveLabel }}
           </GameButton>
         </div>
       </header>
 
       <p v-if="loadError" class="diary-scene__error">{{ loadError }}</p>
+      <p v-if="deleteError" class="diary-scene__error">{{ deleteError }}</p>
+      <p v-else-if="diaryStore.error" class="diary-scene__error">{{ diaryStore.error }}</p>
 
       <DiaryEditor
         v-if="!loadError"
@@ -247,29 +242,32 @@ onMounted(async () => {
       />
 
       <footer class="diary-scene__footer">
-        <span v-if="wordCount > 0" class="diary-scene__word-count">{{ wordCount }} 字</span>
+        <span v-if="wordCount > 0" class="diary-scene__word-count">
+          {{ wordCount }} {{ copy.wordUnit }}
+        </span>
         <GameButton
           v-if="showAnalysisAction"
           variant="secondary"
           class="diary-scene__analysis-btn"
           @click="goToAnalysis"
         >
-          {{ diaryStore.currentEntry?.ai_ans?.trim() ? '查看 AI 回信' : '获取 AI 回信' }}
+          {{ analysisLabel }}
         </GameButton>
         <span class="diary-scene__save-dot" :class="`diary-scene__save-dot--${saveState}`" />
       </footer>
     </div>
 
-    <!-- 删除确认对话框 -->
     <Teleport to="body">
       <div v-if="showDeleteConfirm" class="confirm-overlay" @click.self="showDeleteConfirm = false">
         <GlassPanel elevated class="confirm-dialog">
-          <p class="confirm-dialog__title">确定删除这篇日记吗？</p>
-          <p class="confirm-dialog__desc">删除后将无法恢复</p>
+          <p class="confirm-dialog__title">{{ copy.confirmDeleteTitle }}</p>
+          <p class="confirm-dialog__desc">{{ copy.confirmDeleteDesc }}</p>
           <div class="confirm-dialog__actions">
-            <GameButton variant="secondary" @click="showDeleteConfirm = false">取消</GameButton>
+            <GameButton variant="secondary" @click="showDeleteConfirm = false">
+              {{ copy.cancel }}
+            </GameButton>
             <GameButton variant="primary" class="confirm-dialog__danger-btn" @click="executeDelete">
-              确认删除
+              {{ copy.confirmDelete }}
             </GameButton>
           </div>
         </GlassPanel>
@@ -324,48 +322,17 @@ onMounted(async () => {
   position: relative;
 }
 
-/* 更多菜单 */
-.more-menu-wrapper {
-  position: relative;
-}
-.more-menu {
-  position: absolute;
-  right: 0;
-  top: 100%;
-  margin-top: 0.25rem;
-  min-width: 8rem;
-  padding: 0.375rem;
-  border-radius: 0.75rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  z-index: 50;
-}
-.more-menu__item {
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
+.diary-scene__delete-btn {
   font-size: 0.8125rem;
-  color: var(--color-text-primary);
-  cursor: pointer;
-}
-.more-menu__item:hover {
-  background: var(--color-bg-elevated-2);
-}
-.more-menu__item--danger {
-  color: var(--color-danger);
+  color: var(--color-danger) !important;
+  border-color: color-mix(in srgb, var(--color-danger) 35%, var(--color-border)) !important;
 }
 
-/* 错误 */
 .diary-scene__error {
   color: var(--color-danger);
   font-size: 0.875rem;
 }
 
-/* 底部状态条 */
 .diary-scene__footer {
   margin-top: 0.75rem;
   padding-top: 0.5rem;
@@ -385,7 +352,6 @@ onMounted(async () => {
   font-size: 0.8125rem;
 }
 
-/* 保存状态圆点 */
 .diary-scene__save-dot {
   width: 8px;
   height: 8px;
@@ -406,7 +372,6 @@ onMounted(async () => {
   background: var(--color-danger);
 }
 
-/* 删除确认弹窗 */
 .confirm-overlay {
   position: fixed;
   inset: 0;

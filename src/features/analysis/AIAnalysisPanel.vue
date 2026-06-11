@@ -53,6 +53,12 @@ const tierLabel = computed(() => {
   }
   return map[tier] ?? tier
 })
+
+const modelLabel = computed(() => props.analysis?.model_name?.trim() || null)
+
+const isFallback = computed(() => props.analysis?.agent_mode === 'fallback')
+
+const statusDetail = computed(() => props.analysis?.status_detail?.trim() || null)
 </script>
 
 <template>
@@ -74,7 +80,11 @@ const tierLabel = computed(() => {
           <PhEnvelopeSimple :size="20" weight="duotone" class="analysis-panel__letter-icon" />
           <div>
             <p class="analysis-panel__letter-title">夜记的回信</p>
-            <p v-if="tierLabel" class="analysis-panel__letter-meta">分析模式 · {{ tierLabel }}</p>
+            <p v-if="tierLabel || modelLabel" class="analysis-panel__letter-meta">
+              <template v-if="tierLabel">分析模式 · {{ tierLabel }}</template>
+              <template v-if="tierLabel && modelLabel"> · </template>
+              <template v-if="modelLabel">模型 · {{ modelLabel }}</template>
+            </p>
           </div>
         </div>
 
@@ -84,10 +94,19 @@ const tierLabel = computed(() => {
           <FeedbackButtons :analysis-id="analysis!.id" />
         </div>
 
-        <p v-if="analysis?.agent_mode === 'fallback'" class="analysis-panel__fallback-hint">
-          本次未成功调用 AI 模型（可能是未配置或未启用模型）。请前往
+        <p v-if="isFallback" class="analysis-panel__fallback-hint">
+          <strong>未成功调用 AI 模型。</strong>
+          <span v-if="statusDetail">{{ statusDetail }}</span>
+          <span v-else>可能是未配置或未启用模型。</span>
+          请前往
           <RouterLink to="/settings">设置</RouterLink>
           添加 DeepSeek API 并勾选「设为该层级的当前使用模型」，然后重新获取回信。
+        </p>
+
+        <p v-else-if="!modelLabel && hasAnalysis" class="analysis-panel__fallback-hint">
+          当前层级未配置活跃模型，可能使用了环境变量或降级模式。请前往
+          <RouterLink to="/settings">设置</RouterLink>
+          确认模型配置。
         </p>
 
         <div v-if="analysis?.token_cost != null" class="analysis-panel__tokens">

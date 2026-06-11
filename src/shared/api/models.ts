@@ -12,6 +12,20 @@ export interface ModelProvider {
   has_api_key: boolean
 }
 
+export interface ModelTierStatus {
+  tier: ModelTier
+  configured: boolean
+  model_name: string | null
+  base_url: string | null
+  is_active: boolean
+}
+
+export interface ModelStatusResponse {
+  tiers: ModelTierStatus[]
+  env_fallback: boolean
+  env_model_name: string | null
+}
+
 export interface ModelCreatePayload {
   model_name: string
   api_key: string
@@ -28,9 +42,26 @@ export interface ModelUpdatePayload {
   is_active?: boolean
 }
 
+export interface ModelTestConnectionPayload {
+  model_name: string
+  api_key: string
+  base_url: string
+}
+
+export interface ModelTestConnectionResult {
+  ok: boolean
+  message: string | null
+}
+
 export async function listModels(): Promise<ModelProvider[]> {
   const client = await getHttpClient()
   const { data } = await client.get<ModelProvider[]>('/api/v1/models')
+  return data
+}
+
+export async function getModelsStatus(): Promise<ModelStatusResponse> {
+  const client = await getHttpClient()
+  const { data } = await client.get<ModelStatusResponse>('/api/v1/models/status')
   return data
 }
 
@@ -52,4 +83,15 @@ export async function updateModel(
 export async function deleteModel(modelId: number): Promise<void> {
   const client = await getHttpClient()
   await client.delete(`/api/v1/models/${modelId}`)
+}
+
+export async function testModelConnection(
+  payload: ModelTestConnectionPayload,
+): Promise<ModelTestConnectionResult> {
+  const client = await getHttpClient()
+  const { data } = await client.post<ModelTestConnectionResult>(
+    '/api/v1/models/test-connection',
+    payload,
+  )
+  return data
 }
