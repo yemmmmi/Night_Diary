@@ -75,6 +75,11 @@ function statusClass(status: ReturnType<typeof diaryStatus>) {
 }
 
 function openEntry(entry: DiaryEntry) {
+  const status = diaryStatus(entry)
+  if (status === 'reply' || status === 'pending') {
+    router.push(`/analysis/${entry.id}`)
+    return
+  }
   router.push(`/write/${entry.id}`)
 }
 

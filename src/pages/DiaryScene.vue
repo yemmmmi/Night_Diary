@@ -8,7 +8,7 @@ import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { listTags, type Tag } from '@/shared/api/tags'
 import { useDiaryStore } from '@/stores/diary'
-import { countWordUnits } from '@/shared/utils/diaryFormat'
+import { countWordUnits, diaryStatus } from '@/shared/utils/diaryFormat'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,7 +35,13 @@ const diaryId = computed(() => {
 const isEditing = computed(() => diaryId.value != null)
 const hasContent = computed(() => content.value.trim().length > 0)
 const wordCount = computed(() => countWordUnits(content.value))
-const showWritingPrompt = computed(() => !isEditing.value && !hasContent.value)
+const showWritingHint = computed(() => !isEditing.value && !hasContent.value)
+
+const editorPlaceholder = computed(() =>
+  showWritingHint.value
+    ? '今天发生了什么？不用修饰，说你想说的'
+    : '写下此刻的想法…',
+)
 
 const dateLabel = computed(() => {
   const entryDate = diaryStore.currentEntry?.date
@@ -57,6 +63,14 @@ const dateLabel = computed(() => {
 })
 
 const canSave = computed(() => hasContent.value && !diaryStore.saving)
+
+const entryStatus = computed(() =>
+  diaryStore.currentEntry ? diaryStatus(diaryStore.currentEntry) : 'draft',
+)
+
+const showAnalysisAction = computed(
+  () => isEditing.value && hasContent.value && entryStatus.value !== 'draft',
+)
 
 let saveStateTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -165,6 +179,11 @@ function goBack() {
   router.push('/')
 }
 
+function goToAnalysis() {
+  if (!diaryId.value) return
+  router.push(`/analysis/${diaryId.value}`)
+}
+
 watch(
   () => route.fullPath,
   () => {
@@ -218,21 +237,25 @@ onMounted(async () => {
 
       <p v-if="loadError" class="diary-scene__error">{{ loadError }}</p>
 
-      <!-- 写作提示 -->
-      <p v-if="showWritingPrompt" class="diary-scene__writing-prompt">
-        今天发生了什么？不用修饰，说你想说的
-      </p>
-
       <DiaryEditor
-        v-else-if="!loadError"
+        v-if="!loadError"
         v-model="content"
         v-model:tag-ids="tagIds"
         :tags="tags"
+        :placeholder="editorPlaceholder"
         @autosave="onAutosave"
       />
 
       <footer class="diary-scene__footer">
         <span v-if="wordCount > 0" class="diary-scene__word-count">{{ wordCount }} 字</span>
+        <GameButton
+          v-if="showAnalysisAction"
+          variant="secondary"
+          class="diary-scene__analysis-btn"
+          @click="goToAnalysis"
+        >
+          {{ diaryStore.currentEntry?.ai_ans?.trim() ? '查看 AI 回信' : '获取 AI 回信' }}
+        </GameButton>
         <span class="diary-scene__save-dot" :class="`diary-scene__save-dot--${saveState}`" />
       </footer>
     </div>
@@ -336,21 +359,6 @@ onMounted(async () => {
   color: var(--color-danger);
 }
 
-/* 写作提示 */
-.diary-scene__writing-prompt {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9375rem;
-  color: var(--color-text-secondary);
-  opacity: 0.6;
-  font-family: var(--font-diary);
-  min-height: 12rem;
-  text-align: center;
-  padding: 2rem;
-}
-
 /* 错误 */
 .diary-scene__error {
   color: var(--color-danger);
@@ -370,6 +378,11 @@ onMounted(async () => {
 }
 .diary-scene__word-count {
   opacity: 0.7;
+  margin-right: auto;
+}
+
+.diary-scene__analysis-btn {
+  font-size: 0.8125rem;
 }
 
 /* 保存状态圆点 */
