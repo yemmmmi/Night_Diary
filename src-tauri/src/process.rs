@@ -273,6 +273,28 @@ pub fn health_poll(port: u16, app: Option<&tauri::AppHandle>) -> Result<(), Stri
     ))
 }
 
+/// Dev-only: port for attaching to a running `make dev-api` backend.
+pub fn dev_backend_port() -> Option<u16> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    std::env::var("NIGHTDIARY_DEV_BACKEND")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .or(Some(8000))
+}
+
+/// If a dev backend already listens on the configured port, return its port.
+pub fn try_attach_dev_backend() -> Option<u16> {
+    let port = dev_backend_port()?;
+    if health_check_once(port) {
+        eprintln!("[tauri] attached to existing dev backend on port {port}");
+        Some(port)
+    } else {
+        None
+    }
+}
+
 /// Ask the backend to shut down gracefully, then terminate the child process.
 pub fn graceful_shutdown(port: u16, child: &mut Child) {
     let shutdown_url = format!("http://127.0.0.1:{port}/shutdown");

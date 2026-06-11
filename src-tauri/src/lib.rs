@@ -2,7 +2,7 @@ mod process;
 
 use process::{
     allocate_port, default_data_dir, graceful_shutdown, health_check_once, health_poll,
-    spawn_backend, BackendProcess,
+    spawn_backend, try_attach_dev_backend, BackendProcess,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -12,8 +12,10 @@ pub struct AppState {
     pub backend_port: u16,
     pub data_dir: String,
     pub backend: Mutex<Option<BackendProcess>>,
-    /// Set after the first successful /health poll in the startup thread.
+    /// Uvicorn listening (/health OK) — frontend shell may show.
     pub backend_ready: AtomicBool,
+    /// Attached to external dev backend — do not spawn or shutdown on exit.
+    pub external_backend: AtomicBool,
 }
 
 #[tauri::command]
@@ -31,7 +33,6 @@ fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
-/// Probe backend /health via native HTTP (avoids WebView CORS on localhost ↔ 127.0.0.1).
 #[tauri::command]
 fn check_backend_health(state: State<'_, AppState>) -> bool {
     if state.backend_ready.load(Ordering::SeqCst) {
@@ -43,6 +44,25 @@ fn check_backend_health(state: State<'_, AppState>) -> bool {
 #[tauri::command]
 fn is_backend_ready(state: State<'_, AppState>) -> bool {
     state.backend_ready.load(Ordering::SeqCst)
+}
+
+#[tauri::command]
+fn is_core_ready(state: State<'_, AppState>) -> bool {
+    if state.external_backend.load(Ordering::SeqCst) {
+        return ready_check_once(state.backend_port);
+    }
+    state.backend_ready.load(Ordering::SeqCst)
+}
+
+fn ready_check_once(port: u16) -> bool {
+    let url = format!("http://127.0.0.1:{port}/ready");
+    reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_millis(300))
+        .no_proxy()
+        .build()
+        .ok()
+        .and_then(|client| client.get(&url).send().ok())
+        .is_some_and(|r| r.status().is_success())
 }
 
 fn splash_path() -> std::path::PathBuf {
@@ -67,6 +87,23 @@ fn open_splash(app: &tauri::AppHandle) -> tauri::Result<()> {
         .build()?;
 
     Ok(())
+}
+
+fn finish_external_attach(app: tauri::AppHandle, port: u16) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.backend_ready.store(true, Ordering::SeqCst);
+        state.external_backend.store(true, Ordering::SeqCst);
+    }
+    let _ = app.emit("backend-ready", port);
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(splash) = handle.get_webview_window("splash") {
+            let _ = splash.close();
+        }
+        if let Some(main) = handle.get_webview_window("main") {
+            let _ = main.set_focus();
+        }
+    });
 }
 
 fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
@@ -104,11 +141,12 @@ fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
         if let Err(err) = startup_result {
             eprintln!("backend startup failed: {err}");
             if let Some(state) = app.try_state::<AppState>() {
-                let port = state.backend_port;
-                let mut guard = state.backend.lock().expect("backend lock poisoned");
-                if let Some(ref mut backend) = *guard {
-                    graceful_shutdown(port, backend.child_mut());
-                    *guard = None;
+                if !state.external_backend.load(Ordering::SeqCst) {
+                    let port = state.backend_port;
+                    let mut guard = state.backend.lock().expect("backend lock poisoned");
+                    if let Some(ref mut backend) = *guard {
+                        graceful_shutdown(port, backend.child_mut());
+                    }
                 }
             }
             let app_ui = app.clone();
@@ -127,8 +165,11 @@ fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let backend_port = allocate_port();
     let data_dir = default_data_dir();
+    let (backend_port, use_external) = match try_attach_dev_backend() {
+        Some(port) => (port, true),
+        None => (allocate_port(), false),
+    };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -137,20 +178,26 @@ pub fn run() {
             data_dir: data_dir.clone(),
             backend: Mutex::new(None),
             backend_ready: AtomicBool::new(false),
+            external_backend: AtomicBool::new(use_external),
         })
         .invoke_handler(tauri::generate_handler![
             get_backend_port,
             get_data_dir,
             get_app_version,
             check_backend_health,
-            is_backend_ready
+            is_backend_ready,
+            is_core_ready
         ])
         .setup(move |app| {
             open_splash(app.handle())?;
             if let Some(main) = app.get_webview_window("main") {
                 let _ = main.show();
             }
-            start_backend(app.handle().clone(), backend_port, data_dir);
+            if use_external {
+                finish_external_attach(app.handle().clone(), backend_port);
+            } else {
+                start_backend(app.handle().clone(), backend_port, data_dir);
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -158,6 +205,9 @@ pub fn run() {
         .run(|app_handle, event| {
             if let RunEvent::Exit = event {
                 if let Some(state) = app_handle.try_state::<AppState>() {
+                    if state.external_backend.load(Ordering::SeqCst) {
+                        return;
+                    }
                     let port = state.backend_port;
                     let mut guard = state.backend.lock().expect("backend lock poisoned");
                     if let Some(ref mut backend) = *guard {
