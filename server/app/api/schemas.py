@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date as DateType, datetime
+import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -18,7 +18,7 @@ class TagBrief(BaseModel):
 
 class DiaryCreateRequest(BaseModel):
     content: str = Field(min_length=1)
-    date: DateType | None = None
+    date: datetime.date | None = None
     weather: str | None = None
     tag_ids: list[int] = Field(default_factory=list)
 
@@ -32,11 +32,11 @@ class DiaryUpdateRequest(BaseModel):
 class DiaryResponse(BaseModel):
     id: int
     content: str | None
-    date: DateType | None
+    date: datetime.date | None
     weather: str | None
     ai_ans: str | None
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
     tags: list[TagBrief] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
@@ -45,7 +45,7 @@ class DiaryResponse(BaseModel):
 class AnalysisResponse(BaseModel):
     id: int
     diary_id: int
-    created_at: datetime
+    created_at: datetime.datetime
     token_cost: int | None
     cache_hit_tokens: int | None
     cache_miss_tokens: int | None
@@ -73,7 +73,7 @@ class FeedbackResponse(BaseModel):
     feedback_type: str
     response_style: str
     reason: str | None
-    created_at: datetime
+    created_at: datetime.datetime
 
     model_config = {"from_attributes": True}
 
@@ -88,7 +88,7 @@ class TagResponse(BaseModel):
     name: str
     color: str
     usage_count: int
-    created_at: datetime
+    created_at: datetime.datetime
 
     model_config = {"from_attributes": True}
 
