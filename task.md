@@ -826,17 +826,17 @@ AI 分析结果展示 + 反馈互动 + 历史回顾（日历/时间线）。
 
 #### Tasks
 
-- [ ] 1. [核心] `src/pages/SettingsScene.vue` — 设置面板：分区平滑展开（通用/LLM/备份/关于）
-- [ ] 2. [核心] `src/features/settings/LLMConfig.vue` — LLM 配置表单：添加/编辑/删除 provider，设为默认
-- [ ] 3. [核心] `src/features/settings/BackupManager.vue` — 备份管理：手动备份、自动备份开关、备份列表、恢复
-- [ ] 4. [核心] `src/features/settings/ThemeToggle.vue` — 主题切换：日/夜/跟随系统
-- [ ] 5. [核心] `src/pages/OnboardingScene.vue` — 首次使用叙事式引导（非表单！）：AI 引擎下载进度、设置昵称/偏好、介绍核心功能
-- [ ] 6. [核心] `src/stores/settings.ts` — Pinia store：应用设置持久化（通过 Tauri 文件 API 或 localStorage）
-- [ ] 7. [核心] `src/shared/api/settings.ts` — API 模块：models CRUD, backup, stats
-- [ ] 8. [核心] `src/composables/useTheme.ts` — 主题 composable：日/夜/auto，平滑过渡
-- [ ] 9. [核心] `src/composables/useSound.ts` — 音效 composable：Web Audio API，默认关闭
-- [ ] 10. [路由] 注册 `/settings` → SettingsScene, `/settings/llm`, `/settings/backup`, `/onboarding` → OnboardingScene
-- [ ] 11. [配置] `src/router/index.ts` — Vue Router 路由配置 + 首次使用重定向（无日记 → onboarding）
+- [x] 1. [核心] `src/pages/SettingsScene.vue` — 设置面板：分区平滑展开（通用/LLM/备份/关于）
+- [x] 2. [核心] `src/features/settings/LLMConfig.vue` — LLM 配置表单：添加/编辑/删除 provider，设为默认
+- [x] 3. [核心] `src/features/settings/BackupManager.vue` — 备份管理：手动备份、自动备份开关、备份列表、恢复
+- [x] 4. [核心] `src/features/settings/ThemeToggle.vue` — 主题切换：日/夜/跟随系统
+- [x] 5. [核心] `src/pages/OnboardingScene.vue` — 首次使用叙事式引导（非表单！）：AI 引擎下载进度、设置昵称/偏好、介绍核心功能
+- [x] 6. [核心] `src/stores/settings.ts` — Pinia store：应用设置持久化（通过 Tauri 文件 API 或 localStorage）
+- [x] 7. [核心] `src/shared/api/settings.ts` — API 模块：models CRUD, backup, stats
+- [x] 8. [核心] `src/composables/useTheme.ts` — 主题 composable：日/夜/auto，平滑过渡
+- [x] 9. [核心] `src/composables/useSound.ts` — 音效 composable：Web Audio API，默认关闭
+- [x] 10. [路由] 注册 `/settings` → SettingsScene, `/settings/llm`, `/settings/backup`, `/onboarding` → OnboardingScene
+- [x] 11. [配置] `src/router/index.ts` — Vue Router 路由配置 + 首次使用重定向（无日记 → onboarding）
 
 #### Verification
 

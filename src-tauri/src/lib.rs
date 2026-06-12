@@ -1,4 +1,7 @@
+mod backup;
 mod process;
+
+use backup::{create_backup, list_backups, restore_backup};
 
 use process::{
     allocate_port, default_data_dir, graceful_shutdown, health_check_once, health_poll,
@@ -186,7 +189,10 @@ pub fn run() {
             get_app_version,
             check_backend_health,
             is_backend_ready,
-            is_core_ready
+            is_core_ready,
+            list_backups,
+            create_backup,
+            restore_backup,
         ])
         .setup(move |app| {
             open_splash(app.handle())?;
