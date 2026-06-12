@@ -14,7 +14,7 @@ const error = ref<string | null>(null)
 
 const form = reactive({
   name: '',
-  color: PRESET_COLORS[0],
+  color: PRESET_COLORS[0] as string,
 })
 
 async function refresh() {
