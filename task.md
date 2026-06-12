@@ -15,7 +15,7 @@
 
 **累计 PR 数**：24（Phase A:5 + B:11 + C:3 + D:4 + E:1）
 
-**当前进度**：18/24 PR 已合并（Phase C ✅ 全部完成：C-1 #26、C-2 #27、C-3 #28）。下一步 **D-1** `feature/design-system`。
+**当前进度**：23/24 PR 已合并（Phase D ✅ 全部完成：D-1 #29、D-2 #31、D-3 #32、D-4 #33）。下一步 **E-1** 交付打包。
 
 **架构方案**：`docs/本地化桌面端重构方案.md`（本文件仅维护施工清单，不重复论述设计决策）
 
@@ -707,7 +707,7 @@ LLM 配置管理：ModelProvider CRUD + Fernet 加密 + LLMFactory。统一所�
 
 ---
 
-## PR: phase-d-1-design-system ▶
+## PR: phase-d-1-design-system ✅
 
 - **Branch**: `feature/design-system`
 - **Depends on**: Phase C 全部完成 ✅
@@ -793,16 +793,16 @@ AI 分析结果展示 + 反馈互动 + 历史回顾（日历/时间线）。
 
 #### Tasks
 
-- [ ] 1. [核心] `src/pages/AnalysisScene.vue` — AI 回应以"来信"样式淡入；打字指示器；点赞/踩按钮（满足感动画）
-- [ ] 2. [核心] `src/features/analysis/AIAnalysisPanel.vue` — AI 分析面板组件：展示 response、token 消耗、执行 tier
-- [ ] 3. [核心] `src/features/analysis/FeedbackButtons.vue` — 赞/踩按钮：`+1`/`-1` 状态机；点击动画
-- [ ] 4. [核心] `src/shared/api/analysis.ts` — API 模块：trigger/get
-- [ ] 5. [核心] `src/shared/api/feedback.ts` — API 模块：submit
-- [ ] 6. [核心] `src/pages/ReviewScene.vue` — 日历/时间线视图："书架"隐喻（每月一本书）；点击日期展开条目详情 + AI 分析
-- [ ] 7. [核心] `src/features/review/CalendarView.vue` — 日历组件，有日记的日期用贴纸标记
-- [ ] 8. [核心] `src/features/review/TimelineView.vue` — 时间线组件，日记条目按日期排列
-- [ ] 9. [核心] `src/stores/analysis.ts` — Pinia store：当前分析状态
-- [ ] 10. [路由] 注册 `/analysis/:diaryId` → AnalysisScene, `/review` → ReviewScene, `/review/:diaryId` → ReviewScene + 详情
+- [x] 1. [核心] `src/pages/AnalysisScene.vue` — AI 回应以"来信"样式淡入；打字指示器；点赞/踩按钮（满足感动画）
+- [x] 2. [核心] `src/features/analysis/AIAnalysisPanel.vue` — AI 分析面板组件：展示 response、token 消耗、执行 tier
+- [x] 3. [核心] `src/features/analysis/FeedbackButtons.vue` — 赞/踩按钮：`+1`/`-1` 状态机；点击动画
+- [x] 4. [核心] `src/shared/api/analysis.ts` — API 模块：trigger/get
+- [x] 5. [核心] `src/shared/api/feedback.ts` — API 模块：submit
+- [x] 6. [核心] `src/pages/ReviewScene.vue` — 日历/时间线视图："书架"隐喻（每月一本书）；点击日期展开条目详情 + AI 分析
+- [x] 7. [核心] `src/features/review/CalendarView.vue` — 日历组件，有日记的日期用贴纸标记
+- [x] 8. [核心] `src/features/review/TimelineView.vue` — 时间线组件，日记条目按日期排列
+- [x] 9. [核心] `src/stores/analysis.ts` — Pinia store：当前分析状态
+- [x] 10. [路由] 注册 `/analysis/:diaryId` → AnalysisScene, `/review` → ReviewScene, `/review/:diaryId` → ReviewScene + 详情
 
 #### Verification
 
@@ -846,7 +846,7 @@ AI 分析结果展示 + 反馈互动 + 历史回顾（日历/时间线）。
 
 ---
 
-## PR: phase-e-1-delivery
+## PR: phase-e-1-delivery ▶
 
 - **Branch**: `chore/delivery`
 - **Depends on**: Phase D 全部完成
