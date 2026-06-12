@@ -44,6 +44,28 @@ def test_models_test_connection_failure(api_client: TestClient) -> None:
     assert "405" in (body["message"] or "")
 
 
+def test_models_test_stored_connection(api_client: TestClient) -> None:
+    with patch("app.services.model_service.validate_model_connection", return_value=None):
+        created = api_client.post(
+            "/api/v1/models",
+            json={
+                "model_name": "deepseek-chat",
+                "api_key": "sk-test",
+                "base_url": "https://api.deepseek.com/v1",
+                "tier": "default",
+            },
+        )
+    model_id = created.json()["id"]
+
+    with patch(
+        "app.services.model_service.test_stored_model_connection",
+        return_value=None,
+    ):
+        response = api_client.post(f"/api/v1/models/{model_id}/test-connection")
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
 def test_models_status(api_client: TestClient) -> None:
     response = api_client.get("/api/v1/models/status")
     assert response.status_code == 200

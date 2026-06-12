@@ -1,267 +1,152 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
-import GameButton from '@/shared/components/GameButton.vue'
+import BackupManager from '@/features/settings/BackupManager.vue'
+import LLMConfig from '@/features/settings/LLMConfig.vue'
+import SettingsSection from '@/features/settings/SettingsSection.vue'
+import TagManager from '@/features/settings/TagManager.vue'
+import ThemeToggle from '@/features/settings/ThemeToggle.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
-import {
-  createModel,
-  deleteModel,
-  getModelsStatus,
-  listModels,
-  testModelConnection,
-  updateModel,
-  type ModelProvider,
-  type ModelStatusResponse,
-  type ModelTier,
-} from '@/shared/api/models'
-import { formatApiError } from '@/shared/utils/apiError'
+import { getAppVersion, getStats, type AppStats } from '@/shared/api/settings'
+import { useSettingsStore } from '@/stores/settings'
 
-const tierLabels: Record<ModelTier, string> = {
-  light: '轻量模型',
-  medium: '标准模型',
-  heavy: '深度分析模型',
-  default: '默认使用',
-}
+const route = useRoute()
+const router = useRouter()
+const settings = useSettingsStore()
+settings.load()
 
-const models = ref<ModelProvider[]>([])
-const modelStatus = ref<ModelStatusResponse | null>(null)
-const loading = ref(true)
-const saving = ref(false)
-const testing = ref(false)
-const error = ref<string | null>(null)
-const success = ref<string | null>(null)
-const testResult = ref<string | null>(null)
+const openSection = ref('general')
+const usageStats = ref<AppStats | null>(null)
+const statsLoading = ref(true)
+const appVersion = ref<string | null>(null)
 
-const form = reactive({
-  model_name: '',
-  api_key: '',
-  base_url: 'https://api.deepseek.com/v1',
-  tier: 'default' as ModelTier,
-  is_active: true,
-})
+const sectionIds = ['general', 'llm', 'tags', 'backup', 'about'] as const
 
-async function refresh() {
-  loading.value = true
-  error.value = null
-  try {
-    const [list, status] = await Promise.all([listModels(), getModelsStatus()])
-    models.value = list
-    modelStatus.value = status
-  } catch (err) {
-    error.value = formatApiError(err, '加载模型列表失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-const activeTierSummary = computed(() => {
-  if (!modelStatus.value) return null
-  const configured = modelStatus.value.tiers.filter((t) => t.configured)
-  if (configured.length === 0) {
-    if (modelStatus.value.env_fallback) {
-      return `当前使用环境变量模型：${modelStatus.value.env_model_name ?? '未命名'}`
-    }
-    return '尚未配置任何 AI 模型，AI 回信将使用降级模板'
-  }
-  return configured
-    .map((t) => `${tierLabels[t.tier] ?? t.tier} → ${t.model_name}`)
-    .join('；')
-})
-
-async function submit() {
-  saving.value = true
-  error.value = null
-  success.value = null
-  testResult.value = null
-  try {
-    await createModel({ ...form })
-    success.value = '模型已保存'
-    form.model_name = ''
-    form.api_key = ''
-    await refresh()
-  } catch (err) {
-    error.value = formatApiError(err, '保存失败')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function runConnectionTest() {
-  if (!form.api_key.trim() || !form.base_url.trim()) {
-    testResult.value = '请先填写 API 地址和密钥'
+function syncSectionFromRoute() {
+  const hash = route.hash.replace('#', '')
+  if (sectionIds.includes(hash as (typeof sectionIds)[number])) {
+    openSection.value = hash
     return
   }
-  testing.value = true
-  testResult.value = null
-  error.value = null
+  if (route.path.endsWith('/llm')) openSection.value = 'llm'
+  else if (route.path.endsWith('/backup')) openSection.value = 'backup'
+}
+
+function toggleSection(id: string) {
+  openSection.value = openSection.value === id ? '' : id
+  router.replace({ path: '/settings', hash: openSection.value ? `#${openSection.value}` : undefined })
+}
+
+async function loadAbout() {
+  statsLoading.value = true
   try {
-    const result = await testModelConnection({
-      model_name: form.model_name.trim() || 'deepseek-chat',
-      api_key: form.api_key,
-      base_url: form.base_url,
-    })
-    testResult.value = result.ok
-      ? result.message ?? '连接成功，可以保存'
-      : result.message ?? '连接失败'
-  } catch (err) {
-    testResult.value = formatApiError(err, '连接测试失败')
+    usageStats.value = await getStats()
+  } catch {
+    usageStats.value = null
   } finally {
-    testing.value = false
+    statsLoading.value = false
   }
-}
-
-async function toggleActive(model: ModelProvider) {
-  error.value = null
-  try {
-    await updateModel(model.id, { is_active: !model.is_active })
-    await refresh()
-  } catch (err) {
-    error.value = formatApiError(err, '更新失败')
-  }
-}
-
-async function remove(model: ModelProvider) {
-  if (!window.confirm(`确定要移除模型「${model.model_name}」吗？`)) return
-  error.value = null
-  try {
-    await deleteModel(model.id)
-    await refresh()
-  } catch (err) {
-    error.value = formatApiError(err, '删除失败')
-  }
+  appVersion.value = await getAppVersion()
 }
 
 onMounted(() => {
-  void refresh()
+  syncSectionFromRoute()
+  void loadAbout()
 })
+
+watch(
+  () => [route.hash, route.path],
+  () => {
+    syncSectionFromRoute()
+  },
+)
 </script>
 
 <template>
   <main class="settings-scene">
     <div class="settings-scene__container">
-      <!-- 页头 -->
       <header class="settings-scene__header">
         <RouterLink to="/" class="settings-scene__back">
           <PhArrowLeft :size="16" />
           返回
         </RouterLink>
         <div class="settings-scene__title-area">
-          <h1 class="settings-scene__title">AI 模型设置</h1>
-          <p class="settings-scene__subtitle">为不同场景选择合适的模型；所有数据仅存储在本地</p>
+          <h1 class="settings-scene__title">设置</h1>
+          <p class="settings-scene__subtitle">偏好、AI 模型与本地数据管理</p>
         </div>
       </header>
 
-      <!-- 隐私声明 -->
       <GlassPanel class="settings-scene__privacy" elevated>
-        <div class="privacy-block">
-          <p class="privacy-block__title">夜记完全运行在你的电脑上</p>
-          <p class="privacy-block__text">日记内容、AI 模型调用、所有数据均不经过第三方服务器。无需注册、无需登录。</p>
-        </div>
+        <p class="privacy-block__title">夜记完全运行在你的电脑上</p>
+        <p class="privacy-block__text">日记与 AI 调用均不经过第三方服务器，无需注册或登录。</p>
       </GlassPanel>
 
-      <!-- 当前生效配置 -->
-      <GlassPanel v-if="activeTierSummary" class="settings-scene__status" elevated>
-        <h2 class="section-heading">当前生效</h2>
-        <p class="settings-scene__status-text">{{ activeTierSummary }}</p>
-      </GlassPanel>
+      <SettingsSection
+        id="general"
+        title="通用"
+        subtitle="昵称、主题与音效"
+        :open="openSection === 'general'"
+        @toggle="toggleSection"
+      >
+        <label class="settings-field">
+          <span class="settings-field__label">称呼（可选）</span>
+          <input v-model="settings.nickname" class="settings-field__input" maxlength="24" placeholder="夜记如何称呼你" />
+        </label>
+        <ThemeToggle />
+        <label class="settings-field settings-field--checkbox">
+          <input v-model="settings.soundEnabled" type="checkbox" />
+          <span>启用界面音效</span>
+        </label>
+      </SettingsSection>
 
-      <!-- 添加模型表单 -->
-      <GlassPanel elevated>
-        <h2 class="section-heading">添加模型</h2>
-        <form class="settings-form" @submit.prevent="submit">
-          <label class="settings-form__field">
-            <span class="settings-form__label">模型名称</span>
-            <input
-              v-model="form.model_name"
-              required
-              class="settings-form__input"
-              placeholder="如 deepseek-chat"
-            />
-          </label>
+      <SettingsSection
+        id="llm"
+        title="AI 模型"
+        subtitle="配置 DeepSeek 等模型的 API"
+        :open="openSection === 'llm'"
+        @toggle="toggleSection"
+      >
+        <LLMConfig />
+      </SettingsSection>
 
-          <label class="settings-form__field">
-            <span class="settings-form__label">模型层级</span>
-            <select v-model="form.tier" class="settings-form__input">
-              <option v-for="(label, tier) in tierLabels" :key="tier" :value="tier">
-                {{ label }}
-              </option>
-            </select>
-          </label>
+      <SettingsSection
+        id="tags"
+        title="标签"
+        subtitle="管理写日记时可选用的标签"
+        :open="openSection === 'tags'"
+        @toggle="toggleSection"
+      >
+        <TagManager />
+      </SettingsSection>
 
-          <label class="settings-form__field">
-            <span class="settings-form__label">API 地址</span>
-            <input
-              v-model="form.base_url"
-              required
-              class="settings-form__input"
-              placeholder="https://api.deepseek.com/v1"
-            />
-          </label>
+      <SettingsSection
+        id="backup"
+        title="备份"
+        subtitle="手动备份与退出时自动备份"
+        :open="openSection === 'backup'"
+        @toggle="toggleSection"
+      >
+        <BackupManager />
+      </SettingsSection>
 
-          <label class="settings-form__field">
-            <span class="settings-form__label">API 密钥</span>
-            <input
-              v-model="form.api_key"
-              required
-              type="password"
-              class="settings-form__input"
-              placeholder="sk-..."
-            />
-          </label>
-
-          <label class="settings-form__checkbox">
-            <input v-model="form.is_active" type="checkbox" />
-            <span>设为该层级的当前使用模型</span>
-          </label>
-
-          <div class="settings-form__actions">
-            <GameButton type="button" variant="secondary" :disabled="testing" @click="runConnectionTest">
-              {{ testing ? '测试中…' : '测试连接' }}
-            </GameButton>
-            <GameButton type="submit" variant="primary" :disabled="saving">
-              {{ saving ? '保存中…' : '保存' }}
-            </GameButton>
-            <p v-if="testResult" class="settings-form__msg settings-form__msg--test">{{ testResult }}</p>
-            <p v-if="success" class="settings-form__msg settings-form__msg--ok">{{ success }}</p>
-            <p v-if="error" class="settings-form__msg settings-form__msg--err">{{ error }}</p>
-          </div>
-        </form>
-      </GlassPanel>
-
-      <!-- 已配置模型列表 -->
-      <GlassPanel elevated>
-        <h2 class="section-heading">已配置模型</h2>
-        <p v-if="loading" class="settings-scene__hint">加载中…</p>
-        <p v-else-if="models.length === 0" class="settings-scene__hint">暂无模型，请先添加。</p>
-        <ul v-else class="models-list">
-          <li
-            v-for="model in models"
-            :key="model.id"
-            class="models-list__item"
-          >
-            <div class="models-list__info">
-              <p class="models-list__name">{{ model.model_name }}</p>
-              <p class="models-list__meta">
-                <span class="models-list__tier">{{ tierLabels[model.tier] || model.tier }}</span>
-                <span class="models-list__sep">·</span>
-                <span>{{ model.has_api_key ? '密钥已设置' : '密钥未设置' }}</span>
-              </p>
-            </div>
-            <div class="models-list__actions">
-              <GameButton
-                :variant="model.is_active ? 'secondary' : 'ghost'"
-                @click="toggleActive(model)"
-              >
-                {{ model.is_active ? '当前使用' : '切换至此' }}
-              </GameButton>
-              <GameButton variant="ghost" @click="remove(model)">
-                移除
-              </GameButton>
-            </div>
-          </li>
-        </ul>
-      </GlassPanel>
+      <SettingsSection
+        id="about"
+        title="关于"
+        subtitle="版本与用量统计"
+        :open="openSection === 'about'"
+        @toggle="toggleSection"
+      >
+        <p v-if="appVersion" class="about-line">版本 {{ appVersion }}</p>
+        <p v-if="statsLoading" class="about-line">加载统计…</p>
+        <dl v-else-if="usageStats" class="usage-stats">
+          <div class="usage-stats__row"><dt>日记总数</dt><dd>{{ usageStats.diary_count }}</dd></div>
+          <div class="usage-stats__row"><dt>AI 回信数</dt><dd>{{ usageStats.analysis_count }}</dd></div>
+          <div class="usage-stats__row"><dt>LLM 调用次数</dt><dd>{{ usageStats.llm_call_count }}</dd></div>
+          <div class="usage-stats__row"><dt>累计 Token</dt><dd>{{ usageStats.total_token_cost }}</dd></div>
+        </dl>
+      </SettingsSection>
     </div>
   </main>
 </template>
@@ -277,7 +162,7 @@ onMounted(() => {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .settings-scene__header {
@@ -298,171 +183,85 @@ onMounted(() => {
   border-radius: var(--radius-button);
   border: 1px solid var(--color-border);
   background: var(--color-bg-elevated);
-  margin-top: 0.125rem;
-  flex-shrink: 0;
-  transition: color var(--motion-duration) var(--motion-ease);
-}
-.settings-scene__back:hover {
-  color: var(--color-text-primary);
 }
 
-.settings-scene__title-area {
-  min-width: 0;
-}
 .settings-scene__title {
   font-size: 1.35rem;
   font-weight: 700;
   color: var(--color-text-primary);
 }
+
 .settings-scene__subtitle {
   margin-top: 0.25rem;
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
 }
 
-/* 隐私声明 */
-.privacy-block {
-  padding: 0.25rem 0;
-}
 .privacy-block__title {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-text-primary);
   margin-bottom: 0.375rem;
 }
+
 .privacy-block__text {
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--color-text-secondary);
 }
 
-/* section 标题 */
-.section-heading {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: 1rem;
-}
-
-/* 表单 */
-.settings-form {
-  display: grid;
-  gap: 0.875rem;
-}
-.settings-form__field {
+.settings-field {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
+  margin-bottom: 0.875rem;
 }
-.settings-form__label {
+
+.settings-field--checkbox {
+  flex-direction: row;
+  align-items: center;
   font-size: 0.8125rem;
-  font-weight: 500;
   color: var(--color-text-secondary);
 }
-.settings-form__input {
-  width: 100%;
+
+.settings-field__label {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.settings-field__input {
   padding: 0.625rem 0.75rem;
   border-radius: 0.625rem;
   border: 1px solid var(--color-border);
   background: var(--color-bg-elevated-2);
   color: var(--color-text-primary);
-  font-size: 0.875rem;
-  outline: none;
-  transition: border-color var(--motion-duration) var(--motion-ease);
-}
-.settings-form__input:focus {
-  border-color: var(--color-accent);
-}
-.settings-form__input::placeholder {
-  color: var(--color-text-secondary);
-  opacity: 0.6;
-}
-.settings-form__checkbox {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-.settings-form__checkbox input[type='checkbox'] {
-  accent-color: var(--color-accent);
-}
-.settings-form__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  margin-top: 0.25rem;
-}
-.settings-form__msg {
-  font-size: 0.8125rem;
-}
-.settings-form__msg--ok {
-  color: var(--color-success);
-}
-.settings-form__msg--test {
-  color: var(--color-text-secondary);
-  flex-basis: 100%;
-}
-.settings-form__msg--err {
-  color: var(--color-danger);
 }
 
-/* 模型列表 */
-.models-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.about-line {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.usage-stats {
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
 }
-.models-list__item {
+
+.usage-stats__row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   justify-content: space-between;
-  gap: 0.625rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8125rem;
 }
-.models-list__item:last-child {
-  border-bottom: none;
+
+.usage-stats__row dt {
+  color: var(--color-text-secondary);
 }
-.models-list__info {
-  min-width: 0;
-}
-.models-list__name {
-  font-size: 0.875rem;
+
+.usage-stats__row dd {
+  margin: 0;
   font-weight: 600;
-  color: var(--color-text-primary);
-}
-.models-list__meta {
-  margin-top: 0.1875rem;
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-}
-.models-list__tier {
-  color: var(--color-accent);
-}
-.models-list__sep {
-  margin: 0 0.375rem;
-  opacity: 0.4;
-}
-.models-list__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex-shrink: 0;
-}
-
-.settings-scene__hint {
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-}
-
-.settings-scene__status-text {
-  font-size: 0.8125rem;
-  line-height: 1.6;
   color: var(--color-text-primary);
 }
 </style>

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
 import { resetHttpClient } from '@/shared/api/http'
-import { createModel, listModels } from '@/shared/api/models'
+import { createModel, listModels, testStoredModelConnection } from '@/shared/api/models'
 
 vi.mock('axios', () => {
   const create = vi.fn()
@@ -76,5 +76,14 @@ describe('models API', () => {
       is_active: true,
     })
     expect(created.tier).toBe('heavy')
+  })
+
+  it('tests stored model connection by id', async () => {
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post }) as never)
+    post.mockResolvedValueOnce({ data: { ok: true, message: '连接成功' } })
+
+    const result = await testStoredModelConnection(5)
+    expect(post).toHaveBeenCalledWith('/api/v1/models/5/test-connection')
+    expect(result.ok).toBe(true)
   })
 })

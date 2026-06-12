@@ -51,6 +51,14 @@ def test_model_connection(body: ModelTestConnectionRequest) -> ModelTestConnecti
     return ModelTestConnectionResponse(ok=True, message="连接成功")
 
 
+@router.post("/{model_id}/test-connection", response_model=ModelTestConnectionResponse)
+def test_stored_model_connection(model_id: int, db: DbDep) -> ModelTestConnectionResponse:
+    error = model_service.test_stored_model_connection(db, model_id)
+    if error:
+        return ModelTestConnectionResponse(ok=False, message=error)
+    return ModelTestConnectionResponse(ok=True, message="连接成功")
+
+
 @router.post("", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)
 def create_model(body: ModelCreateRequest, db: DbDep) -> ModelResponse:
     row = model_service.create_model(

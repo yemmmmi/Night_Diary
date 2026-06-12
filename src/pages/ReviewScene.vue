@@ -8,6 +8,7 @@ import TimelineView from '@/features/review/TimelineView.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import type { DiaryEntry } from '@/shared/api/diary'
+import { useAnalysisStore } from '@/stores/analysis'
 import { useDiaryStore } from '@/stores/diary'
 import { formatApiError } from '@/shared/utils/apiError'
 import { diaryStatus, diaryStatusLabel, diarySummary } from '@/shared/utils/diaryFormat'
@@ -17,6 +18,7 @@ type ReviewMode = 'calendar' | 'timeline'
 const route = useRoute()
 const router = useRouter()
 const diaryStore = useDiaryStore()
+const analysisStore = useAnalysisStore()
 
 const mode = ref<ReviewMode>('timeline')
 const selectedDate = ref<string | null>(null)
@@ -35,9 +37,47 @@ const routeDiaryId = computed(() => {
   return Number.isFinite(parsed) ? parsed : null
 })
 
+const aiReplyPreview = computed(() => {
+  const text =
+    analysisStore.current?.ai_ans?.trim() || selectedEntry.value?.ai_ans?.trim() || ''
+  return text ? diarySummary(text, 160) : null
+})
+
+const showAiPreview = computed(
+  () =>
+    selectedEntry.value != null &&
+    diaryStatus(selectedEntry.value) !== 'draft' &&
+    Boolean(aiReplyPreview.value),
+)
+
+function syncFromRoute() {
+  if (!routeDiaryId.value) {
+    selectedEntry.value = null
+    analysisStore.clear()
+    return
+  }
+  const found = diaryStore.entries.find((e) => e.id === routeDiaryId.value)
+  if (found) {
+    selectedEntry.value = found
+    selectedDate.value = found.date
+    void loadAnalysisForEntry(found)
+  }
+}
+
+async function loadAnalysisForEntry(entry: DiaryEntry) {
+  analysisStore.clear()
+  if (diaryStatus(entry) === 'draft') return
+  try {
+    await analysisStore.loadForDiary(entry.id)
+  } catch {
+    // 无分析记录时静默
+  }
+}
+
 function selectEntry(entry: DiaryEntry) {
   selectedEntry.value = entry
   selectedDate.value = entry.date
+  void loadAnalysisForEntry(entry)
   router.replace({ name: 'review-detail', params: { diaryId: entry.id } })
 }
 
@@ -50,8 +90,10 @@ function selectDate(iso: string) {
   }
   selectedEntry.value = matches[0] ?? null
   if (selectedEntry.value) {
+    void loadAnalysisForEntry(selectedEntry.value)
     router.replace({ name: 'review-detail', params: { diaryId: selectedEntry.value.id } })
   } else {
+    analysisStore.clear()
     router.replace({ name: 'review' })
   }
 }
@@ -72,6 +114,7 @@ async function executeDelete() {
   try {
     await diaryStore.removeEntry(id)
     selectedEntry.value = null
+    analysisStore.clear()
     await router.replace({ name: 'review' })
   } catch (err) {
     deleteError.value = formatApiError(err, '删除日记失败')
@@ -80,18 +123,6 @@ async function executeDelete() {
 
 function goHome() {
   router.push('/')
-}
-
-function syncFromRoute() {
-  if (!routeDiaryId.value) {
-    selectedEntry.value = null
-    return
-  }
-  const found = diaryStore.entries.find((e) => e.id === routeDiaryId.value)
-  if (found) {
-    selectedEntry.value = found
-    selectedDate.value = found.date
-  }
 }
 
 onMounted(async () => {
@@ -166,6 +197,10 @@ watch(
           <span class="review-scene__detail-chip">
             {{ diaryStatusLabel(diaryStatus(selectedEntry)) }}
           </span>
+          <div v-if="showAiPreview" class="review-scene__ai-block">
+            <p class="review-scene__ai-label">AI 回信</p>
+            <p class="review-scene__ai-preview font-diary">{{ aiReplyPreview }}</p>
+          </div>
           <div class="review-scene__detail-actions">
             <GameButton variant="secondary" @click="openWrite(selectedEntry)">继续编辑</GameButton>
             <GameButton
@@ -307,6 +342,28 @@ watch(
   background: var(--color-surface-sunken);
   color: var(--color-text-secondary);
   margin-bottom: 1rem;
+}
+
+.review-scene__ai-block {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border-radius: 0.625rem;
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-surface-sunken);
+}
+
+.review-scene__ai-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.375rem;
+}
+
+.review-scene__ai-preview {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
 }
 
 .review-scene__detail-actions {

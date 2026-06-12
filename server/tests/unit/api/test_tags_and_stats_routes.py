@@ -20,6 +20,20 @@ def test_tags_crud(api_client: TestClient) -> None:
     assert deleted.status_code == 204
 
 
+def test_seed_mood_tags(api_client: TestClient) -> None:
+    response = api_client.post("/api/v1/tags/seed-mood")
+    assert response.status_code == 200
+    names = {tag["name"] for tag in response.json()}
+    assert "开心" in names
+    assert "难过" in names
+    assert "委屈" in names
+    assert "沮丧" in names
+
+    again = api_client.post("/api/v1/tags/seed-mood")
+    assert again.status_code == 200
+    assert len(again.json()) >= len(names)
+
+
 def test_stats_endpoint(api_client: TestClient) -> None:
     api_client.post("/api/v1/diary/entries", json={"content": "统计测试"})
     response = api_client.get("/api/v1/stats")

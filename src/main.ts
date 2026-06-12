@@ -3,9 +3,16 @@ import { createPinia } from 'pinia'
 
 import App from './App.vue'
 import router from './router'
+import { bindSoundSettingWatcher } from '@/shared/composables/useSound'
 import { initTheme } from '@/shared/composables/useTheme'
+import { useSettingsStore } from '@/stores/settings'
 import '@/styles/base.css'
 
-initTheme()
+const pinia = createPinia()
+const app = createApp(App).use(pinia)
 
-createApp(App).use(createPinia()).use(router).mount('#app')
+useSettingsStore(pinia).load()
+initTheme()
+bindSoundSettingWatcher()
+
+app.use(router).mount('#app')

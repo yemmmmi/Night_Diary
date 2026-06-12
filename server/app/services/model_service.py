@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.infrastructure.models.model_provider import TIER_VALUES, ModelProviderRow
-from app.infrastructure.security import encrypt_api_key
+from app.infrastructure.security import decrypt_api_key, encrypt_api_key
 from app.shared.errors import ModelProviderNotFoundError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -137,6 +137,22 @@ def validate_model_connection(
     if last_status is not None:
         return f"API 返回状态码 {last_status}"
     return None
+
+
+def test_stored_model_connection(
+    db: Session,
+    model_id: int,
+    *,
+    settings: Settings | None = None,
+) -> str | None:
+    row = get_model(db, model_id)
+    if not row.api_key_encrypted:
+        return "未配置 API Key"
+    if not row.base_url:
+        return "未配置 API 地址"
+    resolved = settings or get_settings()
+    api_key = decrypt_api_key(row.api_key_encrypted, resolved)
+    return validate_model_connection(row.base_url, api_key, model_name=row.model_name)
 
 
 def create_model(

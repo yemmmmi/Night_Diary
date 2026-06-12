@@ -8,6 +8,16 @@ from sqlalchemy.orm import Session
 from app.infrastructure.models.tag import TagRow
 from app.shared.errors import TagConflictError, TagNotFoundError
 
+DEFAULT_MOOD_TAGS: tuple[tuple[str, str], ...] = (
+    ("开心", "#10B981"),
+    ("平静", "#3B82F6"),
+    ("难过", "#6366F1"),
+    ("委屈", "#8B5CF6"),
+    ("沮丧", "#6B7280"),
+    ("焦虑", "#F59E0B"),
+    ("愤怒", "#EF4444"),
+)
+
 
 def list_tags(db: Session, *, sort_by_usage: bool = True) -> list[TagRow]:
     order = desc(TagRow.usage_count) if sort_by_usage else desc(TagRow.created_at)
@@ -39,3 +49,13 @@ def delete_tag(db: Session, tag_id: int) -> None:
         raise TagNotFoundError(tag_id=tag_id)
     db.delete(tag)
     db.commit()
+
+
+def seed_mood_tags(db: Session) -> list[TagRow]:
+    """Idempotently add default mood labels (开心/难过/…). Skips names that already exist."""
+    for name, color in DEFAULT_MOOD_TAGS:
+        existing = db.query(TagRow).filter(TagRow.name == name).first()
+        if existing is None:
+            db.add(TagRow(name=name, color=color))
+    db.commit()
+    return list_tags(db)

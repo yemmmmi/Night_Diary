@@ -95,3 +95,11 @@ export async function testModelConnection(
   )
   return data
 }
+
+export async function testStoredModelConnection(modelId: number): Promise<ModelTestConnectionResult> {
+  const client = await getHttpClient()
+  const { data } = await client.post<ModelTestConnectionResult>(
+    `/api/v1/models/${modelId}/test-connection`,
+  )
+  return data
+}

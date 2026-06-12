@@ -1,6 +1,9 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
+import { listDiaryEntries } from '@/shared/api/diary'
+import { waitForCoreReady } from '@/shared/composables/useBackend'
 import SettingsScene from '@/pages/SettingsScene.vue'
+import { useSettingsStore } from '@/stores/settings'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -24,15 +27,27 @@ const router = createRouter({
       path: '/design-system',
       name: 'design-system',
       component: () => import('@/pages/DesignSystemScene.vue'),
+      meta: { skipOnboarding: true },
+    },
+    {
+      path: '/onboarding',
+      name: 'onboarding',
+      component: () => import('@/pages/OnboardingScene.vue'),
+      meta: { skipOnboarding: true },
     },
     {
       path: '/settings',
       name: 'settings',
       component: SettingsScene,
+      meta: { skipOnboarding: true },
     },
     {
       path: '/settings/llm',
-      redirect: '/settings',
+      redirect: { path: '/settings', hash: '#llm' },
+    },
+    {
+      path: '/settings/backup',
+      redirect: { path: '/settings', hash: '#backup' },
     },
     {
       path: '/analysis/:diaryId',
@@ -50,6 +65,28 @@ const router = createRouter({
       component: () => import('@/pages/ReviewScene.vue'),
     },
   ],
+})
+
+router.beforeEach(async (to) => {
+  if (to.meta.skipOnboarding) return true
+
+  const settings = useSettingsStore()
+  settings.load()
+  if (settings.onboardingCompleted) return true
+  if (to.name === 'onboarding') return true
+
+  try {
+    await waitForCoreReady()
+    const entries = await listDiaryEntries({ limit: 1 })
+    if (entries.length > 0) {
+      settings.completeOnboarding()
+      return true
+    }
+  } catch {
+    return true
+  }
+
+  return { name: 'onboarding' }
 })
 
 export default router

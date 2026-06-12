@@ -18,11 +18,12 @@ vi.mock('@tauri-apps/api/window', () => ({
     unmaximize: vi.fn(),
     isMaximized: vi.fn().mockResolvedValue(false),
     close: vi.fn(),
+    onCloseRequested: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 
 vi.mock('@/shared/api/diary', () => ({
-  listDiaryEntries: vi.fn().mockResolvedValue([]),
+  listDiaryEntries: vi.fn().mockResolvedValue([{ id: 1 }]),
 }))
 
 vi.mock('@/shared/api/stats', () => ({
@@ -52,6 +53,10 @@ vi.mock('axios', () => {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.setItem(
+      'night-diary-app-settings',
+      JSON.stringify({ onboardingCompleted: true, themePreference: 'auto' }),
+    )
     vi.stubGlobal('__TAURI_INTERNALS__', {})
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }))
     vi.mocked(invoke).mockImplementation((cmd: string) => {

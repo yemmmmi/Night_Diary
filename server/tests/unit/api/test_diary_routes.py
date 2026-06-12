@@ -49,6 +49,15 @@ def test_create_diary_validation_error(api_client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_create_diary_with_explicit_date(api_client: TestClient) -> None:
+    response = api_client.post(
+        "/api/v1/diary/entries",
+        json={"content": "指定日期日记", "date": "2025-06-01"},
+    )
+    assert response.status_code == 201
+    assert response.json()["date"] == "2025-06-01"
+
+
 def test_get_missing_diary_returns_app_error_shape(api_client: TestClient) -> None:
     response = api_client.get("/api/v1/diary/entries/9999")
     assert response.status_code == 404

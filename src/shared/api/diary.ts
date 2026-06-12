@@ -19,6 +19,7 @@ export interface DiaryEntry {
 
 export interface DiaryCreatePayload {
   content: string
+  date?: string | null
   weather?: string | null
   tag_ids?: number[]
 }

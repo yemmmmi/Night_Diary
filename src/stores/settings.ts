@@ -1,0 +1,100 @@
+import { defineStore } from 'pinia'
+import { ref, watch } from 'vue'
+
+import type { ThemePreference } from '@/shared/composables/useTheme'
+
+const STORAGE_KEY = 'night-diary-app-settings'
+
+export interface AppSettingsSnapshot {
+  nickname: string
+  themePreference: ThemePreference
+  soundEnabled: boolean
+  autoBackup: boolean
+  onboardingCompleted: boolean
+}
+
+const DEFAULTS: AppSettingsSnapshot = {
+  nickname: '',
+  themePreference: 'auto',
+  soundEnabled: false,
+  autoBackup: false,
+  onboardingCompleted: false,
+}
+
+function readStored(): AppSettingsSnapshot {
+  if (typeof window === 'undefined') return { ...DEFAULTS }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return { ...DEFAULTS }
+    const parsed = JSON.parse(raw) as Partial<AppSettingsSnapshot>
+    return {
+      nickname: typeof parsed.nickname === 'string' ? parsed.nickname : DEFAULTS.nickname,
+      themePreference:
+        parsed.themePreference === 'day' ||
+        parsed.themePreference === 'night' ||
+        parsed.themePreference === 'auto'
+          ? parsed.themePreference
+          : DEFAULTS.themePreference,
+      soundEnabled: Boolean(parsed.soundEnabled),
+      autoBackup: Boolean(parsed.autoBackup),
+      onboardingCompleted: Boolean(parsed.onboardingCompleted),
+    }
+  } catch {
+    return { ...DEFAULTS }
+  }
+}
+
+export const useSettingsStore = defineStore('settings', () => {
+  const loaded = ref(false)
+  const nickname = ref(DEFAULTS.nickname)
+  const themePreference = ref<ThemePreference>(DEFAULTS.themePreference)
+  const soundEnabled = ref(DEFAULTS.soundEnabled)
+  const autoBackup = ref(DEFAULTS.autoBackup)
+  const onboardingCompleted = ref(DEFAULTS.onboardingCompleted)
+
+  function applySnapshot(snapshot: AppSettingsSnapshot) {
+    nickname.value = snapshot.nickname
+    themePreference.value = snapshot.themePreference
+    soundEnabled.value = snapshot.soundEnabled
+    autoBackup.value = snapshot.autoBackup
+    onboardingCompleted.value = snapshot.onboardingCompleted
+  }
+
+  function load() {
+    if (loaded.value) return
+    applySnapshot(readStored())
+    loaded.value = true
+  }
+
+  function persist() {
+    const snapshot: AppSettingsSnapshot = {
+      nickname: nickname.value,
+      themePreference: themePreference.value,
+      soundEnabled: soundEnabled.value,
+      autoBackup: autoBackup.value,
+      onboardingCompleted: onboardingCompleted.value,
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+  }
+
+  function completeOnboarding() {
+    onboardingCompleted.value = true
+    persist()
+  }
+
+  watch([nickname, themePreference, soundEnabled, autoBackup, onboardingCompleted], persist, {
+    deep: true,
+  })
+
+  return {
+    loaded,
+    nickname,
+    themePreference,
+    soundEnabled,
+    autoBackup,
+    onboardingCompleted,
+    load,
+    persist,
+    completeOnboarding,
+  }
+})

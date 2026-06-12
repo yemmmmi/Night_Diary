@@ -31,6 +31,7 @@ def create_entry(
     row = diary_service.create_entry(
         db,
         content=body.content,
+        entry_date=body.date,
         weather=body.weather,
         tag_ids=body.tag_ids,
         collection_manager=container.diary_collection,
