@@ -2,7 +2,7 @@ import axios from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
-import { createTag, deleteTag, listTags } from '@/shared/api/tags'
+import { createTag, deleteTag, listTags, seedMoodTags } from '@/shared/api/tags'
 import { resetHttpClient } from '@/shared/api/http'
 
 vi.mock('axios', () => {
@@ -53,5 +53,16 @@ describe('tags API', () => {
 
     await deleteTag(3)
     expect(del).toHaveBeenCalledWith('/api/v1/tags/3')
+  })
+
+  it('seeds mood tags', async () => {
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post, delete: del }) as never)
+    post.mockResolvedValue({
+      data: [{ id: 1, name: '开心', color: '#10B981' }],
+    })
+
+    const tags = await seedMoodTags()
+    expect(post).toHaveBeenCalledWith('/api/v1/tags/seed-mood')
+    expect(tags[0].name).toBe('开心')
   })
 })

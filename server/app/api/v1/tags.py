@@ -28,3 +28,9 @@ def create_tag(body: TagCreateRequest, db: DbDep) -> TagResponse:
 def delete_tag(tag_id: int, db: DbDep) -> Response:
     tag_service.delete_tag(db, tag_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/seed-mood", response_model=list[TagResponse])
+def seed_mood_tags(db: DbDep) -> list[TagResponse]:
+    rows = tag_service.seed_mood_tags(db)
+    return [tag_to_response(row) for row in rows]

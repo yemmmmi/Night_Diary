@@ -8,6 +8,7 @@ import {
   getModelsStatus,
   listModels,
   testModelConnection,
+  testStoredModelConnection,
   updateModel,
   type ModelProvider,
   type ModelStatusResponse,
@@ -27,6 +28,7 @@ const modelStatus = ref<ModelStatusResponse | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const testing = ref(false)
+const testingModelId = ref<number | null>(null)
 const error = ref<string | null>(null)
 const success = ref<string | null>(null)
 const testResult = ref<string | null>(null)
@@ -110,6 +112,47 @@ async function runConnectionTest() {
     })
     testResult.value = result.ok
       ? result.message ?? '连接成功，可以保存'
+      : result.message ?? '连接失败'
+  } catch (err) {
+    testResult.value = formatApiError(err, '连接测试失败')
+  } finally {
+    testing.value = false
+  }
+}
+
+async function runStoredModelTest(model: ModelProvider) {
+  if (!model.has_api_key) {
+    testResult.value = '该模型未配置 API Key'
+    return
+  }
+  testingModelId.value = model.id
+  testResult.value = null
+  error.value = null
+  try {
+    const result = await testStoredModelConnection(model.id)
+    testResult.value = `${model.model_name}：${result.ok ? result.message ?? '连接成功' : result.message ?? '连接失败'}`
+  } catch (err) {
+    testResult.value = formatApiError(err, '连接测试失败')
+  } finally {
+    testingModelId.value = null
+  }
+}
+
+async function runEditConnectionTest() {
+  if (!editingModel.value) return
+  testing.value = true
+  testResult.value = null
+  error.value = null
+  try {
+    const result = editForm.api_key.trim()
+      ? await testModelConnection({
+          model_name: editForm.model_name.trim() || 'deepseek-chat',
+          api_key: editForm.api_key.trim(),
+          base_url: editForm.base_url.trim(),
+        })
+      : await testStoredModelConnection(editingModel.value.id)
+    testResult.value = result.ok
+      ? result.message ?? '连接成功'
       : result.message ?? '连接失败'
   } catch (err) {
     testResult.value = formatApiError(err, '连接测试失败')
@@ -236,6 +279,13 @@ onMounted(() => {
             </p>
           </div>
           <div class="models-list__actions">
+            <GameButton
+              variant="ghost"
+              :disabled="testingModelId === model.id || !model.has_api_key"
+              @click="runStoredModelTest(model)"
+            >
+              {{ testingModelId === model.id ? '测试中…' : '测试连接' }}
+            </GameButton>
             <GameButton :variant="model.is_active ? 'secondary' : 'ghost'" @click="toggleActive(model)">
               {{ model.is_active ? '当前使用' : '切换至此' }}
             </GameButton>
@@ -271,9 +321,13 @@ onMounted(() => {
         <span>设为该层级的当前使用模型</span>
       </label>
       <div class="settings-form__actions">
+        <GameButton type="button" variant="secondary" :disabled="testing" @click="runEditConnectionTest">
+          {{ testing ? '测试中…' : '测试连接' }}
+        </GameButton>
         <GameButton type="button" variant="ghost" @click="cancelEdit">取消</GameButton>
         <GameButton type="submit" variant="primary" :disabled="saving">{{ saving ? '保存中…' : '保存更改' }}</GameButton>
       </div>
+      <p v-if="testResult && editingModel" class="settings-form__msg">{{ testResult }}</p>
     </form>
   </div>
 </template>

@@ -76,6 +76,7 @@ defineExpose({ wordCount })
     />
 
     <footer class="diary-editor__footer">
+      <p class="diary-editor__tags-label">心情标签</p>
       <div v-if="tags.length > 0" class="diary-editor__tags">
         <button
           v-for="tag in tags"
@@ -87,12 +88,13 @@ defineExpose({ wordCount })
           :disabled="readonly"
           @click="toggleTag(tag.id)"
         >
-          {{ tag.name }}
+          <span class="diary-editor__tag-dot" aria-hidden="true" />
+          <span class="diary-editor__tag-name">{{ tag.name }}</span>
         </button>
       </div>
       <p v-else class="diary-editor__empty-tags">
-        暂无标签，
-        <RouterLink to="/settings">前往设置添加</RouterLink>
+        暂无心情标签，
+        <RouterLink to="/settings#tags">前往设置添加</RouterLink>
       </p>
     </footer>
   </div>
@@ -131,6 +133,13 @@ defineExpose({ wordCount })
   border-top: 1px solid var(--color-border);
 }
 
+.diary-editor__tags-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
 .diary-editor__empty-tags {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
@@ -147,10 +156,13 @@ defineExpose({ wordCount })
 }
 
 .diary-editor__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.75rem;
+  padding: 0.375rem 0.875rem;
+  font-size: 0.8125rem;
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -158,6 +170,19 @@ defineExpose({ wordCount })
     background-color var(--motion-duration) var(--motion-ease),
     color var(--motion-duration) var(--motion-ease),
     border-color var(--motion-duration) var(--motion-ease);
+}
+
+.diary-editor__tag-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--tag-color, var(--color-accent));
+  flex-shrink: 0;
+}
+
+.diary-editor__tag-name {
+  font-weight: 500;
+  color: var(--color-text-primary);
 }
 
 .diary-editor__tag.is-selected {

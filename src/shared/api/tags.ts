@@ -29,3 +29,9 @@ export async function deleteTag(tagId: number): Promise<void> {
   const client = await getHttpClient()
   await client.delete(`/api/v1/tags/${tagId}`)
 }
+
+export async function seedMoodTags(): Promise<Tag[]> {
+  const client = await getHttpClient()
+  const { data } = await client.post<Tag[]>('/api/v1/tags/seed-mood')
+  return data
+}
