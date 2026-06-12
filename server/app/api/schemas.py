@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date as DateType, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -18,6 +18,7 @@ class TagBrief(BaseModel):
 
 class DiaryCreateRequest(BaseModel):
     content: str = Field(min_length=1)
+    date: DateType | None = None
     weather: str | None = None
     tag_ids: list[int] = Field(default_factory=list)
 
@@ -31,7 +32,7 @@ class DiaryUpdateRequest(BaseModel):
 class DiaryResponse(BaseModel):
     id: int
     content: str | None
-    date: date | None
+    date: DateType | None
     weather: str | None
     ai_ans: str | None
     created_at: datetime

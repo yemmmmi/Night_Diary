@@ -75,8 +75,8 @@ defineExpose({ wordCount })
       @input="onInput"
     />
 
-    <footer v-if="tags.length > 0" class="diary-editor__footer">
-      <div class="diary-editor__tags">
+    <footer class="diary-editor__footer">
+      <div v-if="tags.length > 0" class="diary-editor__tags">
         <button
           v-for="tag in tags"
           :key="tag.id"
@@ -90,6 +90,10 @@ defineExpose({ wordCount })
           {{ tag.name }}
         </button>
       </div>
+      <p v-else class="diary-editor__empty-tags">
+        暂无标签，
+        <RouterLink to="/settings">前往设置添加</RouterLink>
+      </p>
     </footer>
   </div>
 </template>
@@ -125,6 +129,15 @@ defineExpose({ wordCount })
   margin-top: 1rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--color-border);
+}
+
+.diary-editor__empty-tags {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.diary-editor__empty-tags a {
+  color: var(--color-accent);
 }
 
 .diary-editor__tags {

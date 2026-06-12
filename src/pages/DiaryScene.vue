@@ -12,6 +12,14 @@ import { useDiaryStore } from '@/stores/diary'
 import { formatApiError } from '@/shared/utils/apiError'
 import { countWordUnits, diaryStatus } from '@/shared/utils/diaryFormat'
 
+function parseQueryDate(raw: unknown): string | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
+  const parsed = new Date(`${raw}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return null
+  return raw
+}
+
 const route = useRoute()
 const router = useRouter()
 const diaryStore = useDiaryStore()
@@ -42,10 +50,17 @@ const editorPlaceholder = computed(() =>
   showWritingHint.value ? copy.placeholderNew : copy.placeholderContinue,
 )
 
+const targetDate = computed(() => {
+  if (isEditing.value && diaryStore.currentEntry?.date) {
+    return diaryStore.currentEntry.date
+  }
+  return parseQueryDate(route.query.date)
+})
+
 const dateLabel = computed(() => {
-  const entryDate = diaryStore.currentEntry?.date
-  if (entryDate) {
-    const date = new Date(`${entryDate}T00:00:00`)
+  const iso = targetDate.value
+  if (iso) {
+    const date = new Date(`${iso}T00:00:00`)
     return date.toLocaleDateString('zh-CN', {
       year: 'numeric',
       month: 'long',
@@ -136,6 +151,7 @@ async function persist(showFeedback = true) {
     const created = await diaryStore.createEntry({
       content: trimmed,
       tag_ids: tagIds.value,
+      date: targetDate.value,
     })
     setSaveState('saved')
     await router.replace(`/write/${created.id}`)

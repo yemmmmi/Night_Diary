@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from unittest.mock import MagicMock
 
 import pytest
@@ -27,6 +28,15 @@ def test_create_entry_persists_and_syncs_chroma(db_session) -> None:
 def test_create_entry_rejects_empty_content(db_session) -> None:
     with pytest.raises(ValidationError):
         diary_service.create_entry(db_session, content="   ")
+
+
+def test_create_entry_uses_explicit_date(db_session) -> None:
+    entry = diary_service.create_entry(
+        db_session,
+        content="指定日期",
+        entry_date=date(2025, 6, 1),
+    )
+    assert entry.date == date(2025, 6, 1)
 
 
 def test_get_recent_entries_shared_window(db_session) -> None:

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
+import TagManager from '@/features/settings/TagManager.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import {
@@ -15,6 +16,7 @@ import {
   type ModelStatusResponse,
   type ModelTier,
 } from '@/shared/api/models'
+import { getStats, type AppStats } from '@/shared/api/stats'
 import { formatApiError } from '@/shared/utils/apiError'
 
 const tierLabels: Record<ModelTier, string> = {
@@ -26,12 +28,15 @@ const tierLabels: Record<ModelTier, string> = {
 
 const models = ref<ModelProvider[]>([])
 const modelStatus = ref<ModelStatusResponse | null>(null)
+const usageStats = ref<AppStats | null>(null)
 const loading = ref(true)
+const statsLoading = ref(true)
 const saving = ref(false)
 const testing = ref(false)
 const error = ref<string | null>(null)
 const success = ref<string | null>(null)
 const testResult = ref<string | null>(null)
+const editingModel = ref<ModelProvider | null>(null)
 
 const form = reactive({
   model_name: '',
@@ -39,6 +44,14 @@ const form = reactive({
   base_url: 'https://api.deepseek.com/v1',
   tier: 'default' as ModelTier,
   is_active: true,
+})
+
+const editForm = reactive({
+  model_name: '',
+  api_key: '',
+  base_url: '',
+  tier: 'default' as ModelTier,
+  is_active: false,
 })
 
 async function refresh() {
@@ -52,6 +65,17 @@ async function refresh() {
     error.value = formatApiError(err, '加载模型列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadUsageStats() {
+  statsLoading.value = true
+  try {
+    usageStats.value = await getStats()
+  } catch {
+    usageStats.value = null
+  } finally {
+    statsLoading.value = false
   }
 }
 
@@ -126,14 +150,56 @@ async function remove(model: ModelProvider) {
   error.value = null
   try {
     await deleteModel(model.id)
+    if (editingModel.value?.id === model.id) {
+      cancelEdit()
+    }
     await refresh()
   } catch (err) {
     error.value = formatApiError(err, '删除失败')
   }
 }
 
+function startEdit(model: ModelProvider) {
+  editingModel.value = model
+  editForm.model_name = model.model_name
+  editForm.api_key = ''
+  editForm.base_url = model.base_url ?? 'https://api.deepseek.com/v1'
+  editForm.tier = model.tier
+  editForm.is_active = model.is_active
+  error.value = null
+  success.value = null
+}
+
+function cancelEdit() {
+  editingModel.value = null
+}
+
+async function saveEdit() {
+  if (!editingModel.value) return
+  saving.value = true
+  error.value = null
+  success.value = null
+  try {
+    await updateModel(editingModel.value.id, {
+      model_name: editForm.model_name.trim(),
+      base_url: editForm.base_url.trim(),
+      tier: editForm.tier,
+      is_active: editForm.is_active,
+      ...(editForm.api_key.trim() ? { api_key: editForm.api_key.trim() } : {}),
+    })
+    success.value = '模型已更新'
+    cancelEdit()
+    await refresh()
+  } catch (err) {
+    error.value = formatApiError(err, '更新失败')
+  } finally {
+    saving.value = false
+  }
+}
+
 onMounted(() => {
   void refresh()
+  void loadUsageStats()
 })
 </script>
 
@@ -164,6 +230,45 @@ onMounted(() => {
       <GlassPanel v-if="activeTierSummary" class="settings-scene__status" elevated>
         <h2 class="section-heading">当前生效</h2>
         <p class="settings-scene__status-text">{{ activeTierSummary }}</p>
+      </GlassPanel>
+
+      <!-- 标签管理 -->
+      <GlassPanel elevated>
+        <h2 class="section-heading">标签管理</h2>
+        <TagManager />
+      </GlassPanel>
+
+      <!-- 用量统计 -->
+      <GlassPanel elevated>
+        <h2 class="section-heading">用量统计</h2>
+        <p v-if="statsLoading" class="settings-scene__hint">加载中…</p>
+        <dl v-else-if="usageStats" class="usage-stats">
+          <div class="usage-stats__row">
+            <dt>日记总数</dt>
+            <dd>{{ usageStats.diary_count }}</dd>
+          </div>
+          <div class="usage-stats__row">
+            <dt>AI 回信数</dt>
+            <dd>{{ usageStats.analysis_count }}</dd>
+          </div>
+          <div class="usage-stats__row">
+            <dt>LLM 调用次数</dt>
+            <dd>{{ usageStats.llm_call_count }}</dd>
+          </div>
+          <div class="usage-stats__row">
+            <dt>累计 Token 消耗</dt>
+            <dd>{{ usageStats.total_token_cost }}</dd>
+          </div>
+          <div class="usage-stats__row">
+            <dt>输入 Token</dt>
+            <dd>{{ usageStats.total_tokens_in }}</dd>
+          </div>
+          <div class="usage-stats__row">
+            <dt>输出 Token</dt>
+            <dd>{{ usageStats.total_tokens_out }}</dd>
+          </div>
+        </dl>
+        <p v-else class="settings-scene__hint">暂无统计数据</p>
       </GlassPanel>
 
       <!-- 添加模型表单 -->
@@ -255,12 +360,55 @@ onMounted(() => {
               >
                 {{ model.is_active ? '当前使用' : '切换至此' }}
               </GameButton>
+              <GameButton variant="ghost" @click="startEdit(model)">编辑</GameButton>
               <GameButton variant="ghost" @click="remove(model)">
                 移除
               </GameButton>
             </div>
           </li>
         </ul>
+      </GlassPanel>
+
+      <!-- 编辑模型 -->
+      <GlassPanel v-if="editingModel" elevated>
+        <h2 class="section-heading">编辑模型</h2>
+        <form class="settings-form" @submit.prevent="saveEdit">
+          <label class="settings-form__field">
+            <span class="settings-form__label">模型名称</span>
+            <input v-model="editForm.model_name" required class="settings-form__input" />
+          </label>
+          <label class="settings-form__field">
+            <span class="settings-form__label">模型层级</span>
+            <select v-model="editForm.tier" class="settings-form__input">
+              <option v-for="(label, tier) in tierLabels" :key="tier" :value="tier">
+                {{ label }}
+              </option>
+            </select>
+          </label>
+          <label class="settings-form__field">
+            <span class="settings-form__label">API 地址</span>
+            <input v-model="editForm.base_url" required class="settings-form__input" />
+          </label>
+          <label class="settings-form__field">
+            <span class="settings-form__label">新 API 密钥（留空则不修改）</span>
+            <input
+              v-model="editForm.api_key"
+              type="password"
+              class="settings-form__input"
+              placeholder="sk-..."
+            />
+          </label>
+          <label class="settings-form__checkbox">
+            <input v-model="editForm.is_active" type="checkbox" />
+            <span>设为该层级的当前使用模型</span>
+          </label>
+          <div class="settings-form__actions">
+            <GameButton type="button" variant="ghost" @click="cancelEdit">取消</GameButton>
+            <GameButton type="submit" variant="primary" :disabled="saving">
+              {{ saving ? '保存中…' : '保存更改' }}
+            </GameButton>
+          </div>
+        </form>
       </GlassPanel>
     </div>
   </main>
@@ -463,6 +611,30 @@ onMounted(() => {
 .settings-scene__status-text {
   font-size: 0.8125rem;
   line-height: 1.6;
+  color: var(--color-text-primary);
+}
+
+.usage-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.usage-stats__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8125rem;
+}
+
+.usage-stats__row dt {
+  color: var(--color-text-secondary);
+}
+
+.usage-stats__row dd {
+  margin: 0;
+  font-weight: 600;
   color: var(--color-text-primary);
 }
 </style>

@@ -61,8 +61,11 @@ describe('diary API', () => {
       },
     })
 
-    const created = await createDiaryEntry({ content: '新建日记' })
-    expect(post).toHaveBeenCalledWith('/api/v1/diary/entries', { content: '新建日记' })
+    const created = await createDiaryEntry({ content: '新建日记', date: '2025-06-01' })
+    expect(post).toHaveBeenCalledWith('/api/v1/diary/entries', {
+      content: '新建日记',
+      date: '2025-06-01',
+    })
     expect(created.id).toBe(2)
   })
 })

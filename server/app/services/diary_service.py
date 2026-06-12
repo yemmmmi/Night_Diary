@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import desc
@@ -49,6 +49,7 @@ def create_entry(
     db: Session,
     *,
     content: str,
+    entry_date: date | None = None,
     weather: str | None = None,
     tag_ids: list[int] | None = None,
     collection_manager: DiaryCollectionManager | None = None,
@@ -59,7 +60,7 @@ def create_entry(
     entry = DiaryEntryRow(
         content=content.strip(),
         weather=weather,
-        date=datetime.utcnow().date(),
+        date=entry_date if entry_date is not None else datetime.utcnow().date(),
     )
     if tag_ids:
         tags = db.query(TagRow).filter(TagRow.id.in_(tag_ids)).all()
