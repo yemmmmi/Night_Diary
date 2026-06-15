@@ -860,15 +860,15 @@ PyInstaller 打包 Python → Tauri build 生成 Windows 安装器 → E2E 验�
 
 #### Tasks
 
-- [ ] 1. [核心] `server/build.spec` — 最终 PyInstaller spec（含 torch/chromadb/onnxruntime/sentence-transformers/jieba 所有 hidden imports + 二进制依赖）
-- [ ] 2. [核心] Tauri build 配置 — `tauri.conf.json`：bundle 配置，嵌入 Python .exe 为 resource；Windows 安装器（NSIS/Inno Setup）
-- [ ] 3. [核心] 模型下载器 — 首次启动下载 embedding/reranker 模型（从 HuggingFace 镜像），进度条 UI，断点续传
-- [ ] 4. [核心] 自动备份 — Rust 侧应用退出前 copy `night_diary.db` → `backups/YYYY-MM-DDTHHmmss-auto.db`
-- [ ] 5. [测试] E2E 测试 — Playwright（或 Tauri driver）：日记 CRUD → AI 分析 → 反馈完整流程
-- [ ] 6. [测试] 性能验证 — embedding 模型 warmup 时间、LLM 调用延迟、SQLite 查询性能
-- [ ] 7. [文档] `README.md` 最终版
-- [ ] 8. [文档] `docs/user-guide.md` — 用户指南（安装、LLM 配置、备份恢复）
-- [ ] 9. [文档] `docs/dev-guide.md` — 开发者指南（环境搭建、目录结构、构建流程）
+- [x] 1. [核心] `server/build.spec` — 最终 PyInstaller spec（含 torch/chromadb/onnxruntime/sentence-transformers/jieba 所有 hidden imports + 二进制依赖）
+- [x] 2. [核心] Tauri build 配置 — `tauri.conf.json`：bundle 配置，嵌入 Python .exe 为 resource；Windows 安装器（NSIS/Inno Setup）
+- [x] 3. [核心] 模型下载器 — 首次启动下载 embedding/reranker 模型（从 HuggingFace 镜像），进度条 UI，断点续传
+- [x] 4. [核心] 自动备份 — Rust 侧应用退出前 copy `night_diary.db` → `backups/YYYY-MM-DDTHHmmss-auto.db`
+- [x] 5. [测试] E2E 测试 — Playwright（或 Tauri driver）：日记 CRUD → AI 分析 → 反馈完整流程
+- [x] 6. [测试] 性能验证 — embedding 模型 warmup 时间、LLM 调用延迟、SQLite 查询性能
+- [x] 7. [文档] `README.md` 最终版
+- [x] 8. [文档] `docs/user-guide.md` — 用户指南（安装、LLM 配置、备份恢复）
+- [x] 9. [文档] `docs/dev-guide.md` — 开发者指南（环境搭建、目录结构、构建流程）
 
 #### Verification
 
