@@ -78,3 +78,12 @@ class AIServiceUnavailableError(AppError):
 class BootstrapNotReadyError(AppError):
     def __init__(self) -> None:
         super().__init__(message="AI 引擎仍在初始化，请稍候", http_status=503)
+
+
+class NotFoundError(AppError):
+    """Generic 404 for resources identified by (resource_type, resource_id)."""
+
+    def __init__(self, *, resource: str, resource_id: str | int) -> None:
+        super().__init__(message=f"{resource} {resource_id} 不存在", http_status=404)
+        self.resource = resource
+        self.resource_id = resource_id
