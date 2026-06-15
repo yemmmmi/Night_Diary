@@ -132,7 +132,7 @@ def delete_card(card_id: str, db: DbDep, container: ContainerDep) -> Response:
 @router.post("/{card_id}/expand", response_model=dict[str, Any])
 def expand_card_to_diary(
     card_id: str,
-    body: CardExpandRequest,  # noqa: ARG001 — reserved for future options
+    _body: CardExpandRequest,
     db: DbDep,
     container: ContainerDep,
 ) -> dict[str, Any]:
