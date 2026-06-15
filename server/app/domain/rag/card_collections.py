@@ -142,7 +142,7 @@ class CardCollectionManager:
             return []
 
     @staticmethod
-    def _format_results(raw: dict) -> list[dict[str, Any]]:
+    def _format_results(raw: dict[str, Any]) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         if not raw or "ids" not in raw:
             return items
