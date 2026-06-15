@@ -8,6 +8,8 @@ export default tseslint.config(
       'dist/**',
       'node_modules/**',
       'coverage/**',
+      'public/**',
+      'memory-card-feasibility/**',
       'server/.venv/**',
       'src-tauri/target/**',
       'scripts/**',

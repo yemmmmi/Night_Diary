@@ -7,6 +7,7 @@ the business logic, including Card->Episodic and Card->Diary flows.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from fastapi import APIRouter, Query, Response, status
@@ -131,22 +132,20 @@ def delete_card(card_id: str, db: DbDep, container: ContainerDep) -> Response:
 @router.post("/{card_id}/expand", response_model=dict[str, Any])
 def expand_card_to_diary(
     card_id: str,
-    body: CardExpandRequest,  # noqa: ARG001
+    body: CardExpandRequest,  # noqa: ARG001 — reserved for future options
     db: DbDep,
     container: ContainerDep,
 ) -> dict[str, Any]:
     diary = card_service.expand_to_diary(db, card_id)
 
     if container.diary_collection is not None:
-        try:
+        with contextlib.suppress(Exception):
             container.diary_collection.update_diary(
                 str(diary.id),
                 diary.content or "",
                 date=diary.date.isoformat() if diary.date else "",
                 tags="",
             )
-        except Exception:
-            pass
 
     return {
         "card_id": card_id,

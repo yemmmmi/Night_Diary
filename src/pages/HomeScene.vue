@@ -5,7 +5,6 @@ import { PhCaretLeft, PhCaretRight, PhCalendarBlank, PhNotePencil } from '@phosp
 
 import BrandMark from '@/shared/components/BrandMark.vue'
 import GameButton from '@/shared/components/GameButton.vue'
-import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { getStats, type AppStats } from '@/shared/api/stats'
 import type { DiaryEntry } from '@/shared/api/diary'
 import { homeSceneCopy as copy } from '@/shared/copy/homeScene'

@@ -183,7 +183,6 @@ def delete_card(db: Session, card_id: str) -> None:
 
 def card_to_episodic(row: MemoryCardRow) -> EpisodicEntry:
     """Convert a MemoryCardRow to an EpisodicEntry for the memory pipeline."""
-    tags = _json_to_tags(row.tags_json)
     event = row.event_summary or f"（{row.emotion}情绪记录）"
     return EpisodicEntry(
         event=event,
