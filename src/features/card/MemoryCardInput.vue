@@ -282,7 +282,7 @@ defineExpose({ reset, saveCard })
           @click="startCustomEmotion"
         >
           <PhPlus :size="14" weight="bold" />
-          <span class="mcard-emotion-label">{{ cardCopy.tagsPlaceholder.slice(0, 4) }}</span>
+          <span class="mcard-emotion-label">{{ copy.tagsPlaceholder.slice(0, 4) }}</span>
         </button>
       </div>
 
