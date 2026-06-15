@@ -43,12 +43,13 @@ def _json_to_tags(tags_json: str | None) -> list[str]:
     if not tags_json:
         return []
     try:
-        return json.loads(tags_json)
+        parsed = json.loads(tags_json)
+        return parsed if isinstance(parsed, list) else []
     except (json.JSONDecodeError, TypeError):
         return []
 
 
-def row_to_dict(row: MemoryCardRow) -> dict:
+def row_to_dict(row: MemoryCardRow) -> dict[str, Any]:
     return {
         "card_id": row.card_id,
         "emotion": row.emotion,
@@ -297,7 +298,7 @@ def expand_to_diary(
 # ── stats ───────────────────────────────────────────────────────────────
 
 
-def get_card_stats(db: Session) -> dict:
+def get_card_stats(db: Session) -> dict[str, Any]:
     """Get summary stats for the memory management dashboard."""
     total = db.query(MemoryCardRow).count()
 
@@ -333,7 +334,7 @@ def get_mood_trends(
     db: Session,
     *,
     days: int = 30,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Get daily average mood scores for trend chart.
 
     Returns a list of {date, avg_mood, card_count} sorted by date ascending.
