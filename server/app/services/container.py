@@ -22,6 +22,7 @@ from app.domain.memory.episodic import EpisodicMemory
 from app.domain.memory.long_term import LongTermMemory
 from app.domain.memory.working import WorkingMemory
 from app.domain.rag.bm25 import BM25Index
+from app.domain.rag.card_collections import CardCollectionManager
 from app.domain.rag.collections import DiaryCollectionManager
 from app.domain.rag.retriever import HybridRetriever
 from app.domain.skills.registry import create_default_registry
@@ -54,6 +55,7 @@ class ServiceContainer:
     decision_logger: SqliteAgentDecisionLogger
     style_preference_store: SqliteStylePreferenceStore
     diary_collection: DiaryCollectionManager | None = field(default=None, repr=False)
+    card_collection: CardCollectionManager | None = field(default=None, repr=False)
     knowledge_store: DomainKnowledgeStore | None = field(default=None, repr=False)
     bm25_index: BM25Index | None = field(default=None, repr=False)
     retriever: HybridRetriever | None = field(default=None, repr=False)
@@ -100,6 +102,7 @@ class ServiceContainer:
 
             cfg = self.settings
             diary_collection = DiaryCollectionManager(settings=cfg)
+            card_collection = CardCollectionManager(settings=cfg)
             knowledge_store = DomainKnowledgeStore(settings=cfg)
             bm25 = BM25Index()
             retriever = HybridRetriever(
@@ -115,6 +118,7 @@ class ServiceContainer:
                 logger.warning("Episodic memory load skipped: %s", exc)
 
             self.diary_collection = diary_collection
+            self.card_collection = card_collection
             self.knowledge_store = knowledge_store
             self.bm25_index = bm25
             self.retriever = retriever
