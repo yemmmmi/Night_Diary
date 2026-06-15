@@ -22,6 +22,7 @@ import { createCard, generateCardPrompt } from '@/shared/api/card'
 import type { CardCreatePayload } from '@/shared/api/card'
 import { formatApiError } from '@/shared/utils/apiError'
 import { cardCopy as copy, PRESET_EMOTIONS, QUICK_TAGS } from '@/shared/copy/card'
+import { emotionIconFor } from '@/shared/utils/emotionIcon'
 import GameButton from '@/shared/components/GameButton.vue'
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -52,9 +53,12 @@ const emit = defineEmits<{
 // ── State ──────────────────────────────────────────────────────────
 
 const selectedEmotion = ref('')
+const selectedEmotions = ref<string[]>([])
 const customEmotion = ref('')
 const eventSummary = ref('')
 const selectedTags = ref<string[]>([])
+const customTag = ref('')
+const showCustomTagInput = ref(false)
 const saving = ref(false)
 const saveError = ref<string | null>(null)
 const savedCardId = ref<string | null>(null)
@@ -69,13 +73,24 @@ const guidedError = ref<string | null>(null)
 
 // ── Computed ───────────────────────────────────────────────────────
 
-const currentEmotion = computed(() => customEmotion.value || selectedEmotion.value)
-const moodScore = computed(() => {
-  const preset = PRESET_EMOTIONS.find(e => e.key === selectedEmotion.value)
-  return preset ? preset.moodScore : 0.5
-})
-const canSave = computed(() => selectedEmotion.value.trim().length > 0)
 const isQuickMode = computed(() => props.mode === 'quick')
+// Quick mode keeps single-select semantics; standard/guided are multi-select.
+const effectiveEmotions = computed<string[]>(() =>
+  isQuickMode.value
+    ? (selectedEmotion.value ? [selectedEmotion.value] : [])
+    : selectedEmotions.value,
+)
+const primaryEmotion = computed(() => effectiveEmotions.value[0] || '')
+const moodScore = computed(() => {
+  const scores: number[] = []
+  for (const key of effectiveEmotions.value) {
+    const preset = PRESET_EMOTIONS.find(e => e.key === key)
+    if (preset) scores.push(preset.moodScore)
+  }
+  if (scores.length === 0) return 0.5
+  return scores.reduce((a, b) => a + b, 0) / scores.length
+})
+const canSave = computed(() => effectiveEmotions.value.length > 0)
 const isGuidedMode = computed(() => props.mode === 'guided')
 const currentQuestion = computed(() => guidedQuestions.value[currentQuestionIndex.value] || '')
 const isLastQuestion = computed(() => currentQuestionIndex.value >= guidedQuestions.value.length - 1)
@@ -87,19 +102,36 @@ const hasMoreQuestions = computed(() => guidedQuestions.value.length > 0)
 watch(
   () => props.initialEmotion,
   (val) => {
-    if (val) selectedEmotion.value = val
+    if (!val) return
+    selectedEmotion.value = val
+    if (!isQuickMode.value && !selectedEmotions.value.includes(val)) {
+      selectedEmotions.value.push(val)
+    }
   },
+  { immediate: true },
 )
 
 // ── Methods ────────────────────────────────────────────────────────
 
-function selectEmotion(emotion: string) {
-  selectedEmotion.value = emotion
-  customEmotion.value = ''
+function isEmotionSelected(emotion: string): boolean {
+  return isQuickMode.value
+    ? selectedEmotion.value === emotion
+    : selectedEmotions.value.includes(emotion)
+}
 
+function selectEmotion(emotion: string) {
   if (isQuickMode.value) {
-    // Quick mode: save immediately on emotion tap
+    // Quick mode: single-select and save immediately on emotion tap.
+    selectedEmotion.value = emotion
     saveCard()
+    return
+  }
+  // Standard / guided: toggle in the multi-select list.
+  const idx = selectedEmotions.value.indexOf(emotion)
+  if (idx === -1) {
+    selectedEmotions.value.push(emotion)
+  } else {
+    selectedEmotions.value.splice(idx, 1)
   }
 }
 
@@ -114,19 +146,44 @@ function toggleTag(tag: string) {
 
 function startCustomEmotion() {
   showCustomInput.value = true
-  customEmotion.value = selectedEmotion.value
+  customEmotion.value = ''
 }
 
 function confirmCustomEmotion() {
-  if (customEmotion.value.trim()) {
-    selectedEmotion.value = customEmotion.value.trim()
+  const value = customEmotion.value.trim()
+  if (value) {
+    if (isQuickMode.value) {
+      selectedEmotion.value = value
+    } else if (!selectedEmotions.value.includes(value)) {
+      selectedEmotions.value.push(value)
+    }
   }
   showCustomInput.value = false
+  customEmotion.value = ''
 }
 
 function cancelCustomEmotion() {
   showCustomInput.value = false
   customEmotion.value = ''
+}
+
+function startCustomTag() {
+  showCustomTagInput.value = true
+  customTag.value = ''
+}
+
+function confirmCustomTag() {
+  const value = customTag.value.trim()
+  if (value && !selectedTags.value.includes(value)) {
+    selectedTags.value.push(value)
+  }
+  showCustomTagInput.value = false
+  customTag.value = ''
+}
+
+function cancelCustomTag() {
+  showCustomTagInput.value = false
+  customTag.value = ''
 }
 
 async function saveCard() {
@@ -137,7 +194,8 @@ async function saveCard() {
 
   try {
     const payload: CardCreatePayload = {
-      emotion: currentEmotion.value,
+      emotion: primaryEmotion.value,
+      emotions: [...effectiveEmotions.value],
       event_summary: eventSummary.value || null,
       mood_score: moodScore.value,
       tags: selectedTags.value,
@@ -162,9 +220,12 @@ async function saveCard() {
 
 function reset() {
   selectedEmotion.value = ''
+  selectedEmotions.value = []
   customEmotion.value = ''
   eventSummary.value = ''
   selectedTags.value = []
+  customTag.value = ''
+  showCustomTagInput.value = false
   saveError.value = null
   savedCardId.value = null
   showCustomInput.value = false
@@ -222,6 +283,7 @@ async function saveGuidedCard() {
   try {
     const payload: CardCreatePayload = {
       emotion: '记录',
+      emotions: ['记录'],
       event_summary: allAnswers || '今天的记忆卡片',
       mood_score: 0.6,
       tags: selectedTags.value,
@@ -264,16 +326,30 @@ defineExpose({ reset, saveCard })
           :key="emotion.key"
           class="mcard-emotion-chip"
           :class="{
-            'mcard-emotion-chip--selected': selectedEmotion === emotion.key && !showCustomInput,
+            'mcard-emotion-chip--selected': isEmotionSelected(emotion.key),
             'mcard-emotion-chip--high': emotion.moodScore >= 0.7,
             'mcard-emotion-chip--mid': emotion.moodScore >= 0.4 && emotion.moodScore < 0.7,
             'mcard-emotion-chip--low': emotion.moodScore < 0.4,
           }"
           :aria-label="emotion.key"
+          :aria-pressed="isEmotionSelected(emotion.key)"
           @click="selectEmotion(emotion.key)"
         >
-          <span class="mcard-emotion-icon">{{ emotion.key.slice(0, 1) }}</span>
+          <component :is="emotionIconFor(emotion.key)" :size="16" class="mcard-emotion-icon" />
           <span class="mcard-emotion-label">{{ emotion.key }}</span>
+        </button>
+
+        <!-- Custom emotions chosen by the user (not in presets) -->
+        <button
+          v-for="custom in effectiveEmotions.filter(e => !PRESET_EMOTIONS.some(p => p.key === e))"
+          :key="`custom-${custom}`"
+          class="mcard-emotion-chip mcard-emotion-chip--selected"
+          :aria-label="custom"
+          :aria-pressed="true"
+          @click="selectEmotion(custom)"
+        >
+          <component :is="emotionIconFor(custom)" :size="16" class="mcard-emotion-icon" />
+          <span class="mcard-emotion-label">{{ custom }}</span>
         </button>
 
         <button
@@ -282,7 +358,7 @@ defineExpose({ reset, saveCard })
           @click="startCustomEmotion"
         >
           <PhPlus :size="14" weight="bold" />
-          <span class="mcard-emotion-label">{{ copy.tagsPlaceholder.slice(0, 4) }}</span>
+          <span class="mcard-emotion-label">{{ copy.customEmotion }}</span>
         </button>
       </div>
 
@@ -291,7 +367,7 @@ defineExpose({ reset, saveCard })
         <input
           v-model="customEmotion"
           class="mcard-custom-input"
-          :placeholder="copy.emotionPlaceholder"
+          :placeholder="copy.customEmotionPlaceholder"
           maxlength="32"
           @keydown.enter="confirmCustomEmotion"
         />
@@ -329,6 +405,42 @@ defineExpose({ reset, saveCard })
           @click="toggleTag(tag.key)"
         >
           {{ tag.key }}
+        </button>
+
+        <!-- Custom tags chosen by the user (not in presets) -->
+        <button
+          v-for="tag in selectedTags.filter(t => !QUICK_TAGS.some(q => q.key === t))"
+          :key="`ctag-${tag}`"
+          class="mcard-tag-chip mcard-tag-chip--selected"
+          @click="toggleTag(tag)"
+        >
+          {{ tag }}
+        </button>
+
+        <button
+          v-if="!showCustomTagInput"
+          class="mcard-tag-chip mcard-tag-chip--add"
+          @click="startCustomTag"
+        >
+          <PhPlus :size="12" weight="bold" />
+          {{ copy.customTag }}
+        </button>
+      </div>
+
+      <!-- Custom tag input -->
+      <div v-if="showCustomTagInput" class="mcard-custom-row">
+        <input
+          v-model="customTag"
+          class="mcard-custom-input"
+          :placeholder="copy.customTagPlaceholder"
+          maxlength="16"
+          @keydown.enter="confirmCustomTag"
+        />
+        <button class="mcard-custom-btn mcard-custom-btn--ok" @click="confirmCustomTag">
+          <PhCheck :size="14" weight="bold" />
+        </button>
+        <button class="mcard-custom-btn mcard-custom-btn--cancel" @click="cancelCustomTag">
+          <PhX :size="14" />
         </button>
       </div>
     </div>
@@ -472,7 +584,8 @@ defineExpose({ reset, saveCard })
 }
 
 .mcard-emotion-icon {
-  font-size: 0.9375rem;
+  display: inline-flex;
+  flex-shrink: 0;
   line-height: 1;
 }
 
@@ -593,6 +706,11 @@ defineExpose({ reset, saveCard })
   background: color-mix(in srgb, var(--color-accent) 15%, transparent);
   color: var(--color-accent);
   font-weight: 600;
+}
+
+.mcard-tag-chip--add {
+  border-style: dashed;
+  gap: 0.25rem;
 }
 
 /* ── Guided ──────────────────────────────────────────────── */
