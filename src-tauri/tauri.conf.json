@@ -39,6 +39,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/splash.html"]
+    "resources": ["resources/splash.html"],
+    "externalBin": ["binaries/nightdiary-backend"],
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "languages": ["SimpChinese", "English"]
+      }
+    }
   }
 }
