@@ -91,6 +91,43 @@ class ServiceContainer:
             style_preference_store=SqliteStylePreferenceStore(factory),
         )
 
+    def _ensure_memory_layers_locked(self) -> None:
+        """Initialise the three in-process memory layers (cheap, SQLite-backed).
+
+        Must be called while holding ``self._ai_lock``. Idempotent.
+        """
+        if self.episodic_memory is not None:
+            return
+
+        episodic_store = SqliteEpisodicMemoryStore(self.session_factory)
+        episodic = EpisodicMemory(store=episodic_store, user_id="default")
+        try:
+            episodic.load()
+        except Exception as exc:
+            logger.warning("Episodic memory load skipped: %s", exc)
+
+        self.episodic_memory = episodic
+        self.long_term_memory = LongTermMemory(store=SqliteLongTermProfileStore(self.session_factory))
+        self.working_memory = WorkingMemory()
+
+    def _ensure_card_collection_locked(self) -> None:
+        """Initialise the card Chroma collection. Hold ``self._ai_lock``. Idempotent."""
+        if self.card_collection is None:
+            self.card_collection = CardCollectionManager(settings=self.settings)
+
+    def ensure_memory(self) -> None:
+        """Lightweight path for card flows: three-layer memory + card collection.
+
+        Avoids loading the full RAG/agent stack (knowledge store, BM25, retriever,
+        diary collection, graph) on first card creation/search. Idempotent.
+        """
+        if self.episodic_memory is not None and self.card_collection is not None:
+            return
+
+        with self._ai_lock:
+            self._ensure_memory_layers_locked()
+            self._ensure_card_collection_locked()
+
     def ensure_ai_stack(self) -> None:
         """Load RAG / memory / agent graph (heavy — defer until first AI call)."""
         if self.diary_collection is not None:
@@ -102,7 +139,7 @@ class ServiceContainer:
 
             cfg = self.settings
             diary_collection = DiaryCollectionManager(settings=cfg)
-            card_collection = CardCollectionManager(settings=cfg)
+            self._ensure_card_collection_locked()
             knowledge_store = DomainKnowledgeStore(settings=cfg)
             bm25 = BM25Index()
             retriever = HybridRetriever(
@@ -110,21 +147,12 @@ class ServiceContainer:
                 bm25_index=bm25,
             )
 
-            episodic_store = SqliteEpisodicMemoryStore(self.session_factory)
-            episodic = EpisodicMemory(store=episodic_store, user_id="default")
-            try:
-                episodic.load()
-            except Exception as exc:
-                logger.warning("Episodic memory load skipped: %s", exc)
+            self._ensure_memory_layers_locked()
 
             self.diary_collection = diary_collection
-            self.card_collection = card_collection
             self.knowledge_store = knowledge_store
             self.bm25_index = bm25
             self.retriever = retriever
-            self.episodic_memory = episodic
-            self.long_term_memory = LongTermMemory(store=SqliteLongTermProfileStore(self.session_factory))
-            self.working_memory = WorkingMemory()
             logger.info("AI stack ready (RAG + memory + agents)")
 
     @classmethod
