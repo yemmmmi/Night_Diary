@@ -34,5 +34,17 @@ if (process.platform === 'win32') {
   }
 }
 
+// Linux/macOS dev: touch a placeholder so `cargo check` can resolve externalBin.
+// Release builds must replace this via `npm run prepare-sidecar` after PyInstaller.
+if (process.platform !== 'win32') {
+  mkdirSync(destDir, { recursive: true })
+  const placeholder = path.join(destDir, `nightdiary-backend-${triple}`)
+  if (!existsSync(placeholder)) {
+    copyFileSync(process.execPath, placeholder)
+    console.warn(`[ensure-sidecar-stub] using node placeholder → ${placeholder}`)
+  }
+  process.exit(0)
+}
+
 console.error('No sidecar or Windows stub available. Run: make build-sidecar')
 process.exit(1)
