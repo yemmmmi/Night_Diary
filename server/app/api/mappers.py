@@ -76,3 +76,10 @@ def feedback_to_response(row: FeedbackRow) -> FeedbackResponse:
 
 def model_to_response(row: ModelProviderRow) -> ModelResponse:
     return ModelResponse(**model_service.model_to_public_dict(row))
+
+
+def card_to_response(row) -> dict:
+    """Convert MemoryCardRow to dict (for CardResponse.model_validate)."""
+    from app.services.card_service import row_to_dict
+
+    return row_to_dict(row)

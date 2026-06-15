@@ -168,5 +168,46 @@ class ModelDownloadStatusResponse(BaseModel):
     downloading: bool = False
 
 
+# ── Memory Card ────────────────────────────────────────────────────────
+
+
+class CardCreateRequest(BaseModel):
+    emotion: str = Field(min_length=1, max_length=32)
+    event_summary: str | None = Field(default=None)
+    mood_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    tags: list[str] = Field(default_factory=list)
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    card_type: Literal["quick", "standard", "guided"] = "standard"
+
+
+class CardUpdateRequest(BaseModel):
+    emotion: str | None = Field(default=None, min_length=1, max_length=32)
+    event_summary: str | None = None
+    mood_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    tags: list[str] | None = None
+    importance: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class CardResponse(BaseModel):
+    card_id: str
+    emotion: str
+    event_summary: str | None
+    mood_score: float
+    tags: list[str]
+    importance: float
+    card_type: str
+    diary_id: int | None
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CardExpandRequest(BaseModel):
+    """Expand a memory card into a full diary entry."""
+
+    pass
+
+
 class ErrorResponse(BaseModel):
     detail: str
