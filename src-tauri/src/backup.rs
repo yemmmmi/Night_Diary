@@ -24,6 +24,30 @@ fn backup_stamp() -> String {
     format!("backup-{secs}.db")
 }
 
+/// Auto backup filename per E-1 spec: ``YYYY-MM-DDTHHmmss-auto.db``.
+fn auto_backup_stamp() -> String {
+    let now = chrono::Local::now();
+    format!("{}-auto.db", now.format("%Y-%m-%dT%H%M%S"))
+}
+
+/// Copy ``night_diary.db`` to ``backups/`` on application exit (best-effort).
+pub fn auto_backup_on_exit(data_dir: &str) -> Option<String> {
+    let src = db_path(data_dir);
+    if !src.is_file() {
+        return None;
+    }
+
+    let dir = backups_dir(data_dir);
+    if fs::create_dir_all(&dir).is_err() {
+        return None;
+    }
+
+    let filename = auto_backup_stamp();
+    let dest = dir.join(&filename);
+    fs::copy(&src, &dest).ok()?;
+    Some(filename)
+}
+
 #[tauri::command]
 pub fn list_backups(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let dir = backups_dir(&state.data_dir);

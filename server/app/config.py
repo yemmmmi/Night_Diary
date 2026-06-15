@@ -89,6 +89,12 @@ class Settings(BaseSettings):
         description="Sentence-transformers model name for vector embeddings.",
     )
 
+    # ---- HuggingFace (first-run model download) ----
+    hf_endpoint: str = Field(
+        default="https://hf-mirror.com",
+        description="HuggingFace mirror for embedding/reranker downloads (China-friendly).",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

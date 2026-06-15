@@ -1,7 +1,7 @@
 mod backup;
 mod process;
 
-use backup::{create_backup, list_backups, restore_backup};
+use backup::{auto_backup_on_exit, create_backup, list_backups, restore_backup};
 
 use process::{
     allocate_port, default_data_dir, graceful_shutdown, health_check_once, health_poll,
@@ -211,13 +211,13 @@ pub fn run() {
         .run(|app_handle, event| {
             if let RunEvent::Exit = event {
                 if let Some(state) = app_handle.try_state::<AppState>() {
-                    if state.external_backend.load(Ordering::SeqCst) {
-                        return;
-                    }
-                    let port = state.backend_port;
-                    let mut guard = state.backend.lock().expect("backend lock poisoned");
-                    if let Some(ref mut backend) = *guard {
-                        graceful_shutdown(port, backend.child_mut());
+                    if !state.external_backend.load(Ordering::SeqCst) {
+                        let _ = auto_backup_on_exit(&state.data_dir);
+                        let port = state.backend_port;
+                        let mut guard = state.backend.lock().expect("backend lock poisoned");
+                        if let Some(ref mut backend) = *guard {
+                            graceful_shutdown(port, backend.child_mut());
+                        }
                     }
                 }
             }

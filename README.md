@@ -82,9 +82,21 @@ npm run dev       # Vite → http://localhost:5173（需配合 dev-api）
 | `make dev-api` | 启动 Python 后端（热重载，仅 127.0.0.1） |
 | `make dev-web` | 启动 Tauri（自动启停 :8000 后端，Ctrl+C 一并退出） |
 | `make dev-web-fast` | Tauri + 已有 `dev-api`（attach 模式，不关闭后端） |
+| `make build` | PyInstaller sidecar + Tauri 安装包 |
+| `make e2e` | API 端到端流程测试 |
+| `make smoke` | 性能冒烟检查 |
 | `make test` | 跑 pytest + vitest |
 | `make lint` | ruff + mypy + eslint + vue-tsc |
 | `make format` | ruff format |
+
+## 生产构建
+
+```bash
+cd server && pip install -e ".[dev,eval]"
+cd .. && make build
+```
+
+安装包输出在 `src-tauri/target/release/bundle/nsis/`。详见 [`docs/dev-guide.md`](./docs/dev-guide.md) 与 [`docs/user-guide.md`](./docs/user-guide.md)。
 
 ## 开发约定
 
