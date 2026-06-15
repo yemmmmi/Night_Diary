@@ -5,6 +5,7 @@ import { PhArrowLeft, PhCalendarBlank, PhListBullets, PhCards, PhArrowSquareOut,
 
 import CalendarView from '@/features/review/CalendarView.vue'
 import TimelineView from '@/features/review/TimelineView.vue'
+import EmotionChips from '@/features/card/EmotionChips.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import type { DiaryEntry } from '@/shared/api/diary'
@@ -292,6 +293,10 @@ watch(
 )
 
 onMounted(async () => {
+  const queryMode = route.query.mode
+  if (queryMode === 'cards' || queryMode === 'calendar' || queryMode === 'timeline') {
+    mode.value = queryMode
+  }
   await Promise.all([diaryStore.loadEntries(), cardStore.loadCards()])
   syncFromRoute()
   if (mode.value === 'cards') {
@@ -414,7 +419,7 @@ watch(
               class="review-card-item glass-panel"
             >
               <div class="review-card-item__head">
-                <span class="review-card-item__emotion">{{ card.emotion }}</span>
+                <EmotionChips :emotions="card.emotions" :emotion="card.emotion" />
                 <span class="review-card-item__type">
                   {{ card.card_type === 'quick' ? '极速' : card.card_type === 'guided' ? '引导' : '标准' }}
                 </span>
@@ -458,7 +463,7 @@ watch(
 
           <div v-for="card in cardStore.cards" :key="card.card_id" class="review-card-item glass-panel">
             <div class="review-card-item__head">
-              <span class="review-card-item__emotion">{{ card.emotion }}</span>
+              <EmotionChips :emotions="card.emotions" :emotion="card.emotion" />
               <span class="review-card-item__type">
                 {{ card.card_type === 'quick' ? '极速' : card.card_type === 'guided' ? '引导' : '标准' }}
               </span>

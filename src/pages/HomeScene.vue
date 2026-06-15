@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhCaretLeft, PhCaretRight, PhCalendarBlank, PhNotePencil } from '@phosphor-icons/vue'
+import { PhCaretLeft, PhCaretRight, PhCalendarBlank, PhNotePencil, PhBrain } from '@phosphor-icons/vue'
 
 import BrandMark from '@/shared/components/BrandMark.vue'
 import GameButton from '@/shared/components/GameButton.vue'
@@ -9,9 +9,12 @@ import { getStats, type AppStats } from '@/shared/api/stats'
 import type { DiaryEntry } from '@/shared/api/diary'
 import { homeSceneCopy as copy } from '@/shared/copy/homeScene'
 import { cardCopy } from '@/shared/copy/card'
+import { weeklyCopy } from '@/shared/copy/weekly'
+import { memoryCopy } from '@/shared/copy/memory'
 import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
 import MemoryCardInput from '@/features/card/MemoryCardInput.vue'
+import EmotionChips from '@/features/card/EmotionChips.vue'
 import {
   computeWritingStreak,
   diaryStatus,
@@ -107,6 +110,14 @@ function goReview() {
   router.push('/review')
 }
 
+function goWeekly() {
+  router.push('/weekly')
+}
+
+function goMemory() {
+  router.push('/memory')
+}
+
 async function refreshHome() {
   await Promise.all([diaryStore.loadEntries(), loadStats(), cardStore.loadCards()])
 }
@@ -145,6 +156,10 @@ watch(
         <GameButton variant="ghost" @click="cardStore.openDrawer()">
           <PhNotePencil :size="16" />
           {{ cardCopy.newCard }}
+        </GameButton>
+        <GameButton variant="ghost" @click="goMemory">
+          <PhBrain :size="16" />
+          {{ memoryCopy.title }}
         </GameButton>
         <RouterLink to="/settings" class="home-scene__icon-link" :aria-label="copy.settingsAria">
           <PhCalendarBlank :size="18" />
@@ -218,9 +233,17 @@ watch(
 
     <div v-if="!isEmpty" class="home-scene__footer">
       <span class="home-scene__footer-stats">{{ footerStatsLabel }}</span>
-      <button type="button" class="home-scene__review-link" @click="goReview">
-        {{ copy.reviewLink }}
-      </button>
+      <div class="home-scene__footer-links">
+        <button type="button" class="home-scene__review-link" @click="goWeekly">
+          {{ weeklyCopy.title }}
+        </button>
+        <button type="button" class="home-scene__review-link" @click="goMemory">
+          {{ memoryCopy.title }}
+        </button>
+        <button type="button" class="home-scene__review-link" @click="goReview">
+          {{ copy.reviewLink }}
+        </button>
+      </div>
     </div>
 
     <!-- ── Card drawer overlay ──────────────────────────────── -->
@@ -260,7 +283,12 @@ watch(
                   :key="card.card_id"
                   class="recent-card-item"
                 >
-                  <span class="recent-card-emotion">{{ card.emotion }}</span>
+                  <EmotionChips
+                    class="recent-card-emotion"
+                    :emotions="card.emotions"
+                    :emotion="card.emotion"
+                    :size="13"
+                  />
                   <span v-if="card.event_summary" class="recent-card-summary">
                     {{ card.event_summary.slice(0, 40) }}{{ card.event_summary.length > 40 ? '\u2026' : '' }}
                   </span>
@@ -520,6 +548,11 @@ watch(
 .home-scene__footer-stats {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
+}
+.home-scene__footer-links {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 .home-scene__review-link {
   font-size: 0.75rem;
