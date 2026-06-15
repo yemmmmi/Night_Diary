@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 
 import CustomTitlebar from '@/shared/components/CustomTitlebar.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import PageTransition from '@/shared/components/PageTransition.vue'
 import ParticleBackground from '@/shared/components/ParticleBackground.vue'
-import { createBackup } from '@/shared/api/settings'
 import { useBackend } from '@/shared/composables/useBackend'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -52,23 +50,6 @@ const statusBanner = computed(() => {
 
   return null
 
-})
-
-onMounted(async () => {
-  if (!isTauri.value) return
-  try {
-    const win = getCurrentWindow()
-    await win.onCloseRequested(async () => {
-      if (!settings.autoBackup) return
-      try {
-        await createBackup()
-      } catch {
-        // ignore backup errors during shutdown
-      }
-    })
-  } catch {
-    // window API unavailable in tests
-  }
 })
 
 </script>
