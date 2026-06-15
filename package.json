@@ -13,9 +13,7 @@
     "type-check": "vue-tsc --noEmit",
     "tauri": "node scripts/tauri-cli.mjs",
     "prepare-sidecar": "node scripts/prepare-sidecar.mjs",
-    "ensure-sidecar-stub": "node scripts/ensure-sidecar-stub.mjs",
-    "predev": "node scripts/ensure-sidecar-stub.mjs",
-    "prebuild": "node scripts/ensure-sidecar-stub.mjs"
+    "ensure-sidecar-stub": "node scripts/ensure-sidecar-stub.mjs"
   },
   "dependencies": {
     "@phosphor-icons/vue": "^2.2.1",
