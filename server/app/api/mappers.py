@@ -11,12 +11,14 @@ from app.api.schemas import (
     ModelResponse,
     TagBrief,
     TagResponse,
+    WeeklyReportResponse,
 )
 from app.infrastructure.models.analysis import AnalysisRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.infrastructure.models.feedback_record import FeedbackRow
 from app.infrastructure.models.model_provider import ModelProviderRow
 from app.infrastructure.models.tag import TagRow
+from app.infrastructure.models.weekly_report import WeeklyReportRow
 from app.services import model_service
 
 
@@ -85,3 +87,7 @@ def card_to_response(row: Any) -> dict[str, Any]:
     from app.services.card_service import row_to_dict
 
     return row_to_dict(row)
+
+
+def weekly_to_response(row: WeeklyReportRow) -> WeeklyReportResponse:
+    return WeeklyReportResponse.model_validate(row)

@@ -23,6 +23,7 @@ class MemoryCardRow(Base):
 
     card_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     emotion: Mapped[str] = mapped_column(String(32), nullable=False, default="neutral")
+    emotions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     event_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     mood_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
     tags_json: Mapped[str | None] = mapped_column(Text, nullable=True)
