@@ -10,12 +10,8 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import TYPE_CHECKING
 
 from app.shared.llm import LLMClient, message_text
-
-if TYPE_CHECKING:
-    from app.shared.tracing_llm import TracingLLMClient
 
 logger = logging.getLogger(__name__)
 

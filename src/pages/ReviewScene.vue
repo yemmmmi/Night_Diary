@@ -40,6 +40,7 @@ const searchActive = ref(false)
 // ── Mood chart state ──────────────────────────────────────────────
 const moodTrends = ref<MoodTrendPoint[]>([])
 const chartEl = ref<HTMLDivElement | null>(null)
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 let chartInstance: any = null
 
 const entriesOnSelectedDate = computed(() => {
@@ -205,6 +206,7 @@ async function loadMoodTrends() {
 
 function renderMoodChart() {
   if (!chartEl.value || moodTrends.value.length < 2) return
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const echarts = (window as any).echarts
   if (!echarts) return
 
@@ -212,7 +214,6 @@ function renderMoodChart() {
   const accent = style.getPropertyValue('--color-accent').trim() || '#D4A574'
   const muted = style.getPropertyValue('--color-text-secondary').trim() || '#7A6F63'
   const rule = style.getPropertyValue('--color-border').trim() || 'rgba(61,52,41,0.12)'
-  const bg2 = style.getPropertyValue('--color-bg-elevated').trim() || '#F5F0E8'
 
   if (chartInstance) chartInstance.dispose()
 
@@ -260,6 +261,7 @@ function renderMoodChart() {
     tooltip: {
       trigger: 'axis',
       appendToBody: true,
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       formatter: (params: any) => {
         const p = params[0]
         return `${p.axisValue}<br/>平均心情: ${(p.value * 100).toFixed(0)}%`
