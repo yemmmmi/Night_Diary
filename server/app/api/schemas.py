@@ -153,6 +153,127 @@ class StatsResponse(BaseModel):
     total_tokens_out: int
 
 
+
+# ── Memory Card ────────────────────────────────────────────────────────
+
+
+class CardCreateRequest(BaseModel):
+    emotion: str = Field(min_length=1, max_length=32)
+    emotions: list[str] = Field(default_factory=list)
+    event_summary: str | None = Field(default=None)
+    mood_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    tags: list[str] = Field(default_factory=list)
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    card_type: Literal["quick", "standard", "guided"] = "standard"
+
+
+class CardUpdateRequest(BaseModel):
+    emotion: str | None = Field(default=None, min_length=1, max_length=32)
+    emotions: list[str] | None = None
+    event_summary: str | None = None
+    mood_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    tags: list[str] | None = None
+    importance: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class CardResponse(BaseModel):
+    card_id: str
+    emotion: str
+    emotions: list[str] = Field(default_factory=list)
+    event_summary: str | None
+    mood_score: float
+    tags: list[str]
+    importance: float
+    card_type: str
+    diary_id: int | None
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CardExpandRequest(BaseModel):
+    """Expand a memory card into a full diary entry."""
+
+    pass
+
+
+# ── Weekly Report ──────────────────────────────────────────────────────
+
+
+class WeeklyReportResponse(BaseModel):
+    id: int
+    period_start: datetime.date
+    period_end: datetime.date
+    content: str
+    diary_count: int
+    card_count: int
+    avg_mood: float | None
+    token_cost: int | None
+    execution_tier: str | None
+    created_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Memory Library ─────────────────────────────────────────────────────
+
+
+class EpisodicEntryResponse(BaseModel):
+    entry_id: str
+    event: str
+    emotion: str
+    ai_suggestion: str
+    user_feedback: str
+    importance: float
+    timestamp: float
+    diary_ids: list[str] = Field(default_factory=list)
+    source: Literal["card", "diary"]
+
+
+class EmotionBaselineResponse(BaseModel):
+    average_sentiment: float
+    volatility: float
+    dominant_emotion: str
+
+
+class ImportantPersonResponse(BaseModel):
+    name: str
+    relation: str
+    sentiment: float
+
+
+class UserProfileResponse(BaseModel):
+    personality_tags: list[str] = Field(default_factory=list)
+    emotion_baseline: EmotionBaselineResponse
+    important_people: list[ImportantPersonResponse] = Field(default_factory=list)
+    recurring_topics: list[str] = Field(default_factory=list)
+    preferred_response_style: str
+
+
+class MemoryOverviewResponse(BaseModel):
+    episodic_total: int
+    episodic_from_cards: int
+    episodic_from_diaries: int
+    card_total: int
+    profile_built: bool
+
+
+class ModelDownloadItemResponse(BaseModel):
+    key: str
+    repo_id: str
+    status: Literal["pending", "downloading", "ready", "error", "skipped"]
+    progress: float = 0.0
+    error: str | None = None
+
+
+class ModelDownloadStatusResponse(BaseModel):
+    items: list[ModelDownloadItemResponse]
+    overall_progress: float = 0.0
+    all_ready: bool = False
+    downloading: bool = False
+
+
 class ErrorResponse(BaseModel):
     detail: str
 

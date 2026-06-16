@@ -91,6 +91,9 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     cfg = settings or get_settings()
 
+    from app.services.model_downloader import configure_hf_environment
+
+    configure_hf_environment(cfg)
     _ensure_dirs(cfg)
 
     app = FastAPI(title=cfg.app_name, version="0.0.1", lifespan=lifespan)

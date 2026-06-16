@@ -80,8 +80,34 @@ class BootstrapNotReadyError(AppError):
         super().__init__(message="AI 引擎仍在初始化，请稍候", http_status=503)
 
 
+class WeeklyReportNotFoundError(AppError):
+    def __init__(self, *, report_id: int | None = None) -> None:
+        message = f"周记 {report_id} 不存在" if report_id is not None else "暂无周记记录"
+        super().__init__(message=message, http_status=404)
+        self.report_id = report_id
+
+
+class WeeklyReportExistsError(AppError):
+    def __init__(self, message: str = "本周已生成周记") -> None:
+        super().__init__(message=message, http_status=409)
+
+
+class WeeklyReportEmptyError(AppError):
+    def __init__(self, message: str = "本周还没有日记或记忆卡片，无法生成周记") -> None:
+        super().__init__(message=message, http_status=422)
+
+
 class ConversationNotFoundError(AppError):
     def __init__(self, *, conversation_id: str | None = None) -> None:
         message = f"会话 {conversation_id} 不存在" if conversation_id else "会话不存在"
         super().__init__(message=message, http_status=404)
         self.conversation_id = conversation_id
+
+
+class NotFoundError(AppError):
+    """Generic 404 for resources identified by (resource_type, resource_id)."""
+
+    def __init__(self, *, resource: str, resource_id: str | int) -> None:
+        super().__init__(message=f"{resource} {resource_id} 不存在", http_status=404)
+        self.resource = resource
+        self.resource_id = resource_id

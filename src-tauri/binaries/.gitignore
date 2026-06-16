@@ -1,0 +1,2 @@
+# PyInstaller output copied here before `tauri build` — do not commit real binaries
+*.exe
