@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import json
+
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
     AnalysisResponse,
+    ConversationResponse,
     DiaryResponse,
     FeedbackResponse,
+    MessageResponse,
     ModelResponse,
     TagBrief,
     TagResponse,
 )
 from app.infrastructure.models.analysis import AnalysisRow
+from app.infrastructure.models.conversation import ChatMessageRow, ConversationRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.infrastructure.models.feedback_record import FeedbackRow
 from app.infrastructure.models.model_provider import ModelProviderRow
@@ -76,3 +81,31 @@ def feedback_to_response(row: FeedbackRow) -> FeedbackResponse:
 
 def model_to_response(row: ModelProviderRow) -> ModelResponse:
     return ModelResponse(**model_service.model_to_public_dict(row))
+
+
+def conversation_to_response(row: ConversationRow) -> ConversationResponse:
+    return ConversationResponse.model_validate(row)
+
+
+def message_to_response(row: ChatMessageRow) -> MessageResponse:
+    diary_ids: list[int] | None = None
+    memory_ids: list[str] | None = None
+    if row.retrieved_diary_ids:
+        try:
+            diary_ids = json.loads(row.retrieved_diary_ids)
+        except (json.JSONDecodeError, TypeError):
+            diary_ids = None
+    if row.retrieved_memory_ids:
+        try:
+            memory_ids = json.loads(row.retrieved_memory_ids)
+        except (json.JSONDecodeError, TypeError):
+            memory_ids = None
+    return MessageResponse(
+        id=row.id,
+        conversation_id=row.conversation_id,
+        role=row.role,
+        content=row.content,
+        retrieved_diary_ids=diary_ids,
+        retrieved_memory_ids=memory_ids,
+        created_at=row.created_at,
+    )

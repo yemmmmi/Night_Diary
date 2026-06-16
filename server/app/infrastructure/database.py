@@ -31,6 +31,7 @@ def init_db(engine: Engine) -> None:
     from app.infrastructure.models import agent_decision as _agent_decision_models  # noqa: F401
     from app.infrastructure.models import analysis as _analysis_models  # noqa: F401
     from app.infrastructure.models import app_config as _app_config_models  # noqa: F401
+    from app.infrastructure.models import conversation as _conversation_models  # noqa: F401
     from app.infrastructure.models import diary_entry as _diary_entry_models  # noqa: F401
     from app.infrastructure.models import feedback as _feedback_models  # noqa: F401
     from app.infrastructure.models import feedback_record as _feedback_record_models  # noqa: F401

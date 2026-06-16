@@ -78,3 +78,10 @@ class AIServiceUnavailableError(AppError):
 class BootstrapNotReadyError(AppError):
     def __init__(self) -> None:
         super().__init__(message="AI 引擎仍在初始化，请稍候", http_status=503)
+
+
+class ConversationNotFoundError(AppError):
+    def __init__(self, *, conversation_id: str | None = None) -> None:
+        message = f"会话 {conversation_id} 不存在" if conversation_id else "会话不存在"
+        super().__init__(message=message, http_status=404)
+        self.conversation_id = conversation_id
