@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "type-check": "vue-tsc --noEmit",
-    "tauri": "node scripts/tauri-cli.mjs"
+    "tauri": "node scripts/tauri-cli.mjs",
+    "prepare-sidecar": "node scripts/prepare-sidecar.mjs",
+    "ensure-sidecar-stub": "node scripts/ensure-sidecar-stub.mjs"
   },
   "dependencies": {
     "@phosphor-icons/vue": "^2.2.1",
