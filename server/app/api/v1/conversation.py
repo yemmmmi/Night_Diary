@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Response, status
 
 from app.api.deps import DbDep
@@ -71,8 +73,8 @@ def send_message(
     )
 
 
-@router.post("/{conversation_id}/generate-card", response_model=dict)
-def generate_card_summary(conversation_id: str, db: DbDep) -> dict:
+@router.post("/{conversation_id}/generate-card", response_model=dict[str, Any])
+def generate_card_summary(conversation_id: str, db: DbDep) -> dict[str, Any]:
     conv = conversation_service.get_conversation(db, conversation_id)
     if conv is None:
         raise ConversationNotFoundError(conversation_id=conversation_id)
