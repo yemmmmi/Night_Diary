@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhCaretLeft, PhCaretRight, PhCalendarBlank } from '@phosphor-icons/vue'
+import { PhCaretLeft, PhCaretRight, PhCalendarBlank, PhNotePencil } from '@phosphor-icons/vue'
 
 import BrandMark from '@/shared/components/BrandMark.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import { getStats, type AppStats } from '@/shared/api/stats'
 import type { DiaryEntry } from '@/shared/api/diary'
 import { homeSceneCopy as copy } from '@/shared/copy/homeScene'
+import { cardCopy } from '@/shared/copy/card'
 import { useDiaryStore } from '@/stores/diary'
+import { useCardStore } from '@/stores/card'
+import MemoryCardInput from '@/features/card/MemoryCardInput.vue'
 import {
   computeWritingStreak,
   diaryStatus,
@@ -25,6 +28,7 @@ import {
 const router = useRouter()
 const route = useRoute()
 const diaryStore = useDiaryStore()
+const cardStore = useCardStore()
 
 const weekOffset = ref(0)
 const stats = ref<AppStats | null>(null)
@@ -104,7 +108,7 @@ function goReview() {
 }
 
 async function refreshHome() {
-  await Promise.all([diaryStore.loadEntries(), loadStats()])
+  await Promise.all([diaryStore.loadEntries(), loadStats(), cardStore.loadCards()])
 }
 
 async function loadStats() {
@@ -138,6 +142,10 @@ watch(
         </div>
       </div>
       <div class="home-scene__header-actions">
+        <GameButton variant="ghost" @click="cardStore.openDrawer()">
+          <PhNotePencil :size="16" />
+          {{ cardCopy.newCard }}
+        </GameButton>
         <RouterLink to="/settings" class="home-scene__icon-link" :aria-label="copy.settingsAria">
           <PhCalendarBlank :size="18" />
         </RouterLink>
@@ -214,6 +222,58 @@ watch(
         {{ copy.reviewLink }}
       </button>
     </div>
+
+    <!-- ── Card drawer overlay ──────────────────────────────── -->
+    <Teleport to="body">
+      <Transition name="card-drawer">
+        <div
+          v-if="cardStore.showCardDrawer"
+          class="card-drawer-backdrop"
+          @click.self="cardStore.closeDrawer()"
+        >
+          <div class="card-drawer-panel">
+            <div class="card-drawer-header">
+              <h2 class="card-drawer-title">{{ cardCopy.newCard }}</h2>
+              <button
+                type="button"
+                class="card-drawer-close"
+                @click="cardStore.closeDrawer()"
+              >
+                &times;
+              </button>
+            </div>
+            <div class="card-drawer-body">
+              <MemoryCardInput
+                mode="standard"
+                :auto-close="true"
+                @saved="cardStore.loadCards()"
+                @close="cardStore.closeDrawer()"
+              />
+            </div>
+
+            <!-- Recent cards -->
+            <div v-if="cardStore.cards.length > 0" class="card-drawer-recent">
+              <p class="card-drawer-recent-title">最近记忆卡片</p>
+              <div class="card-drawer-recent-list">
+                <div
+                  v-for="card in cardStore.cards.slice(0, 5)"
+                  :key="card.card_id"
+                  class="recent-card-item"
+                >
+                  <span class="recent-card-emotion">{{ card.emotion }}</span>
+                  <span v-if="card.event_summary" class="recent-card-summary">
+                    {{ card.event_summary.slice(0, 40) }}{{ card.event_summary.length > 40 ? '\u2026' : '' }}
+                  </span>
+                  <span class="recent-card-type">
+                    {{ card.card_type === 'quick' ? '极速' : card.card_type === 'guided' ? '引导' : '标准' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </main>
 </template>
 
@@ -471,5 +531,147 @@ watch(
 }
 .home-scene__review-link:hover {
   color: var(--color-accent-muted);
+}
+
+/* ── Card drawer ──────────────────────────────────────────────── */
+.card-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 3rem 1rem 1rem;
+  overflow-y: auto;
+}
+
+.card-drawer-panel {
+  width: 100%;
+  max-width: 28rem;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-outer, 1.5rem);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.card-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.card-drawer-title {
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.card-drawer-close {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background var(--motion-duration, 220ms);
+}
+
+.card-drawer-close:hover {
+  background: var(--color-bg-elevated-2);
+}
+
+.card-drawer-body {
+  padding: 1.25rem;
+}
+
+.card-drawer-recent {
+  border-top: 1px solid var(--color-border);
+  padding: 1rem 1.25rem;
+}
+
+.card-drawer-recent-title {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.card-drawer-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.recent-card-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.625rem;
+  border-radius: 0.5rem;
+  background: var(--color-bg);
+  font-size: 0.8125rem;
+}
+
+.recent-card-emotion {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  color: var(--color-accent);
+  white-space: nowrap;
+  min-width: 2.5rem;
+}
+
+.recent-card-summary {
+  font-family: var(--font-diary);
+  color: var(--color-text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-card-type {
+  font-family: var(--font-ui);
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  padding: 0.125rem 0.4375rem;
+  background: var(--color-bg-elevated-2);
+  border-radius: 0.375rem;
+}
+
+/* ── Drawer transition ───────────────────────────────────────── */
+.card-drawer-enter-active,
+.card-drawer-leave-active {
+  transition: opacity var(--motion-duration, 220ms) var(--motion-ease, ease);
+}
+
+.card-drawer-enter-active .card-drawer-panel,
+.card-drawer-leave-active .card-drawer-panel {
+  transition: transform var(--motion-duration, 220ms) var(--motion-ease, ease);
+}
+
+.card-drawer-enter-from,
+.card-drawer-leave-to {
+  opacity: 0;
+}
+
+.card-drawer-enter-from .card-drawer-panel {
+  transform: translateY(1rem) scale(0.98);
+}
+
+.card-drawer-leave-to .card-drawer-panel {
+  transform: translateY(0.5rem) scale(0.98);
 }
 </style>

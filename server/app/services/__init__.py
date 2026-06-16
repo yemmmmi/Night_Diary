@@ -2,6 +2,8 @@
 
 from app.services import (
     analysis_service,
+    card_prompt_service,
+    card_service,
     diary_service,
     feedback_service,
     model_service,
@@ -12,6 +14,8 @@ from app.services.container import ServiceContainer
 __all__ = [
     "ServiceContainer",
     "analysis_service",
+    "card_prompt_service",
+    "card_service",
     "diary_service",
     "feedback_service",
     "model_service",

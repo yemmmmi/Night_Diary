@@ -35,15 +35,21 @@ def test_ready_returns_ok_after_core_bootstrap() -> None:
 
 
 def test_ready_returns_503_while_bootstrapping() -> None:
-    with TestClient(create_app()) as client:
-        # Core bootstrap may finish before the first request on fast CI runners;
-        # force bootstrapping state to test the /ready contract deterministically.
-        client.app.state.bootstrap_done = False
-        client.app.state.container = None
+    import app.main
 
-        response = client.get("/ready")
-        assert response.status_code == 503
-        assert response.json()["status"] == "bootstrapping"
+    # Patch _bootstrap_core_sync so the background thread never sets
+    # bootstrap_done → True.  This eliminates the race between the
+    # manual state override and the async core bootstrap.
+    original = app.main._bootstrap_core_sync
+    app.main._bootstrap_core_sync = lambda _app: None  # type: ignore[assignment]
+
+    try:
+        with TestClient(create_app()) as client:
+            response = client.get("/ready")
+            assert response.status_code == 503
+            assert response.json()["status"] == "bootstrapping"
+    finally:
+        app.main._bootstrap_core_sync = original
 
 
 def test_openapi_schema_available() -> None:

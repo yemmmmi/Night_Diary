@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
@@ -76,3 +78,10 @@ def feedback_to_response(row: FeedbackRow) -> FeedbackResponse:
 
 def model_to_response(row: ModelProviderRow) -> ModelResponse:
     return ModelResponse(**model_service.model_to_public_dict(row))
+
+
+def card_to_response(row: Any) -> dict[str, Any]:
+    """Convert MemoryCardRow to dict (for CardResponse.model_validate)."""
+    from app.services.card_service import row_to_dict
+
+    return row_to_dict(row)
