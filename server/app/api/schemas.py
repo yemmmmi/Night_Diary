@@ -261,3 +261,37 @@ class MemoryOverviewResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+# ── Conversation (Chat) ──────────────────────────────────────────────
+
+
+class ConversationResponse(BaseModel):
+    id: str
+    title: str
+    active_replier_id: str
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MessageResponse(BaseModel):
+    id: str
+    conversation_id: str
+    role: str
+    content: str
+    retrieved_diary_ids: list[int] | None = None
+    retrieved_memory_ids: list[str] | None = None
+    created_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SendMessageRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class SendMessageResponse(BaseModel):
+    message: MessageResponse
+    reply: MessageResponse
