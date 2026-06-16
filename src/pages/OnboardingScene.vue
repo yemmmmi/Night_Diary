@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import GameButton from '@/shared/components/GameButton.vue'
@@ -7,6 +7,7 @@ import GlassPanel from '@/shared/components/GlassPanel.vue'
 import AITypingIndicator from '@/shared/components/AITypingIndicator.vue'
 import BrandMark from '@/shared/components/BrandMark.vue'
 import { useBackend } from '@/shared/composables/useBackend'
+import { useModelDownload } from '@/shared/composables/useModelDownload'
 import { useSound } from '@/shared/composables/useSound'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -14,9 +15,11 @@ const router = useRouter()
 const settings = useSettingsStore()
 settings.load()
 const { ready, coreReady, loading, startupProgress } = useBackend()
+const { status: modelStatus, loading: modelLoading, error: modelError, ensureModels } = useModelDownload()
 const { playSuccess } = useSound()
 
 const step = ref(0)
+const modelsReady = ref(false)
 const selectedReplier = ref('preset-warm')
 
 const replierOptions = [
@@ -32,7 +35,7 @@ const steps = [
   },
   {
     title: 'AI 引擎正在就位',
-    body: '首次启动需要加载本地 AI 组件，请稍候片刻。',
+    body: '首次启动需要下载本地检索模型（约 200MB），请保持网络畅通。',
   },
   {
     title: '怎么称呼你？',
@@ -52,15 +55,39 @@ const isEngineStep = computed(() => step.value === 1)
 const isNicknameStep = computed(() => step.value === 2)
 const isReplierStep = computed(() => step.value === 3)
 const isLastStep = computed(() => step.value === steps.length - 1)
-const engineReady = computed(() => ready.value && coreReady.value)
+const engineReady = computed(() => ready.value && coreReady.value && modelsReady.value)
 
 const progressLabel = computed(() => {
+  if (modelError.value) return modelError.value
+  if (modelStatus.value && !modelStatus.value.all_ready) {
+    const pct = Math.round(modelStatus.value.overall_progress)
+    return modelLoading.value ? `正在下载 AI 模型… ${pct}%` : `准备下载 AI 模型… ${pct}%`
+  }
   if (startupProgress.value != null) {
     return `正在加载 AI 组件… ${startupProgress.value}%`
   }
   if (!ready.value || loading.value) return '正在连接本地 AI 引擎…'
   if (!coreReady.value) return '正在加载 AI 组件…'
   return 'AI 引擎已就绪'
+})
+
+async function bootstrapModels() {
+  if (!engineReady.value && ready.value && coreReady.value && !modelsReady.value) {
+    try {
+      await ensureModels()
+      modelsReady.value = true
+    } catch {
+      modelsReady.value = false
+    }
+  }
+}
+
+onMounted(() => {
+  void bootstrapModels()
+})
+
+watch([ready, coreReady], () => {
+  void bootstrapModels()
 })
 
 function nextStep() {

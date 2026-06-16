@@ -68,10 +68,7 @@ onMounted(() => {
   <div class="backup-manager">
     <p v-if="!isTauri" class="backup-manager__hint">备份与恢复功能仅在 Tauri 桌面应用中可用。</p>
     <template v-else>
-      <label class="backup-manager__toggle">
-        <input v-model="settings.autoBackup" type="checkbox" />
-        <span>退出应用时自动备份</span>
-      </label>
+      <p class="backup-manager__hint">退出应用时会自动备份数据库（文件名以 <code>-auto.db</code> 结尾）。</p>
       <GameButton variant="secondary" :disabled="working" @click="onCreateBackup">
         {{ working ? '处理中…' : '立即备份' }}
       </GameButton>
