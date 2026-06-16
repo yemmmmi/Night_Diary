@@ -3,6 +3,7 @@ import { getHttpClient } from '@/shared/api/http'
 export interface MemoryCard {
   card_id: string
   emotion: string
+  emotions: string[]
   event_summary: string | null
   mood_score: number
   tags: string[]
@@ -15,6 +16,7 @@ export interface MemoryCard {
 
 export interface CardCreatePayload {
   emotion: string
+  emotions?: string[]
   event_summary?: string | null
   mood_score?: number
   tags?: string[]
@@ -24,6 +26,7 @@ export interface CardCreatePayload {
 
 export interface CardUpdatePayload {
   emotion?: string | null
+  emotions?: string[] | null
   event_summary?: string | null
   mood_score?: number | null
   tags?: string[] | null

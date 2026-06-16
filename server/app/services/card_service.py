@@ -49,10 +49,25 @@ def _json_to_tags(tags_json: str | None) -> list[str]:
         return []
 
 
+def _emotions_to_json(emotions: list[str]) -> str | None:
+    return json.dumps(emotions, ensure_ascii=False) if emotions else None
+
+
+def _json_to_emotions(emotions_json: str | None, fallback: str) -> list[str]:
+    if not emotions_json:
+        return [fallback] if fallback else []
+    try:
+        parsed = json.loads(emotions_json)
+        return parsed if isinstance(parsed, list) and parsed else ([fallback] if fallback else [])
+    except (json.JSONDecodeError, TypeError):
+        return [fallback] if fallback else []
+
+
 def row_to_dict(row: MemoryCardRow) -> dict[str, Any]:
     return {
         "card_id": row.card_id,
         "emotion": row.emotion,
+        "emotions": _json_to_emotions(row.emotions_json, row.emotion),
         "event_summary": row.event_summary,
         "mood_score": row.mood_score,
         "tags": _json_to_tags(row.tags_json),
@@ -71,6 +86,7 @@ def create_card(
     db: Session,
     *,
     emotion: str,
+    emotions: list[str] | None = None,
     event_summary: str | None = None,
     mood_score: float = 0.5,
     tags: list[str] | None = None,
@@ -80,9 +96,15 @@ def create_card(
     if not emotion.strip():
         raise ValidationError("情绪标签不能为空")
 
+    cleaned_emotions = [e.strip() for e in (emotions or []) if e.strip()]
+    primary = emotion.strip() or (cleaned_emotions[0] if cleaned_emotions else "")
+    if not cleaned_emotions:
+        cleaned_emotions = [primary]
+
     row = MemoryCardRow(
         card_id=uuid.uuid4().hex,
-        emotion=emotion.strip(),
+        emotion=primary,
+        emotions_json=_emotions_to_json(cleaned_emotions),
         event_summary=event_summary.strip() if event_summary else None,
         mood_score=max(0.0, min(1.0, mood_score)),
         tags_json=_tags_to_json(tags or []),
@@ -141,6 +163,7 @@ def update_card(
     card_id: str,
     *,
     emotion: str | None = None,
+    emotions: list[str] | None = None,
     event_summary: str | None = None,
     mood_score: float | None = None,
     tags: list[str] | None = None,
@@ -148,10 +171,18 @@ def update_card(
 ) -> MemoryCardRow:
     row = get_card(db, card_id)
 
+    if emotions is not None:
+        cleaned = [e.strip() for e in emotions if e.strip()]
+        if cleaned:
+            row.emotions_json = _emotions_to_json(cleaned)
+            row.emotion = cleaned[0]
+
     if emotion is not None:
         if not emotion.strip():
             raise ValidationError("情绪标签不能为空")
         row.emotion = emotion.strip()
+        if emotions is None:
+            row.emotions_json = _emotions_to_json([emotion.strip()])
 
     if event_summary is not None:
         row.event_summary = event_summary.strip() if event_summary else None
@@ -183,7 +214,13 @@ def delete_card(db: Session, card_id: str) -> None:
 
 
 def card_to_episodic(row: MemoryCardRow) -> EpisodicEntry:
-    """Convert a MemoryCardRow to an EpisodicEntry for the memory pipeline."""
+    """Convert a MemoryCardRow to an EpisodicEntry for the memory pipeline.
+
+    The primary ``emotion`` stays single-valued (episodic / insight rely on
+    positive/negative membership). Multiple selected emotions remain on the
+    card record; no interpretive label is attached here — let downstream
+    LLM agents read the raw emotion set when needed.
+    """
     event = row.event_summary or f"（{row.emotion}情绪记录）"
     return EpisodicEntry(
         event=event,

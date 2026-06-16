@@ -74,12 +74,15 @@ def create_card(
     row = card_service.create_card(
         db,
         emotion=body.emotion,
+        emotions=body.emotions,
         event_summary=body.event_summary,
         mood_score=body.mood_score,
         tags=body.tags,
         importance=body.importance,
         card_type=body.card_type,
     )
+    # Ensure memory layers + card collection are ready (lazy on cold start)
+    container.ensure_memory()
     # Sync to episodic memory pipeline (best-effort)
     card_service.sync_card_to_episodic(row, container.episodic_memory)
     # Sync to Chroma for semantic search (best-effort)
@@ -104,11 +107,13 @@ def update_card(
         db,
         card_id,
         emotion=body.emotion,
+        emotions=body.emotions,
         event_summary=body.event_summary,
         mood_score=body.mood_score,
         tags=body.tags,
         importance=body.importance,
     )
+    container.ensure_memory()
     card_service.sync_card_to_episodic(row, container.episodic_memory)
     _sync_card_to_chroma(row, container)
     return card_to_response(row)
@@ -121,6 +126,7 @@ def update_card(
 )
 def delete_card(card_id: str, db: DbDep, container: ContainerDep) -> Response:
     card_service.delete_card(db, card_id)
+    container.ensure_memory()
     if container.card_collection is not None:
         container.card_collection.delete_card(card_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -224,6 +230,7 @@ def search_cards(
     limit: int = Query(10, ge=1, le=50),
 ) -> dict[str, Any]:
     """Semantic search across memory cards using ChromaDB vector index."""
+    container.ensure_memory()
     if container.card_collection is None:
         return {"results": [], "query": q}
 
