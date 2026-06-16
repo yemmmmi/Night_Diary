@@ -20,7 +20,7 @@ import os
 
 block_cipher = None
 
-# task.md phase-a-5: mandated hidden imports for the Phase B AI stack.
+# task.md phase-a-5 / E-1: hidden imports for the Phase B AI stack + runtime deps.
 HIDDEN_IMPORTS: list[str] = [
     "chromadb",
     "onnxruntime",
@@ -28,6 +28,32 @@ HIDDEN_IMPORTS: list[str] = [
     "jieba",
     "torch",
     "tokenizers",
+    "transformers",
+    "huggingface_hub",
+    "safetensors",
+    "sklearn",
+    "scipy",
+    "numpy",
+    "langchain_text_splitters",
+    "langchain_openai",
+    "langchain_core",
+    "openai",
+    "cryptography",
+    "httpx",
+    "httpcore",
+    "anyio",
+    "sniffio",
+    "certifi",
+    "charset_normalizer",
+    "idna",
+    "urllib3",
+    "requests",
+    "packaging",
+    "filelock",
+    "tqdm",
+    "regex",
+    "yaml",
+    "tiktoken",
     # FastAPI / uvicorn runtime (one-file bundle)
     "uvicorn.logging",
     "uvicorn.loops",
@@ -60,6 +86,11 @@ _COLLECT_PACKAGES = (
     "tokenizers",
     "torch",
     "jieba",
+    "transformers",
+    "huggingface_hub",
+    "langchain_text_splitters",
+    "langchain_openai",
+    "cryptography",
 )
 
 

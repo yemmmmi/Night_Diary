@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-web dev-web-fast test test-server test-web lint lint-server lint-web format eval eval-rag
+.PHONY: help dev-api dev-web dev-web-fast test test-server test-web lint lint-server lint-web format eval eval-rag build build-sidecar build-desktop e2e smoke
 
 PY ?= python
 NPM ?= npm
@@ -7,8 +7,12 @@ SERVER_DIR := server
 help:
 	@echo "Night Diary V2 — common targets"
 	@echo "  dev-api        Run FastAPI dev server (http://127.0.0.1:8000, keep running)"
-  @echo "  dev-web        Run Tauri desktop (auto-starts backend on :8000, then attaches)"
+	@echo "  dev-web        Run Tauri desktop (auto-starts backend on :8000, then attaches)"
 	@echo "  dev-web-fast   Tauri dev attaching to dev-api (no Python respawn)"
+	@echo "  build          PyInstaller sidecar + Tauri desktop installer"
+	@echo "  build-sidecar  PyInstaller only → dist/nightdiary-backend.exe"
+	@echo "  e2e            API end-to-end flow (diary → analysis → feedback)"
+	@echo "  smoke          Performance smoke checks (SQLite / bootstrap)"
 	@echo "  test           Run pytest + vitest"
 	@echo "  lint           Run ruff + mypy + eslint + vue-tsc"
 	@echo "  format         Run ruff format"
@@ -53,3 +57,23 @@ lint-web:
 
 format:
 	cd $(SERVER_DIR) && $(PY) -m ruff format .
+
+build-sidecar:
+	cd $(SERVER_DIR) && $(PY) -m pip install -e ".[dev,eval]" -q
+	pyinstaller server/build.spec
+	$(NPM) run prepare-sidecar
+
+prepare-sidecar:
+	node scripts/prepare-sidecar.mjs
+
+build-desktop: build-sidecar
+	$(NPM) run build
+	$(NPM) run tauri build
+
+build: build-desktop
+
+e2e:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/e2e/ -v
+
+smoke:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/smoke/ -v

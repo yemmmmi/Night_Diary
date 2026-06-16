@@ -195,5 +195,20 @@ class CardExpandRequest(BaseModel):
     pass
 
 
+class ModelDownloadItemResponse(BaseModel):
+    key: str
+    repo_id: str
+    status: Literal["pending", "downloading", "ready", "error", "skipped"]
+    progress: float = 0.0
+    error: str | None = None
+
+
+class ModelDownloadStatusResponse(BaseModel):
+    items: list[ModelDownloadItemResponse]
+    overall_progress: float = 0.0
+    all_ready: bool = False
+    downloading: bool = False
+
+
 class ErrorResponse(BaseModel):
     detail: str
