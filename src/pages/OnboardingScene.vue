@@ -17,6 +17,13 @@ const { ready, coreReady, loading, startupProgress } = useBackend()
 const { playSuccess } = useSound()
 
 const step = ref(0)
+const selectedReplier = ref('preset-warm')
+
+const replierOptions = [
+  { key: 'preset-warm', name: '温暖', desc: '以温暖共情的方式回信，像一位耐心的倾听者' },
+  { key: 'preset-pragmatic', name: '务实', desc: '简洁直接，就事论事，像老朋友一样坦诚' },
+  { key: 'preset-calm', name: '平静', desc: '温和从容，用"没关系，慢慢来"的节奏回应' },
+]
 
 const steps = [
   {
@@ -32,13 +39,18 @@ const steps = [
     body: '可以留空，之后随时在设置里修改。',
   },
   {
+    title: '想让谁给你回信？',
+    body: '选一位回信者。之后可以在设置中切换，不影响已收到的回信。',
+  },
+  {
     title: '你可以这样使用',
-    body: '首页按周整理日记；写完可获取 AI 回信；回顾页浏览历史。',
+    body: '首页按周整理日记；写完可获取回信；回顾页浏览历史。',
   },
 ] as const
 
 const isEngineStep = computed(() => step.value === 1)
 const isNicknameStep = computed(() => step.value === 2)
+const isReplierStep = computed(() => step.value === 3)
 const isLastStep = computed(() => step.value === steps.length - 1)
 const engineReady = computed(() => ready.value && coreReady.value)
 
@@ -61,6 +73,7 @@ function nextStep() {
 }
 
 function finish() {
+  settings.setActiveReplier(selectedReplier.value)
   settings.completeOnboarding()
   playSuccess()
   void router.replace('/')
@@ -83,6 +96,20 @@ function finish() {
         <span>称呼</span>
         <input v-model="settings.nickname" maxlength="24" placeholder="例如：小夜" />
       </label>
+
+      <div v-if="isReplierStep" class="onboarding-scene__replier">
+        <button
+          v-for="opt in replierOptions"
+          :key="opt.key"
+          type="button"
+          class="onboarding-replier-card"
+          :class="{ 'is-active': selectedReplier === opt.key }"
+          @click="selectedReplier = opt.key"
+        >
+          <span class="onboarding-replier-name">{{ opt.name }}</span>
+          <span class="onboarding-replier-desc">{{ opt.desc }}</span>
+        </button>
+      </div>
 
       <div class="onboarding-scene__actions">
         <GameButton
@@ -162,5 +189,47 @@ function finish() {
 .onboarding-scene__actions {
   display: flex;
   justify-content: center;
+}
+
+.onboarding-scene__replier {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.onboarding-replier-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-bg-elevated);
+  cursor: pointer;
+  transition: border-color var(--motion-duration) var(--motion-ease);
+  text-align: center;
+}
+
+.onboarding-replier-card:hover {
+  border-color: var(--color-accent-muted);
+}
+
+.onboarding-replier-card.is-active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-elevated));
+}
+
+.onboarding-replier-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.onboarding-replier-desc {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
 }
 </style>

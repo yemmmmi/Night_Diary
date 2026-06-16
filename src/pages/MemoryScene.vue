@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  PhArrowLeft,
   PhBrain,
   PhStack,
   PhCards,
@@ -11,7 +10,6 @@ import {
   PhNotePencil,
 } from '@phosphor-icons/vue'
 
-import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import EmotionChips from '@/features/card/EmotionChips.vue'
 import { memoryCopy as copy } from '@/shared/copy/memory'
@@ -20,6 +18,8 @@ import type { EpisodicEntry } from '@/shared/api/memory'
 
 const router = useRouter()
 const memoryStore = useMemoryStore()
+
+defineOptions({ name: 'MemoryScene' })
 
 /** Randomly pick an element from an array. */
 const pick = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)]
@@ -43,10 +43,6 @@ function entrySourceLabel(entry: EpisodicEntry): string {
   return entry.source === 'card' ? copy.sourceCard : copy.sourceDiary
 }
 
-function goBack() {
-  router.push('/')
-}
-
 function goToCards() {
   router.push({ path: '/review', query: { mode: 'cards' } })
 }
@@ -56,20 +52,21 @@ onMounted(() => {
     // surfaced via memoryStore.error
   })
 })
+
+onActivated(() => {
+  void memoryStore.loadAll().catch(() => {
+    // surfaced via memoryStore.error
+  })
+})
 </script>
 
 <template>
   <main class="memory-scene">
     <header class="memory-scene__header">
-      <GameButton variant="ghost" @click="goBack">
-        <PhArrowLeft :size="16" />
-        {{ copy.back }}
-      </GameButton>
       <h1 class="memory-scene__title">
         <PhBrain :size="20" weight="duotone" />
         {{ copy.title }}
       </h1>
-      <span class="memory-scene__spacer" />
     </header>
 
     <p class="memory-scene__subtitle">{{ subtitle }}</p>
@@ -229,10 +226,9 @@ onMounted(() => {
 }
 
 .memory-scene__header {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: center;
   margin-bottom: 0.75rem;
 }
 
@@ -244,10 +240,6 @@ onMounted(() => {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--color-text-primary);
-}
-
-.memory-scene__spacer {
-  width: 4.5rem;
 }
 
 .memory-scene__subtitle {

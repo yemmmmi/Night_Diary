@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { PhArrowLeft, PhTrash } from '@phosphor-icons/vue'
+import { computed, onActivated, onMounted, ref } from 'vue'
+import { PhTrash } from '@phosphor-icons/vue'
 
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
@@ -11,7 +10,8 @@ import type { WeeklyReport } from '@/shared/api/weekly'
 import { useWeeklyStore } from '@/stores/weekly'
 import { startOfWeekMonday, toIsoDate } from '@/shared/utils/diaryFormat'
 
-const router = useRouter()
+defineOptions({ name: 'WeeklyScene' })
+
 const weeklyStore = useWeeklyStore()
 
 const selectedId = ref<number | null>(null)
@@ -87,11 +87,11 @@ async function onDeleteConfirm() {
   }
 }
 
-function goBack() {
-  router.push('/')
-}
-
 onMounted(() => {
+  void load()
+})
+
+onActivated(() => {
   void load()
 })
 </script>
@@ -99,12 +99,7 @@ onMounted(() => {
 <template>
   <main class="weekly-scene">
     <header class="weekly-scene__header">
-      <GameButton variant="ghost" @click="goBack">
-        <PhArrowLeft :size="16" />
-        {{ copy.back }}
-      </GameButton>
       <h1 class="weekly-scene__title">{{ copy.title }}</h1>
-      <span class="weekly-scene__spacer" />
     </header>
 
     <p class="weekly-scene__subtitle">{{ copy.subtitle }}</p>
@@ -212,10 +207,9 @@ onMounted(() => {
 }
 
 .weekly-scene__header {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: center;
   margin-bottom: 0.75rem;
 }
 
@@ -224,10 +218,6 @@ onMounted(() => {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--color-text-primary);
-}
-
-.weekly-scene__spacer {
-  width: 4.5rem;
 }
 
 .weekly-scene__subtitle {

@@ -3,10 +3,11 @@ import { defineStore } from 'pinia'
 import {
   listCards,
   deleteCard,
+  createCard,
   expandCardToDiary,
   getCardStats,
 } from '@/shared/api/card'
-import type { MemoryCard, ListCardsParams, CardStats } from '@/shared/api/card'
+import type { MemoryCard, ListCardsParams, CardStats, CardCreatePayload } from '@/shared/api/card'
 import { formatApiError } from '@/shared/utils/apiError'
 
 export const useCardStore = defineStore('card', () => {
@@ -70,6 +71,18 @@ export const useCardStore = defineStore('card', () => {
     showCardDrawer.value = false
   }
 
+  async function createFromChat(payload: CardCreatePayload) {
+    error.value = null
+    try {
+      const card = await createCard(payload)
+      cards.value = [card, ...cards.value]
+      return card
+    } catch (err) {
+      error.value = formatApiError(err, '保存卡片失败')
+      return null
+    }
+  }
+
   return {
     cards,
     stats,
@@ -82,5 +95,6 @@ export const useCardStore = defineStore('card', () => {
     expandCard,
     openDrawer,
     closeDrawer,
+    createFromChat,
   }
 })
