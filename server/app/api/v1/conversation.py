@@ -57,7 +57,7 @@ def send_message(
         raise ConversationNotFoundError(conversation_id=conversation_id)
 
     # For now: echo + simple reply. AI-powered reply will replace this in a follow-up PR.
-    reply_text = f"收到你的消息。这段对话的功能还在完善中，请期待后续更新。"
+    reply_text = "收到你的消息。这段对话的功能还在完善中。请期待后续更新。"
 
     user_msg, reply_msg = conversation_service.add_user_message_and_reply(
         db,
