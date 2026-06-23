@@ -97,6 +97,13 @@ class WeeklyReportEmptyError(AppError):
         super().__init__(message=message, http_status=422)
 
 
+class ConversationNotFoundError(AppError):
+    def __init__(self, *, conversation_id: str | None = None) -> None:
+        message = f"会话 {conversation_id} 不存在" if conversation_id else "会话不存在"
+        super().__init__(message=message, http_status=404)
+        self.conversation_id = conversation_id
+
+
 class NotFoundError(AppError):
     """Generic 404 for resources identified by (resource_type, resource_id)."""
 
