@@ -5,8 +5,8 @@ export const diarySceneCopy = {
   saving: '\u4fdd\u5b58\u4e2d\u2026',
   save: '\u4fdd\u5b58',
   wordUnit: '\u5b57',
-  viewAiReply: '\u67e5\u770b AI \u56de\u4fe1',
-  getAiReply: '\u83b7\u53d6 AI \u56de\u4fe1',
+  viewAiReply: '\u67e5\u770b\u56de\u4fe1',
+  getAiReply: '\u83b7\u53d6\u56de\u4fe1',
   placeholderNew:
     '\u4eca\u5929\u60f3\u5199\u70b9\u4ec0\u4e48\uff1f\u53ef\u4ee5\u4ece\u4e00\u53e5\u8bdd\u3001\u4e00\u4e2a\u753b\u9762\u5f00\u59cb',
   placeholderContinue: '\u7ee7\u7eed\u5199\u4e0b\u53bb\u2026',

@@ -8,6 +8,7 @@ import LLMConfig from '@/features/settings/LLMConfig.vue'
 import SettingsSection from '@/features/settings/SettingsSection.vue'
 import TagManager from '@/features/settings/TagManager.vue'
 import ThemeToggle from '@/features/settings/ThemeToggle.vue'
+import ReplierManager from '@/features/settings/ReplierManager.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { getAppVersion, getStats, type AppStats } from '@/shared/api/settings'
 import { useSettingsStore } from '@/stores/settings'
@@ -18,11 +19,10 @@ const settings = useSettingsStore()
 settings.load()
 
 const openSection = ref('general')
+const sectionIds = ['general', 'llm', 'tags', 'replier', 'backup', 'about'] as const
 const usageStats = ref<AppStats | null>(null)
 const statsLoading = ref(true)
 const appVersion = ref<string | null>(null)
-
-const sectionIds = ['general', 'llm', 'tags', 'backup', 'about'] as const
 
 function syncSectionFromRoute() {
   const hash = route.hash.replace('#', '')
@@ -122,6 +122,17 @@ watch(
       </SettingsSection>
 
       <SettingsSection
+        id="replier"
+        title="回信者"
+        subtitle="选择谁给你回信，或创建自己的人设"
+        :open="openSection === 'replier'"
+        @toggle="toggleSection"
+      >
+        <ReplierManager />
+        <p class="settings-field__hint">切换回信者只影响之后生成的回信，不影响已收到的</p>
+      </SettingsSection>
+
+      <SettingsSection
         id="backup"
         title="备份"
         subtitle="手动备份与退出时自动备份"
@@ -142,7 +153,7 @@ watch(
         <p v-if="statsLoading" class="about-line">加载统计…</p>
         <dl v-else-if="usageStats" class="usage-stats">
           <div class="usage-stats__row"><dt>日记总数</dt><dd>{{ usageStats.diary_count }}</dd></div>
-          <div class="usage-stats__row"><dt>AI 回信数</dt><dd>{{ usageStats.analysis_count }}</dd></div>
+          <div class="usage-stats__row"><dt>回信数</dt><dd>{{ usageStats.analysis_count }}</dd></div>
           <div class="usage-stats__row"><dt>LLM 调用次数</dt><dd>{{ usageStats.llm_call_count }}</dd></div>
           <div class="usage-stats__row"><dt>累计 Token</dt><dd>{{ usageStats.total_token_cost }}</dd></div>
         </dl>
@@ -263,5 +274,11 @@ watch(
   margin: 0;
   font-weight: 600;
   color: var(--color-text-primary);
+}
+
+.settings-field__hint {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.375rem;
 }
 </style>

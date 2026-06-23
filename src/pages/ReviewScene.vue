@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhArrowLeft, PhCalendarBlank, PhListBullets, PhCards, PhArrowSquareOut, PhMagnifyingGlass, PhXCircle } from '@phosphor-icons/vue'
+import { PhCalendarBlank, PhListBullets, PhCards, PhArrowSquareOut, PhMagnifyingGlass, PhXCircle } from '@phosphor-icons/vue'
 
 import CalendarView from '@/features/review/CalendarView.vue'
 import TimelineView from '@/features/review/TimelineView.vue'
@@ -25,6 +25,8 @@ const router = useRouter()
 const diaryStore = useDiaryStore()
 const analysisStore = useAnalysisStore()
 const cardStore = useCardStore()
+
+defineOptions({ name: 'ReviewScene' })
 
 const mode = ref<ReviewMode>('timeline')
 const selectedDate = ref<string | null>(null)
@@ -137,10 +139,6 @@ async function executeDelete() {
   } catch (err) {
     deleteError.value = formatApiError(err, '删除日记失败')
   }
-}
-
-function goHome() {
-  router.push('/')
 }
 
 async function expandCard(card: MemoryCard) {
@@ -305,6 +303,15 @@ onMounted(async () => {
   }
 })
 
+onActivated(async () => {
+  await Promise.all([diaryStore.loadEntries(), cardStore.loadCards()])
+  syncFromRoute()
+  if (mode.value === 'cards') {
+    await nextTick()
+    loadMoodTrends()
+  }
+})
+
 onUnmounted(() => {
   disposeChart()
 })
@@ -320,10 +327,6 @@ watch(
 <template>
   <main class="review-scene">
     <header class="review-scene__header">
-      <GameButton variant="ghost" @click="goHome">
-        <PhArrowLeft :size="16" />
-        首页
-      </GameButton>
       <h1 class="review-scene__title">历史回顾</h1>
       <div class="review-scene__tabs">
         <button
@@ -520,7 +523,7 @@ watch(
             {{ diaryStatusLabel(diaryStatus(selectedEntry)) }}
           </span>
           <div v-if="showAiPreview" class="review-scene__ai-block">
-            <p class="review-scene__ai-label">AI 回信</p>
+            <p class="review-scene__ai-label">回信</p>
             <p class="review-scene__ai-preview font-diary">{{ aiReplyPreview }}</p>
           </div>
           <div class="review-scene__detail-actions">
@@ -530,7 +533,7 @@ watch(
               variant="primary"
               @click="openAnalysis(selectedEntry)"
             >
-              {{ selectedEntry.ai_ans?.trim() ? '查看回信' : '获取 AI 回信' }}
+              {{ selectedEntry.ai_ans?.trim() ? '查看回信' : '获取回信' }}
             </GameButton>
             <GameButton
               variant="ghost"
@@ -568,7 +571,7 @@ watch(
       >
         <GlassPanel elevated class="confirm-dialog">
           <p class="confirm-dialog__title">确定删除这篇日记吗？</p>
-          <p class="confirm-dialog__desc">日记内容及关联的 AI 回信将被永久删除，此操作不可撤销。</p>
+          <p class="confirm-dialog__desc">日记内容及关联的回信将被永久删除，此操作不可撤销。</p>
           <div class="confirm-dialog__actions">
             <GameButton variant="secondary" @click="showDeleteConfirm = false">取消</GameButton>
             <GameButton variant="primary" class="confirm-dialog__danger-btn" @click="executeDelete">

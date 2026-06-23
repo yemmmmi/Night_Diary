@@ -16,15 +16,29 @@ export interface AnalysisRecord {
   status_detail: string | null
 }
 
-export async function triggerAnalysis(diaryId: number): Promise<AnalysisRecord> {
+export interface AnalysisTriggerPayload {
+  replier_preset?: string
+  replier_persona?: string
+}
+
+export async function triggerAnalysis(
+  diaryId: number,
+  payload?: AnalysisTriggerPayload,
+): Promise<AnalysisRecord> {
   const client = await getHttpClient()
-  const { data } = await client.post<AnalysisRecord>(`/api/v1/analysis/${diaryId}`)
+  const { data } = await client.post<AnalysisRecord>(`/api/v1/analysis/${diaryId}`, payload ?? {})
   return data
 }
 
-export async function regenerateAnalysis(diaryId: number): Promise<AnalysisRecord> {
+export async function regenerateAnalysis(
+  diaryId: number,
+  payload?: AnalysisTriggerPayload,
+): Promise<AnalysisRecord> {
   const client = await getHttpClient()
-  const { data } = await client.post<AnalysisRecord>(`/api/v1/analysis/${diaryId}/regenerate`)
+  const { data } = await client.post<AnalysisRecord>(
+    `/api/v1/analysis/${diaryId}/regenerate`,
+    payload ?? {},
+  )
   return data
 }
 

@@ -7,11 +7,13 @@ import AIAnalysisPanel from '@/features/analysis/AIAnalysisPanel.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import { useAnalysisStore } from '@/stores/analysis'
 import { useDiaryStore } from '@/stores/diary'
+import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
 const router = useRouter()
 const diaryStore = useDiaryStore()
 const analysisStore = useAnalysisStore()
+const settings = useSettingsStore()
 
 const loadError = ref<string | null>(null)
 const showDeleteConfirm = ref(false)
@@ -117,7 +119,7 @@ watch(
         <PhArrowLeft :size="16" />
         返回
       </GameButton>
-      <h1 class="analysis-scene__title">AI 回信</h1>
+      <h1 class="analysis-scene__title">{{ settings.replierName ? `${settings.replierName}的回信` : '回信' }}</h1>
       <GameButton v-if="diaryId" variant="ghost" @click="goEdit">编辑日记</GameButton>
     </header>
 
@@ -139,9 +141,9 @@ watch(
             :disabled="analysisStore.triggering"
             @click="onTrigger"
           >
-            {{ analysisStore.triggering ? '分析中…' : '获取 AI 回信' }}
+            {{ analysisStore.triggering ? '分析中…' : '获取回信' }}
           </GameButton>
-          <p class="analysis-scene__hint">夜记会认真阅读你的日记，并写一封回信给你</p>
+          <p class="analysis-scene__hint">会认真读你的日记，给你回信</p>
         </div>
 
         <div v-if="showManageActions" class="analysis-scene__actions analysis-scene__actions--row">
@@ -170,7 +172,7 @@ watch(
         @click.self="showDeleteConfirm = false"
       >
         <div class="confirm-dialog">
-          <p class="confirm-dialog__title">确定删除这封 AI 回信吗？</p>
+          <p class="confirm-dialog__title">确定删除这封回信吗？</p>
           <p class="confirm-dialog__desc">删除后可重新获取回信，日记内容不受影响</p>
           <div class="confirm-dialog__actions">
             <GameButton variant="secondary" @click="showDeleteConfirm = false">取消</GameButton>

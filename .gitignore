@@ -32,10 +32,9 @@ yarn-debug.log*
 # IDE
 .vscode/
 .idea/
-.cursor/*
-!.cursor/skills/
-!.cursor/skills/**
-
+.cursor
+_test_data
+.trae
 # Project-local (not tracked)
 night-diary-v2-cursor-rules.md
 前端参考图/

@@ -5,6 +5,7 @@ import { PhCaretDown, PhCaretUp, PhEnvelopeSimple } from '@phosphor-icons/vue'
 import FeedbackButtons from '@/features/analysis/FeedbackButtons.vue'
 import AITypingIndicator from '@/shared/components/AITypingIndicator.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
+import { useSettingsStore } from '@/stores/settings'
 import type { AnalysisRecord } from '@/shared/api/analysis'
 import type { DiaryEntry } from '@/shared/api/diary'
 import { diarySummary } from '@/shared/utils/diaryFormat'
@@ -15,6 +16,8 @@ const props = defineProps<{
   loading?: boolean
   triggering?: boolean
 }>()
+
+const settings = useSettingsStore()
 
 defineEmits<{
   trigger: []
@@ -71,7 +74,7 @@ const statusDetail = computed(() => props.analysis?.status_detail?.trim() || nul
     </GlassPanel>
 
     <section v-if="triggering || loading" class="analysis-panel__waiting">
-      <AITypingIndicator label="夜记正在读你的日记…" />
+      <AITypingIndicator label="正在读你写下的字…" />
     </section>
 
     <Transition name="letter-in">
@@ -79,7 +82,7 @@ const statusDetail = computed(() => props.analysis?.status_detail?.trim() || nul
         <div class="analysis-panel__letter-head">
           <PhEnvelopeSimple :size="20" weight="duotone" class="analysis-panel__letter-icon" />
           <div>
-            <p class="analysis-panel__letter-title">夜记的回信</p>
+            <p class="analysis-panel__letter-title">{{ settings.replierName ? `${settings.replierName}的回信` : '回信' }}</p>
             <p v-if="tierLabel || modelLabel" class="analysis-panel__letter-meta">
               <template v-if="tierLabel">分析模式 · {{ tierLabel }}</template>
               <template v-if="tierLabel && modelLabel"> · </template>

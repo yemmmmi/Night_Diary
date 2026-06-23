@@ -65,6 +65,11 @@ const router = createRouter({
       component: () => import('@/pages/MemoryScene.vue'),
     },
     {
+      path: '/chat',
+      name: 'chat',
+      component: () => import('@/pages/ChatScene.vue'),
+    },
+    {
       path: '/review',
       name: 'review',
       component: () => import('@/pages/ReviewScene.vue'),
