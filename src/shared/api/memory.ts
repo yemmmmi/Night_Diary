@@ -12,6 +12,13 @@ export interface EpisodicEntry {
   source: 'card' | 'diary'
 }
 
+export interface EpisodicEntryUpdate {
+  event?: string
+  emotion?: string
+  ai_suggestion?: string
+  importance?: number
+}
+
 export interface EmotionBaseline {
   average_sentiment: number
   volatility: number
@@ -44,6 +51,23 @@ export async function listEpisodic(): Promise<EpisodicEntry[]> {
   const client = await getHttpClient()
   const { data } = await client.get<EpisodicEntry[]>('/api/v1/memory/episodic')
   return data
+}
+
+export async function updateEpisodic(
+  entryId: string,
+  patch: EpisodicEntryUpdate,
+): Promise<EpisodicEntry> {
+  const client = await getHttpClient()
+  const { data } = await client.patch<EpisodicEntry>(
+    `/api/v1/memory/episodic/${entryId}`,
+    patch,
+  )
+  return data
+}
+
+export async function deleteEpisodic(entryId: string): Promise<void> {
+  const client = await getHttpClient()
+  await client.delete(`/api/v1/memory/episodic/${entryId}`)
 }
 
 export async function getProfile(): Promise<UserProfile | null> {
