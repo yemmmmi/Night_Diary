@@ -14,6 +14,7 @@ export interface AnalysisRecord {
   ai_ans: string | null
   model_name: string | null
   status_detail: string | null
+  referenced_memory_count?: number
 }
 
 export interface AnalysisTriggerPayload {

@@ -26,6 +26,13 @@ class SqliteEpisodicMemoryStore:
             )
             return [EpisodicEntry.model_validate_json(row.payload_json) for row in rows]
 
+    def get_entry(self, user_id: str, entry_id: str) -> EpisodicEntry | None:
+        with self._session_factory() as session:
+            row = session.get(EpisodicMemoryRow, entry_id)
+            if row is None or row.user_id != user_id:
+                return None
+            return EpisodicEntry.model_validate_json(row.payload_json)
+
     def upsert_entry(self, user_id: str, entry: EpisodicEntry) -> None:
         with self._session_factory() as session:
             row = session.get(EpisodicMemoryRow, entry.entry_id)

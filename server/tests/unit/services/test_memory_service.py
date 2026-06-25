@@ -24,6 +24,8 @@ from app.services import card_service, memory_service
 class _FakeContainer:
     """Minimal container exposing only what memory_service needs."""
 
+    episodic_memory = None
+
     def __init__(self, session_factory) -> None:
         self.session_factory = session_factory
 
@@ -117,3 +119,42 @@ def test_get_overview_counts(memory_ctx) -> None:
     assert overview["episodic_from_diaries"] == 1
     assert overview["card_total"] == 1
     assert overview["profile_built"] is False
+
+
+def test_update_episodic(memory_ctx) -> None:
+    store = SqliteEpisodicMemoryStore(memory_ctx.session_factory)
+    store.upsert_entry(
+        "default",
+        _card_entry("散步", "平静", time.time(), entry_id="a"),
+    )
+
+    updated = memory_service.update_episodic(
+        memory_ctx,
+        "a",
+        event="晨间散步",
+        emotion="开心",
+        importance=0.9,
+    )
+
+    assert updated["event"] == "晨间散步"
+    assert updated["emotion"] == "开心"
+    assert updated["importance"] == 0.9
+
+
+def test_delete_episodic(memory_ctx) -> None:
+    store = SqliteEpisodicMemoryStore(memory_ctx.session_factory)
+    store.upsert_entry(
+        "default",
+        _card_entry("散步", "平静", time.time(), entry_id="a"),
+    )
+
+    memory_service.delete_episodic(memory_ctx, "a")
+
+    assert memory_service.list_episodic(memory_ctx) == []
+
+
+def test_update_episodic_not_found(memory_ctx) -> None:
+    from app.shared.errors import NotFoundError
+
+    with pytest.raises(NotFoundError):
+        memory_service.update_episodic(memory_ctx, "missing", event="x")

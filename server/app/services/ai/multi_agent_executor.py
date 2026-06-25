@@ -26,6 +26,7 @@ class MultiAgentRunResult:
     intent: str = ""
     activated_agents: list[str] = field(default_factory=list)
     activated_skills: list[str] = field(default_factory=list)
+    referenced_memory_count: int = 0
 
 
 def _load_episodic_context(episodic: EpisodicMemory | None) -> list[dict[str, Any]]:
@@ -142,4 +143,5 @@ def run_multi_agent(
         intent=intent,
         activated_agents=activated_agents,
         activated_skills=activated_skills,
+        referenced_memory_count=len(episodic_context),
     )

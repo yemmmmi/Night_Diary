@@ -44,6 +44,7 @@ def analysis_to_response(
     *,
     ai_ans: str | None = None,
     db: Session | None = None,
+    referenced_memory_count: int = 0,
 ) -> AnalysisResponse:
     model_name: str | None = None
     if db is not None and row.execution_tier:
@@ -71,6 +72,7 @@ def analysis_to_response(
         ai_ans=ai_ans,
         model_name=model_name,
         status_detail=status_detail,
+        referenced_memory_count=referenced_memory_count,
     )
 
 
