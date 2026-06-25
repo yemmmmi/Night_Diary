@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { PhCaretDown, PhCaretUp, PhEnvelopeSimple } from '@phosphor-icons/vue'
+import { PhCaretDown, PhCaretUp, PhEnvelopeSimple, PhBrain } from '@phosphor-icons/vue'
 
 import FeedbackButtons from '@/features/analysis/FeedbackButtons.vue'
 import AITypingIndicator from '@/shared/components/AITypingIndicator.vue'
@@ -62,6 +62,8 @@ const modelLabel = computed(() => props.analysis?.model_name?.trim() || null)
 const isFallback = computed(() => props.analysis?.agent_mode === 'fallback')
 
 const statusDetail = computed(() => props.analysis?.status_detail?.trim() || null)
+
+const referencedMemoryCount = computed(() => props.analysis?.referenced_memory_count ?? 0)
 </script>
 
 <template>
@@ -87,6 +89,10 @@ const statusDetail = computed(() => props.analysis?.status_detail?.trim() || nul
               <template v-if="tierLabel">分析模式 · {{ tierLabel }}</template>
               <template v-if="tierLabel && modelLabel"> · </template>
               <template v-if="modelLabel">模型 · {{ modelLabel }}</template>
+            </p>
+            <p v-if="referencedMemoryCount > 0" class="analysis-panel__memory-ref">
+              <PhBrain :size="12" weight="duotone" />
+              本次参考了 {{ referencedMemoryCount }} 条记忆
             </p>
           </div>
         </div>
@@ -193,6 +199,19 @@ const statusDetail = computed(() => props.analysis?.status_detail?.trim() || nul
   font-size: 0.75rem;
   color: var(--color-text-secondary);
   margin-top: 0.125rem;
+}
+
+.analysis-panel__memory-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  padding: 0.125rem 0.5rem;
+  border-radius: 1rem;
+  width: fit-content;
 }
 
 .analysis-panel__letter-body {

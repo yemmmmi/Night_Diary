@@ -29,13 +29,14 @@ class _FakeContainer:
 
 def test_create_analysis_persists_result(db_session) -> None:
     entry = diary_service.create_entry(db_session, content="今天工作很累。")
-    analysis = analysis_service.create_analysis(db_session, entry.id, planner=_planner())
+    analysis, mem_count = analysis_service.create_analysis(db_session, entry.id, planner=_planner())
 
     assert analysis.id is not None
     assert analysis.diary_id == entry.id
     db_session.refresh(entry)
     assert entry.ai_ans
     assert analysis.execution_tier
+    assert mem_count == 0  # no episodic memory in stub planner
 
 
 def test_create_analysis_rejects_duplicate(db_session) -> None:
@@ -54,8 +55,8 @@ def test_update_analysis_rejects_unchanged_content(db_session) -> None:
 
 def test_regenerate_analysis_replaces_existing(db_session) -> None:
     entry = diary_service.create_entry(db_session, content="重新生成测试")
-    first = analysis_service.create_analysis(db_session, entry.id, planner=_planner())
-    second = analysis_service.regenerate_analysis(
+    first, _ = analysis_service.create_analysis(db_session, entry.id, planner=_planner())
+    second, _ = analysis_service.regenerate_analysis(
         db_session,
         entry.id,
         container=_FakeContainer(_planner()),

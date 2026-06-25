@@ -15,16 +15,16 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
 
 @router.post("/{diary_id}", response_model=AnalysisResponse, status_code=status.HTTP_201_CREATED)
 def trigger_analysis(diary_id: int, db: DbDep, container: ContainerDep) -> AnalysisResponse:
-    row = analysis_service.trigger_analysis(db, diary_id, container)
+    row, mem_count = analysis_service.trigger_analysis(db, diary_id, container)
     entry = diary_service.get_entry(db, diary_id)
-    return analysis_to_response(row, ai_ans=entry.ai_ans, db=db)
+    return analysis_to_response(row, ai_ans=entry.ai_ans, db=db, referenced_memory_count=mem_count)
 
 
 @router.post("/{diary_id}/regenerate", response_model=AnalysisResponse)
 def regenerate_analysis(diary_id: int, db: DbDep, container: ContainerDep) -> AnalysisResponse:
-    row = analysis_service.regenerate_analysis(db, diary_id, container)
+    row, mem_count = analysis_service.regenerate_analysis(db, diary_id, container)
     entry = diary_service.get_entry(db, diary_id)
-    return analysis_to_response(row, ai_ans=entry.ai_ans, db=db)
+    return analysis_to_response(row, ai_ans=entry.ai_ans, db=db, referenced_memory_count=mem_count)
 
 
 @router.get("/{diary_id}", response_model=AnalysisResponse)
