@@ -208,8 +208,10 @@ watch(
 .chat-scene {
   display: grid;
   grid-template-columns: 12rem 1fr 16rem;
-  height: calc(100vh - 2.5rem - 2.625rem);
+  /* titlebar 2.5rem + nav tabs ~3rem + app-shell frameless padding 2.5rem */
+  height: calc(100dvh - 8rem);
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .chat-scene__sidebar {
@@ -244,6 +246,7 @@ watch(
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .chat-scene__empty {
@@ -277,6 +280,7 @@ watch(
   gap: 0.5rem;
   padding: 1rem;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .chat-scene__divider {

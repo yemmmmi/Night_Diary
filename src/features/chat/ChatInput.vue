@@ -48,6 +48,7 @@ function onKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: flex-end;
   gap: 0.5rem;
+  flex-shrink: 0;
   padding: 0.625rem 0.75rem;
   border-top: 1px solid var(--color-border);
   background: var(--color-bg);
