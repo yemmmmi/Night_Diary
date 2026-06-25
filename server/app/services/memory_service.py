@@ -58,6 +58,58 @@ def list_episodic(container: ServiceContainer) -> list[dict[str, Any]]:
     return [_entry_to_dict(entry) for entry in entries]
 
 
+def _sync_live_episodic(container: ServiceContainer) -> None:
+    if container.episodic_memory is not None:
+        container.episodic_memory.load()
+
+
+def update_episodic(
+    container: ServiceContainer,
+    entry_id: str,
+    *,
+    event: str | None = None,
+    emotion: str | None = None,
+    ai_suggestion: str | None = None,
+    importance: float | None = None,
+) -> dict[str, Any]:
+    """Update a persisted episodic entry."""
+    from app.shared.errors import NotFoundError
+
+    store = SqliteEpisodicMemoryStore(container.session_factory)
+    entry = store.get_entry(DEFAULT_USER_ID, entry_id)
+    if entry is None:
+        raise NotFoundError(resource="情节记忆", resource_id=entry_id)
+
+    updates: dict[str, Any] = {}
+    if event is not None:
+        updates["event"] = event
+    if emotion is not None:
+        updates["emotion"] = emotion
+    if ai_suggestion is not None:
+        updates["ai_suggestion"] = ai_suggestion
+    if importance is not None:
+        updates["importance"] = importance
+
+    if not updates:
+        return _entry_to_dict(entry)
+
+    updated = entry.model_copy(update=updates)
+    store.upsert_entry(DEFAULT_USER_ID, updated)
+    _sync_live_episodic(container)
+    return _entry_to_dict(updated)
+
+
+def delete_episodic(container: ServiceContainer, entry_id: str) -> None:
+    """Delete a persisted episodic entry."""
+    from app.shared.errors import NotFoundError
+
+    store = SqliteEpisodicMemoryStore(container.session_factory)
+    if store.get_entry(DEFAULT_USER_ID, entry_id) is None:
+        raise NotFoundError(resource="情节记忆", resource_id=entry_id)
+    store.delete_entries(DEFAULT_USER_ID, [entry_id])
+    _sync_live_episodic(container)
+
+
 def _profile_to_dict(profile: UserProfile) -> dict[str, Any]:
     return {
         "personality_tags": list(profile.personality_tags),

@@ -2,7 +2,7 @@ import axios from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
-import { getOverview, getProfile, listEpisodic } from '@/shared/api/memory'
+import { getOverview, getProfile, listEpisodic, updateEpisodic, deleteEpisodic } from '@/shared/api/memory'
 import { resetHttpClient } from '@/shared/api/http'
 
 vi.mock('axios', () => {
@@ -45,6 +45,8 @@ const sampleOverview = {
 
 describe('memory API', () => {
   const get = vi.fn()
+  const patch = vi.fn()
+  const del = vi.fn()
 
   afterEach(() => {
     vi.clearAllMocks()
@@ -85,5 +87,31 @@ describe('memory API', () => {
     const result = await getOverview()
     expect(get).toHaveBeenCalledWith('/api/v1/memory/overview')
     expect(result.episodic_from_cards).toBe(1)
+  })
+
+  it('updates an episodic entry', async () => {
+    vi.mocked(axios.create).mockReturnValue(
+      mockAxiosClient({ get, patch }) as never,
+    )
+    patch.mockResolvedValue({
+      data: { ...sampleEpisodic, event: '更新后', emotion: '开心' },
+    })
+
+    const result = await updateEpisodic('a1', { event: '更新后', emotion: '开心' })
+    expect(patch).toHaveBeenCalledWith('/api/v1/memory/episodic/a1', {
+      event: '更新后',
+      emotion: '开心',
+    })
+    expect(result.event).toBe('更新后')
+  })
+
+  it('deletes an episodic entry', async () => {
+    vi.mocked(axios.create).mockReturnValue(
+      mockAxiosClient({ get, delete: del }) as never,
+    )
+    del.mockResolvedValue({})
+
+    await deleteEpisodic('a1')
+    expect(del).toHaveBeenCalledWith('/api/v1/memory/episodic/a1')
   })
 })

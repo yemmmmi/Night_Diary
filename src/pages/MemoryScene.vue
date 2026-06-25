@@ -11,10 +11,10 @@ import {
 } from '@phosphor-icons/vue'
 
 import GlassPanel from '@/shared/components/GlassPanel.vue'
-import EmotionChips from '@/features/card/EmotionChips.vue'
+import EpisodicEntryCard from '@/features/memory/EpisodicEntryCard.vue'
 import { memoryCopy as copy } from '@/shared/copy/memory'
 import { useMemoryStore } from '@/stores/memory'
-import type { EpisodicEntry } from '@/shared/api/memory'
+import type { EpisodicEntry, EpisodicEntryUpdate } from '@/shared/api/memory'
 
 const router = useRouter()
 const memoryStore = useMemoryStore()
@@ -25,6 +25,9 @@ defineOptions({ name: 'MemoryScene' })
 const pick = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)]
 
 const subtitle = ref(pick(copy.subtitle))
+
+const showDeleteConfirm = ref(false)
+const pendingDeleteId = ref<string | null>(null)
 
 const profile = computed(() => memoryStore.profile)
 const overview = computed(() => memoryStore.overview)
@@ -45,6 +48,22 @@ function entrySourceLabel(entry: EpisodicEntry): string {
 
 function goToCards() {
   router.push({ path: '/review', query: { mode: 'cards' } })
+}
+
+function onAskDelete(entryId: string) {
+  pendingDeleteId.value = entryId
+  showDeleteConfirm.value = true
+}
+
+async function onDeleteConfirm() {
+  const id = pendingDeleteId.value
+  showDeleteConfirm.value = false
+  pendingDeleteId.value = null
+  if (id) await memoryStore.removeEpisodic(id)
+}
+
+async function onSaveEntry(entryId: string, patch: EpisodicEntryUpdate) {
+  await memoryStore.saveEpisodic(entryId, patch)
 }
 
 onMounted(() => {
@@ -170,27 +189,16 @@ onActivated(() => {
       <p class="memory-scene__section-desc">{{ copy.episodicDesc }}</p>
 
       <div v-if="episodic.length" class="memory-timeline">
-        <article v-for="entry in episodic" :key="entry.entry_id" class="memory-entry glass-panel">
-          <div class="memory-entry__head">
-            <EmotionChips :emotion="entry.emotion" :size="13" />
-            <span
-              class="memory-entry__source"
-              :class="`memory-entry__source--${entry.source}`"
-            >
-              {{ entrySourceLabel(entry) }}
-            </span>
-          </div>
-          <p class="memory-entry__event font-diary">{{ entry.event }}</p>
-          <p v-if="entry.ai_suggestion" class="memory-entry__suggestion">
-            {{ entry.ai_suggestion }}
-          </p>
-          <div class="memory-entry__footer">
-            <span class="memory-entry__time">{{ formatTime(entry.timestamp) }}</span>
-            <span class="memory-entry__importance">
-              {{ copy.importance }} {{ (entry.importance * 100).toFixed(0) }}%
-            </span>
-          </div>
-        </article>
+        <EpisodicEntryCard
+          v-for="entry in episodic"
+          :key="entry.entry_id"
+          :entry="entry"
+          :source-label="entrySourceLabel(entry)"
+          :formatted-time="formatTime(entry.timestamp)"
+          :saving="memoryStore.saving"
+          @save="onSaveEntry"
+          @delete="onAskDelete"
+        />
       </div>
 
       <div v-else-if="!memoryStore.loading" class="memory-scene__empty">
@@ -215,6 +223,36 @@ onActivated(() => {
       </GlassPanel>
     </section>
   </main>
+
+  <Teleport to="body">
+    <div
+      v-if="showDeleteConfirm"
+      class="memory-confirm-overlay"
+      @click.self="showDeleteConfirm = false"
+    >
+      <div class="memory-confirm-dialog">
+        <p class="memory-confirm-dialog__title">{{ copy.confirmDeleteTitle }}</p>
+        <p class="memory-confirm-dialog__desc">{{ copy.confirmDeleteDesc }}</p>
+        <div class="memory-confirm-dialog__actions">
+          <button
+            type="button"
+            class="memory-confirm-dialog__btn"
+            @click="showDeleteConfirm = false"
+          >
+            {{ copy.cancel }}
+          </button>
+          <button
+            type="button"
+            class="memory-confirm-dialog__btn memory-confirm-dialog__btn--danger"
+            :disabled="memoryStore.saving"
+            @click="onDeleteConfirm"
+          >
+            {{ copy.confirmDelete }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -385,59 +423,65 @@ onActivated(() => {
   gap: 0.625rem;
 }
 
-.memory-entry {
-  padding: 0.875rem 1rem;
-  border-radius: var(--radius-button, 0.75rem);
-}
-
-.memory-entry__head {
+.memory-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
 }
 
-.memory-entry__source {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  padding: 0.125rem 0.5rem;
-  border-radius: 1rem;
-}
-
-.memory-entry__source--card {
-  color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-}
-
-.memory-entry__source--diary {
-  color: var(--color-text-secondary);
+.memory-confirm-dialog {
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border-radius: var(--radius-outer);
+  border: 1px solid var(--color-border);
   background: var(--color-bg-elevated);
+  text-align: center;
 }
 
-.memory-entry__event {
+.memory-confirm-dialog__title {
   font-size: 0.9375rem;
-  line-height: 1.7;
+  font-weight: 600;
   color: var(--color-text-primary);
+  margin-bottom: 0.375rem;
 }
 
-.memory-entry__suggestion {
-  margin-top: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
-  background: var(--color-bg-elevated);
+.memory-confirm-dialog__desc {
   font-size: 0.8125rem;
-  line-height: 1.6;
+  color: var(--color-text-secondary);
+  margin-bottom: 1rem;
+}
+
+.memory-confirm-dialog__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.memory-confirm-dialog__btn {
+  padding: 0.4375rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  background: var(--color-bg-elevated);
   color: var(--color-text-secondary);
 }
 
-.memory-entry__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.625rem;
-  font-size: 0.6875rem;
-  color: var(--color-text-secondary);
+.memory-confirm-dialog__btn--danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #fff;
+  font-weight: 600;
+}
+
+.memory-confirm-dialog__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ── Empty ──────────────────────────────────────────────────── */
