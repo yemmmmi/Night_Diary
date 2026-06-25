@@ -1,6 +1,6 @@
 [package]
 name = "night-diary"
-version = "0.0.1"
+version = "1.0.0"
 description = "Night Diary — local AI diary desktop app"
 authors = ["Night Diary"]
 edition = "2021"
