@@ -168,8 +168,8 @@ def import_all(
         )
         # Overwrite auto-generated fields with original values
         entry.ai_ans = diary_data.get("ai_ans")
-        if diary_data.get("created_at"):
-            entry.created_at = _parse_datetime(diary_data["created_at"])
+        if created_at := _parse_datetime(diary_data.get("created_at")):
+            entry.created_at = created_at
         db.commit()
         db.refresh(entry)
         diary_id_map[old_id] = entry.id
@@ -192,8 +192,8 @@ def import_all(
             execution_tier=analysis_data.get("execution_tier"),
             activated_agents=analysis_data.get("activated_agents"),
         )
-        if analysis_data.get("created_at"):
-            analysis.created_at = _parse_datetime(analysis_data["created_at"])
+        if created_at := _parse_datetime(analysis_data.get("created_at")):
+            analysis.created_at = created_at
         db.add(analysis)
     db.commit()
 
@@ -212,8 +212,8 @@ def import_all(
             card_type=card_data.get("card_type", "standard"),
             diary_id=new_diary_id,
         )
-        if card_data.get("created_at"):
-            card.created_at = _parse_datetime(card_data["created_at"])
+        if created_at := _parse_datetime(card_data.get("created_at")):
+            card.created_at = created_at
         db.add(card)
     db.commit()
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -12,7 +14,7 @@ router = APIRouter(tags=["export"])
 
 
 @router.get("/export/all")
-def export_all(db: DbDep) -> dict:
+def export_all(db: DbDep) -> dict[str, Any]:
     """Export all user data as a JSON dict.
 
     Returns diary entries (with tags + analyses), memory cards,
@@ -24,11 +26,11 @@ def export_all(db: DbDep) -> dict:
 class ImportRequest(BaseModel):
     """Request body for JSON import. Accepts the same format as export_all output."""
 
-    data: dict
+    data: dict[str, Any]
 
 
 @router.post("/import/json")
-def import_json(body: ImportRequest, db: DbDep, container: ContainerDep) -> dict:
+def import_json(body: ImportRequest, db: DbDep, container: ContainerDep) -> dict[str, Any]:
     """Import user data from JSON, replacing all existing data.
 
     Clears existing diaries, tags, analyses, memory cards, and memories,
