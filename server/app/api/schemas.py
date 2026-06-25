@@ -231,6 +231,13 @@ class EpisodicEntryResponse(BaseModel):
     source: Literal["card", "diary"]
 
 
+class EpisodicEntryUpdateRequest(BaseModel):
+    event: str | None = Field(default=None, min_length=1)
+    emotion: str | None = Field(default=None, min_length=1, max_length=32)
+    ai_suggestion: str | None = None
+    importance: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
 class EmotionBaselineResponse(BaseModel):
     average_sentiment: float
     volatility: float
