@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onActivated, onMounted, ref } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   PhBrain,
@@ -8,6 +8,7 @@ import {
   PhArrowRight,
   PhSparkle,
   PhNotePencil,
+  PhChartPie,
 } from '@phosphor-icons/vue'
 
 import GlassPanel from '@/shared/components/GlassPanel.vue'
@@ -29,6 +30,107 @@ const subtitle = ref(pick(copy.subtitle))
 const profile = computed(() => memoryStore.profile)
 const overview = computed(() => memoryStore.overview)
 const episodic = computed(() => memoryStore.episodic)
+
+/* ── Emotion distribution chart ────────────────────────────── */
+const emotionChartEl = ref<HTMLDivElement | null>(null)
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+let emotionChartInstance: any = null
+
+/** Emotion label → display name mapping. */
+const EMOTION_LABELS: Record<string, string> = {
+  positive: '积极',
+  negative: '消极',
+  neutral: '平静',
+  crisis: '危机',
+}
+
+/** Emotion → color CSS variable name. */
+const EMOTION_COLORS: Record<string, string> = {
+  positive: 'var(--color-success, #6B8E5A)',
+  negative: 'var(--color-danger, #B85450)',
+  neutral: 'var(--color-text-secondary, #7A6F63)',
+  crisis: 'var(--color-danger, #B85450)',
+}
+
+const emotionDistribution = computed(() => {
+  if (episodic.value.length === 0) return []
+  const counts: Record<string, number> = {}
+  for (const entry of episodic.value) {
+    const label = entry.emotion || 'neutral'
+    counts[label] = (counts[label] || 0) + 1
+  }
+  return Object.entries(counts).map(([emotion, count]) => ({
+    name: EMOTION_LABELS[emotion] || emotion,
+    emotion,
+    value: count,
+  }))
+})
+
+function renderEmotionChart() {
+  if (!emotionChartEl.value || emotionDistribution.value.length === 0) return
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  const echarts = (window as any).echarts
+  if (!echarts) return
+
+  const style = getComputedStyle(document.documentElement)
+  const accent = style.getPropertyValue('--color-accent').trim() || '#D4A574'
+  const muted = style.getPropertyValue('--color-text-secondary').trim() || '#7A6F63'
+  const rule = style.getPropertyValue('--color-border').trim() || 'rgba(61,52,41,0.12)'
+
+  if (emotionChartInstance) emotionChartInstance.dispose()
+
+  emotionChartInstance = echarts.init(emotionChartEl.value, null, { renderer: 'svg' })
+  emotionChartInstance.setOption({
+    animation: false,
+    tooltip: {
+      trigger: 'item',
+      appendToBody: true,
+      formatter: '{b}: {c} 条 ({d}%)',
+    },
+    legend: {
+      bottom: 0,
+      icon: 'circle',
+      itemWidth: 8,
+      itemHeight: 8,
+      textStyle: { color: muted, fontSize: 11 },
+    },
+    series: [{
+      type: 'pie',
+      radius: ['42%', '68%'],
+      center: ['50%', '42%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderColor: rule, borderWidth: 2 },
+      label: {
+        show: true,
+        color: muted,
+        fontSize: 11,
+        formatter: '{b}\n{d}%',
+      },
+      emphasis: {
+        label: { show: true, fontSize: 13, fontWeight: 'bold' },
+      },
+      data: emotionDistribution.value.map(d => ({
+        name: d.name,
+        value: d.value,
+        itemStyle: {
+          color: EMOTION_COLORS[d.emotion] || accent,
+        },
+      })),
+    }],
+  })
+}
+
+function disposeEmotionChart() {
+  if (emotionChartInstance) {
+    emotionChartInstance.dispose()
+    emotionChartInstance = null
+  }
+}
+
+watch(() => episodic.value.length, async () => {
+  await nextTick()
+  renderEmotionChart()
+})
 
 function formatTime(ts: number): string {
   const d = new Date(ts * 1000)
@@ -57,6 +159,10 @@ onActivated(() => {
   void memoryStore.loadAll().catch(() => {
     // surfaced via memoryStore.error
   })
+})
+
+onBeforeUnmount(() => {
+  disposeEmotionChart()
 })
 </script>
 
@@ -159,6 +265,18 @@ onActivated(() => {
         <p class="memory-scene__empty-title">{{ copy.profileEmpty }}</p>
         <p class="memory-scene__empty-desc">{{ copy.profileEmptyHint }}</p>
       </div>
+    </section>
+
+    <!-- ── Emotion distribution chart ──────────────────────────── -->
+    <section v-if="emotionDistribution.length" class="memory-scene__section">
+      <h2 class="memory-scene__section-title">
+        <PhChartPie :size="16" weight="duotone" />
+        {{ copy.emotionChartTitle }}
+      </h2>
+      <p class="memory-scene__section-desc">{{ copy.emotionChartDesc }}</p>
+      <GlassPanel class="memory-emotion-chart">
+        <div ref="emotionChartEl" class="memory-emotion-chart__canvas"></div>
+      </GlassPanel>
     </section>
 
     <!-- ── Episodic timeline ────────────────────────────────────── -->
@@ -438,6 +556,16 @@ onActivated(() => {
   margin-top: 0.625rem;
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
+}
+
+/* ── Emotion chart ──────────────────────────────────────────── */
+.memory-emotion-chart {
+  padding: 1rem;
+}
+
+.memory-emotion-chart__canvas {
+  width: 100%;
+  height: 240px;
 }
 
 /* ── Empty ──────────────────────────────────────────────────── */

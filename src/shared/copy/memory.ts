@@ -38,6 +38,11 @@ export const memoryCopy = {
   sourceCard: '来自卡片',
   sourceDiary: '来自日记',
   importance: '重要性',
+  viewDiary: '查看原文',
+
+  // Emotion chart
+  emotionChartTitle: '情绪分布',
+  emotionChartDesc: '基于情节记忆的情绪构成，帮你看见自己的情绪底色。',
 
   // Cards section
   cardsTitle: '记忆卡片',
