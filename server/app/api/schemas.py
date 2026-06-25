@@ -56,6 +56,7 @@ class AnalysisResponse(BaseModel):
     ai_ans: str | None = None
     model_name: str | None = None
     status_detail: str | None = None
+    referenced_memory_count: int = 0
 
     model_config = {"from_attributes": True}
 
