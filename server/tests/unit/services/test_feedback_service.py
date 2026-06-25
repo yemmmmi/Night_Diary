@@ -23,7 +23,7 @@ def _planner() -> ExecutionPlanner:
 
 def test_submit_feedback_persists_and_schedules_thompson(db_session) -> None:
     entry = diary_service.create_entry(db_session, content="反馈测试日记")
-    analysis = analysis_service.create_analysis(db_session, entry.id, planner=_planner())
+    analysis, _ = analysis_service.create_analysis(db_session, entry.id, planner=_planner())
 
     thompson = MagicMock()
     row = feedback_service.submit_feedback(

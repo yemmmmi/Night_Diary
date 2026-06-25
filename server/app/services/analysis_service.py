@@ -68,7 +68,8 @@ def create_analysis(
     diary_id: int,
     *,
     planner: ExecutionPlanner,
-) -> AnalysisRow:
+) -> tuple[AnalysisRow, int]:
+    """Create analysis and return (row, referenced_memory_count)."""
     entry = db.query(DiaryEntryRow).filter(DiaryEntryRow.id == diary_id).first()
     if entry is None:
         raise DiaryNotFoundError(diary_id=diary_id)
@@ -92,7 +93,7 @@ def create_analysis(
         analysis.token_cost or 0,
         analysis.execution_tier,
     )
-    return analysis
+    return analysis, result.referenced_memory_count
 
 
 def get_analysis(db: Session, diary_id: int) -> AnalysisRow:
@@ -114,7 +115,8 @@ def update_analysis(
     diary_id: int,
     *,
     planner: ExecutionPlanner,
-) -> AnalysisRow:
+) -> tuple[AnalysisRow, int]:
+    """Update analysis and return (row, referenced_memory_count)."""
     entry = db.query(DiaryEntryRow).filter(DiaryEntryRow.id == diary_id).first()
     if entry is None:
         raise DiaryNotFoundError(diary_id=diary_id)
@@ -150,7 +152,7 @@ def update_analysis(
     db.commit()
     db.refresh(existing)
     logger.info("分析更新成功: diary_id=%d analysis_id=%d", diary_id, existing.id)
-    return existing
+    return existing, result.referenced_memory_count
 
 
 def delete_analysis(db: Session, analysis_id: int) -> bool:
@@ -180,20 +182,20 @@ def regenerate_analysis(
     db: Session,
     diary_id: int,
     container: ServiceContainer,
-) -> AnalysisRow:
+) -> tuple[AnalysisRow, int]:
     """Force a fresh AI reply — replaces any existing analysis."""
     delete_analysis_for_diary(db, diary_id)
     planner = container.build_execution_planner(db)
     return create_analysis(db, diary_id, planner=planner)
 
 
-def trigger_analysis(db: Session, diary_id: int, container: ServiceContainer) -> AnalysisRow:
+def trigger_analysis(db: Session, diary_id: int, container: ServiceContainer) -> tuple[AnalysisRow, int]:
     """End-to-end entry: build planner from container and create analysis."""
     planner = container.build_execution_planner(db)
     return create_analysis(db, diary_id, planner=planner)
 
 
-def rerun_analysis(db: Session, diary_id: int, container: ServiceContainer) -> AnalysisRow:
+def rerun_analysis(db: Session, diary_id: int, container: ServiceContainer) -> tuple[AnalysisRow, int]:
     """Re-run analysis when diary content changed."""
     planner = container.build_execution_planner(db)
     return update_analysis(db, diary_id, planner=planner)

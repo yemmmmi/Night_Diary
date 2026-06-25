@@ -56,6 +56,7 @@ class AnalysisResponse(BaseModel):
     ai_ans: str | None = None
     model_name: str | None = None
     status_detail: str | None = None
+    referenced_memory_count: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -229,6 +230,13 @@ class EpisodicEntryResponse(BaseModel):
     timestamp: float
     diary_ids: list[str] = Field(default_factory=list)
     source: Literal["card", "diary"]
+
+
+class EpisodicEntryUpdateRequest(BaseModel):
+    event: str | None = Field(default=None, min_length=1)
+    emotion: str | None = Field(default=None, min_length=1, max_length=32)
+    ai_suggestion: str | None = None
+    importance: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class EmotionBaselineResponse(BaseModel):

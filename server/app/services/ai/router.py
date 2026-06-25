@@ -47,6 +47,7 @@ class AnalysisResult:
     agent_mode: str
     execution_tier: str
     activated_agents: str
+    referenced_memory_count: int = 0
 
 
 class ExecutionPlanner:
@@ -207,6 +208,7 @@ class ExecutionPlanner:
                     agent_mode="multi_agent",
                     execution_tier=run.tier,
                     activated_agents=activated_agents,
+                    referenced_memory_count=run.referenced_memory_count,
                 )
 
             if decision.mode == ExecutionMode.AGENT and self._db is not None:
