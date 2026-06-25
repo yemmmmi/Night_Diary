@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { PhPencilSimple, PhTrash, PhCheck, PhX } from '@phosphor-icons/vue'
+import { PhPencilSimple, PhTrash, PhCheck, PhX, PhArrowRight } from '@phosphor-icons/vue'
 
 import EmotionChips from '@/features/card/EmotionChips.vue'
 import { memoryCopy as copy } from '@/shared/copy/memory'
@@ -16,6 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   save: [entryId: string, patch: EpisodicEntryUpdate]
   delete: [entryId: string]
+  viewDiary: [diaryId: string]
 }>()
 
 const editing = ref(false)
@@ -142,9 +143,20 @@ defineExpose({ cancelEdit })
       </p>
       <div class="memory-entry__footer">
         <span class="memory-entry__time">{{ formattedTime }}</span>
-        <span class="memory-entry__importance">
-          {{ copy.importance }} {{ (entry.importance * 100).toFixed(0) }}%
-        </span>
+        <div class="memory-entry__footer-right">
+          <span class="memory-entry__importance">
+            {{ copy.importance }} {{ (entry.importance * 100).toFixed(0) }}%
+          </span>
+          <button
+            v-if="entry.diary_ids.length"
+            type="button"
+            class="memory-entry__link"
+            @click="emit('viewDiary', entry.diary_ids[0])"
+          >
+            {{ copy.viewDiary }}
+            <PhArrowRight :size="12" weight="bold" />
+          </button>
+        </div>
       </div>
     </template>
   </article>
@@ -234,6 +246,31 @@ defineExpose({ cancelEdit })
   margin-top: 0.625rem;
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
+}
+
+.memory-entry__footer-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.memory-entry__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: none;
+  border-radius: 1rem;
+  background: transparent;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: background var(--motion-duration, 220ms) var(--motion-ease, ease);
+}
+
+.memory-entry__link:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 
 .memory-entry__field {
