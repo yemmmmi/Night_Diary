@@ -152,6 +152,10 @@ function goToCards() {
   router.push({ path: '/review', query: { mode: 'cards' } })
 }
 
+function goToDiary(diaryId: string) {
+  router.push({ name: 'review-detail', params: { diaryId } })
+}
+
 function onAskDelete(entryId: string) {
   pendingDeleteId.value = entryId
   showDeleteConfirm.value = true
@@ -316,6 +320,7 @@ onBeforeUnmount(() => {
           :saving="memoryStore.saving"
           @save="onSaveEntry"
           @delete="onAskDelete"
+          @view-diary="goToDiary"
         />
       </div>
 
