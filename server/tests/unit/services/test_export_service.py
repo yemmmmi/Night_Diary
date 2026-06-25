@@ -32,7 +32,7 @@ class TestExportImport:
         db_session.add_all([tag1, tag2])
         db_session.flush()
 
-        entry = diary_service.create_entry(
+        diary_service.create_entry(
             db_session,
             content="今天工作很顺利",
             tag_ids=[tag1.id, tag2.id],

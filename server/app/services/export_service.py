@@ -7,7 +7,6 @@ rebuilds from the JSON, including ChromaDB vector sync for each diary entry.
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
