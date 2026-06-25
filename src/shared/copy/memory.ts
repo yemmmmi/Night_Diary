@@ -53,6 +53,10 @@ export const memoryCopy = {
   saveError: '保存失败',
   deleteError: '删除失败',
 
+  // Emotion chart
+  emotionChartTitle: '情绪分布',
+  emotionChartDesc: '基于情节记忆的情绪构成，帮你看见自己的情绪底色。',
+
   // Cards section
   cardsTitle: '记忆卡片',
   cardsDesc: '卡片是最轻量的记忆原子，保存后会沉淀进上面的情节记忆。',
