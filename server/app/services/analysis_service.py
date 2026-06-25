@@ -8,10 +8,12 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
+from app.domain.memory.types import EpisodicEntry
 from app.infrastructure.models.analysis import AnalysisRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.services import diary_service
 from app.services.ai.router import ExecutionPlanner
+from app.shared.emotion_estimator import EmotionEstimator
 
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
@@ -23,6 +25,14 @@ from app.shared.errors import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Module-level estimator — lightweight, stateless, safe to share.
+_emotion_estimator = EmotionEstimator()
+
+# Importance threshold for diary-derived episodic entries.  Diary entries are
+# the primary content of the product, so they default above the 0.5 store
+# threshold to ensure they are actually persisted (not filtered out).
+_DIARY_EPISODIC_IMPORTANCE = 0.6
 
 
 def _build_context(entry: DiaryEntryRow, recent_entries: list[DiaryEntryRow]) -> dict[str, str]:
@@ -63,11 +73,83 @@ def _persist_analysis(
     return analysis
 
 
+def _sync_diary_to_memory(
+    entry: DiaryEntryRow,
+    ai_ans: str,
+    container: ServiceContainer,
+) -> None:
+    """Persist a diary-derived event into episodic memory and trigger promotion.
+
+    This bridges the gap identified in the memory-pipeline analysis: diary
+    analyses were read by the multi-agent system but never written back.  We
+    extract a short event summary + emotion label from the diary content, store
+    it as an episodic entry, then ask the long-term layer to promote any
+    recurring patterns into the user profile.
+
+    Failures are logged and swallowed — memory is a best-effort enhancement,
+    not a hard dependency of the analysis flow.
+    """
+    episodic = getattr(container, "episodic_memory", None)
+    long_term = getattr(container, "long_term_memory", None)
+    if episodic is None:
+        logger.debug("Episodic memory unavailable; skip sync for diary_id=%s", entry.id)
+        return
+
+    content = entry.content or ""
+    estimate = _emotion_estimator.estimate(content)
+
+    # Build a concise event summary from the diary content.
+    event_summary = content.strip().replace("\n", " ")[:120]
+    if len(content.strip()) > 120:
+        event_summary += "…"
+
+    episodic_entry = EpisodicEntry(
+        event=event_summary,
+        emotion=estimate.label,
+        ai_suggestion=(ai_ans or "")[:200],
+        user_feedback="none",
+        timestamp=datetime.utcnow().timestamp(),
+        diary_ids=[str(entry.id)],
+        importance=_DIARY_EPISODIC_IMPORTANCE,
+        entry_id="",
+    )
+
+    try:
+        stored = episodic.store(episodic_entry)
+        if stored:
+            logger.info(
+                "Diary synced to episodic memory: diary_id=%s emotion=%s",
+                entry.id,
+                estimate.label,
+            )
+        else:
+            logger.debug(
+                "Episodic entry below threshold, not stored: diary_id=%s",
+                entry.id,
+            )
+    except Exception as exc:
+        logger.warning("Failed to store episodic entry for diary_id=%s: %s", entry.id, exc)
+        return
+
+    # Trigger long-term profile promotion from all episodic entries.
+    if long_term is not None and stored:
+        try:
+            all_entries = list(episodic._entries)
+            long_term.promote_from_episodic(
+                user_id=episodic._user_id,
+                episodic_entries=all_entries,
+            )
+            logger.debug("Long-term profile promotion completed for diary_id=%s", entry.id)
+        except Exception as exc:
+            logger.warning("Profile promotion failed for diary_id=%s: %s", entry.id, exc)
+
+
 def create_analysis(
     db: Session,
     diary_id: int,
     *,
     planner: ExecutionPlanner,
+    container: ServiceContainer | None = None,
 ) -> tuple[AnalysisRow, int]:
     """Create analysis and return (row, referenced_memory_count)."""
     entry = db.query(DiaryEntryRow).filter(DiaryEntryRow.id == diary_id).first()
@@ -93,6 +175,9 @@ def create_analysis(
         analysis.token_cost or 0,
         analysis.execution_tier,
     )
+    # Best-effort: sync diary event into episodic memory + trigger profile promotion.
+    if container is not None:
+        _sync_diary_to_memory(entry, result.ai_ans, container)
     return analysis, result.referenced_memory_count
 
 
@@ -115,6 +200,7 @@ def update_analysis(
     diary_id: int,
     *,
     planner: ExecutionPlanner,
+    container: ServiceContainer | None = None,
 ) -> tuple[AnalysisRow, int]:
     """Update analysis and return (row, referenced_memory_count)."""
     entry = db.query(DiaryEntryRow).filter(DiaryEntryRow.id == diary_id).first()
@@ -152,6 +238,9 @@ def update_analysis(
     db.commit()
     db.refresh(existing)
     logger.info("分析更新成功: diary_id=%d analysis_id=%d", diary_id, existing.id)
+    # Best-effort: sync updated diary event into episodic memory + trigger promotion.
+    if container is not None:
+        _sync_diary_to_memory(entry, result.ai_ans, container)
     return existing, result.referenced_memory_count
 
 
@@ -186,16 +275,16 @@ def regenerate_analysis(
     """Force a fresh AI reply — replaces any existing analysis."""
     delete_analysis_for_diary(db, diary_id)
     planner = container.build_execution_planner(db)
-    return create_analysis(db, diary_id, planner=planner)
+    return create_analysis(db, diary_id, planner=planner, container=container)
 
 
 def trigger_analysis(db: Session, diary_id: int, container: ServiceContainer) -> tuple[AnalysisRow, int]:
     """End-to-end entry: build planner from container and create analysis."""
     planner = container.build_execution_planner(db)
-    return create_analysis(db, diary_id, planner=planner)
+    return create_analysis(db, diary_id, planner=planner, container=container)
 
 
 def rerun_analysis(db: Session, diary_id: int, container: ServiceContainer) -> tuple[AnalysisRow, int]:
     """Re-run analysis when diary content changed."""
     planner = container.build_execution_planner(db)
-    return update_analysis(db, diary_id, planner=planner)
+    return update_analysis(db, diary_id, planner=planner, container=container)
