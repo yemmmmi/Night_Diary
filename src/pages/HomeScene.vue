@@ -214,12 +214,6 @@ function cardEmotionColor(card: MemoryCard): string {
   return EMOTION_COLORS[card.emotion] ?? 'var(--color-accent)'
 }
 
-function cardTypeLabel(card: MemoryCard): string {
-  if (card.card_type === 'quick') return '\u6781\u901f'
-  if (card.card_type === 'guided') return '\u5f15\u5bfc'
-  return '\u6807\u51c6'
-}
-
 onMounted(() => {
   void refreshHome()
 })
@@ -309,7 +303,6 @@ watch(
                 :emotion="item.linkedCard.emotion"
                 :size="11"
               />
-              <span class="kanban-card__embed-type">{{ cardTypeLabel(item.linkedCard) }}</span>
             </div>
             <span class="kanban-card__summary">{{ diarySummary(item.entry.content) }}</span>
             <span class="kanban-card__chip" :class="statusClass(diaryStatus(item.entry))">
@@ -331,12 +324,11 @@ watch(
                 :emotion="item.card.emotion"
                 :size="11"
               />
-              <span class="kanban-card__card-type">{{ cardTypeLabel(item.card) }}</span>
             </div>
             <span v-if="item.card.event_summary" class="kanban-card__summary">
-              {{ item.card.event_summary.slice(0, 28) }}{{ item.card.event_summary.length > 28 ? '\u2026' : '' }}
+              {{ item.card.event_summary.slice(0, 28) }}{{ item.card.event_summary.length > 28 ? '…' : '' }}
             </span>
-            <span v-else class="kanban-card__summary kanban-card__summary--muted">\u8bb0\u5f55\u4e86\u5fc3\u60c5</span>
+            <span v-else class="kanban-card__summary kanban-card__summary--muted">{{ cardCopy.recordedMoodOnly }}</span>
           </button>
         </template>
 
@@ -384,7 +376,7 @@ watch(
             </div>
 
             <div v-if="cardStore.cards.length > 0" class="card-drawer-recent">
-              <p class="card-drawer-recent-title">\u6700\u8fd1\u8bb0\u5fc6\u5361\u7247</p>
+              <p class="card-drawer-recent-title">{{ cardCopy.recentCards }}</p>
               <div class="card-drawer-recent-list">
                 <div
                   v-for="card in cardStore.cards.slice(0, 5)"
@@ -398,10 +390,7 @@ watch(
                     :size="13"
                   />
                   <span v-if="card.event_summary" class="recent-card-summary">
-                    {{ card.event_summary.slice(0, 40) }}{{ card.event_summary.length > 40 ? '\u2026' : '' }}
-                  </span>
-                  <span class="recent-card-type">
-                    {{ cardTypeLabel(card) }}
+                    {{ card.event_summary.slice(0, 40) }}{{ card.event_summary.length > 40 ? '…' : '' }}
                   </span>
                 </div>
               </div>
@@ -602,7 +591,7 @@ watch(
 .kanban-card__card-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.25rem;
   margin-bottom: 0.25rem;
 }
 
@@ -616,26 +605,6 @@ watch(
   border-radius: 0.375rem;
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
   font-size: 0.625rem;
-}
-
-.kanban-card__embed-type {
-  font-family: var(--font-ui);
-  font-size: 0.5625rem;
-  font-weight: 600;
-  color: var(--color-accent);
-  padding: 0.0625rem 0.3125rem;
-  border-radius: 0.25rem;
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-}
-
-.kanban-card__card-type {
-  font-family: var(--font-ui);
-  font-size: 0.5625rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  padding: 0.0625rem 0.3125rem;
-  border-radius: 0.25rem;
-  background: var(--color-bg-elevated);
 }
 
 .kanban-card__summary {
@@ -805,15 +774,6 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.recent-card-type {
-  font-family: var(--font-ui);
-  font-size: 0.6875rem;
-  color: var(--color-text-secondary);
-  padding: 0.125rem 0.4375rem;
-  background: var(--color-bg-elevated-2);
-  border-radius: 0.375rem;
 }
 
 /* Drawer transition */

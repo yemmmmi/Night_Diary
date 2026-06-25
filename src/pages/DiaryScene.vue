@@ -4,11 +4,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
 import DiaryEditor from '@/features/diary/DiaryEditor.vue'
+import EmotionChips from '@/features/card/EmotionChips.vue'
+import CardTypeBadge from '@/features/card/CardTypeBadge.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { listTags, type Tag } from '@/shared/api/tags'
 import { diarySceneCopy as copy } from '@/shared/copy/diaryScene'
 import { useDiaryStore } from '@/stores/diary'
+import { useCardStore } from '@/stores/card'
+import { findCardForDiary } from '@/shared/utils/cardFormat'
 import { formatApiError } from '@/shared/utils/apiError'
 import { countWordUnits, diaryStatus } from '@/shared/utils/diaryFormat'
 
@@ -23,6 +27,7 @@ function parseQueryDate(raw: unknown): string | null {
 const route = useRoute()
 const router = useRouter()
 const diaryStore = useDiaryStore()
+const cardStore = useCardStore()
 
 const content = ref('')
 const tagIds = ref<number[]>([])
@@ -91,6 +96,11 @@ const saveLabel = computed(() => (diaryStore.saving ? copy.saving : copy.save))
 const analysisLabel = computed(() =>
   diaryStore.currentEntry?.ai_ans?.trim() ? copy.viewAiReply : copy.getAiReply,
 )
+
+const linkedCard = computed(() => {
+  if (!diaryId.value) return null
+  return findCardForDiary(cardStore.cards, diaryId.value)
+})
 
 let saveStateTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -210,7 +220,7 @@ watch(tagIds, async (value, oldValue) => {
 })
 
 onMounted(async () => {
-  await loadTags()
+  await Promise.all([loadTags(), cardStore.loadCards()])
   await loadEntry()
 })
 </script>
@@ -226,6 +236,14 @@ onMounted(async () => {
 
         <div class="diary-scene__meta">
           <p class="diary-scene__date">{{ dateLabel }}</p>
+          <div v-if="linkedCard" class="diary-scene__card-origin">
+            <EmotionChips
+              :emotions="linkedCard.emotions"
+              :emotion="linkedCard.emotion"
+              :size="12"
+            />
+            <CardTypeBadge :card-type="linkedCard.card_type" />
+          </div>
         </div>
 
         <div class="diary-scene__actions">
@@ -329,6 +347,15 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.diary-scene__card-origin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
 }
 
 .diary-scene__actions {

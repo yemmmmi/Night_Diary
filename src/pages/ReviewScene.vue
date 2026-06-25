@@ -6,6 +6,7 @@ import { PhCalendarBlank, PhListBullets, PhCards, PhArrowSquareOut, PhMagnifying
 import CalendarView from '@/features/review/CalendarView.vue'
 import TimelineView from '@/features/review/TimelineView.vue'
 import EmotionChips from '@/features/card/EmotionChips.vue'
+import CardTypeBadge from '@/features/card/CardTypeBadge.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import type { DiaryEntry } from '@/shared/api/diary'
@@ -17,6 +18,7 @@ import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
 import { formatApiError } from '@/shared/utils/apiError'
 import { diaryStatus, diaryStatusLabel, diarySummary } from '@/shared/utils/diaryFormat'
+import { findCardForDiary } from '@/shared/utils/cardFormat'
 
 type ReviewMode = 'calendar' | 'timeline' | 'cards'
 
@@ -69,6 +71,11 @@ const showAiPreview = computed(
     diaryStatus(selectedEntry.value) !== 'draft' &&
     Boolean(aiReplyPreview.value),
 )
+
+const linkedCard = computed(() => {
+  if (!selectedEntry.value) return null
+  return findCardForDiary(cardStore.cards, selectedEntry.value.id)
+})
 
 function syncFromRoute() {
   if (!routeDiaryId.value) {
@@ -443,9 +450,7 @@ watch(
             >
               <div class="review-card-item__head">
                 <EmotionChips :emotions="card.emotions" :emotion="card.emotion" />
-                <span class="review-card-item__type">
-                  {{ card.card_type === 'quick' ? '极速' : card.card_type === 'guided' ? '引导' : '标准' }}
-                </span>
+                <CardTypeBadge :card-type="card.card_type" />
               </div>
               <p v-if="card.event_summary" class="review-card-item__summary font-diary">
                 {{ card.event_summary }}
@@ -487,9 +492,7 @@ watch(
           <div v-for="card in cardStore.cards" :key="card.card_id" class="review-card-item glass-panel">
             <div class="review-card-item__head">
               <EmotionChips :emotions="card.emotions" :emotion="card.emotion" />
-              <span class="review-card-item__type">
-                {{ card.card_type === 'quick' ? '极速' : card.card_type === 'guided' ? '引导' : '标准' }}
-              </span>
+              <CardTypeBadge :card-type="card.card_type" />
             </div>
             <p v-if="card.event_summary" class="review-card-item__summary font-diary">
               {{ card.event_summary }}
@@ -536,6 +539,14 @@ watch(
           <p class="review-scene__detail-date">
             {{ selectedEntry.date ?? selectedEntry.created_at.slice(0, 10) }}
           </p>
+          <div v-if="linkedCard" class="review-scene__card-origin">
+            <EmotionChips
+              :emotions="linkedCard.emotions"
+              :emotion="linkedCard.emotion"
+              :size="12"
+            />
+            <CardTypeBadge :card-type="linkedCard.card_type" />
+          </div>
           <p class="review-scene__detail-summary font-diary">
             {{ diarySummary(selectedEntry.content, 120) }}
           </p>
@@ -671,6 +682,14 @@ watch(
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
   margin-bottom: 0.5rem;
+}
+
+.review-scene__card-origin {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.625rem;
 }
 
 .review-scene__detail-summary {
@@ -912,15 +931,6 @@ watch(
   font-size: 0.9375rem;
   font-weight: 700;
   color: var(--color-accent);
-}
-
-.review-card-item__type {
-  font-family: var(--font-ui);
-  font-size: 0.6875rem;
-  color: var(--color-text-secondary);
-  padding: 0.125rem 0.5rem;
-  background: var(--color-bg-elevated-2);
-  border-radius: 0.375rem;
 }
 
 .review-card-item__summary {

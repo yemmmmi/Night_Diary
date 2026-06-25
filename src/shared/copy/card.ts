@@ -25,6 +25,8 @@ export const cardCopy = {
   cardDeleted: '卡片已删除',
   emptyCards: '还没有记忆卡片',
   emptyCardsHint: '点下方按钮，花 30 秒记录今天的心情吧',
+  recentCards: '最近记忆卡片',
+  recordedMoodOnly: '记录了心情',
   loadError: '加载卡片失败',
   saveError: '保存卡片失败',
   deleteError: '删除卡片失败',
