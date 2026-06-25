@@ -101,6 +101,26 @@ function selectEntry(entry: DiaryEntry) {
   router.replace({ name: 'review-detail', params: { diaryId: entry.id } })
 }
 
+function exportMarkdown() {
+  const entry = selectedEntry.value
+  if (!entry) return
+
+  const date = entry.date || '未知日期'
+  const weather = entry.weather ? `  \n*天气：${entry.weather}*` : ''
+  const content = entry.content || ''
+  const aiAns = entry.ai_ans?.trim() || analysisStore.current?.ai_ans?.trim() || ''
+
+  const md = `# ${date}\n${weather}\n\n## 日记\n\n${content}\n${aiAns ? `\n---\n\n## 回信\n\n${aiAns}\n` : ''}`
+
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `nightdiary-${date}.md`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function selectDate(iso: string) {
   selectedDate.value = iso
   const matches = diaryStore.entries.filter((e) => e.date === iso)
@@ -535,6 +555,7 @@ watch(
             >
               {{ selectedEntry.ai_ans?.trim() ? '查看回信' : '获取回信' }}
             </GameButton>
+            <GameButton variant="ghost" @click="exportMarkdown">导出 Markdown</GameButton>
             <GameButton
               variant="ghost"
               class="review-scene__delete-btn"

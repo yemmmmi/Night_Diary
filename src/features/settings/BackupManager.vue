@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 
 import GameButton from '@/shared/components/GameButton.vue'
 import { createBackup, listBackups, restoreBackup } from '@/shared/api/settings'
+import { exportAll, importJson, type ExportSummary } from '@/shared/api/export'
 import { useSettingsStore } from '@/stores/settings'
 import { formatApiError } from '@/shared/utils/apiError'
 
@@ -59,6 +60,59 @@ async function onRestore(filename: string) {
   }
 }
 
+async function onExportJson() {
+  working.value = true
+  message.value = null
+  error.value = null
+  try {
+    const data = await exportAll()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const date = new Date().toISOString().slice(0, 10)
+    a.download = `nightdiary-export-${date}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    message.value = `已导出 ${(data as { diaries?: unknown[] }).diaries?.length ?? 0} 篇日记`
+  } catch (err) {
+    error.value = formatApiError(err, '导出失败')
+  } finally {
+    working.value = false
+  }
+}
+
+async function onImportJson(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (!window.confirm('导入将覆盖当前所有数据（日记、标签、记忆等），确定继续吗？')) {
+    input.value = ''
+    return
+  }
+
+  working.value = true
+  message.value = null
+  error.value = null
+  try {
+    const text = await file.text()
+    const data = JSON.parse(text)
+    const summary: ExportSummary = await importJson(data)
+    message.value = `导入完成：${summary.diaries} 篇日记、${summary.tags} 个标签、${summary.memory_cards} 张记忆卡片`
+    await refresh()
+  } catch (err) {
+    error.value = formatApiError(err, '导入失败，请检查文件格式')
+  } finally {
+    working.value = false
+    input.value = ''
+  }
+}
+
+function onToggleAutoBackup() {
+  settings.autoBackup = !settings.autoBackup
+}
+
 onMounted(() => {
   void refresh()
 })
@@ -66,9 +120,22 @@ onMounted(() => {
 
 <template>
   <div class="backup-manager">
-    <p v-if="!isTauri" class="backup-manager__hint">备份与恢复功能仅在 Tauri 桌面应用中可用。</p>
-    <template v-else>
-      <p class="backup-manager__hint">退出应用时会自动备份数据库（文件名以 <code>-auto.db</code> 结尾）。</p>
+    <!-- Auto backup toggle -->
+    <div class="backup-manager__toggle">
+      <button
+        class="backup-manager__switch"
+        :class="{ 'backup-manager__switch--on': settings.autoBackup }"
+        :aria-pressed="settings.autoBackup"
+        @click="onToggleAutoBackup"
+      >
+        <span class="backup-manager__switch-knob" />
+      </button>
+      <span>退出应用时自动备份</span>
+    </div>
+
+    <!-- Backup & restore (Tauri only) -->
+    <template v-if="isTauri">
+      <p class="backup-manager__hint">退出应用时会自动备份数据库（文件名以 <code>-auto.db</code> 结尾）。最多保留 20 份备份。</p>
       <GameButton variant="secondary" :disabled="working" @click="onCreateBackup">
         {{ working ? '处理中…' : '立即备份' }}
       </GameButton>
@@ -85,6 +152,26 @@ onMounted(() => {
         </ul>
       </div>
     </template>
+    <p v-else class="backup-manager__hint">整库备份与恢复功能仅在 Tauri 桌面应用中可用。</p>
+
+    <!-- JSON export/import (always available) -->
+    <div class="backup-manager__divider" />
+    <p class="backup-manager__hint">导出所有数据为 JSON 文件，可用于跨设备迁移或数据备份。</p>
+    <div class="backup-manager__actions">
+      <GameButton variant="secondary" :disabled="working" @click="onExportJson">
+        {{ working ? '处理中…' : '导出 JSON' }}
+      </GameButton>
+      <label class="backup-manager__file-label">
+        <GameButton variant="ghost" :disabled="working" tag="span">导入 JSON</GameButton>
+        <input
+          type="file"
+          accept=".json,application/json"
+          class="backup-manager__file-input"
+          :disabled="working"
+          @change="onImportJson"
+        />
+      </label>
+    </div>
   </div>
 </template>
 
@@ -106,6 +193,38 @@ onMounted(() => {
   gap: 0.5rem;
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
+}
+
+.backup-manager__switch {
+  position: relative;
+  width: 2.5rem;
+  height: 1.375rem;
+  border: none;
+  border-radius: 0.6875rem;
+  background: var(--color-border, rgba(0, 0, 0, 0.15));
+  cursor: pointer;
+  transition: background var(--motion-duration, 220ms) var(--motion-ease, ease);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.backup-manager__switch--on {
+  background: var(--color-accent, #D4A574);
+}
+
+.backup-manager__switch-knob {
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform var(--motion-duration, 220ms) var(--motion-ease, ease);
+}
+
+.backup-manager__switch--on .backup-manager__switch-knob {
+  transform: translateX(1.125rem);
 }
 
 .backup-manager__msg {
@@ -139,5 +258,30 @@ onMounted(() => {
 
 .backup-manager__list li:last-child {
   border-bottom: none;
+}
+
+.backup-manager__divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 0.5rem 0;
+}
+
+.backup-manager__actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.backup-manager__file-label {
+  position: relative;
+  cursor: pointer;
+}
+
+.backup-manager__file-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
 }
 </style>

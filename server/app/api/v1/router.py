@@ -9,6 +9,7 @@ from app.api.v1 import (
     card,
     conversation,
     diary,
+    export,
     feedback,
     memory,
     model_download,
@@ -30,3 +31,4 @@ api_router.include_router(model_download.router)
 api_router.include_router(stats.router)
 api_router.include_router(weekly.router)
 api_router.include_router(memory.router)
+api_router.include_router(export.router)
