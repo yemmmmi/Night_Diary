@@ -38,6 +38,7 @@ export const memoryCopy = {
   sourceCard: '来自卡片',
   sourceDiary: '来自日记',
   importance: '重要性',
+  viewDiary: '查看原文',
 
   // Cards section
   cardsTitle: '记忆卡片',

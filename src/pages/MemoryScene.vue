@@ -47,6 +47,10 @@ function goToCards() {
   router.push({ path: '/review', query: { mode: 'cards' } })
 }
 
+function goToDiary(diaryId: string) {
+  router.push({ name: 'review-detail', params: { diaryId } })
+}
+
 onMounted(() => {
   void memoryStore.loadAll().catch(() => {
     // surfaced via memoryStore.error
@@ -186,9 +190,19 @@ onActivated(() => {
           </p>
           <div class="memory-entry__footer">
             <span class="memory-entry__time">{{ formatTime(entry.timestamp) }}</span>
-            <span class="memory-entry__importance">
-              {{ copy.importance }} {{ (entry.importance * 100).toFixed(0) }}%
-            </span>
+            <div class="memory-entry__footer-right">
+              <span class="memory-entry__importance">
+                {{ copy.importance }} {{ (entry.importance * 100).toFixed(0) }}%
+              </span>
+              <button
+                v-if="entry.diary_ids.length"
+                class="memory-entry__link"
+                @click="goToDiary(entry.diary_ids[0])"
+              >
+                {{ copy.viewDiary }}
+                <PhArrowRight :size="12" weight="bold" />
+              </button>
+            </div>
           </div>
         </article>
       </div>
@@ -438,6 +452,31 @@ onActivated(() => {
   margin-top: 0.625rem;
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
+}
+
+.memory-entry__footer-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.memory-entry__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: none;
+  border-radius: 1rem;
+  background: transparent;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: background var(--motion-duration, 220ms) var(--motion-ease, ease);
+}
+
+.memory-entry__link:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 
 /* ── Empty ──────────────────────────────────────────────────── */
