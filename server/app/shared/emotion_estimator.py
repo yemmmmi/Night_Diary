@@ -15,6 +15,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+# Negation characters that flip the polarity of a following positive keyword.
+# e.g. "不开心" → negative, "没快乐" → negative, "不是不开心" → positive (double negation)
+_NEGATION_CHARS: str = "不没未别无非"
+
 # Default lexicon — the union of the V1 empathy_agent / crisis_detector word
 # lists, de-duplicated. "崩溃"/"绝望" are treated as severe (not merely negative)
 # so they are never double-counted across the two tiers.
@@ -130,12 +134,35 @@ class EmotionEstimator:
 
         matched_severe = tuple(w for w in self._severe if w in text)
         matched_negative = tuple(w for w in self._negative if w in text)
-        matched_positive = tuple(w for w in self._positive if w in text)
+        matched_positive: list[str] = []
+        negated_positive: list[str] = []
+
+        # Detect negation prefixes before positive keywords.
+        # Odd number of negation chars → polarity flipped (positive → negative).
+        # Even number → double negation restores positive (e.g. "不是不开心").
+        for w in self._positive:
+            start = 0
+            while True:
+                idx = text.find(w, start)
+                if idx == -1:
+                    break
+                prefix = text[max(0, idx - 3) : idx]
+                neg_count = sum(1 for c in prefix if c in _NEGATION_CHARS)
+                if neg_count % 2 == 1:
+                    negated_positive.append(w)
+                else:
+                    matched_positive.append(w)
+                start = idx + len(w)
+
+        matched_positive_t = tuple(matched_positive)
+        negated_positive_t = tuple(negated_positive)
 
         raw = (
             len(matched_severe) * self._severe_weight
             + len(matched_negative) * self._negative_weight
-            + len(matched_positive) * self._positive_weight
+            + len(matched_positive_t) * self._positive_weight
+            # Negated positives count as negative (same weight as general negative).
+            + len(negated_positive_t) * self._negative_weight
         )
         score = max(-1.0, min(1.0, raw))
 
@@ -144,7 +171,7 @@ class EmotionEstimator:
             label=self.label_for(score),
             matched_severe=matched_severe,
             matched_negative=matched_negative,
-            matched_positive=matched_positive,
+            matched_positive=matched_positive_t,
         )
 
     def score(self, text: str) -> float:

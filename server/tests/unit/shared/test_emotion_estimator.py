@@ -54,3 +54,55 @@ def test_custom_lexicon_and_weights() -> None:
     assert result.score == -0.5
     assert result.matched_negative == ("摆烂",)
     assert est.has_severe_signal("我想死") is False
+
+
+# ── Negation prefix detection (PR-1: fix/crisis-emotion-bug) ──
+
+
+def test_negation_prefix_flips_positive() -> None:
+    """'不开心' must score negative — not match '开心' as positive."""
+    est = EmotionEstimator()
+    result = est.estimate("不开心")
+    assert result.score < 0
+    assert result.label != "positive"
+    assert "开心" not in result.matched_positive
+
+
+def test_negation_prefix_variants() -> None:
+    """Multiple negation prefixes all flip positive keywords."""
+    est = EmotionEstimator()
+    for text in ("不快乐", "没幸福", "不满足", "别期待"):
+        result = est.estimate(text)
+        assert result.score <= 0, f"Expected non-positive for '{text}', got {result.score}"
+
+
+def test_pure_positive_unchanged() -> None:
+    """Pure positive keywords without negation remain positive (regression guard)."""
+    est = EmotionEstimator()
+    for text in ("开心", "快乐", "幸福"):
+        result = est.estimate(text)
+        assert result.score > 0, f"Expected positive for '{text}', got {result.score}"
+    # Multiple positive words should exceed positive_threshold
+    result = est.estimate("开心快乐幸福")
+    assert result.label == "positive"
+
+
+def test_double_negation_restores_positive() -> None:
+    """'不是不开心' is double negation → neutral or positive."""
+    est = EmotionEstimator()
+    result = est.estimate("不是不开心")
+    # Double negation → even count → treated as positive
+    assert "开心" in result.matched_positive
+
+
+def test_crisis_negation_not_masked() -> None:
+    """Crisis keywords like '不想活了' must still be detected as severe."""
+    est = EmotionEstimator()
+    result = est.estimate("不想活了")
+    # "不想活" is a severe keyword — must be detected despite "不" prefix
+    assert "不想活" in result.matched_severe
+    assert result.score < 0
+    # Multiple severe keywords should trigger crisis threshold
+    result2 = est.estimate("不想活了，撑不下去了")
+    assert result2.score <= est.crisis_threshold
+    assert result2.label == "crisis"
