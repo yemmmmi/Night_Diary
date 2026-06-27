@@ -18,7 +18,6 @@ function entry(partial: Partial<DiaryEntry> & Pick<DiaryEntry, 'id'>): DiaryEntr
     ai_ans: partial.ai_ans ?? null,
     created_at: partial.created_at ?? '2026-06-08T10:00:00',
     updated_at: partial.updated_at ?? '2026-06-08T10:00:00',
-    tags: [],
     ...partial,
   }
 }

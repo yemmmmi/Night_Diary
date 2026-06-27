@@ -1,33 +1,101 @@
 <script setup lang="ts">
-import { nextTick, onActivated, onMounted, ref, watch } from 'vue'
-import { chatCopy } from '@/shared/copy/chat'
+import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { chatCopy, type DiaryReferenceItem } from '@/shared/copy/chat'
+import { listDiaryEntries, type DiaryEntry } from '@/shared/api/diary'
+import { listEpisodic } from '@/shared/api/memory'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
-import { useCardStore } from '@/stores/card'
+import { diarySummary } from '@/shared/utils/diaryFormat'
 import ConversationList from '@/features/chat/ConversationList.vue'
 import ChatMessage from '@/features/chat/ChatMessage.vue'
 import ChatInput from '@/features/chat/ChatInput.vue'
+import DiaryReferencePicker from '@/features/chat/DiaryReferencePicker.vue'
 import ReferencePanel from '@/features/chat/ReferencePanel.vue'
 import OutputPanel from '@/features/chat/OutputPanel.vue'
+import AITypingIndicator from '@/shared/components/AITypingIndicator.vue'
 
 defineOptions({ name: 'ChatScene' })
 
+const route = useRoute()
 const chatStore = useChatStore()
 const settings = useSettingsStore()
 settings.load()
-const cardStore = useCardStore()
 
 const messagesEl = ref<HTMLElement | null>(null)
 const showDeleteConfirm = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const cardSummary = ref<string | null>(null)
 const cardGenerating = ref(false)
+const diaryCatalog = ref<DiaryEntry[]>([])
+const episodicMemories = ref<string[]>([])
+
+function toReferenceItem(entry: DiaryEntry): DiaryReferenceItem {
+  return {
+    id: entry.id,
+    date: entry.date,
+    summary: diarySummary(entry.content, 48),
+  }
+}
+
+const diaryLabelMap = computed(() => {
+  const map: Record<number, string> = {}
+  for (const entry of diaryCatalog.value) {
+    map[entry.id] = diarySummary(entry.content, 20)
+  }
+  return map
+})
+
+const pinnedDiaries = computed(() =>
+  chatStore.pinnedDiaryIds
+    .map((id) => diaryCatalog.value.find((entry) => entry.id === id))
+    .filter((entry): entry is DiaryEntry => entry != null)
+    .map(toReferenceItem),
+)
+
+const lastAssistantMessage = computed(() =>
+  [...chatStore.messages].reverse().find((msg) => msg.role === 'assistant') ?? null,
+)
+
+const retrievedDiaries = computed(() => {
+  const ids = lastAssistantMessage.value?.retrieved_diary_ids ?? []
+  const pinned = new Set(chatStore.pinnedDiaryIds)
+  return ids
+    .filter((id) => !pinned.has(id))
+    .map((id) => diaryCatalog.value.find((entry) => entry.id === id))
+    .filter((entry): entry is DiaryEntry => entry != null)
+    .map(toReferenceItem)
+})
+
+async function loadReferenceData() {
+  try {
+    const [diaries, episodic] = await Promise.all([
+      listDiaryEntries({ limit: 50 }),
+      listEpisodic(),
+    ])
+    diaryCatalog.value = diaries
+    episodicMemories.value = episodic.slice(0, 3).map((entry) => `[${entry.emotion}] ${entry.event}`)
+  } catch {
+    diaryCatalog.value = []
+    episodicMemories.value = []
+  }
+}
+
+function applyRouteDiaryPin() {
+  const raw = route.query.diaryId
+  if (typeof raw !== 'string' || !raw.trim()) return
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return
+  chatStore.pinDiary(parsed)
+}
 
 function scrollToBottom() {
   nextTick(() => {
-    if (messagesEl.value) {
-      messagesEl.value.scrollTop = messagesEl.value.scrollHeight
-    }
+    requestAnimationFrame(() => {
+      if (messagesEl.value) {
+        messagesEl.value.scrollTop = messagesEl.value.scrollHeight
+      }
+    })
   })
 }
 
@@ -57,8 +125,14 @@ async function onSend(text: string) {
   if (!chatStore.activeConversationId) {
     await chatStore.startNewConversation()
   }
+  pendingUserText.value = text
+  scrollToBottom()
+
   const ok = await chatStore.send(text)
-  if (ok) scrollToBottom()
+  if (ok) {
+    pendingUserText.value = null
+  }
+  scrollToBottom()
 }
 
 async function onGenerateCard() {
@@ -70,32 +144,60 @@ async function onGenerateCard() {
   cardGenerating.value = false
 }
 
-const dateDividers = (() => {
-  const messages = chatStore.messages
-  if (messages.length === 0) return []
-  const dividers: { date: string; index: number }[] = []
+const pendingUserText = ref<string | null>(null)
+
+const messageTimeline = computed(() => {
+  const items: Array<
+    | { kind: 'divider'; key: string; date: string }
+    | { kind: 'message'; key: string; message: (typeof chatStore.messages)[number] }
+  > = []
+
   let currentDate = ''
-  for (let i = 0; i < messages.length; i++) {
-    const d = messages[i].created_at.slice(0, 10)
-    if (d !== currentDate) {
-      currentDate = d
-      dividers.push({ date: d, index: i })
+  for (const message of chatStore.messages) {
+    const date = message.created_at.slice(0, 10)
+    if (date !== currentDate) {
+      currentDate = date
+      items.push({ kind: 'divider', key: `div-${date}-${items.length}`, date })
+    }
+    items.push({ kind: 'message', key: message.id, message })
+  }
+
+  if (pendingUserText.value && chatStore.activeConversationId) {
+    const last = chatStore.messages.at(-1)
+    const alreadyPersisted =
+      last?.role === 'user' && last.content === pendingUserText.value
+    if (!alreadyPersisted) {
+      const date = new Date().toISOString().slice(0, 10)
+      if (date !== currentDate) {
+        items.push({ kind: 'divider', key: `div-${date}-pending`, date })
+      }
+      items.push({
+        kind: 'message',
+        key: 'pending-user-local',
+        message: {
+          id: 'pending-user-local',
+          conversation_id: chatStore.activeConversationId,
+          role: 'user',
+          content: pendingUserText.value,
+          created_at: new Date().toISOString(),
+        },
+      })
     }
   }
-  return dividers.map((d) => ({
-    ...d,
-    key: `div-${d.date}`,
-    totalBefore: d.index + dividers.filter((x) => x.date <= d.date).length,
-  }))
-})()
+
+  return items
+})
 
 onMounted(async () => {
-  await chatStore.loadConversations()
+  await Promise.all([chatStore.loadConversations(), loadReferenceData()])
+  applyRouteDiaryPin()
 })
 
 onActivated(async () => {
   await chatStore.loadConversations()
-  if (chatStore.activeConversationId) {
+  await loadReferenceData()
+  applyRouteDiaryPin()
+  if (chatStore.activeConversationId && !chatStore.sending) {
     await chatStore.openConversation(chatStore.activeConversationId)
     scrollToBottom()
   }
@@ -136,24 +238,23 @@ watch(
       <!-- Messages -->
       <template v-else>
         <div ref="messagesEl" class="chat-scene__messages">
-          <template v-for="(divider, di) in dateDividers" :key="divider.key">
-            <p class="chat-scene__divider">{{ chatCopy.dateDivider(divider.date) }}</p>
+          <template v-for="item in messageTimeline" :key="item.key">
+            <p v-if="item.kind === 'divider'" class="chat-scene__divider">
+              {{ chatCopy.dateDivider(item.date) }}
+            </p>
             <ChatMessage
-              v-for="msg in chatStore.messages.slice(divider.index, di + 1 < dateDividers.length ? dateDividers[di + 1].index : undefined)"
-              :key="msg.id"
-              :message="msg"
+              v-else
+              :message="item.message"
+              :diary-labels="diaryLabelMap"
             />
           </template>
 
-          <template v-if="dateDividers.length === 0 && chatStore.messages.length > 0">
-            <ChatMessage
-              v-for="msg in chatStore.messages"
-              :key="msg.id"
-              :message="msg"
-            />
-          </template>
+          <div v-if="chatStore.sending" class="chat-scene__typing">
+            <AITypingIndicator :label="chatCopy.thinkingLabel" />
+          </div>
         </div>
 
+        <DiaryReferencePicker v-model="chatStore.pinnedDiaryIds" class="chat-scene__picker" />
         <ChatInput :disabled="chatStore.sending" @send="onSend" />
       </template>
     </section>
@@ -162,8 +263,9 @@ watch(
     <aside class="chat-scene__aside">
       <div class="chat-scene__aside-scroll">
         <ReferencePanel
-          :recent-diary-summary="null"
-          :episodic-memories="[]"
+          :pinned-diaries="pinnedDiaries"
+          :retrieved-diaries="retrievedDiaries"
+          :episodic-memories="episodicMemories"
           :loading="chatStore.loading"
         />
         <hr class="chat-scene__aside-divider" />
@@ -283,11 +385,21 @@ watch(
   min-height: 0;
 }
 
+.chat-scene__picker {
+  padding: 0 1rem 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
 .chat-scene__divider {
   text-align: center;
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
   margin: 0.5rem 0;
+}
+
+.chat-scene__typing {
+  align-self: flex-start;
+  padding: 0.25rem 0.5rem;
 }
 
 .chat-scene__aside {

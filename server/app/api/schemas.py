@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TagBrief(BaseModel):
@@ -20,13 +20,11 @@ class DiaryCreateRequest(BaseModel):
     content: str = Field(min_length=1)
     date: datetime.date | None = None
     weather: str | None = None
-    tag_ids: list[int] = Field(default_factory=list)
 
 
 class DiaryUpdateRequest(BaseModel):
     content: str | None = Field(default=None, min_length=1)
     weather: str | None = None
-    tag_ids: list[int] | None = None
 
 
 class DiaryResponse(BaseModel):
@@ -37,7 +35,6 @@ class DiaryResponse(BaseModel):
     ai_ans: str | None
     created_at: datetime.datetime
     updated_at: datetime.datetime
-    tags: list[TagBrief] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -325,6 +322,15 @@ class MessageResponse(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
+    diary_ids: list[int] = Field(default_factory=list)
+    auto_retrieve: bool = True
+
+    @field_validator("diary_ids")
+    @classmethod
+    def validate_diary_ids(cls, value: list[int]) -> list[int]:
+        if len(value) > 3:
+            raise ValueError("最多引用 3 篇日记")
+        return value
 
 
 class SendMessageResponse(BaseModel):

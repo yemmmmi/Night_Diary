@@ -10,7 +10,8 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.infrastructure.models.diary_entry import DiaryEntryRow
-from app.infrastructure.models.tag import TagRow
+from app.infrastructure.models.memory_card import MemoryCardRow
+from app.services.card_service import _json_to_emotions
 from app.shared.errors import DiaryNotFoundError, ValidationError
 
 if TYPE_CHECKING:
@@ -20,26 +21,32 @@ logger = logging.getLogger(__name__)
 
 RECENT_HISTORY_DAYS = 7
 RECENT_HISTORY_LIMIT = 10
+MAX_SNIPPET = 200
 
 
-def _format_tags_for_chroma(tags: list[TagRow]) -> str:
-    return ",".join(tag.name for tag in tags if tag.name)
+def _format_emotion_for_chroma(db: Session, entry: DiaryEntryRow) -> str:
+    card = db.query(MemoryCardRow).filter(MemoryCardRow.diary_id == entry.id).first()
+    if card is None:
+        return ""
+    emotions = _json_to_emotions(card.emotions_json, card.emotion)
+    return "、".join(emotions) if emotions else card.emotion
 
 
 def _sync_to_chroma(
+    db: Session,
     collection_manager: DiaryCollectionManager | None,
     entry: DiaryEntryRow,
 ) -> None:
     if collection_manager is None:
         return
     date_str = entry.date.isoformat() if entry.date else ""
-    tags_str = _format_tags_for_chroma(entry.tags)
+    emotion_str = _format_emotion_for_chroma(db, entry)
     try:
         collection_manager.update_diary(
             str(entry.id),
             entry.content or "",
             date=date_str,
-            tags=tags_str,
+            tags=emotion_str,
         )
     except Exception as exc:
         logger.warning("Chroma sync failed for diary_id=%s: %s", entry.id, exc)
@@ -51,7 +58,6 @@ def create_entry(
     content: str,
     entry_date: date | None = None,
     weather: str | None = None,
-    tag_ids: list[int] | None = None,
     collection_manager: DiaryCollectionManager | None = None,
 ) -> DiaryEntryRow:
     if not content or not content.strip():
@@ -62,14 +68,11 @@ def create_entry(
         weather=weather,
         date=entry_date if entry_date is not None else datetime.utcnow().date(),
     )
-    if tag_ids:
-        tags = db.query(TagRow).filter(TagRow.id.in_(tag_ids)).all()
-        entry.tags = tags
 
     db.add(entry)
     db.commit()
     db.refresh(entry)
-    _sync_to_chroma(collection_manager, entry)
+    _sync_to_chroma(db, collection_manager, entry)
     return entry
 
 
@@ -95,6 +98,14 @@ def get_entry(db: Session, diary_id: int) -> DiaryEntryRow:
     return entry
 
 
+def get_entries_by_ids(db: Session, diary_ids: list[int]) -> list[DiaryEntryRow]:
+    if not diary_ids:
+        return []
+    rows = db.query(DiaryEntryRow).filter(DiaryEntryRow.id.in_(diary_ids)).all()
+    by_id = {row.id: row for row in rows}
+    return [by_id[did] for did in diary_ids if did in by_id]
+
+
 def get_recent_entries(
     db: Session,
     *,
@@ -118,7 +129,6 @@ def update_entry(
     *,
     content: str | None = None,
     weather: str | None = None,
-    tag_ids: list[int] | None = None,
     collection_manager: DiaryCollectionManager | None = None,
 ) -> DiaryEntryRow:
     entry = get_entry(db, diary_id)
@@ -131,14 +141,10 @@ def update_entry(
     if weather is not None:
         entry.weather = weather
 
-    if tag_ids is not None:
-        tags = db.query(TagRow).filter(TagRow.id.in_(tag_ids)).all()
-        entry.tags = tags
-
     entry.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(entry)
-    _sync_to_chroma(collection_manager, entry)
+    _sync_to_chroma(db, collection_manager, entry)
     return entry
 
 
@@ -162,7 +168,7 @@ def format_history_summary(
     entries: list[DiaryEntryRow],
     *,
     exclude_id: int | None = None,
-    max_snippet: int = 200,
+    max_snippet: int = MAX_SNIPPET,
 ) -> str:
     if not entries:
         return "（暂无历史记录）"
@@ -174,15 +180,27 @@ def format_history_summary(
         date_str = entry.date.isoformat() if entry.date else "未知"
         content = entry.content or ""
         snippet = content[:max_snippet] + "..." if len(content) > max_snippet else content
-        tag_str = ""
-        if entry.tags:
-            tag_str = " [" + ", ".join(f"#{t.name}" for t in entry.tags) + "]"
-        lines.append(f"[{date_str}]{tag_str} {snippet}")
+        lines.append(f"[{date_str}] {snippet}")
 
     return "\n".join(lines) if lines else "（暂无历史记录）"
 
 
-def format_tags_context(tags: list[TagRow]) -> str:
-    if not tags:
-        return "（未设置标签）"
-    return "、".join(f"#{tag.name}" for tag in tags if tag.name)
+def format_emotion_context(db: Session, entry: DiaryEntryRow) -> str:
+    """Build mood context from linked memory card, or prompt AI to infer from text."""
+    card = db.query(MemoryCardRow).filter(MemoryCardRow.diary_id == entry.id).first()
+    if card is None:
+        return "（未标注，请从正文推断情绪）"
+    emotions = _json_to_emotions(card.emotions_json, card.emotion)
+    if emotions:
+        return f"关联记忆卡片情绪：{'、'.join(emotions)}"
+    if card.emotion:
+        return f"关联记忆卡片情绪：{card.emotion}"
+    return "（未标注，请从正文推断情绪）"
+
+
+def format_diary_excerpt(entry: DiaryEntryRow, *, max_chars: int = 800) -> str:
+    date_str = entry.date.isoformat() if entry.date else "未知"
+    content = (entry.content or "").strip()
+    if len(content) > max_chars:
+        content = content[:max_chars] + "..."
+    return f"[日记 #{entry.id} · {date_str}]\n{content}"

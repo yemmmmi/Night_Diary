@@ -17,6 +17,8 @@ export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
   const messages = ref<ChatMessage[]>([])
+  const pinnedDiaryIds = ref<number[]>([])
+  const autoRetrieve = ref(true)
   const loading = ref(false)
   const sending = ref(false)
   const error = ref<string | null>(null)
@@ -79,8 +81,13 @@ export const useChatStore = defineStore('chat', () => {
     if (!convId) return false
     sending.value = true
     error.value = null
+
     try {
-      const result = await sendMessage(convId, content)
+      const result = await sendMessage(convId, {
+        content,
+        diary_ids: pinnedDiaryIds.value,
+        auto_retrieve: autoRetrieve.value,
+      })
       messages.value = [...messages.value, result.message, result.reply]
       return true
     } catch (err) {
@@ -103,10 +110,22 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function setPinnedDiaryIds(ids: number[]) {
+    pinnedDiaryIds.value = ids.slice(0, 3)
+  }
+
+  function pinDiary(id: number) {
+    if (pinnedDiaryIds.value.includes(id)) return
+    if (pinnedDiaryIds.value.length >= 3) return
+    pinnedDiaryIds.value = [...pinnedDiaryIds.value, id]
+  }
+
   return {
     conversations,
     activeConversationId,
     messages,
+    pinnedDiaryIds,
+    autoRetrieve,
     loading,
     sending,
     error,
@@ -116,5 +135,7 @@ export const useChatStore = defineStore('chat', () => {
     removeConversation,
     send,
     generateCard,
+    setPinnedDiaryIds,
+    pinDiary,
   }
 })

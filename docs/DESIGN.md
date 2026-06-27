@@ -131,7 +131,7 @@
 
 - 顶栏：日期 · 字数 · 返回 / 保存（`GameButton`）
 - 主区：无边框 `textarea` 或 contenteditable，字号略大、`font-diary`
-- 可选：标签 chip、天气（Phosphor 图标，非 emoji）
+- 可选：天气（Phosphor 图标，非 emoji）
 - **禁止**：独立暖黄 parchment 纹理层、心情 emoji 网格
 - 环境：首页保留暖奶油 + 粒子；写作页粒子减弱或关闭（待 D-2 施工）
 

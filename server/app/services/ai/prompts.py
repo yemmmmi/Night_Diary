@@ -21,6 +21,27 @@ USER_PROMPT_TEMPLATE = """日记：{current_content}
 天气：{weather_info}
 请回应："""
 
+CHAT_SYSTEM_PROMPT = """你是夜记的回信者，正在与用户进行多轮对话。
+请结合用户引用的日记、相关历史与情节记忆，给出温暖、具体、50-150 字的中文回复。
+不要重复用户原话，不要自称 AI 或机器人。"""
+
+CHAT_USER_PROMPT_TEMPLATE = """## 用户引用的日记
+{pinned_diaries}
+
+## 自动检索的相关日记
+{retrieved_diaries}
+
+## 情节记忆
+{episodic_memories}
+
+## 对话历史
+{chat_history}
+
+## 用户最新消息
+{user_message}
+
+请回复："""
+
 FALLBACK_FEEDBACK = (
     "感谢你今天的记录！坚持写日记是一件很棒的事，"
     "每一天的记录都是珍贵的回忆。继续加油，期待明天的故事！"

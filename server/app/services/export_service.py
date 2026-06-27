@@ -1,8 +1,10 @@
 """JSON export/import service for full user data migration.
 
-Exports diary entries (with tags + analyses), memory cards, episodic memories,
-and long-term profile as a single JSON blob.  Import clears existing data and
-rebuilds from the JSON, including ChromaDB vector sync for each diary entry.
+Exports diary entries (with legacy mood tags + analyses), memory cards, episodic
+memories, and long-term profile as a single JSON blob.  Import clears existing
+data and rebuilds from the JSON, including ChromaDB vector sync for each diary
+entry.  Legacy ``tags`` / ``tag_ids`` fields are preserved for old backups only;
+new writes no longer create diary mood tags.
 """
 
 from __future__ import annotations
@@ -163,9 +165,11 @@ def import_all(
             content=diary_data["content"] or "",
             entry_date=_parse_date(diary_data.get("date")),
             weather=diary_data.get("weather"),
-            tag_ids=new_tag_ids,
             collection_manager=collection_manager,
         )
+        if new_tag_ids:
+            tags = db.query(TagRow).filter(TagRow.id.in_(new_tag_ids)).all()
+            entry.tags = tags
         # Overwrite auto-generated fields with original values
         entry.ai_ans = diary_data.get("ai_ans")
         if created_at := _parse_datetime(diary_data.get("created_at")):

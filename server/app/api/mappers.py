@@ -12,7 +12,6 @@ from app.api.schemas import (
     FeedbackResponse,
     MessageResponse,
     ModelResponse,
-    TagBrief,
     TagResponse,
     WeeklyReportResponse,
 )
@@ -35,7 +34,6 @@ def diary_to_response(row: DiaryEntryRow) -> DiaryResponse:
         ai_ans=row.ai_ans,
         created_at=row.created_at,
         updated_at=row.updated_at,
-        tags=[TagBrief.model_validate(tag) for tag in row.tags],
     )
 
 

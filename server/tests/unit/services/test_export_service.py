@@ -23,26 +23,16 @@ class TestExportImport:
         assert result["episodic_memories"] == []
         assert result["long_term_profile"] is None
 
-    def test_export_with_diary_and_tags(self, db_session):
-        """Export includes diary content and tag associations."""
-        from app.infrastructure.models.tag import TagRow
-
-        tag1 = TagRow(name="开心", color="#FF0000")
-        tag2 = TagRow(name="工作", color="#00FF00")
-        db_session.add_all([tag1, tag2])
-        db_session.flush()
-
+    def test_export_with_diary(self, db_session):
+        """Export includes diary content."""
         diary_service.create_entry(
             db_session,
             content="今天工作很顺利",
-            tag_ids=[tag1.id, tag2.id],
         )
 
         result = export_service.export_all(db_session)
         assert len(result["diaries"]) == 1
         assert result["diaries"][0]["content"] == "今天工作很顺利"
-        assert set(result["diaries"][0]["tag_ids"]) == {tag1.id, tag2.id}
-        assert len(result["tags"]) == 2
 
     def test_import_round_trip(self, db_session):
         """Import of exported data preserves diary content."""
@@ -90,11 +80,15 @@ class TestExportImport:
         db_session.add(tag)
         db_session.flush()
 
+        from app.infrastructure.models.diary_entry import DiaryEntryRow
+
         diary_service.create_entry(
             db_session,
             content="重要的事情",
-            tag_ids=[tag.id],
         )
+        entry = db_session.query(DiaryEntryRow).first()
+        entry.tags = [tag]
+        db_session.commit()
 
         exported = export_service.export_all(db_session)
         export_service.import_all(db_session, exported)

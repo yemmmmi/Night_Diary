@@ -1,11 +1,5 @@
 import { getHttpClient } from '@/shared/api/http'
 
-export interface TagBrief {
-  id: number
-  name: string
-  color: string
-}
-
 export interface DiaryEntry {
   id: number
   content: string | null
@@ -14,20 +8,17 @@ export interface DiaryEntry {
   ai_ans: string | null
   created_at: string
   updated_at: string
-  tags: TagBrief[]
 }
 
 export interface DiaryCreatePayload {
   content: string
   date?: string | null
   weather?: string | null
-  tag_ids?: number[]
 }
 
 export interface DiaryUpdatePayload {
   content?: string
   weather?: string | null
-  tag_ids?: number[]
 }
 
 export interface ListDiaryParams {
