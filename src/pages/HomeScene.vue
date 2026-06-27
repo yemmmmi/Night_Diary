@@ -113,13 +113,12 @@ const weekColumns = computed(() => {
     }
   })
 
-  const inboxDiaries = inbox
+  const inboxDiaries = diaryStore.entries
+    .slice()
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
+    .slice(0, 1)
     .map((e): KanbanItem => ({ kind: 'diary', entry: e, linkedCard: cardByDiaryId.get(e.id) ?? null }))
-    .sort((a, b) => {
-      if (a.kind !== 'diary' || b.kind !== 'diary') return 0
-      return (b.entry.created_at ?? '').localeCompare(a.entry.created_at ?? '')
-    })
-  const inboxItems: KanbanItem[] = inboxDiaries.slice(0, 1)
+  const inboxItems: KanbanItem[] = inboxDiaries
 
   return [
     ...days,
