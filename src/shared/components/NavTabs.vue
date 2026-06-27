@@ -9,6 +9,7 @@ import {
   PhBrain,
   PhClockCounterClockwise,
   PhChatsCircle,
+  PhCpu,
   PhGear,
 } from '@phosphor-icons/vue'
 
@@ -28,6 +29,7 @@ const tabs: Tab[] = [
   { key: 'memory', label: '\u8bb0\u5fc6\u5e93', icon: PhBrain, routeName: 'memory' },
   { key: 'review', label: '\u56de\u987e', icon: PhClockCounterClockwise, routeName: 'review' },
   { key: 'chat', label: '\u4f1a\u8bdd', icon: PhChatsCircle, routeName: 'chat' },
+  { key: 'models', label: '\u6a21\u578b', icon: PhCpu, routeName: 'models' },
 ]
 
 const activeKey = computed(() => {

@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PhArrowLeft } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhCaretRight } from '@phosphor-icons/vue'
 
 import BackupManager from '@/features/settings/BackupManager.vue'
-import LLMConfig from '@/features/settings/LLMConfig.vue'
 import SettingsSection from '@/features/settings/SettingsSection.vue'
 import ThemeToggle from '@/features/settings/ThemeToggle.vue'
 import ReplierManager from '@/features/settings/ReplierManager.vue'
@@ -18,7 +17,7 @@ const settings = useSettingsStore()
 settings.load()
 
 const openSection = ref('general')
-const sectionIds = ['general', 'llm', 'replier', 'backup', 'about'] as const
+const sectionIds = ['general', 'replier', 'backup', 'about'] as const
 const usageStats = ref<AppStats | null>(null)
 const statsLoading = ref(true)
 const appVersion = ref<string | null>(null)
@@ -29,8 +28,7 @@ function syncSectionFromRoute() {
     openSection.value = hash
     return
   }
-  if (route.path.endsWith('/llm')) openSection.value = 'llm'
-  else if (route.path.endsWith('/backup')) openSection.value = 'backup'
+  if (route.path.endsWith('/backup')) openSection.value = 'backup'
 }
 
 function toggleSection(id: string) {
@@ -100,15 +98,13 @@ watch(
         </label>
       </SettingsSection>
 
-      <SettingsSection
-        id="llm"
-        title="AI 模型"
-        subtitle="配置 DeepSeek 等模型的 API"
-        :open="openSection === 'llm'"
-        @toggle="toggleSection"
-      >
-        <LLMConfig />
-      </SettingsSection>
+      <RouterLink to="/models" class="settings-scene__llm-link">
+        <div class="settings-scene__llm-link-body">
+          <span class="settings-scene__llm-link-title">AI 模型</span>
+          <span class="settings-scene__llm-link-desc">配置 DeepSeek、通义千问、智谱等模型 API</span>
+        </div>
+        <PhCaretRight :size="18" class="settings-scene__llm-link-arrow" />
+      </RouterLink>
 
       <SettingsSection
         id="replier"
@@ -269,5 +265,40 @@ watch(
   font-size: 0.75rem;
   color: var(--color-text-secondary);
   margin-top: 0.375rem;
+}
+
+.settings-scene__llm-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-outer);
+  background: var(--color-bg-elevated);
+  text-decoration: none;
+  transition: border-color var(--motion-duration) var(--motion-ease);
+}
+
+.settings-scene__llm-link:hover {
+  border-color: var(--color-accent);
+}
+
+.settings-scene__llm-link-title {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.settings-scene__llm-link-desc {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.settings-scene__llm-link-arrow {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
 }
 </style>

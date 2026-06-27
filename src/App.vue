@@ -22,14 +22,14 @@ const isTauri = computed(
 
 const subtleParticles = computed(() => route.path.startsWith('/write'))
 
-const tabRouteNames = new Set(['home', 'weekly', 'memory', 'review', 'chat'])
+const tabRouteNames = new Set(['home', 'weekly', 'memory', 'review', 'chat', 'models'])
 
 const isTabRoute = computed(() => {
   const name = route.name as string | null
   return name != null && tabRouteNames.has(name)
 })
 
-const tabViewNames = ['HomeScene', 'WeeklyScene', 'MemoryScene', 'ReviewScene', 'ChatScene']
+const tabViewNames = ['HomeScene', 'WeeklyScene', 'MemoryScene', 'ReviewScene', 'ChatScene', 'ModelsScene']
 
 const statusBanner = computed(() => {
   if (error.value) return null

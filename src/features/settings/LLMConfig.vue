@@ -14,7 +14,9 @@ import {
   type ModelStatusResponse,
   type ModelTier,
 } from '@/shared/api/models'
+import { MODEL_PRESETS, modelsCopy, type ModelPreset } from '@/shared/copy/models'
 import { formatApiError } from '@/shared/utils/apiError'
+import { openExternal } from '@/shared/utils/openExternal'
 
 const tierLabels: Record<ModelTier, string> = {
   light: '轻量模型',
@@ -33,11 +35,12 @@ const error = ref<string | null>(null)
 const success = ref<string | null>(null)
 const testResult = ref<string | null>(null)
 const editingModel = ref<ModelProvider | null>(null)
+const selectedPreset = ref<ModelPreset | null>(null)
 
 const form = reactive({
   model_name: '',
   api_key: '',
-  base_url: 'https://api.deepseek.com/v1',
+  base_url: 'https://api.deepseek.com',
   tier: 'default' as ModelTier,
   is_active: true,
 })
@@ -49,6 +52,20 @@ const editForm = reactive({
   tier: 'default' as ModelTier,
   is_active: false,
 })
+
+function applyPreset(preset: ModelPreset) {
+  selectedPreset.value = preset
+  form.base_url = preset.baseUrl
+  if (preset.defaultModel) form.model_name = preset.defaultModel
+  form.tier = preset.suggestedTier
+  error.value = null
+  success.value = null
+  testResult.value = null
+}
+
+function openKeyUrl(url: string) {
+  if (url) void openExternal(url)
+}
 
 async function refresh() {
   loading.value = true
@@ -231,9 +248,54 @@ onMounted(() => {
     <p v-if="activeTierSummary" class="llm-config__status">{{ activeTierSummary }}</p>
 
     <form class="settings-form" @submit.prevent="submit">
+      <div class="llm-config__presets">
+        <p class="llm-config__presets-title">{{ modelsCopy.presetSectionTitle }}</p>
+        <p class="llm-config__presets-hint">{{ modelsCopy.presetSectionHint }}</p>
+        <div class="preset-grid">
+          <div
+            v-for="preset in MODEL_PRESETS"
+            :key="preset.key"
+            class="preset-card"
+            :class="{ 'preset-card--active': selectedPreset?.key === preset.key }"
+            role="button"
+            tabindex="0"
+            @click="applyPreset(preset)"
+            @keydown.enter="applyPreset(preset)"
+            @keydown.space.prevent="applyPreset(preset)"
+          >
+            <span class="preset-card__name">{{ preset.name }}</span>
+            <span v-if="preset.freeHint" class="preset-card__free">{{ preset.freeHint }}</span>
+            <span class="preset-card__desc">{{ preset.description }}</span>
+            <button
+              v-if="preset.keyUrl"
+              type="button"
+              class="preset-card__link"
+              @click.stop="openKeyUrl(preset.keyUrl)"
+            >
+              {{ modelsCopy.getKey }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <label class="settings-form__field">
         <span class="settings-form__label">模型名称</span>
-        <input v-model="form.model_name" required class="settings-form__input" placeholder="如 deepseek-chat" />
+        <select
+          v-if="selectedPreset && selectedPreset.models.length > 0"
+          v-model="form.model_name"
+          class="settings-form__input"
+        >
+          <option v-for="opt in selectedPreset.models" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+        <input
+          v-else
+          v-model="form.model_name"
+          required
+          class="settings-form__input"
+          :placeholder="modelsCopy.modelInputPlaceholder"
+        />
       </label>
       <label class="settings-form__field">
         <span class="settings-form__label">模型层级</span>
@@ -457,5 +519,90 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
+}
+
+.llm-config__presets {
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 0.25rem;
+}
+
+.llm-config__presets-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.llm-config__presets-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.625rem;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 7.5rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated-2);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.preset-card:hover {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-elevated-2));
+}
+
+.preset-card--active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-elevated-2));
+}
+
+.preset-card__name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.preset-card__free {
+  font-size: 0.6875rem;
+  color: var(--color-success);
+}
+
+.preset-card__desc {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.preset-card__link {
+  margin-top: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.6875rem;
+  color: var(--color-accent);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  align-self: flex-start;
+}
+
+.preset-card__link:hover {
+  text-decoration: underline;
 }
 </style>
