@@ -47,5 +47,5 @@ def register_error_handlers(app: FastAPI) -> None:
         logger.exception("Unhandled exception: %s", exc)
         return JSONResponse(
             status_code=500,
-            content=ErrorResponse(detail="内部错误，请稍后重试").model_dump(),
+            content=ErrorResponse(detail="内部错误, 请稍后重试").model_dump(),
         )

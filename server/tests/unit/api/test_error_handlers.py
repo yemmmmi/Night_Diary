@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
@@ -49,7 +48,7 @@ def test_unhandled_exception_returns_500() -> None:
     resp = client.get("/raise-runtime-error")
     assert resp.status_code == 500
     body = resp.json()
-    assert body["detail"] == "内部错误，请稍后重试"
+    assert body["detail"] == "内部错误, 请稍后重试"
     # Must not leak the original exception message
     assert "unexpected internal error" not in body["detail"]
 
