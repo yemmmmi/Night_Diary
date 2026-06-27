@@ -514,7 +514,7 @@ watch(
   min-height: calc(100vh - 2.5rem);
   max-width: 60rem;
   margin: 0 auto;
-  padding: 1.25rem 1rem 2rem;
+  padding: 1.25rem 2rem 2rem;
 }
 
 .review-scene__header {
