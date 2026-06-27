@@ -19,6 +19,13 @@ pub struct AppState {
     pub backend_ready: AtomicBool,
     /// Attached to external dev backend — do not spawn or shutdown on exit.
     pub external_backend: AtomicBool,
+    /// Whether auto-backup on exit is enabled (set by frontend via set_auto_backup).
+    pub auto_backup_enabled: AtomicBool,
+}
+
+#[tauri::command]
+fn set_auto_backup(enabled: bool, state: State<'_, AppState>) {
+    state.auto_backup_enabled.store(enabled, Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -182,6 +189,7 @@ pub fn run() {
             backend: Mutex::new(None),
             backend_ready: AtomicBool::new(false),
             external_backend: AtomicBool::new(use_external),
+            auto_backup_enabled: AtomicBool::new(true), // default: auto-backup on
         })
         .invoke_handler(tauri::generate_handler![
             get_backend_port,
@@ -193,6 +201,7 @@ pub fn run() {
             list_backups,
             create_backup,
             restore_backup,
+            set_auto_backup,
         ])
         .setup(move |app| {
             open_splash(app.handle())?;
@@ -212,11 +221,17 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 if let Some(state) = app_handle.try_state::<AppState>() {
                     if !state.external_backend.load(Ordering::SeqCst) {
-                        let _ = auto_backup_on_exit(&state.data_dir);
+                        // Shutdown backend FIRST to flush all pending SQLite writes,
+                        // then backup to avoid half-consistent database snapshots.
                         let port = state.backend_port;
                         let mut guard = state.backend.lock().expect("backend lock poisoned");
                         if let Some(ref mut backend) = *guard {
                             graceful_shutdown(port, backend.child_mut());
+                        }
+                        drop(guard); // release lock before backup
+                        // Only backup if autoBackup is enabled (set by frontend)
+                        if state.auto_backup_enabled.load(Ordering::SeqCst) {
+                            let _ = auto_backup_on_exit(&state.data_dir);
                         }
                     }
                 }

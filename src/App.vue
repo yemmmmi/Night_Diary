@@ -8,9 +8,8 @@ import GameButton from '@/shared/components/GameButton.vue'
 import NavTabs from '@/shared/components/NavTabs.vue'
 import PageTransition from '@/shared/components/PageTransition.vue'
 import ParticleBackground from '@/shared/components/ParticleBackground.vue'
-import { createBackup } from '@/shared/api/settings'
+import { useSettingsStore } from '@/stores/settings'
 import { useBackend } from '@/shared/composables/useBackend'
-import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
 const settings = useSettingsStore()
@@ -45,21 +44,19 @@ const statusBanner = computed(() => {
   return null
 })
 
-onMounted(async () => {
-  if (!isTauri.value) return
-  try {
-    const win = getCurrentWindow()
-    await win.onCloseRequested(async () => {
-      if (!settings.autoBackup) return
-      try {
-        await createBackup()
-      } catch {
-        // ignore backup errors during shutdown
-      }
-    })
-  } catch {
-    // window API unavailable in tests
-  }
+onMounted(async () => {
+  if (!isTauri.value) return
+  try {
+    const win = getCurrentWindow()
+    // Backup on close is handled by the Rust shell (auto_backup_on_exit in lib.rs)
+    // to avoid double-writes. We only need to prevent the window from closing
+    // before any pending save completes.
+    await win.onCloseRequested(async () => {
+      // Let the window close — Rust RunEvent::Exit handles backup + shutdown
+    })
+  } catch {
+    // window API unavailable in tests
+  }
 })
 </script>
 
