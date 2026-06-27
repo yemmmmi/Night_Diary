@@ -17,6 +17,11 @@ vi.mock('@/shared/api/models', () => ({
   testStoredModelConnection: vi.fn(),
 }))
 
+// mock openExternal 避免 Tauri shell 调用
+vi.mock('@/shared/utils/openExternal', () => ({
+  openExternal: vi.fn().mockResolvedValue(undefined),
+}))
+
 describe('ModelsScene', () => {
   it('渲染页面标题与预设卡片', async () => {
     const wrapper = mount(ModelsScene, {

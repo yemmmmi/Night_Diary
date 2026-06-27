@@ -16,6 +16,7 @@ import {
 } from '@/shared/api/models'
 import { MODEL_PRESETS, modelsCopy, type ModelPreset } from '@/shared/copy/models'
 import { formatApiError } from '@/shared/utils/apiError'
+import { openExternal } from '@/shared/utils/openExternal'
 
 const tierLabels: Record<ModelTier, string> = {
   light: '轻量模型',
@@ -60,6 +61,10 @@ function applyPreset(preset: ModelPreset) {
   error.value = null
   success.value = null
   testResult.value = null
+}
+
+function openKeyUrl(url: string) {
+  if (url) void openExternal(url)
 }
 
 async function refresh() {
@@ -261,16 +266,14 @@ onMounted(() => {
             <span class="preset-card__name">{{ preset.name }}</span>
             <span v-if="preset.freeHint" class="preset-card__free">{{ preset.freeHint }}</span>
             <span class="preset-card__desc">{{ preset.description }}</span>
-            <a
+            <button
               v-if="preset.keyUrl"
-              :href="preset.keyUrl"
-              target="_blank"
-              rel="noopener noreferrer"
+              type="button"
               class="preset-card__link"
-              @click.stop
+              @click.stop="openKeyUrl(preset.keyUrl)"
             >
               {{ modelsCopy.getKey }}
-            </a>
+            </button>
           </div>
         </div>
       </div>
