@@ -15,6 +15,7 @@ const props = defineProps<{
   analysis: AnalysisRecord | null
   loading?: boolean
   triggering?: boolean
+  hideDiaryPreview?: boolean
 }>()
 
 const settings = useSettingsStore()
@@ -68,7 +69,7 @@ const referencedMemoryCount = computed(() => props.analysis?.referenced_memory_c
 
 <template>
   <div class="analysis-panel">
-    <GlassPanel elevated class="analysis-panel__diary">
+    <GlassPanel v-if="!hideDiaryPreview" elevated class="analysis-panel__diary">
       <p class="analysis-panel__diary-date">{{ formattedDate }}</p>
       <p class="analysis-panel__diary-preview font-diary">
         {{ diarySummary(entry.content, 160) }}

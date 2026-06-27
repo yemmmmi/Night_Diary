@@ -15,6 +15,8 @@ export const homeSceneCopy = {
   nextWeek: '\u4e0b\u5468',
   retry: '\u91cd\u8bd5',
   inboxColumn: '\u6700\u65b0',
+  moreRecords: (n: number) => `\u8fd8\u6709 ${n} \u6761\u8bb0\u5f55`,
+  dayDrawerTitle: (label: string, day: number) => `${label} ${day}\u65e5`,
   footerStats: (diaryCount: string | number, analysisCount: string | number) =>
     `\u5171 ${diaryCount} \u7bc7\u65e5\u8bb0 \u00b7 ${analysisCount} \u7bc7\u5df2\u6536\u5230\u56de\u4fe1`,
   reviewLink: '\u67e5\u770b\u66f4\u591a\u65e5\u8bb0 \u2192',

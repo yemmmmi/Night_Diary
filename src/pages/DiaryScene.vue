@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
 import DiaryEditor from '@/features/diary/DiaryEditor.vue'
-import EmotionChips from '@/features/card/EmotionChips.vue'
-import CardTypeBadge from '@/features/card/CardTypeBadge.vue'
+import CardDiaryPromptPanel from '@/features/diary/CardDiaryPromptPanel.vue'
+import DiaryReplySection from '@/features/diary/DiaryReplySection.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
+import { cardCopy } from '@/shared/copy/card'
 import { diarySceneCopy as copy } from '@/shared/copy/diaryScene'
 import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
+import { useAnalysisStore } from '@/stores/analysis'
 import { findCardForDiary } from '@/shared/utils/cardFormat'
 import { formatApiError } from '@/shared/utils/apiError'
 import { countWordUnits, diaryStatus } from '@/shared/utils/diaryFormat'
@@ -27,6 +29,7 @@ const route = useRoute()
 const router = useRouter()
 const diaryStore = useDiaryStore()
 const cardStore = useCardStore()
+const analysisStore = useAnalysisStore()
 
 const content = ref('')
 const loadError = ref<string | null>(null)
@@ -48,9 +51,18 @@ const hasContent = computed(() => content.value.trim().length > 0)
 const wordCount = computed(() => countWordUnits(content.value))
 const showWritingHint = computed(() => !isEditing.value && !hasContent.value)
 
-const editorPlaceholder = computed(() =>
-  showWritingHint.value ? copy.placeholderNew : copy.placeholderContinue,
-)
+const linkedCard = computed(() => {
+  if (!diaryId.value) return null
+  return findCardForDiary(cardStore.cards, diaryId.value)
+})
+
+const isCardDiary = computed(() => linkedCard.value != null)
+
+const editorPlaceholder = computed(() => {
+  if (isCardDiary.value) return cardCopy.cardDiaryPlaceholder
+  if (showWritingHint.value) return copy.placeholderNew
+  return copy.placeholderContinue
+})
 
 const targetDate = computed(() => {
   if (isEditing.value && diaryStore.currentEntry?.date) {
@@ -78,26 +90,21 @@ const dateLabel = computed(() => {
   })
 })
 
-const canSave = computed(() => hasContent.value && !diaryStore.saving)
+const canSave = computed(() => {
+  if (diaryStore.saving) return false
+  if (isCardDiary.value && isEditing.value) return true
+  return hasContent.value
+})
 
 const entryStatus = computed(() =>
   diaryStore.currentEntry ? diaryStatus(diaryStore.currentEntry) : 'draft',
 )
 
-const showAnalysisAction = computed(
-  () => isEditing.value && hasContent.value && entryStatus.value !== 'draft',
+const showReplySection = computed(
+  () => isEditing.value && diaryStore.currentEntry && entryStatus.value !== 'draft',
 )
 
 const saveLabel = computed(() => (diaryStore.saving ? copy.saving : copy.save))
-
-const analysisLabel = computed(() =>
-  diaryStore.currentEntry?.ai_ans?.trim() ? copy.viewAiReply : copy.getAiReply,
-)
-
-const linkedCard = computed(() => {
-  if (!diaryId.value) return null
-  return findCardForDiary(cardStore.cards, diaryId.value)
-})
 
 let saveStateTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -111,10 +118,23 @@ function setSaveState(state: 'idle' | 'saving' | 'saved' | 'error') {
   }
 }
 
+async function loadAnalysis() {
+  if (!diaryId.value) {
+    analysisStore.clear()
+    return
+  }
+  try {
+    await analysisStore.loadForDiary(diaryId.value)
+  } catch {
+    // 404 = no analysis yet
+  }
+}
+
 async function loadEntry() {
   loadError.value = null
   if (!diaryId.value) {
     diaryStore.clearCurrent()
+    analysisStore.clear()
     content.value = ''
     saveState.value = 'idle'
     return
@@ -124,14 +144,28 @@ async function loadEntry() {
     const entry = await diaryStore.fetchEntry(diaryId.value)
     content.value = entry.content ?? ''
     saveState.value = 'idle'
+    await loadAnalysis()
+    await scrollToReplyIfNeeded()
   } catch (err) {
     loadError.value = formatApiError(err, copy.loadFailed)
   }
 }
 
+async function scrollToReplyIfNeeded() {
+  if (route.hash !== '#reply') return
+  await nextTick()
+  document.getElementById('reply')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+async function onAnalysisRefreshed() {
+  if (!diaryId.value) return
+  await diaryStore.fetchEntry(diaryId.value)
+  await loadAnalysis()
+}
+
 async function persist(showFeedback = true) {
   const trimmed = content.value.trim()
-  if (!trimmed) return
+  if (!trimmed && !isCardDiary.value) return
 
   setSaveState('saving')
   try {
@@ -143,6 +177,8 @@ async function persist(showFeedback = true) {
       else setSaveState('idle')
       return
     }
+
+    if (!trimmed) return
 
     const created = await diaryStore.createEntry({
       content: trimmed,
@@ -156,7 +192,7 @@ async function persist(showFeedback = true) {
 }
 
 async function onAutosave(value: string) {
-  if (!value.trim()) return
+  if (!value.trim() && !isCardDiary.value) return
   if (!isEditing.value) return
   await persist(false)
 }
@@ -186,15 +222,17 @@ function goBack() {
   router.push('/')
 }
 
-function goToAnalysis() {
-  if (!diaryId.value) return
-  router.push(`/analysis/${diaryId.value}`)
-}
-
 watch(
   () => route.fullPath,
   () => {
     void loadEntry()
+  },
+)
+
+watch(
+  () => route.hash,
+  () => {
+    void scrollToReplyIfNeeded()
   },
 )
 
@@ -215,14 +253,6 @@ onMounted(async () => {
 
         <div class="diary-scene__meta">
           <p class="diary-scene__date">{{ dateLabel }}</p>
-          <div v-if="linkedCard" class="diary-scene__card-origin">
-            <EmotionChips
-              :emotions="linkedCard.emotions"
-              :emotion="linkedCard.emotion"
-              :size="12"
-            />
-            <CardTypeBadge :card-type="linkedCard.card_type" />
-          </div>
         </div>
 
         <div class="diary-scene__actions">
@@ -245,6 +275,8 @@ onMounted(async () => {
       <p v-if="deleteError" class="diary-scene__error">{{ deleteError }}</p>
       <p v-else-if="diaryStore.error" class="diary-scene__error">{{ diaryStore.error }}</p>
 
+      <CardDiaryPromptPanel v-if="linkedCard && !loadError" :card="linkedCard" />
+
       <DiaryEditor
         v-if="!loadError"
         v-model="content"
@@ -252,18 +284,20 @@ onMounted(async () => {
         @autosave="onAutosave"
       />
 
+      <DiaryReplySection
+        v-if="showReplySection && diaryId && diaryStore.currentEntry"
+        :diary-id="diaryId"
+        :entry="diaryStore.currentEntry"
+        :analysis="analysisStore.current"
+        :loading="analysisStore.loading"
+        :triggering="analysisStore.triggering"
+        @refreshed="onAnalysisRefreshed"
+      />
+
       <footer class="diary-scene__footer">
         <span v-if="wordCount > 0" class="diary-scene__word-count">
           {{ wordCount }} {{ copy.wordUnit }}
         </span>
-        <GameButton
-          v-if="showAnalysisAction"
-          variant="secondary"
-          class="diary-scene__analysis-btn"
-          @click="goToAnalysis"
-        >
-          {{ analysisLabel }}
-        </GameButton>
         <span class="diary-scene__save-dot" :class="`diary-scene__save-dot--${saveState}`" />
       </footer>
     </div>
@@ -326,15 +360,6 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-.diary-scene__card-origin {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-top: 0.375rem;
-}
-
 .diary-scene__actions {
   display: flex;
   align-items: center;
@@ -366,10 +391,6 @@ onMounted(async () => {
 .diary-scene__word-count {
   opacity: 0.7;
   margin-right: auto;
-}
-
-.diary-scene__analysis-btn {
-  font-size: 0.8125rem;
 }
 
 .diary-scene__save-dot {

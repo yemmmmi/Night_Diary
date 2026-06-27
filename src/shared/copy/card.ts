@@ -56,7 +56,29 @@ export const cardCopy = {
   guidedQuestion1: '今天最让你印象深刻的一件事是什么？',
   guidedQuestion2: '这件事给你带来了什么感受？',
   guidedQuestion3: '如果可以重来，你会怎么做？',
+
+  /** Card-expanded diary continuation */
+  cardOriginBadge: '从记忆卡片展开',
+  cardDiaryPlaceholder: '从上面的一个感受开始写，也可以直接继续补充细节……',
+  eventNoteLabel: '当时发生了什么',
 } as const
+
+const EMOTION_PROMPTS: Record<string, string> = {
+  开心: '这份开心是从什么时候开始的？',
+  平静: '是什么让你感到平静？',
+  感激: '你想感谢谁，或感谢什么？',
+  期待: '你在期待什么？',
+  兴奋: '是什么让你兴奋起来？',
+  焦虑: '这份焦虑主要来自哪里？',
+  疲惫: '疲惫是从哪一刻开始的？',
+  悲伤: '此刻最让你难过的是什么？',
+  迷茫: '你在迷茫什么？',
+  愤怒: '是什么触发了这份愤怒？',
+}
+
+export function emotionPromptFor(emotion: string): string {
+  return EMOTION_PROMPTS[emotion] ?? `此刻的「${emotion}」背后，发生了什么？`
+}
 
 /** Preset emotions with Phosphor icon names */
 export const PRESET_EMOTIONS = [
