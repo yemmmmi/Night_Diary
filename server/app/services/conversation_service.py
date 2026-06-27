@@ -116,9 +116,18 @@ def add_user_message_and_reply(
     conversation_id: str,
     content: str,
     reply_content: str,
+    retrieved_diary_ids: list[int] | None = None,
+    retrieved_memory_ids: list[str] | None = None,
 ) -> tuple[ChatMessageRow, ChatMessageRow]:
     user_msg = add_message(db, conversation_id=conversation_id, role="user", content=content)
-    reply_msg = add_message(db, conversation_id=conversation_id, role="assistant", content=reply_content)
+    reply_msg = add_message(
+        db,
+        conversation_id=conversation_id,
+        role="assistant",
+        content=reply_content,
+        retrieved_diary_ids=retrieved_diary_ids,
+        retrieved_memory_ids=retrieved_memory_ids,
+    )
     touch_conversation(db, conversation_id)
 
     # Auto-title from first user message

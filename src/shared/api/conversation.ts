@@ -18,6 +18,12 @@ export interface ChatMessage {
   created_at: string
 }
 
+export interface SendMessagePayload {
+  content: string
+  diary_ids?: number[]
+  auto_retrieve?: boolean
+}
+
 export interface SendMessageResponse {
   message: ChatMessage
   reply: ChatMessage
@@ -56,12 +62,12 @@ export async function getMessages(conversationId: string): Promise<ChatMessage[]
 
 export async function sendMessage(
   conversationId: string,
-  content: string,
+  payload: SendMessagePayload,
 ): Promise<SendMessageResponse> {
   const client = await getHttpClient()
   const { data } = await client.post<SendMessageResponse>(
     `/api/v1/conversations/${conversationId}/messages`,
-    { content },
+    payload,
   )
   return data
 }

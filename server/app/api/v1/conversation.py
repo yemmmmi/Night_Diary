@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Response, status
 
-from app.api.deps import DbDep
+from app.api.deps import ContainerDep, DbDep
 from app.api.mappers import conversation_to_response, message_to_response
 from app.api.schemas import (
     ConversationResponse,
@@ -14,7 +14,7 @@ from app.api.schemas import (
     SendMessageRequest,
     SendMessageResponse,
 )
-from app.services import conversation_service
+from app.services import conversation_ai_service, conversation_service
 from app.shared.errors import ConversationNotFoundError
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -53,19 +53,28 @@ def send_message(
     conversation_id: str,
     body: SendMessageRequest,
     db: DbDep,
+    container: ContainerDep,
 ) -> SendMessageResponse:
     conv = conversation_service.get_conversation(db, conversation_id)
     if conv is None:
         raise ConversationNotFoundError(conversation_id=conversation_id)
 
-    # For now: echo + simple reply. AI-powered reply will replace this in a follow-up PR.
-    reply_text = "收到你的消息。这段对话的功能还在完善中。请期待后续更新。"
+    result = conversation_ai_service.generate_reply(
+        db,
+        container,
+        conversation_id=conversation_id,
+        content=body.content,
+        diary_ids=body.diary_ids,
+        auto_retrieve=body.auto_retrieve,
+    )
 
     user_msg, reply_msg = conversation_service.add_user_message_and_reply(
         db,
         conversation_id=conversation_id,
         content=body.content,
-        reply_content=reply_text,
+        reply_content=result.reply_text,
+        retrieved_diary_ids=result.retrieved_diary_ids,
+        retrieved_memory_ids=result.retrieved_memory_ids,
     )
     return SendMessageResponse(
         message=message_to_response(user_msg),

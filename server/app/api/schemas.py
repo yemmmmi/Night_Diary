@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TagBrief(BaseModel):
@@ -310,6 +310,15 @@ class MessageResponse(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
+    diary_ids: list[int] = Field(default_factory=list)
+    auto_retrieve: bool = True
+
+    @field_validator("diary_ids")
+    @classmethod
+    def validate_diary_ids(cls, value: list[int]) -> list[int]:
+        if len(value) > 3:
+            raise ValueError("最多引用 3 篇日记")
+        return value
 
 
 class SendMessageResponse(BaseModel):

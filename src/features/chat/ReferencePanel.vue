@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { chatCopy } from '@/shared/copy/chat'
+import { chatCopy, type DiaryReferenceItem } from '@/shared/copy/chat'
 
 defineProps<{
-  recentDiarySummary: string | null
+  pinnedDiaries: DiaryReferenceItem[]
+  retrievedDiaries: DiaryReferenceItem[]
   episodicMemories: string[]
   loading?: boolean
 }>()
@@ -17,13 +18,30 @@ defineProps<{
     </div>
 
     <template v-else>
-      <!-- Recent diaries -->
-      <div v-if="recentDiarySummary" class="ref-panel__block">
-        <p class="ref-panel__label">{{ chatCopy.recentDiaries }}</p>
-        <p class="ref-panel__text">{{ recentDiarySummary }}</p>
+      <div v-if="pinnedDiaries.length > 0" class="ref-panel__block">
+        <p class="ref-panel__label">{{ chatCopy.pinnedDiaries }}</p>
+        <div
+          v-for="item in pinnedDiaries"
+          :key="`pin-${item.id}`"
+          class="ref-panel__item"
+        >
+          <p class="ref-panel__item-title">#{{ item.id }} · {{ item.date ?? '未标注' }}</p>
+          <p class="ref-panel__text">{{ item.summary }}</p>
+        </div>
       </div>
 
-      <!-- Episodic memory -->
+      <div v-if="retrievedDiaries.length > 0" class="ref-panel__block">
+        <p class="ref-panel__label">{{ chatCopy.retrievedDiaries }}</p>
+        <div
+          v-for="item in retrievedDiaries"
+          :key="`ret-${item.id}`"
+          class="ref-panel__item"
+        >
+          <p class="ref-panel__item-title">#{{ item.id }} · {{ item.date ?? '未标注' }}</p>
+          <p class="ref-panel__text">{{ item.summary }}</p>
+        </div>
+      </div>
+
       <div v-if="episodicMemories.length > 0" class="ref-panel__block">
         <p class="ref-panel__label">{{ chatCopy.episodicMemory }}</p>
         <p
@@ -35,7 +53,10 @@ defineProps<{
         </p>
       </div>
 
-      <p v-if="!recentDiarySummary && episodicMemories.length === 0" class="ref-panel__empty">
+      <p
+        v-if="pinnedDiaries.length === 0 && retrievedDiaries.length === 0 && episodicMemories.length === 0"
+        class="ref-panel__empty"
+      >
         {{ chatCopy.noReference }}
       </p>
     </template>
@@ -73,16 +94,27 @@ defineProps<{
   font-size: 0.6875rem;
   font-weight: 600;
   color: var(--color-accent);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.375rem;
+}
+
+.ref-panel__item {
+  margin-bottom: 0.5rem;
+}
+
+.ref-panel__item-title {
+  font-size: 0.625rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.125rem;
 }
 
 .ref-panel__text {
   font-size: 0.75rem;
   line-height: 1.5;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
 }
 
 .ref-panel__text--mem {
-  padding: 0.1875rem 0;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.25rem;
 }
 </style>

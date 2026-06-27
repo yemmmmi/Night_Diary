@@ -98,6 +98,14 @@ def get_entry(db: Session, diary_id: int) -> DiaryEntryRow:
     return entry
 
 
+def get_entries_by_ids(db: Session, diary_ids: list[int]) -> list[DiaryEntryRow]:
+    if not diary_ids:
+        return []
+    rows = db.query(DiaryEntryRow).filter(DiaryEntryRow.id.in_(diary_ids)).all()
+    by_id = {row.id: row for row in rows}
+    return [by_id[did] for did in diary_ids if did in by_id]
+
+
 def get_recent_entries(
     db: Session,
     *,
@@ -188,3 +196,11 @@ def format_emotion_context(db: Session, entry: DiaryEntryRow) -> str:
     if card.emotion:
         return f"关联记忆卡片情绪：{card.emotion}"
     return "（未标注，请从正文推断情绪）"
+
+
+def format_diary_excerpt(entry: DiaryEntryRow, *, max_chars: int = 800) -> str:
+    date_str = entry.date.isoformat() if entry.date else "未知"
+    content = (entry.content or "").strip()
+    if len(content) > max_chars:
+        content = content[:max_chars] + "..."
+    return f"[日记 #{entry.id} · {date_str}]\n{content}"

@@ -10,9 +10,16 @@ export const chatCopy = {
   cancel: '取消',
   confirm: '确认删除',
   referenceTitle: '参考上下文',
-  recentDiaries: '最近日记',
+  pinnedDiaries: '引用的日记',
+  retrievedDiaries: '自动检索',
   episodicMemory: '情节记忆',
   noReference: '暂无参考信息',
+  pickDiary: '想聊聊什么？',
+  pickDiaryHint: '最多 3 篇',
+  pickDiaryEmpty: '暂无可引用的日记',
+  removePin: '取消引用',
+  thinkingLabel: '正在想怎么回你…',
+  messageReferences: '参考了',
   outputTitle: '产出',
   generateCard: '生成卡片',
   noCards: '暂无卡片',
@@ -22,3 +29,9 @@ export const chatCopy = {
   dateDivider: (date: string) => `— ${date} —`,
   skillPlaceholder: 'skill 管理（即将推出）',
 } as const
+
+export interface DiaryReferenceItem {
+  id: number
+  date: string | null
+  summary: string
+}
