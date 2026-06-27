@@ -18,12 +18,76 @@ from __future__ import annotations
 # prompt-version: empathy_v2.0 (2026-06-03) — migrated from V1 empathy_agent
 EMPATHY_BASE = "你是「夜记助手」的情感陪伴模块，专注于理解和回应用户的情绪状态。"
 
+# prompt-version: empathy_style_v3.0 (2026-06-27) — 重写为 warm/pragmatic/calm 三档,
+# 对齐前端 replier_preset 命名; 删除 humorous 与旧 key. 旧 key 通过 STYLE_KEY_ALIASES 兼容.
+# 每段文案都包含「禁用清单 + 人设示范 + 具体行为约束」, 用于去除 AI 写作的肌肉记忆感。
 EMPATHY_STYLE_INSTRUCTIONS: dict[str, str] = {
-    "empathetic": "温暖共情、理解接纳，让用户感受到被理解和支持",
-    "practical": "务实关怀、给出具体可操作的建议，同时表达理解",
-    "philosophical": "富有哲思、引导用户从更宏观的角度看待当下，同时保持温暖",
-    "humorous": "轻松幽默、用温和的方式化解情绪，但不轻视用户的感受",
+    "warm": (
+        "你是一个会认真读朋友日记的人。回信时先接住具体情绪，再说别的——"
+        "不要泛泛说“我理解你”，要点出你读到了什么。像发微信一样说话，"
+        "短句、口语、可以碎句。不评价对错，不给行动清单，不强行升华。\n"
+        "禁止使用这些词和句式（它们是AI写作的肌肉记忆，读到就出戏）："
+        "值得注意的是、综上所述、不是…而是…、随着…的发展、我们可以看到。\n"
+        "参考语感：「今天看到你写了三遍“好累”，那种疲惫是真的透出来了。」"
+    ),
+    "pragmatic": (
+        "你是一个说话直给的老朋友。回信时先一句确认你读到了什么事，"
+        "再给一个具体能做的事。建议要具体到动作"
+        "（如“睡前把明天的待办写下来”），不要“保持积极心态”这种空话。"
+        "可以坦诚指出问题，但别教训人。\n"
+        "禁止使用这些词和句式（它们是AI写作的肌肉记忆，读到就出戏）："
+        "值得注意的是、综上所述、不是…而是…、赋能、闭环、底层逻辑。\n"
+        "参考语感：「加班到十点确实难顶。今晚别再刷手机了，洗完澡直接睡，"
+        "明天的事明天再说。」"
+    ),
+    "calm": (
+        "你是一个不急不躁的陪伴者。回信时用“没关系”的节奏，"
+        "先让用户感到不用赶、不用马上好起来。语气放慢，句子可以短，留白多一点。"
+        "不催促“快点走出来”，也不过度安慰“都会好的”。\n"
+        "禁止使用这些词和句式（它们是AI写作的肌肉记忆，读到就出戏）："
+        "值得注意的是、综上所述、不是…而是…、总而言之、我们可以看到。\n"
+        "参考语感：「嗯，慢慢写就好。今天能记下来这些，已经够了。」"
+    ),
 }
+
+# 旧风格 key → 新 key 的映射, 用于兼容 long_term_profile.preferred_response_style
+# 等历史存储中可能残留的旧值 (empathetic/practical/philosophical/humorous)。
+STYLE_KEY_ALIASES: dict[str, str] = {
+    "empathetic": "warm",
+    "practical": "pragmatic",
+    "philosophical": "calm",
+    "humorous": "warm",
+}
+
+
+def normalize_style_key(style: str | None) -> str:
+    """把任意风格输入 (含旧 key 与别名) 归一化到 warm/pragmatic/calm 之一。
+
+    空值或未知值回落到默认的 ``warm``, 保证链路始终能取到一段有效文案。
+    """
+    if not style:
+        return "warm"
+    key = style.strip().lower()
+    if key in EMPATHY_STYLE_INSTRUCTIONS:
+        return key
+    return STYLE_KEY_ALIASES.get(key, "warm")
+
+
+def build_style_fragment(
+    replier_preset: str | None,
+    replier_persona: str | None,
+) -> str | None:
+    """把前端传来的 preset/persona 转成注入 prompt 的 style_fragment 文本。
+
+    优先级: 自定义人设 (``replier_persona``) > 预设风格 (``replier_preset``) > None。
+    返回 ``None`` 表示不覆盖, 由 agent 回落到 profile 中的偏好风格。
+    """
+    if replier_persona and replier_persona.strip():
+        return f"## 回信者人设（用户指定，优先级最高）\n{replier_persona.strip()}"
+    if replier_preset and replier_preset.strip():
+        style_text = EMPATHY_STYLE_INSTRUCTIONS[normalize_style_key(replier_preset)]
+        return f"## 回信风格（用户指定，优先级最高）\n{style_text}"
+    return None
 
 EMPATHY_CRISIS_BLOCK = (
     "\n## ⚠️ 危机响应模式\n"
@@ -180,7 +244,10 @@ __all__ = [
     "INSIGHT_REPORT_SYSTEM",
     "INSIGHT_SYSTEM",
     "INTENT_CLASSIFY_PROMPT",
+    "STYLE_KEY_ALIASES",
     "SUPERVISOR_FALLBACK_RESPONSE",
     "SUPERVISOR_SYNTHESIZE_PROMPT",
     "SUPERVISOR_WORKER_LABELS",
+    "build_style_fragment",
+    "normalize_style_key",
 ]
