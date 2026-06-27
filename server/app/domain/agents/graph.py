@@ -222,15 +222,18 @@ def create_multi_agent_graph(
     history before empathy/insight agents run, closing the feedback loop.
     """
 
-    def _build_style_fragment(state: dict[str, Any]) -> str | None:
+    def _build_style_fragment(state: MultiAgentState) -> str | None:
         if prompt_tuner is None:
             return state.get("style_fragment") or None
         try:
             diary_content = state.get("diary_content", "")
             word_count = len(diary_content)
-            return prompt_tuner.build_dynamic_prompt(
-                agent_type="empathy",
-                diary_word_count=word_count,
+            return cast(
+                str,
+                prompt_tuner.build_dynamic_prompt(
+                    agent_type="empathy",
+                    diary_word_count=word_count,
+                ),
             )
         except Exception:
             return state.get("style_fragment") or None
