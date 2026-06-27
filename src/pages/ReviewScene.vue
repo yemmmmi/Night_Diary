@@ -101,6 +101,13 @@ function selectEntry(entry: DiaryEntry) {
   router.replace({ name: 'review-detail', params: { diaryId: entry.id } })
 }
 
+function closeDetail() {
+  selectedEntry.value = null
+  selectedDate.value = null
+  analysisStore.clear()
+  router.replace({ name: 'review' })
+}
+
 function exportMarkdown() {
   const entry = selectedEntry.value
   if (!entry) return
@@ -412,6 +419,14 @@ watch(
       <aside v-if="selectedEntry" class="review-scene__detail">
         <Transition name="detail-fade" mode="out-in">
           <GlassPanel :key="selectedEntry.id" elevated>
+            <button
+              type="button"
+              class="review-scene__detail-close"
+              title="关闭"
+              @click="closeDetail"
+            >
+              <PhXCircle :size="16" />
+            </button>
             <p class="review-scene__detail-date">
               {{ selectedEntry.date ?? selectedEntry.created_at.slice(0, 10) }}
             </p>
@@ -460,6 +475,14 @@ watch(
 
       <aside v-else-if="mode === 'calendar' && selectedDate && entriesOnSelectedDate.length > 1" class="review-scene__detail">
         <GlassPanel elevated>
+          <button
+            type="button"
+            class="review-scene__detail-close"
+            title="关闭"
+            @click="closeDetail"
+          >
+            <PhXCircle :size="16" />
+          </button>
           <p class="review-scene__detail-date">{{ selectedDate }}</p>
           <p class="review-scene__multi-hint">这一天有多篇日记，请选择：</p>
           <button
@@ -566,10 +589,30 @@ watch(
 
 @media (min-width: 768px) {
   .review-scene__layout {
-    grid-template-columns: minmax(0, 34rem) min(20rem, 36%);
-    justify-content: space-between;
+    grid-template-columns: minmax(0, 28rem) 1fr;
     align-items: start;
   }
+}
+
+.review-scene__detail {
+  position: relative;
+}
+
+.review-scene__detail-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  line-height: 1;
+  z-index: 1;
+}
+
+.review-scene__detail-close:hover {
+  color: var(--color-text-secondary);
 }
 
 .review-scene__detail-date {
