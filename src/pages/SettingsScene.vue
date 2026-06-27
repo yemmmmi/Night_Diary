@@ -6,7 +6,6 @@ import { PhArrowLeft } from '@phosphor-icons/vue'
 import BackupManager from '@/features/settings/BackupManager.vue'
 import LLMConfig from '@/features/settings/LLMConfig.vue'
 import SettingsSection from '@/features/settings/SettingsSection.vue'
-import TagManager from '@/features/settings/TagManager.vue'
 import ThemeToggle from '@/features/settings/ThemeToggle.vue'
 import ReplierManager from '@/features/settings/ReplierManager.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
@@ -19,7 +18,7 @@ const settings = useSettingsStore()
 settings.load()
 
 const openSection = ref('general')
-const sectionIds = ['general', 'llm', 'tags', 'replier', 'backup', 'about'] as const
+const sectionIds = ['general', 'llm', 'replier', 'backup', 'about'] as const
 const usageStats = ref<AppStats | null>(null)
 const statsLoading = ref(true)
 const appVersion = ref<string | null>(null)
@@ -109,16 +108,6 @@ watch(
         @toggle="toggleSection"
       >
         <LLMConfig />
-      </SettingsSection>
-
-      <SettingsSection
-        id="tags"
-        title="标签"
-        subtitle="管理写日记时可选用的标签"
-        :open="openSection === 'tags'"
-        @toggle="toggleSection"
-      >
-        <TagManager />
       </SettingsSection>
 
       <SettingsSection

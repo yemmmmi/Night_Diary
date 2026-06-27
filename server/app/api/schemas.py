@@ -20,13 +20,11 @@ class DiaryCreateRequest(BaseModel):
     content: str = Field(min_length=1)
     date: datetime.date | None = None
     weather: str | None = None
-    tag_ids: list[int] = Field(default_factory=list)
 
 
 class DiaryUpdateRequest(BaseModel):
     content: str | None = Field(default=None, min_length=1)
     weather: str | None = None
-    tag_ids: list[int] | None = None
 
 
 class DiaryResponse(BaseModel):
@@ -37,7 +35,6 @@ class DiaryResponse(BaseModel):
     ai_ans: str | None
     created_at: datetime.datetime
     updated_at: datetime.datetime
-    tags: list[TagBrief] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

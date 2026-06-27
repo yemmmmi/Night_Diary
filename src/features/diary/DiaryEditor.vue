@@ -1,20 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 
-import type { Tag } from '@/shared/api/tags'
 import { countWordUnits } from '@/shared/utils/diaryFormat'
 
 const props = withDefaults(
   defineProps<{
     modelValue: string
-    tagIds?: number[]
-    tags?: Tag[]
     placeholder?: string
     readonly?: boolean
   }>(),
   {
-    tagIds: () => [],
-    tags: () => [],
     placeholder: '写下此刻的想法…',
     readonly: false,
   },
@@ -22,21 +17,12 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
-  'update:tagIds': [value: number[]]
   autosave: [value: string]
 }>()
 
-const selectedTagIds = ref<number[]>([...props.tagIds])
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 
 const wordCount = computed(() => countWordUnits(props.modelValue))
-
-watch(
-  () => props.tagIds,
-  (value) => {
-    selectedTagIds.value = [...value]
-  },
-)
 
 watch(
   () => props.modelValue,
@@ -53,15 +39,6 @@ function onInput(event: Event) {
   emit('update:modelValue', target.value)
 }
 
-function toggleTag(tagId: number) {
-  if (props.readonly) return
-  const next = selectedTagIds.value.includes(tagId)
-    ? selectedTagIds.value.filter((id) => id !== tagId)
-    : [...selectedTagIds.value, tagId]
-  selectedTagIds.value = next
-  emit('update:tagIds', next)
-}
-
 defineExpose({ wordCount })
 </script>
 
@@ -74,29 +51,6 @@ defineExpose({ wordCount })
       :readonly="readonly"
       @input="onInput"
     />
-
-    <footer class="diary-editor__footer">
-      <p class="diary-editor__tags-label">心情标签</p>
-      <div v-if="tags.length > 0" class="diary-editor__tags">
-        <button
-          v-for="tag in tags"
-          :key="tag.id"
-          type="button"
-          class="diary-editor__tag"
-          :class="{ 'is-selected': selectedTagIds.includes(tag.id) }"
-          :style="{ '--tag-color': tag.color }"
-          :disabled="readonly"
-          @click="toggleTag(tag.id)"
-        >
-          <span class="diary-editor__tag-dot" aria-hidden="true" />
-          <span class="diary-editor__tag-name">{{ tag.name }}</span>
-        </button>
-      </div>
-      <p v-else class="diary-editor__empty-tags">
-        暂无心情标签，
-        <RouterLink to="/settings#tags">前往设置添加</RouterLink>
-      </p>
-    </footer>
   </div>
 </template>
 
@@ -125,73 +79,5 @@ defineExpose({ wordCount })
 .diary-editor__input::placeholder {
   color: var(--color-text-secondary);
   opacity: 0.7;
-}
-
-.diary-editor__footer {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.diary-editor__tags-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.5rem;
-}
-
-.diary-editor__empty-tags {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-}
-
-.diary-editor__empty-tags a {
-  color: var(--color-accent);
-}
-
-.diary-editor__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.diary-editor__tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  padding: 0.375rem 0.875rem;
-  font-size: 0.8125rem;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--motion-duration) var(--motion-ease),
-    color var(--motion-duration) var(--motion-ease),
-    border-color var(--motion-duration) var(--motion-ease);
-}
-
-.diary-editor__tag-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--tag-color, var(--color-accent));
-  flex-shrink: 0;
-}
-
-.diary-editor__tag-name {
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.diary-editor__tag.is-selected {
-  border-color: color-mix(in srgb, var(--tag-color, var(--color-accent)) 55%, var(--color-border));
-  background: color-mix(in srgb, var(--tag-color, var(--color-accent)) 18%, transparent);
-  color: var(--color-text-primary);
-}
-
-.diary-editor__tag:disabled {
-  cursor: default;
 }
 </style>

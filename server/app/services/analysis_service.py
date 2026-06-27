@@ -35,10 +35,10 @@ _emotion_estimator = EmotionEstimator()
 _DIARY_EPISODIC_IMPORTANCE = 0.6
 
 
-def _build_context(entry: DiaryEntryRow, recent_entries: list[DiaryEntryRow]) -> dict[str, str]:
+def _build_context(db: Session, entry: DiaryEntryRow, recent_entries: list[DiaryEntryRow]) -> dict[str, str]:
     return {
         "current_content": entry.content or "",
-        "tags_context": diary_service.format_tags_context(entry.tags),
+        "tags_context": diary_service.format_emotion_context(db, entry),
         "history_summary": diary_service.format_history_summary(
             recent_entries,
             exclude_id=entry.id,
@@ -161,7 +161,7 @@ def create_analysis(
         raise DiaryAlreadyExistsError()
 
     recent_entries = diary_service.get_recent_entries(db)
-    context = _build_context(entry, recent_entries)
+    context = _build_context(db, entry, recent_entries)
     result = planner.execute(
         diary_id=diary_id,
         context=context,
@@ -216,7 +216,7 @@ def update_analysis(
         raise AnalysisUnchangedError()
 
     recent_entries = diary_service.get_recent_entries(db)
-    context = _build_context(entry, recent_entries)
+    context = _build_context(db, entry, recent_entries)
     result = planner.execute(
         diary_id=diary_id,
         context=context,

@@ -36,7 +36,6 @@ describe('diary API', () => {
           ai_ans: null,
           created_at: '2026-06-08T10:00:00',
           updated_at: '2026-06-08T10:00:00',
-          tags: [],
         },
       ],
     })
@@ -57,7 +56,6 @@ describe('diary API', () => {
         ai_ans: null,
         created_at: '2026-06-08T11:00:00',
         updated_at: '2026-06-08T11:00:00',
-        tags: [],
       },
     })
 

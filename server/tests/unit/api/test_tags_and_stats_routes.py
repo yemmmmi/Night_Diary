@@ -1,37 +1,10 @@
-"""Smoke tests for tags and stats API routes."""
+"""Smoke tests for stats API routes."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-
-
-def test_tags_crud(api_client: TestClient) -> None:
-    created = api_client.post("/api/v1/tags", json={"name": "工作", "color": "#112233"})
-    assert created.status_code == 201
-    tag_id = created.json()["id"]
-
-    listing = api_client.get("/api/v1/tags")
-    assert listing.status_code == 200
-    assert any(tag["id"] == tag_id for tag in listing.json())
-
-    deleted = api_client.delete(f"/api/v1/tags/{tag_id}")
-    assert deleted.status_code == 204
-
-
-def test_seed_mood_tags(api_client: TestClient) -> None:
-    response = api_client.post("/api/v1/tags/seed-mood")
-    assert response.status_code == 200
-    names = {tag["name"] for tag in response.json()}
-    assert "开心" in names
-    assert "难过" in names
-    assert "委屈" in names
-    assert "沮丧" in names
-
-    again = api_client.post("/api/v1/tags/seed-mood")
-    assert again.status_code == 200
-    assert len(again.json()) >= len(names)
 
 
 def test_stats_endpoint(api_client: TestClient) -> None:

@@ -33,7 +33,6 @@ def create_entry(
         content=body.content,
         entry_date=body.date,
         weather=body.weather,
-        tag_ids=body.tag_ids,
         collection_manager=container.diary_collection,
     )
     return diary_to_response(row)
@@ -57,7 +56,6 @@ def update_entry(
         diary_id,
         content=body.content,
         weather=body.weather,
-        tag_ids=body.tag_ids,
         collection_manager=container.diary_collection,
     )
     return diary_to_response(row)
