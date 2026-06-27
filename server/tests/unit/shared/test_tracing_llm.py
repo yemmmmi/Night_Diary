@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -53,7 +53,7 @@ async def test_ainvoke_does_not_block_event_loop() -> None:
     )
     elapsed = time.perf_counter() - start
 
-    # 2 × (0ms LLM + 100ms tracing) = 200ms if sequential
+    # 2 x (0ms LLM + 100ms tracing) = 200ms if sequential
     # If blocking: ~200ms. If non-blocking: <250ms (threads overlap)
     # Allow generous threshold to avoid flakiness
     assert elapsed < 0.4, f"ainvoke appears to block event loop: {elapsed:.3f}s"
