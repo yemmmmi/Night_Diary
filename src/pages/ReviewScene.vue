@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onActivated, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
+import { computed, onActivated, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { PhCalendarBlank, PhListBullets, PhCards, PhArrowSquareOut, PhMagnifyingGlass, PhXCircle } from '@phosphor-icons/vue'
 
@@ -11,8 +11,7 @@ import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import type { DiaryEntry } from '@/shared/api/diary'
 import type { MemoryCard, CardSearchResult } from '@/shared/api/card'
-import { searchCards, getMoodTrends } from '@/shared/api/card'
-import type { MoodTrendPoint } from '@/shared/api/card'
+import { searchCards } from '@/shared/api/card'
 import { useAnalysisStore } from '@/stores/analysis'
 import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
@@ -41,12 +40,6 @@ const searchQuery = ref('')
 const searchResults = ref<CardSearchResult[]>([])
 const searchLoading = ref(false)
 const searchActive = ref(false)
-
-// ── Mood chart state ──────────────────────────────────────────────
-const moodTrends = ref<MoodTrendPoint[]>([])
-const chartEl = ref<HTMLDivElement | null>(null)
-/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-let chartInstance: any = null
 
 const entriesOnSelectedDate = computed(() => {
   if (!selectedDate.value) return []
@@ -217,106 +210,6 @@ function clearSearch() {
   searchResults.value = []
 }
 
-// ── Mood chart ────────────────────────────────────────────────────
-
-async function loadMoodTrends() {
-  if (cardStore.cards.length < 2) return
-  try {
-    moodTrends.value = await getMoodTrends(30)
-    await nextTick()
-    renderMoodChart()
-  } catch {
-    moodTrends.value = []
-  }
-}
-
-function renderMoodChart() {
-  if (!chartEl.value || moodTrends.value.length < 2) return
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  const echarts = (window as any).echarts
-  if (!echarts) return
-
-  const style = getComputedStyle(document.documentElement)
-  const accent = style.getPropertyValue('--color-accent').trim() || '#D4A574'
-  const muted = style.getPropertyValue('--color-text-secondary').trim() || '#7A6F63'
-  const rule = style.getPropertyValue('--color-border').trim() || 'rgba(61,52,41,0.12)'
-
-  if (chartInstance) chartInstance.dispose()
-
-  chartInstance = echarts.init(chartEl.value, null, { renderer: 'svg' })
-  chartInstance.setOption({
-    animation: false,
-    grid: { top: 10, right: 24, bottom: 24, left: 40 },
-    xAxis: {
-      type: 'category',
-      data: moodTrends.value.map(p => p.date.slice(5)),
-      axisLine: { lineStyle: { color: rule } },
-      axisLabel: { color: muted, fontSize: 10 },
-    },
-    yAxis: {
-      type: 'value',
-      min: 0,
-      max: 1,
-      interval: 0.25,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { lineStyle: { color: rule } },
-      axisLabel: {
-        color: muted, fontSize: 10,
-        formatter: (v: number) => v === 0 ? '低' : v === 1 ? '高' : '',
-      },
-    },
-    series: [{
-      type: 'line',
-      data: moodTrends.value.map(p => p.avg_mood),
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 4,
-      lineStyle: { color: accent, width: 2 },
-      itemStyle: { color: accent },
-      areaStyle: {
-        color: {
-          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: accent + '33' },
-            { offset: 1, color: accent + '00' },
-          ],
-        },
-      },
-    }],
-    tooltip: {
-      trigger: 'axis',
-      appendToBody: true,
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      formatter: (params: any) => {
-        const p = params[0]
-        return `${p.axisValue}<br/>平均心情: ${(p.value * 100).toFixed(0)}%`
-      },
-    },
-  })
-
-  window.addEventListener('resize', () => chartInstance?.resize())
-}
-
-function disposeChart() {
-  if (chartInstance) {
-    chartInstance.dispose()
-    chartInstance = null
-  }
-}
-
-// Watch for mode changes to load chart
-watch(
-  () => mode.value,
-  (val) => {
-    if (val === 'cards') {
-      nextTick(() => loadMoodTrends())
-    } else {
-      disposeChart()
-    }
-  },
-)
-
 onMounted(async () => {
   const queryMode = route.query.mode
   if (queryMode === 'cards' || queryMode === 'calendar' || queryMode === 'timeline') {
@@ -324,23 +217,11 @@ onMounted(async () => {
   }
   await Promise.all([diaryStore.loadEntries(), cardStore.loadCards()])
   syncFromRoute()
-  if (mode.value === 'cards') {
-    await nextTick()
-    loadMoodTrends()
-  }
 })
 
 onActivated(async () => {
   await Promise.all([diaryStore.loadEntries(), cardStore.loadCards()])
   syncFromRoute()
-  if (mode.value === 'cards') {
-    await nextTick()
-    loadMoodTrends()
-  }
-})
-
-onUnmounted(() => {
-  disposeChart()
 })
 
 watch(
@@ -430,12 +311,6 @@ watch(
             >
               {{ searchLoading ? '搜索中……' : '搜索' }}
             </GameButton>
-          </div>
-
-          <!-- Mood trend chart -->
-          <div v-if="moodTrends.length >= 2 && !searchActive" class="review-cards__chart">
-            <p class="review-cards__chart-title">近 30 天情绪趋势</p>
-            <div ref="chartEl" class="review-cards__chart-container" />
           </div>
 
           <!-- Search results -->
@@ -890,28 +765,6 @@ watch(
 
 .review-cards__search-clear:hover {
   color: var(--color-danger);
-}
-
-/* ── Mood chart ─────────────────────────────────────────────── */
-.review-cards__chart {
-  margin-bottom: 1rem;
-  padding: 0.75rem;
-  border-radius: var(--radius-outer, 1rem);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-}
-
-.review-cards__chart-title {
-  font-family: var(--font-ui);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.375rem;
-}
-
-.review-cards__chart-container {
-  width: 100%;
-  height: 180px;
 }
 
 .review-card-item {
