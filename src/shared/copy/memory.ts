@@ -53,9 +53,9 @@ export const memoryCopy = {
   saveError: '保存失败',
   deleteError: '删除失败',
 
-  // Emotion chart
-  emotionChartTitle: '情绪分布',
-  emotionChartDesc: '基于情节记忆的情绪构成，帮你看见自己的情绪底色。',
+  // Emotion trend chart
+  emotionChartTitle: '近 30 天情绪趋势',
+  emotionChartDesc: '鼠标移到折线点上，可查看当天记录的心情。',
 
   // Cards section
   cardsTitle: '记忆卡片',
