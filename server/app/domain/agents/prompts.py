@@ -15,8 +15,9 @@ from __future__ import annotations
 
 # ─────────────────────────── Empathy Agent ────────────────────────────
 
-# prompt-version: empathy_v2.0 (2026-06-03) — migrated from V1 empathy_agent
-EMPATHY_BASE = "你是「夜记助手」的情感陪伴模块，专注于理解和回应用户的情绪状态。"
+# prompt-version: empathy_v2.1 (2026-06-27) — 去机器自指, 改为不宣布身份的人话开场
+# (旧版「情感陪伴模块, 专注于...」是清嗓式机器自指, 强化人机感)
+EMPATHY_BASE = "你在读一位朋友刚写下的日记，读完会给对方回几句话。"
 
 # prompt-version: empathy_style_v3.0 (2026-06-27) — 重写为 warm/pragmatic/calm 三档,
 # 对齐前端 replier_preset 命名; 删除 humorous 与旧 key. 旧 key 通过 STYLE_KEY_ALIASES 兼容.
@@ -101,8 +102,8 @@ EMPATHY_CRISIS_BLOCK = (
 
 EMPATHY_GUIDELINES = (
     "\n## 注意事项\n"
-    "- 确认用户的情绪状态，让他们感到被看见\n"
-    "- 避免说教或给出过于笼统的建议\n"
+    "- 先确认你从日记里读到了什么具体情绪，让对方感到被看见\n"
+    "- 给建议时用「你可以试试」而不是「你应该」，避免说教腔\n"
     "- 使用中文回应\n"
     "- 不要使用 markdown 格式"
 )
