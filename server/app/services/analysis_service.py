@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
@@ -52,7 +52,7 @@ def _persist_analysis(
 ) -> AnalysisRow:
     analysis = AnalysisRow(
         diary_id=entry.id,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         token_cost=result.token_cost,
         cache_hit_tokens=result.cache_hit_tokens,
         cache_miss_tokens=result.cache_miss_tokens,
@@ -105,7 +105,7 @@ def _sync_diary_to_memory(
         emotion=estimate.label,
         ai_suggestion=(ai_ans or "")[:200],
         user_feedback="none",
-        timestamp=datetime.now(timezone.utc).timestamp(),
+        timestamp=datetime.now(UTC).timestamp(),
         diary_ids=[str(entry.id)],
         importance=_DIARY_EPISODIC_IMPORTANCE,
         entry_id="",
@@ -224,7 +224,7 @@ def update_analysis(
         style_fragment=style_fragment,
     )
 
-    existing.created_at = datetime.now(timezone.utc)
+    existing.created_at = datetime.now(UTC)
     existing.token_cost = result.token_cost
     existing.cache_hit_tokens = result.cache_hit_tokens
     existing.cache_miss_tokens = result.cache_miss_tokens

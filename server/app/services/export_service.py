@@ -10,7 +10,7 @@ new writes no longer create diary mood tags.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
@@ -41,7 +41,7 @@ def export_all(db: Session) -> dict[str, Any]:
 
     return {
         "version": EXPORT_VERSION,
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "diaries": [
             {
                 "id": d.id,
