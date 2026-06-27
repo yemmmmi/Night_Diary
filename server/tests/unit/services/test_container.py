@@ -43,9 +43,6 @@ def test_trigger_analysis_end_to_end(container: ServiceContainer) -> None:
         db.close()
 
 
-# ── PR-2: verify integration gaps are fixed ──
-
-
 def test_skill_tracer_instantiated(container: ServiceContainer) -> None:
     """Container must have a non-None skill_tracer after creation."""
     assert container.skill_tracer is not None
@@ -57,7 +54,31 @@ def test_multi_agent_graph_has_context_compressor(container: ServiceContainer) -
     try:
         graph = container.build_multi_agent_graph(db)
         if graph is not None:
-            # ContextCompressor is stored in the graph's config
             assert graph is not None
+    finally:
+        db.close()
+
+
+def test_prompt_tuner_instantiated(container: ServiceContainer) -> None:
+    """Container must have a non-None prompt_tuner after build_multi_agent_graph."""
+    db = container.session()
+    try:
+        container.build_multi_agent_graph(db)
+        assert container.prompt_tuner is not None
+    finally:
+        db.close()
+
+
+def test_prompt_tuner_builds_style_fragment(container: ServiceContainer) -> None:
+    """prompt_tuner.build_dynamic_prompt should return a non-empty style fragment."""
+    db = container.session()
+    try:
+        container.build_multi_agent_graph(db)
+        fragment = container.prompt_tuner.build_dynamic_prompt(
+            agent_type="empathy",
+            diary_word_count=100,
+        )
+        assert fragment
+        assert "风格" in fragment or "回应" in fragment
     finally:
         db.close()

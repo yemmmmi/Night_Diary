@@ -18,6 +18,8 @@ from app.domain.agents.insight_agent import InsightAgent
 from app.domain.agents.intent_classifier import IntentClassifier
 from app.domain.agents.retrieval_agent import RetrievalAgent
 from app.domain.agents.supervisor import SupervisorAgent
+from app.domain.feedback.prompt_tuner import PromptTuner
+from app.domain.feedback.thompson_sampling import ThompsonSampling
 from app.domain.knowledge.store import DomainKnowledgeStore
 from app.domain.memory.episodic import EpisodicMemory
 from app.domain.memory.long_term import LongTermMemory
@@ -66,6 +68,7 @@ class ServiceContainer:
     long_term_memory: LongTermMemory | None = field(default=None, repr=False)
     working_memory: WorkingMemory | None = field(default=None, repr=False)
     _multi_agent_graph: MultiAgentGraph | None = field(default=None, repr=False)
+    prompt_tuner: PromptTuner | None = field(default=None, repr=False)
     _ai_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @classmethod
@@ -217,6 +220,10 @@ class ServiceContainer:
             llm_tracer=self.llm_tracer,
         )
         context_compressor = ContextCompressor(llm=llm)
+        prompt_tuner = PromptTuner(
+            store=self.style_preference_store,
+            thompson=ThompsonSampling(store=self.style_preference_store),
+        )
         graph = create_multi_agent_graph(
             supervisor,
             EmpathyAgent(
@@ -233,8 +240,10 @@ class ServiceContainer:
                 tracer=self.llm_tracer,
             ),
             context_compressor=context_compressor,
+            prompt_tuner=prompt_tuner,
         )
         self._multi_agent_graph = graph
+        self.prompt_tuner = prompt_tuner
         return graph
 
     def build_execution_planner(self, db: Session) -> ExecutionPlanner:

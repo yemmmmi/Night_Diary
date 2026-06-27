@@ -210,13 +210,34 @@ def create_multi_agent_graph(
     *,
     worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
     context_compressor: ContextCompressor | None = None,
+    prompt_tuner: Any = None,
 ) -> MultiAgentGraph:
     """Wire the three Worker agents into a graph with correct phases/fallbacks.
 
     ``retrieval`` is a provider (phase 0); ``empathy``/``insight`` are consumers
     (phase 1) so they observe the retrieval context. Each worker's ``fallback``
     is adapted to the uniform ``(state) -> dict`` signature the graph expects.
+
+    ``prompt_tuner`` (optional) generates a ``style_fragment`` from user feedback
+    history before empathy/insight agents run, closing the feedback loop.
     """
+
+    def _build_style_fragment(state: MultiAgentState) -> str | None:
+        if prompt_tuner is None:
+            return state.get("style_fragment") or None
+        try:
+            diary_content = state.get("diary_content", "")
+            word_count = len(diary_content)
+            return cast(
+                str,
+                prompt_tuner.build_dynamic_prompt(
+                    agent_type="empathy",
+                    diary_word_count=word_count,
+                ),
+            )
+        except Exception:
+            return state.get("style_fragment") or None
+
     builder = MultiAgentGraphBuilder(
         worker_timeout_s=worker_timeout_s,
         context_compressor=context_compressor,
@@ -230,7 +251,7 @@ def create_multi_agent_graph(
     )
     builder.add_worker(
         "empathy",
-        lambda state: empathy_agent.run(state, style_fragment=state.get("style_fragment") or None),
+        lambda state: empathy_agent.run(state, style_fragment=_build_style_fragment(state)),
         lambda state: empathy_agent.fallback(
             state.get("intent", "pure_record"),
             is_crisis=state.get("tier") == "crisis",
@@ -239,7 +260,7 @@ def create_multi_agent_graph(
     )
     builder.add_worker(
         "insight",
-        lambda state: insight_agent.run(state, style_fragment=state.get("style_fragment") or None),
+        lambda state: insight_agent.run(state, style_fragment=_build_style_fragment(state)),
         lambda state: insight_agent.fallback(),
         phase=CONSUMER_PHASE,
     )

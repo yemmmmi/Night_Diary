@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import time
 import uuid
 from typing import Any
@@ -9,6 +11,8 @@ from typing import Any
 from app.domain.agents.state import extract_token_usage
 from app.shared.llm import LLMClient, message_text
 from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
+
+logger = logging.getLogger(__name__)
 
 
 class TracingLLMClient:
@@ -59,7 +63,15 @@ class TracingLLMClient:
             raise
         finally:
             if response is not None or error is not None:
-                self._record(prompt, response, started, error)
+                # Run tracing in a thread to avoid blocking the event loop
+                # with synchronous SQLite writes. Swallow tracing errors so
+                # they never mask the original LLM result/exception.
+                try:
+                    await asyncio.to_thread(
+                        self._record, prompt, response, started, error
+                    )
+                except Exception as trace_exc:
+                    logger.warning("Tracing record failed (non-fatal): %s", trace_exc)
 
     def _record(self, prompt: str, response: Any, started: float, error: str | None) -> None:
         usage = extract_token_usage(response) if response is not None else {}
