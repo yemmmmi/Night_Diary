@@ -3,6 +3,7 @@ import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { chatCopy, type DiaryReferenceItem } from '@/shared/copy/chat'
 import { listDiaryEntries, type DiaryEntry } from '@/shared/api/diary'
+import { listCards } from '@/shared/api/card'
 import { listEpisodic } from '@/shared/api/memory'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
@@ -29,19 +30,20 @@ const cardSummary = ref<string | null>(null)
 const cardGenerating = ref(false)
 const diaryCatalog = ref<DiaryEntry[]>([])
 const episodicMemories = ref<string[]>([])
+const cardSummaryMap = ref<Map<number, string>>(new Map())
 
 function toReferenceItem(entry: DiaryEntry): DiaryReferenceItem {
   return {
     id: entry.id,
     date: entry.date,
-    summary: diarySummary(entry.content, 48),
+    summary: diarySummary(entry.content, 48, cardSummaryMap.value.get(entry.id)),
   }
 }
 
 const diaryLabelMap = computed(() => {
   const map: Record<number, string> = {}
   for (const entry of diaryCatalog.value) {
-    map[entry.id] = diarySummary(entry.content, 20)
+    map[entry.id] = diarySummary(entry.content, 20, cardSummaryMap.value.get(entry.id))
   }
   return map
 })
@@ -69,14 +71,23 @@ const retrievedDiaries = computed(() => {
 
 async function loadReferenceData() {
   try {
-    const [diaries, episodic] = await Promise.all([
+    const [diaries, cards, episodic] = await Promise.all([
       listDiaryEntries({ limit: 50 }),
+      listCards(),
       listEpisodic(),
     ])
     diaryCatalog.value = diaries
+    const summaryMap = new Map<number, string>()
+    for (const card of cards) {
+      if (card.diary_id != null && card.event_summary) {
+        summaryMap.set(card.diary_id, card.event_summary)
+      }
+    }
+    cardSummaryMap.value = summaryMap
     episodicMemories.value = episodic.slice(0, 3).map((entry) => `[${entry.emotion}] ${entry.event}`)
   } catch {
     diaryCatalog.value = []
+    cardSummaryMap.value = new Map()
     episodicMemories.value = []
   }
 }
@@ -254,7 +265,12 @@ watch(
           </div>
         </div>
 
-        <DiaryReferencePicker v-model="chatStore.pinnedDiaryIds" class="chat-scene__picker" />
+        <DiaryReferencePicker
+          v-model="chatStore.pinnedDiaryIds"
+          :entries="diaryCatalog"
+          :card-summaries="cardSummaryMap"
+          class="chat-scene__picker"
+        />
         <ChatInput :disabled="chatStore.sending" @send="onSend" />
       </template>
     </section>
