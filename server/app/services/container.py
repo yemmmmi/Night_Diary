@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings, get_settings
 from app.domain.agents.empathy_agent import EmpathyAgent
+from app.domain.agents.context_compressor import ContextCompressor
 from app.domain.agents.graph import MultiAgentGraph, create_multi_agent_graph
 from app.domain.agents.insight_agent import InsightAgent
 from app.domain.agents.intent_classifier import IntentClassifier
@@ -34,6 +35,7 @@ from app.infrastructure.memory_repository import (
     SqliteEpisodicMemoryStore,
     SqliteLongTermProfileStore,
 )
+from app.infrastructure.skill_activation_tracer import SqliteSkillActivationTracer
 from app.services.ai.router import ExecutionPlanner, resolve_llm_clients_by_tier
 from app.shared.errors import AIServiceUnavailableError
 from app.shared.llm import LLMClient
@@ -54,6 +56,7 @@ class ServiceContainer:
     llm_tracer: SqliteLLMCallTracer
     decision_logger: SqliteAgentDecisionLogger
     style_preference_store: SqliteStylePreferenceStore
+    skill_tracer: SqliteSkillActivationTracer | None = field(default=None, repr=False)
     diary_collection: DiaryCollectionManager | None = field(default=None, repr=False)
     card_collection: CardCollectionManager | None = field(default=None, repr=False)
     knowledge_store: DomainKnowledgeStore | None = field(default=None, repr=False)
@@ -89,6 +92,7 @@ class ServiceContainer:
             llm_tracer=SqliteLLMCallTracer(factory),
             decision_logger=SqliteAgentDecisionLogger(factory),
             style_preference_store=SqliteStylePreferenceStore(factory),
+            skill_tracer=SqliteSkillActivationTracer(factory),
         )
 
     def _ensure_memory_layers_locked(self) -> None:
@@ -206,12 +210,13 @@ class ServiceContainer:
         model_name = getattr(llm, "model", self.settings.llm_model)
         supervisor = SupervisorAgent(
             IntentClassifier(llm, model=model_name),
-            create_default_registry(),
+            create_default_registry(tracer=self.skill_tracer),
             llm=llm,
             model=model_name,
             decision_logger=self.decision_logger,
             llm_tracer=self.llm_tracer,
         )
+        context_compressor = ContextCompressor(llm=llm)
         graph = create_multi_agent_graph(
             supervisor,
             EmpathyAgent(
@@ -227,6 +232,7 @@ class ServiceContainer:
                 model=model_name,
                 tracer=self.llm_tracer,
             ),
+            context_compressor=context_compressor,
         )
         self._multi_agent_graph = graph
         return graph

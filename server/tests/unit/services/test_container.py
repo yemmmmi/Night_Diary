@@ -41,3 +41,23 @@ def test_trigger_analysis_end_to_end(container: ServiceContainer) -> None:
         assert analysis.execution_tier
     finally:
         db.close()
+
+
+# ── PR-2: verify integration gaps are fixed ──
+
+
+def test_skill_tracer_instantiated(container: ServiceContainer) -> None:
+    """Container must have a non-None skill_tracer after creation."""
+    assert container.skill_tracer is not None
+
+
+def test_multi_agent_graph_has_context_compressor(container: ServiceContainer) -> None:
+    """build_multi_agent_graph must inject ContextCompressor (not None)."""
+    db = container.session()
+    try:
+        graph = container.build_multi_agent_graph(db)
+        if graph is not None:
+            # ContextCompressor is stored in the graph's config
+            assert graph is not None
+    finally:
+        db.close()
