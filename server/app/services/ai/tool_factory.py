@@ -36,8 +36,8 @@ def create_diary_search_tool(
             hits = retriever.retrieve(query or "", top_k=10)
             results = [
                 {
-                    "date": hit.metadata.get("date", ""),
-                    "tags": hit.metadata.get("tags", ""),
+                    "date": hit.date,
+                    "tags": hit.tags,
                     "content": hit.content,
                 }
                 for hit in hits
