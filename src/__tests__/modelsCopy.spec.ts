@@ -2,13 +2,38 @@ import { describe, expect, it } from 'vitest'
 import { MODEL_PRESETS, modelsCopy } from '@/shared/copy/models'
 
 describe('model presets', () => {
-  it('每项预设都有 key/name/baseUrl/defaultModel/suggestedTier', () => {
+  it('每项预设都有 key/name/baseUrl/defaultModel/suggestedTier/models', () => {
     for (const p of MODEL_PRESETS) {
       expect(p.key).toBeTruthy()
       expect(p.name).toBeTruthy()
       expect(typeof p.baseUrl).toBe('string')
       expect(typeof p.defaultModel).toBe('string')
       expect(['light', 'medium', 'heavy', 'default']).toContain(p.suggestedTier)
+      expect(Array.isArray(p.models)).toBe(true)
+    }
+  })
+
+  it('非 custom 预设至少有 2 个可选模型', () => {
+    for (const p of MODEL_PRESETS) {
+      if (p.key === 'custom') continue
+      expect(p.models.length).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('非 custom 预设的 defaultModel 在 models 列表中', () => {
+    for (const p of MODEL_PRESETS) {
+      if (p.key === 'custom') continue
+      const values = p.models.map((m) => m.value)
+      expect(values).toContain(p.defaultModel)
+    }
+  })
+
+  it('每个模型选项有 value 和 label', () => {
+    for (const p of MODEL_PRESETS) {
+      for (const m of p.models) {
+        expect(m.value).toBeTruthy()
+        expect(m.label).toBeTruthy()
+      }
     }
   })
 

@@ -34,11 +34,12 @@ const error = ref<string | null>(null)
 const success = ref<string | null>(null)
 const testResult = ref<string | null>(null)
 const editingModel = ref<ModelProvider | null>(null)
+const selectedPreset = ref<ModelPreset | null>(null)
 
 const form = reactive({
   model_name: '',
   api_key: '',
-  base_url: 'https://api.deepseek.com/v1',
+  base_url: 'https://api.deepseek.com',
   tier: 'default' as ModelTier,
   is_active: true,
 })
@@ -52,12 +53,17 @@ const editForm = reactive({
 })
 
 function applyPreset(preset: ModelPreset) {
+  selectedPreset.value = preset
   form.base_url = preset.baseUrl
   if (preset.defaultModel) form.model_name = preset.defaultModel
   form.tier = preset.suggestedTier
   error.value = null
   success.value = null
   testResult.value = null
+}
+
+function openKeyUrl(url: string) {
+  if (url) window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 async function refresh() {
@@ -250,28 +256,42 @@ onMounted(() => {
             :key="preset.key"
             type="button"
             class="preset-card"
+            :class="{ 'preset-card--active': selectedPreset?.key === preset.key }"
             @click="applyPreset(preset)"
           >
             <span class="preset-card__name">{{ preset.name }}</span>
             <span v-if="preset.freeHint" class="preset-card__free">{{ preset.freeHint }}</span>
             <span class="preset-card__desc">{{ preset.description }}</span>
-            <a
+            <button
               v-if="preset.keyUrl"
-              :href="preset.keyUrl"
-              target="_blank"
-              rel="noopener noreferrer"
+              type="button"
               class="preset-card__link"
-              @click.stop
+              @click.stop="openKeyUrl(preset.keyUrl)"
             >
-              {{ modelsCopy.getKey }} →
-            </a>
+              {{ modelsCopy.getKey }}
+            </button>
           </button>
         </div>
       </div>
 
       <label class="settings-form__field">
         <span class="settings-form__label">模型名称</span>
-        <input v-model="form.model_name" required class="settings-form__input" placeholder="如 deepseek-chat" />
+        <select
+          v-if="selectedPreset && selectedPreset.models.length > 0"
+          v-model="form.model_name"
+          class="settings-form__input"
+        >
+          <option v-for="opt in selectedPreset.models" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+        <input
+          v-else
+          v-model="form.model_name"
+          required
+          class="settings-form__input"
+          :placeholder="modelsCopy.modelInputPlaceholder"
+        />
       </label>
       <label class="settings-form__field">
         <span class="settings-form__label">模型层级</span>
@@ -526,6 +546,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-height: 7.5rem;
   padding: 0.625rem 0.75rem;
   border-radius: 0.625rem;
   border: 1px solid var(--color-border);
@@ -540,6 +561,11 @@ onMounted(() => {
 .preset-card:hover {
   border-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-elevated-2));
+}
+
+.preset-card--active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-elevated-2));
 }
 
 .preset-card__name {
@@ -560,10 +586,16 @@ onMounted(() => {
 }
 
 .preset-card__link {
+  margin-top: auto;
+  padding: 0;
+  border: none;
+  background: none;
   font-size: 0.6875rem;
   color: var(--color-accent);
+  cursor: pointer;
+  text-align: left;
   text-decoration: none;
-  margin-top: 0.125rem;
+  align-self: flex-start;
 }
 
 .preset-card__link:hover {
