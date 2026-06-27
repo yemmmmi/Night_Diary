@@ -552,7 +552,6 @@ watch(
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-text-primary);
-  flex: 1;
 }
 
 .review-scene__tabs {
