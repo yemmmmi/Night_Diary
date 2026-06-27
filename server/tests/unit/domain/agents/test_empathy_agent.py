@@ -93,6 +93,37 @@ async def test_style_fragment_is_injected_into_prompt(
     assert "用户偏好：请用务实风格回应" in fake_llm.calls[0]
 
 
+async def test_user_preset_overrides_profile_style(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """传 style_fragment 时, fragment 应替代 (而非追加) profile 推导出的风格指令。
+
+    构造一个 preferred_response_style="practical" 的 profile (旧 key, 会归一化成
+    pragmatic), 同时传一段带独特标记的 fragment, 验证:
+      1. fragment 内容进入 prompt;
+      2. 不再出现 ``## 回应风格`` 标题与旧 ``务实关怀`` 文案 —— 证明 fragment 覆盖了
+         profile 风格, 两段风格指令没有同时存在打架。
+    """
+    agent = EmpathyAgent(fake_llm, knowledge_store)
+    fragment = "## 回信风格（用户指定，优先级最高）\n【测试标记】请用诗意的短句回信。"
+    await agent.run(
+        {
+            "diary_content": "今天有点累。",
+            "intent": "emotional_support",
+            "long_term_profile": {"preferred_response_style": "practical"},
+        },
+        style_fragment=fragment,
+    )
+    prompt = fake_llm.calls[0]
+    # fragment 内容进入 prompt
+    assert "【测试标记】请用诗意的短句回信。" in prompt
+    # fragment 覆盖了 profile 推导出的风格指令: 不应再出现 ## 回应风格 标题
+    assert "## 回应风格" not in prompt
+    # 旧文案字样也不应出现 (回归保护)
+    assert "## 回应风格\n务实关怀" not in prompt
+
+
 def test_fallback_direct_call_uses_intent_template(
     fake_llm: FakeLLM,
     knowledge_store: StubKnowledgeStore,

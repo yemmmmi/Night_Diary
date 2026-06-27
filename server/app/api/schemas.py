@@ -61,6 +61,18 @@ class AnalysisResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AnalysisTriggerRequest(BaseModel):
+    """Request body for triggering/regenerating an analysis with a replier style.
+
+    ``replier_preset`` 对应前端预设风格 (warm/pragmatic/calm);
+    ``replier_persona`` 为用户自定义人设文本 (非空时优先级高于 preset).
+    两者都缺省时走后端默认 warm 风格, 保持向后兼容.
+    """
+
+    replier_preset: str | None = None
+    replier_persona: str | None = None
+
+
 class FeedbackCreateRequest(BaseModel):
     feedback_type: Literal["positive", "negative"]
     reason: str | None = None

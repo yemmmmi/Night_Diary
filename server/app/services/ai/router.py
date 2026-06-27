@@ -150,6 +150,7 @@ class ExecutionPlanner:
         diary_id: int,
         context: dict[str, str],
         content: str,
+        style_fragment: str | None = None,
     ) -> AnalysisResult:
         decision = self.plan(
             diary_id=diary_id,
@@ -183,6 +184,7 @@ class ExecutionPlanner:
                     episodic=self._episodic,
                     long_term=self._long_term,
                     working_memory=self._working_memory,
+                    style_fragment=style_fragment,
                 )
                 activated_agents = ",".join(run.activated_agents)
                 self._log_routing(
