@@ -83,7 +83,7 @@ class HybridRetriever:
         limit = top_k if top_k is not None else self.final_top_k
         started = time.perf_counter()
 
-        vector_results = self._vector_search(query)
+        vector_results = self._filter_orphan_vectors(self._vector_search(query))
         bm25_results = self._bm25_search(query)
 
         ranked_lists = [
@@ -126,6 +126,25 @@ class HybridRetriever:
             return []
 
         return self._format_vector_hits(results)
+
+    def _filter_orphan_vectors(self, hits: list[RetrievalResult]) -> list[RetrievalResult]:
+        """Remove vector hits whose doc_id no longer exists in the BM25 index.
+
+        ChromaDB deletion can fail silently, leaving orphan vectors that
+        reference deleted diaries. The BM25 index is built from SQLite and
+        is always consistent, so we use it as the source of truth.
+        """
+        if not hits:
+            return hits
+        known_ids = self._bm25.known_doc_ids()
+        if not known_ids:
+            # BM25 index is empty — can't validate, return as-is
+            return hits
+        filtered = [h for h in hits if h.doc_id in known_ids]
+        if len(filtered) < len(hits):
+            dropped = len(hits) - len(filtered)
+            logger.info("Filtered %d orphan vector(s) not in BM25 index", dropped)
+        return filtered
 
     @staticmethod
     def _format_vector_hits(results: dict[str, Any]) -> list[RetrievalResult]:

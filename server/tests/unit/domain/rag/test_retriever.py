@@ -50,6 +50,13 @@ def bm25_index() -> MagicMock:
         SearchResult(doc_id="diary_2_chunk_0", content="工作压力大", diary_id="2", bm25_score=3.1),
         SearchResult(doc_id="diary_3_chunk_0", content="周末旅行", diary_id="3", bm25_score=1.2),
     ]
+    # BM25 index "knows" all doc_ids that exist in the system, so the orphan
+    # vector filter keeps legitimate vector hits while dropping stale ones.
+    index.known_doc_ids.return_value = {
+        "diary_1_chunk_0",
+        "diary_2_chunk_0",
+        "diary_3_chunk_0",
+    }
     return index
 
 
@@ -162,3 +169,46 @@ def test_retrieve_emits_trace_log(
         and "latency_ms=" in record.message
         for record in caplog.records
     )
+
+
+def test_retrieve_filters_orphan_vectors(
+    collection_manager: MagicMock,
+    bm25_index: MagicMock,
+    collection: MagicMock,
+) -> None:
+    """Vector hits whose doc_id is absent from BM25 index are dropped."""
+    # Vector search returns an orphan doc_id not present in BM25 index
+    collection.query.return_value = {
+        "ids": [["diary_1_chunk_0", "diary_orphan_chunk_0"]],
+        "documents": [["今天很开心", "已删除的日记"]],
+        "metadatas": [
+            [
+                {"diary_id": "1", "date": "2025-01-01", "chunk_index": 0, "chunk_total": 1},
+                {"diary_id": "99", "date": "2025-01-09", "chunk_index": 0, "chunk_total": 1},
+            ]
+        ],
+        "distances": [[0.1, 0.2]],
+    }
+
+    retriever = HybridRetriever(collection_manager, bm25_index, final_top_k=10)
+    results = retriever.retrieve("开心")
+
+    diary_ids = {r.diary_id for r in results}
+    # Orphan diary 99 should be filtered out; diaries 1, 2, 3 remain
+    assert "99" not in diary_ids
+    assert "1" in diary_ids
+
+
+def test_retrieve_keeps_vectors_when_bm25_empty(
+    collection_manager: MagicMock,
+    bm25_index: MagicMock,
+) -> None:
+    """When BM25 index is empty, orphan filter passes vectors through as-is."""
+    bm25_index.known_doc_ids.return_value = set()
+    bm25_index.search.return_value = []
+
+    retriever = HybridRetriever(collection_manager, bm25_index, final_top_k=5)
+    results = retriever.retrieve("压力")
+
+    # Vector results should still be returned despite empty BM25 index
+    assert {r.diary_id for r in results} == {"1", "2"}
