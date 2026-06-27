@@ -72,6 +72,6 @@ make lint         # ruff + mypy + eslint + vue-tsc
 
 ## 当前状态
 
-✅ Phase A 完成（5/5 PR）。✅ Phase B 已合并 B-1~B-8（最新 #23）。🟡 B-9 `feature/agents-orchestration` PR 已提交待合并。▶ 下一步 B-10 韧性 + ContextCompressor。
-
-进度以 `.cursor/rules/current_phase.mdc` 为准；`task.md` 是施工蓝图。
+✅ Phase A–E 全部完成，1.0.0 安装器已发布（`夜记_1.0.0_x64-setup.exe`）。
+`task.md` 为历史施工蓝图，已归档，不再更新。
+后续整改任务见 `.trae/documents/mvp-整改任务拆分方案.md`（10 个 PR，P0→P2 优先级）。
