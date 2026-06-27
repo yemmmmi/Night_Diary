@@ -566,7 +566,8 @@ watch(
 
 @media (min-width: 768px) {
   .review-scene__layout {
-    grid-template-columns: 1fr min(20rem, 36%);
+    grid-template-columns: minmax(0, 34rem) min(20rem, 36%);
+    justify-content: space-between;
     align-items: start;
   }
 }
