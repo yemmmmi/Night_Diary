@@ -16,6 +16,7 @@ import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
 import { useSettingsStore } from '@/stores/settings'
 import MemoryCardInput from '@/features/card/MemoryCardInput.vue'
+import DayDetailDrawer from '@/features/home/DayDetailDrawer.vue'
 import EmotionChips from '@/features/card/EmotionChips.vue'
 import {
   computeWritingStreak,
@@ -29,6 +30,11 @@ import {
   toIsoDate,
   weekdayLabel,
 } from '@/shared/utils/diaryFormat'
+import {
+  sortKanbanItems,
+  splitKanbanItems,
+  type KanbanItem,
+} from '@/shared/utils/kanbanSort'
 
 const router = useRouter()
 const route = useRoute()
@@ -43,9 +49,16 @@ const weekStart = computed(() => startOfWeekMonday(new Date(), weekOffset.value)
 const weekEnd = computed(() => endOfWeekSunday(weekStart.value))
 const weekLabel = computed(() => formatWeekRangeLabel(weekStart.value, weekEnd.value))
 
-type KanbanItem =
-  | { kind: 'diary'; entry: DiaryEntry; linkedCard: MemoryCard | null }
-  | { kind: 'card'; card: MemoryCard }
+type WeekColumn = {
+  key: string
+  label: string
+  dayNumber: number | null
+  visibleItems: KanbanItem[]
+  overflowCount: number
+  allItems: KanbanItem[]
+}
+
+const dayDrawer = ref<{ title: string; items: KanbanItem[] } | null>(null)
 
 function cardDateIso(card: MemoryCard): string {
   return card.created_at.slice(0, 10)
@@ -88,46 +101,38 @@ const weekColumns = computed(() => {
       })),
       ...standaloneCards.map((c): KanbanItem => ({ kind: 'card', card: c })),
     ]
-    items.sort((a, b) => {
-      const at = a.kind === 'diary'
-        ? (a.entry.created_at ?? '')
-        : a.card.created_at
-      const bt = b.kind === 'diary'
-        ? (b.entry.created_at ?? '')
-        : b.card.created_at
-      return at.localeCompare(bt)
-    })
+    const sorted = sortKanbanItems(items)
+    const { visible, overflowCount } = splitKanbanItems(sorted)
 
     return {
       key: iso,
       label: weekdayLabel(date),
       dayNumber: date.getDate(),
-      items,
+      visibleItems: visible,
+      overflowCount,
+      allItems: sorted,
     }
   })
 
-  const inboxStandaloneCards: MemoryCard[] = []
-  for (const card of standaloneCardsByDate.values()) {
-    for (const c of card) inboxStandaloneCards.push(c)
-  }
-  // Only cards NOT already in the week range go to inbox
-  inboxStandaloneCards.length = 0
-  for (const card of cardStore.cards) {
-    if (card.diary_id != null) continue
-    const d = cardDateIso(card)
-    const startIso = toIsoDate(weekStart.value)
-    const endIso = toIsoDate(weekEnd.value)
-    if (d < startIso || d > endIso) {
-      inboxStandaloneCards.push(card)
-    }
-  }
+  const inboxDiaries = inbox
+    .map((e): KanbanItem => ({ kind: 'diary', entry: e, linkedCard: cardByDiaryId.get(e.id) ?? null }))
+    .sort((a, b) => {
+      if (a.kind !== 'diary' || b.kind !== 'diary') return 0
+      return (b.entry.created_at ?? '').localeCompare(a.entry.created_at ?? '')
+    })
+  const inboxItems: KanbanItem[] = inboxDiaries.slice(0, 1)
 
-  const inboxItems: KanbanItem[] = [
-    ...inbox.map((e): KanbanItem => ({ kind: 'diary', entry: e, linkedCard: cardByDiaryId.get(e.id) ?? null })),
-    ...inboxStandaloneCards.map((c): KanbanItem => ({ kind: 'card', card: c })),
-  ]
-
-  return [...days, { key: 'inbox', label: copy.inboxColumn, dayNumber: null, items: inboxItems }]
+  return [
+    ...days,
+    {
+      key: 'inbox',
+      label: copy.inboxColumn,
+      dayNumber: null,
+      visibleItems: inboxItems,
+      overflowCount: 0,
+      allItems: inboxItems,
+    },
+  ] as WeekColumn[]
 })
 
 const streak = computed(() => computeWritingStreak(diaryStore.entries))
@@ -158,8 +163,35 @@ function statusClass(status: ReturnType<typeof diaryStatus>) {
   return `kanban-card__chip--${status}`
 }
 
-function openEntry(entry: DiaryEntry) {
+function openEntry(entry: DiaryEntry, scrollToReply = false) {
+  if (scrollToReply && entry.ai_ans?.trim()) {
+    router.push({ path: `/write/${entry.id}`, hash: '#reply' })
+    return
+  }
   router.push(`/write/${entry.id}`)
+}
+
+function openDayDrawer(column: WeekColumn) {
+  if (column.allItems.length === 0) return
+  const title =
+    column.dayNumber != null
+      ? copy.dayDrawerTitle(column.label, column.dayNumber)
+      : column.label
+  dayDrawer.value = { title, items: column.allItems }
+}
+
+function closeDayDrawer() {
+  dayDrawer.value = null
+}
+
+function onDrawerOpenDiary(entry: DiaryEntry, scrollToReply?: boolean) {
+  closeDayDrawer()
+  openEntry(entry, scrollToReply)
+}
+
+function onDrawerOpenCard(card: MemoryCard) {
+  closeDayDrawer()
+  openCard(card)
 }
 
 function openCard(card: MemoryCard) {
@@ -288,26 +320,29 @@ watch(
           <span v-if="column.dayNumber != null" class="kanban-col__day">{{ column.dayNumber }}</span>
         </div>
 
-        <template v-for="item in column.items" :key="item.kind === 'diary' ? `d-${item.entry.id}` : `c-${item.card.card_id}`">
+        <template v-for="item in column.visibleItems" :key="item.kind === 'diary' ? `d-${item.entry.id}` : `c-${item.card.card_id}`">
           <!-- Diary entry card -->
           <button
             v-if="item.kind === 'diary'"
             type="button"
             class="kanban-card"
-            @click="openEntry(item.entry)"
+            @click="openEntry(item.entry, diaryStatus(item.entry) === 'reply')"
           >
-            <!-- Embedded card chip (if card was expanded to this diary) -->
-            <div v-if="item.linkedCard" class="kanban-card__embed">
+            <span class="kanban-card__summary">{{ diarySummary(item.entry.content) }}</span>
+            <div class="kanban-card__footer">
               <EmotionChips
+                v-if="item.linkedCard"
+                class="kanban-card__emotion"
                 :emotions="item.linkedCard.emotions"
                 :emotion="item.linkedCard.emotion"
-                :size="11"
+                :size="12"
+                compact
+                :max-count="1"
               />
+              <span class="kanban-card__chip" :class="statusClass(diaryStatus(item.entry))">
+                {{ diaryStatusLabel(diaryStatus(item.entry)) }}
+              </span>
             </div>
-            <span class="kanban-card__summary">{{ diarySummary(item.entry.content) }}</span>
-            <span class="kanban-card__chip" :class="statusClass(diaryStatus(item.entry))">
-              {{ diaryStatusLabel(diaryStatus(item.entry)) }}
-            </span>
           </button>
 
           <!-- Memory card in kanban -->
@@ -318,19 +353,31 @@ watch(
             :style="{ borderLeftColor: cardEmotionColor(item.card) }"
             @click="openCard(item.card)"
           >
-            <div class="kanban-card__card-head">
-              <EmotionChips
-                :emotions="item.card.emotions"
-                :emotion="item.card.emotion"
-                :size="11"
-              />
-            </div>
             <span v-if="item.card.event_summary" class="kanban-card__summary">
-              {{ item.card.event_summary.slice(0, 28) }}{{ item.card.event_summary.length > 28 ? '…' : '' }}
+              {{ diarySummary(item.card.event_summary, 32) }}
             </span>
             <span v-else class="kanban-card__summary kanban-card__summary--muted">{{ cardCopy.recordedMoodOnly }}</span>
+            <div class="kanban-card__footer">
+              <EmotionChips
+                class="kanban-card__emotion"
+                :emotions="item.card.emotions"
+                :emotion="item.card.emotion"
+                :size="12"
+                compact
+                :max-count="1"
+              />
+            </div>
           </button>
         </template>
+
+        <button
+          v-if="column.overflowCount > 0"
+          type="button"
+          class="kanban-more"
+          @click="openDayDrawer(column)"
+        >
+          {{ copy.moreRecords(column.overflowCount) }}
+        </button>
 
         <button
           v-if="column.key !== 'inbox'"
@@ -346,6 +393,17 @@ watch(
     <div v-if="!isEmpty" class="home-scene__footer">
       <span class="home-scene__footer-stats">{{ footerStatsLabel }}</span>
     </div>
+
+    <Teleport to="body">
+      <DayDetailDrawer
+        v-if="dayDrawer"
+        :title="dayDrawer.title"
+        :items="dayDrawer.items"
+        @close="closeDayDrawer"
+        @open-diary="onDrawerOpenDiary"
+        @open-card="onDrawerOpenCard"
+      />
+    </Teleport>
 
     <!-- Card drawer overlay -->
     <Teleport to="body">
@@ -541,7 +599,7 @@ watch(
   padding-bottom: 0.5rem;
 }
 .kanban-col {
-  min-width: 8.5rem;
+  min-width: 7.5rem;
   flex: 1;
   flex-shrink: 0;
   background: var(--color-bg-elevated);
@@ -550,7 +608,7 @@ watch(
   padding: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 .kanban-col__head {
   display: flex;
@@ -569,13 +627,13 @@ watch(
   width: 100%;
   text-align: left;
   border: 1px solid var(--color-border);
-  border-left-width: 1px;
-  border-left-style: solid;
-  border-left-color: var(--color-border);
   border-radius: 0.625rem;
   background: var(--color-bg-elevated-2);
-  padding: 0.5rem;
+  padding: 0.4375rem 0.5rem;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
   transition: transform var(--motion-duration) var(--motion-ease);
 }
 .kanban-card:hover {
@@ -588,29 +646,25 @@ watch(
   border-left-style: solid;
 }
 
-.kanban-card__card-head {
+.kanban-card__footer {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.25rem;
-  margin-bottom: 0.25rem;
+  min-height: 1.125rem;
 }
 
-/* Embedded card chip inside diary entry */
-.kanban-card__embed {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  margin-bottom: 0.3125rem;
-  padding: 0.1875rem 0.375rem;
-  border-radius: 0.375rem;
-  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
-  font-size: 0.625rem;
+.kanban-card__emotion {
+  flex-shrink: 0;
 }
 
 .kanban-card__summary {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: 0.75rem;
-  line-height: 1.45;
+  line-height: 1.4;
   color: var(--color-text-primary);
 }
 
@@ -621,11 +675,13 @@ watch(
 
 .kanban-card__chip {
   display: inline-block;
-  margin-top: 0.375rem;
+  margin-left: auto;
+  flex-shrink: 0;
   border-radius: 999px;
-  padding: 0.125rem 0.45rem;
-  font-size: 0.625rem;
+  padding: 0.0625rem 0.375rem;
+  font-size: 0.5625rem;
   font-weight: 600;
+  line-height: 1.4;
 }
 .kanban-card__chip--reply {
   background: color-mix(in srgb, var(--color-success) 18%, transparent);
@@ -639,6 +695,23 @@ watch(
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   color: var(--color-accent-muted);
 }
+.kanban-more {
+  width: 100%;
+  border: none;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  color: var(--color-accent);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.3125rem 0.375rem;
+  cursor: pointer;
+  text-align: center;
+}
+
+.kanban-more:hover {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+
 .kanban-add {
   width: 100%;
   border: 1px dashed var(--color-border);

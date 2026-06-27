@@ -12,26 +12,35 @@ const props = withDefaults(
     emotions?: string[] | null
     emotion?: string | null
     size?: number
+    /** Kanban / tight spaces: icon only, no text label */
+    compact?: boolean
+    /** Cap visible chips (kanban shows primary emotion only) */
+    maxCount?: number
   }>(),
   {
     emotions: null,
     emotion: null,
     size: 14,
+    compact: false,
+    maxCount: undefined,
   },
 )
 
 const list = computed<string[]>(() => {
   const fromList = (props.emotions || []).filter(Boolean)
-  if (fromList.length > 0) return fromList
-  return props.emotion ? [props.emotion] : []
+  const base = fromList.length > 0 ? fromList : props.emotion ? [props.emotion] : []
+  if (props.maxCount != null && props.maxCount > 0) {
+    return base.slice(0, props.maxCount)
+  }
+  return base
 })
 </script>
 
 <template>
-  <div class="emotion-chips">
+  <div class="emotion-chips" :class="{ 'emotion-chips--compact': compact }">
     <span v-for="key in list" :key="key" class="emotion-chips__item">
       <component :is="emotionIconFor(key)" :size="size" weight="fill" />
-      <span class="emotion-chips__label">{{ key }}</span>
+      <span v-if="!compact" class="emotion-chips__label">{{ key }}</span>
     </span>
   </div>
 </template>
@@ -56,6 +65,13 @@ const list = computed<string[]>(() => {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+.emotion-chips--compact .emotion-chips__item {
+  padding: 0.125rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
 }
 
 .emotion-chips__label {

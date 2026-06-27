@@ -293,7 +293,8 @@ def expand_to_diary(
 ) -> DiaryEntryRow:
     """Expand a memory card into a full diary entry.
 
-    The card's emotion, event_summary and tags are used as seed content.
+    Structured card fields (emotion, event, tags) stay on the linked card;
+    diary content starts empty so the card-continuation UI can guide writing.
     The card's ``diary_id`` is updated to link back to the new diary.
     """
     card = get_card(db, card_id)
@@ -301,19 +302,8 @@ def expand_to_diary(
     if card.diary_id is not None:
         raise ValidationError(f"卡片 {card_id} 已经展开为日记 #{card.diary_id}")
 
-    tags = _json_to_tags(card.tags_json)
-    lines = [
-        f"💭 心情：{card.emotion}",
-    ]
-    if card.event_summary:
-        lines.append(f"📌 事件：{card.event_summary}")
-    if tags:
-        lines.append(f"🏷️ 标签：{'、'.join('#' + t for t in tags)}")
-    lines.append("")
-    lines.append("（从记忆卡片展开，继续写下更多细节……）")
-
     diary_entry = DiaryEntryRow(
-        content="\n".join(lines),
+        content="",
         date=entry_date if entry_date is not None else datetime.utcnow().date(),
     )
     db.add(diary_entry)

@@ -82,3 +82,21 @@ def test_card_to_episodic_single_emotion(db_session) -> None:
 
     assert "悲喜参半" not in entry.event
     assert entry.event == "散步"
+
+
+def test_expand_to_diary_links_card_without_template_body(db_session) -> None:
+    row = card_service.create_card(
+        db_session,
+        emotion="平静",
+        emotions=["平静", "期待"],
+        event_summary="傍晚在河边散步",
+        tags=["休息"],
+    )
+
+    diary = card_service.expand_to_diary(db_session, row.card_id)
+    db_session.refresh(row)
+
+    assert diary.content == ""
+    assert "💭" not in diary.content
+    assert "心情" not in diary.content
+    assert row.diary_id == diary.id
