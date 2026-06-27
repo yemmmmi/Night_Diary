@@ -83,12 +83,10 @@ def send_message(
 
 
 @router.post("/{conversation_id}/generate-card", response_model=dict[str, Any])
-def generate_card_summary(conversation_id: str, db: DbDep) -> dict[str, Any]:
+def generate_card_summary(conversation_id: str, db: DbDep, container: ContainerDep) -> dict[str, Any]:
     conv = conversation_service.get_conversation(db, conversation_id)
     if conv is None:
         raise ConversationNotFoundError(conversation_id=conversation_id)
-    return {
-        "emotion": "平静",
-        "event_summary": "卡片生成功能将在后续版本中接入 AI",
-        "tags": ["对话"],
-    }
+    return conversation_ai_service.generate_card_from_conversation(
+        db, container, conversation_id=conversation_id,
+    )

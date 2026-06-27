@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
@@ -186,3 +186,111 @@ def generate_reply(
         retrieved_diary_ids=all_context_ids,
         retrieved_memory_ids=memory_ids,
     )
+
+
+# ── Card generation from conversation ─────────────────────────────────
+
+
+CARD_GEN_PROMPT_TEMPLATE = """你是一个温暖的心理陪伴助手。请根据以下对话内容，生成一张记忆卡片的摘要。
+
+对话内容：
+{conversation_text}
+
+请返回一个 JSON 对象，格式如下，不要包含其他内容：
+{{"event_summary": "用一句话概括对话中的核心事件或主题（不超过30字）", "tags": ["标签1", "标签2"]}}
+
+要求：
+- event_summary 应聚焦于用户提到的具体事件或情感主题
+- tags 应包含 1-3 个关键词标签
+- 用日常口语化的中文
+"""
+
+CARD_GEN_FALLBACK = {"event_summary": "对话摘要生成失败", "tags": ["对话"]}
+
+
+def generate_card_from_conversation(
+    db: Session,
+    container: ServiceContainer,
+    *,
+    conversation_id: str,
+) -> dict[str, Any]:
+    """Generate a memory card summary (emotion + event + tags) from conversation history."""
+    from app.shared.emotion_estimator import EmotionEstimator
+
+    messages = conversation_service.list_messages(db, conversation_id)
+    if not messages:
+        return {"emotion": "平静", "event_summary": "暂无对话内容", "tags": ["对话"]}
+
+    # Build conversation text for LLM and emotion estimation
+    conv_lines: list[str] = []
+    for msg in messages:
+        role = "用户" if msg.role == "user" else "回信者"
+        conv_lines.append(f"{role}：{(msg.content or '').strip()}")
+    conv_text = "\n".join(conv_lines)
+
+    # Estimate emotion from user messages only (more accurate)
+    user_text = " ".join(
+        (msg.content or "").strip() for msg in messages if msg.role == "user"
+    )
+    estimator = EmotionEstimator()
+    estimate = estimator.estimate(user_text)
+    emotion_label = estimate.label if estimate.label != "crisis" else "negative"
+
+    # Map score to emotion word
+    emotion_word_map = {
+        "positive": "积极",
+        "negative": "低落",
+        "neutral": "平静",
+    }
+    emotion = emotion_word_map.get(emotion_label, "平静")
+
+    # Generate event summary and tags via LLM
+    container.ensure_ai_stack()
+    llm: LLMClient | None = container._llm_for_tier(db, "light", agent_name="card-gen")
+    if llm is None:
+        logger.warning("Card-gen LLM unavailable; returning emotion-only result")
+        return {"emotion": emotion, "event_summary": conv_lines[0][:30] if conv_lines else "对话", "tags": ["对话"]}
+
+    prompt = CARD_GEN_PROMPT_TEMPLATE.format(conversation_text=conv_text[:2000])
+    try:
+        response = llm.invoke(prompt)
+        text = message_text(response).strip()
+        result = _parse_card_json(text)
+        result["emotion"] = emotion
+        logger.info("Card-gen generated for conversation=%s emotion=%s", conversation_id, emotion)
+        return result
+    except Exception as exc:
+        logger.warning("Card-gen LLM invoke failed: %s", exc)
+        return {"emotion": emotion, "event_summary": CARD_GEN_FALLBACK["event_summary"], "tags": CARD_GEN_FALLBACK["tags"]}
+
+
+def _parse_card_json(text: str) -> dict[str, Any]:
+    """Parse JSON card output from LLM, tolerating markdown fences."""
+    import json
+    import re
+
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return {
+                "event_summary": str(parsed.get("event_summary", ""))[:100] or "对话摘要",
+                "tags": [str(t) for t in parsed.get("tags", ["对话"])][:3] or ["对话"],
+            }
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: extract event_summary from quotes
+    matches = re.findall(r'"([^"]+)"', text)
+    if matches:
+        return {"event_summary": matches[0][:100], "tags": ["对话"]}
+
+    return CARD_GEN_FALLBACK
