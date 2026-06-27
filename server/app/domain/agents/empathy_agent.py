@@ -91,7 +91,9 @@ class EmpathyAgent:
             style_fragment=style_fragment,
         )
 
-        prompt = f"{system_prompt}\n\n日记内容：{diary_content}\n\n请给予温暖的回应。"
+        # 用中性指令收尾, 不再硬编码「请给予温暖的回应」——
+        # 那会把 pragmatic/calm 风格拉回 warm, 与上面的 style_fragment 打架。
+        prompt = f"{system_prompt}\n\n日记内容：{diary_content}\n\n请回信。"
 
         started = time.perf_counter()
         try:
