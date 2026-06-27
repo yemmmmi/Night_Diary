@@ -410,50 +410,52 @@ watch(
       </section>
 
       <aside v-if="selectedEntry" class="review-scene__detail">
-        <GlassPanel elevated>
-          <p class="review-scene__detail-date">
-            {{ selectedEntry.date ?? selectedEntry.created_at.slice(0, 10) }}
-          </p>
-          <div v-if="linkedCard" class="review-scene__card-origin">
-            <EmotionChips
-              :emotions="linkedCard.emotions"
-              :emotion="linkedCard.emotion"
-              :size="12"
-            />
-            <CardTypeBadge :card-type="linkedCard.card_type" />
-          </div>
-          <p class="review-scene__detail-summary font-diary">
-            {{ diarySummary(selectedEntry.content, 120, linkedCard?.event_summary) }}
-          </p>
-          <span
-            v-if="diaryStatusLabel(diaryStatus(selectedEntry))"
-            class="review-scene__detail-chip"
-          >
-            {{ diaryStatusLabel(diaryStatus(selectedEntry)) }}
-          </span>
-          <div v-if="showAiPreview" class="review-scene__ai-block">
-            <p class="review-scene__ai-label">回信</p>
-            <p class="review-scene__ai-preview font-diary">{{ aiReplyPreview }}</p>
-          </div>
-          <div class="review-scene__detail-actions">
-            <GameButton variant="secondary" @click="openWrite(selectedEntry)">继续编辑</GameButton>
-            <GameButton
-              v-if="diaryStatus(selectedEntry) !== 'draft'"
-              variant="primary"
-              @click="openAnalysis(selectedEntry)"
+        <Transition name="detail-fade" mode="out-in">
+          <GlassPanel :key="selectedEntry.id" elevated>
+            <p class="review-scene__detail-date">
+              {{ selectedEntry.date ?? selectedEntry.created_at.slice(0, 10) }}
+            </p>
+            <div v-if="linkedCard" class="review-scene__card-origin">
+              <EmotionChips
+                :emotions="linkedCard.emotions"
+                :emotion="linkedCard.emotion"
+                :size="12"
+              />
+              <CardTypeBadge :card-type="linkedCard.card_type" />
+            </div>
+            <p class="review-scene__detail-summary font-diary">
+              {{ diarySummary(selectedEntry.content, 120, linkedCard?.event_summary) }}
+            </p>
+            <span
+              v-if="diaryStatusLabel(diaryStatus(selectedEntry))"
+              class="review-scene__detail-chip"
             >
-              {{ selectedEntry.ai_ans?.trim() ? '查看回信' : '获取回信' }}
-            </GameButton>
-            <GameButton variant="ghost" @click="exportMarkdown">导出 Markdown</GameButton>
-            <GameButton
-              variant="ghost"
-              class="review-scene__delete-btn"
-              @click="showDeleteConfirm = true"
-            >
-              删除日记
-            </GameButton>
-          </div>
-        </GlassPanel>
+              {{ diaryStatusLabel(diaryStatus(selectedEntry)) }}
+            </span>
+            <div v-if="showAiPreview" class="review-scene__ai-block">
+              <p class="review-scene__ai-label">回信</p>
+              <p class="review-scene__ai-preview font-diary">{{ aiReplyPreview }}</p>
+            </div>
+            <div class="review-scene__detail-actions">
+              <GameButton variant="secondary" @click="openWrite(selectedEntry)">继续编辑</GameButton>
+              <GameButton
+                v-if="diaryStatus(selectedEntry) !== 'draft'"
+                variant="primary"
+                @click="openAnalysis(selectedEntry)"
+              >
+                {{ selectedEntry.ai_ans?.trim() ? '查看回信' : '获取回信' }}
+              </GameButton>
+              <GameButton variant="ghost" @click="exportMarkdown">导出 Markdown</GameButton>
+              <GameButton
+                variant="ghost"
+                class="review-scene__delete-btn"
+                @click="showDeleteConfirm = true"
+              >
+                删除日记
+              </GameButton>
+            </div>
+          </GlassPanel>
+        </Transition>
       </aside>
 
       <aside v-else-if="mode === 'calendar' && selectedDate && entriesOnSelectedDate.length > 1" class="review-scene__detail">
@@ -495,6 +497,19 @@ watch(
 </template>
 
 <style scoped>
+.detail-fade-enter-active,
+.detail-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.detail-fade-enter-from {
+  opacity: 0.5;
+}
+
+.detail-fade-leave-to {
+  opacity: 0;
+}
+
 .review-scene {
   min-height: calc(100vh - 2.5rem);
   max-width: 56rem;
