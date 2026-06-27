@@ -173,7 +173,7 @@ def generate_reply(
         logger.info(
             "Chat reply generated: conversation=%s tokens=%s pinned=%s retrieved=%s",
             conversation_id,
-            token_info.get("total_tokens"),
+            token_info.get("total_tokens_used"),
             pinned_ids,
             retrieved_ids,
         )

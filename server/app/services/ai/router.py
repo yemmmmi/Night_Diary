@@ -202,7 +202,7 @@ class ExecutionPlanner:
                 )
                 return AnalysisResult(
                     ai_ans=run.text,
-                    token_cost=run.tokens["total_tokens"],
+                    token_cost=run.tokens["total_tokens_used"],
                     cache_hit_tokens=run.tokens["cache_hit_tokens"],
                     cache_miss_tokens=run.tokens["cache_miss_tokens"],
                     output_tokens=run.tokens["output_tokens"],
@@ -219,7 +219,7 @@ class ExecutionPlanner:
                 activated_agents = "react_tools"
                 return AnalysisResult(
                     ai_ans=text,
-                    token_cost=tokens["total_tokens"],
+                    token_cost=tokens["total_tokens_used"],
                     cache_hit_tokens=tokens["cache_hit_tokens"],
                     cache_miss_tokens=tokens["cache_miss_tokens"],
                     output_tokens=tokens["output_tokens"],
@@ -232,7 +232,7 @@ class ExecutionPlanner:
             text, tokens, log = chain_executor.run_chain(llm, context)
             return AnalysisResult(
                 ai_ans=text,
-                token_cost=tokens["total_tokens"],
+                token_cost=tokens["total_tokens_used"],
                 cache_hit_tokens=tokens["cache_hit_tokens"],
                 cache_miss_tokens=tokens["cache_miss_tokens"],
                 output_tokens=tokens["output_tokens"],

@@ -21,7 +21,7 @@ def run_chain(llm: LLMClient, context: dict[str, str]) -> tuple[str, dict[str, i
     token_info = extract_token_usage(response)
     result_text = message_text(response)
     thk_log = (
-        f"[Chain] tokens={token_info['total_tokens']} "
+        f"[Chain] tokens={token_info['total_tokens_used']} "
         f"(cache_hit={token_info['cache_hit_tokens']}, "
         f"miss={token_info['cache_miss_tokens']}, "
         f"output={token_info['output_tokens']})"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import desc
@@ -66,7 +66,7 @@ def create_entry(
     entry = DiaryEntryRow(
         content=content.strip(),
         weather=weather,
-        date=entry_date if entry_date is not None else datetime.utcnow().date(),
+        date=entry_date if entry_date is not None else datetime.now(UTC).date(),
     )
 
     db.add(entry)
@@ -113,7 +113,7 @@ def get_recent_entries(
     limit: int = RECENT_HISTORY_LIMIT,
 ) -> list[DiaryEntryRow]:
     """Shared helper for analysis context — eliminates duplicated 7-day logic."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     return (
         db.query(DiaryEntryRow)
         .filter(DiaryEntryRow.created_at >= cutoff)
@@ -141,7 +141,7 @@ def update_entry(
     if weather is not None:
         entry.weather = weather
 
-    entry.updated_at = datetime.utcnow()
+    entry.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(entry)
     _sync_to_chroma(db, collection_manager, entry)

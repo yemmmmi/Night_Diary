@@ -1,9 +1,23 @@
-"""Pure helpers: cache check, diary result filtering, token extraction."""
+"""Pure helpers: cache check, diary result filtering, token extraction.
+
+``extract_token_usage`` is canonicalised in :mod:`app.domain.agents.state` and
+re-exported here for backward-compatible imports from the executor layer.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+
+from app.domain.agents.state import extract_token_usage
+
+__all__ = [
+    "extract_token_usage",
+    "filter_diary_results",
+    "format_diary_result",
+    "merge_token_info",
+    "should_use_cache",
+]
 
 
 def should_use_cache(
@@ -41,21 +55,6 @@ def format_diary_result(item: dict[str, Any]) -> str:
     snippet = content[:150] + "..." if len(content) > 150 else content
     tag_part = f" {tags}" if tags else ""
     return f"[{date_str}]{tag_part} {snippet}"
-
-
-def extract_token_usage(response: Any) -> dict[str, int]:
-    usage: dict[str, Any] = {}
-    if hasattr(response, "response_metadata"):
-        usage = response.response_metadata.get("token_usage", {})
-    elif isinstance(response, dict):
-        usage = response.get("token_usage", {})
-
-    return {
-        "total_tokens": int(usage.get("total_tokens", 0)),
-        "cache_hit_tokens": int(usage.get("prompt_cache_hit_tokens", 0)),
-        "cache_miss_tokens": int(usage.get("prompt_cache_miss_tokens", 0)),
-        "output_tokens": int(usage.get("completion_tokens", 0)),
-    }
 
 
 def merge_token_info(base: dict[str, int], extra: dict[str, int]) -> dict[str, int]:

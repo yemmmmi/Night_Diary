@@ -28,4 +28,5 @@ def test_registry_writes_traces_for_all_skills(sqlite_activation_tracer) -> None
     registry = create_default_registry(tracer=sqlite_activation_tracer)
     registry.select_skills("今天完成了工作。", token_budget=5000)
     records = sqlite_activation_tracer.load_records()
-    assert len(records) == 10
+    # Only 2 MVP skills remain after stub removal (crisis_detector + sentiment_skill)
+    assert len(records) == 2

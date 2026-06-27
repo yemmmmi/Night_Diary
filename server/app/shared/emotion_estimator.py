@@ -195,3 +195,26 @@ class EmotionEstimator:
     def count_negative_signals(self, text: str) -> int:
         """Count distinct general-negative keywords present in the text."""
         return sum(1 for word in self._negative if word in text)
+
+
+# Lazily-created process-wide singleton of the default estimator. The estimator
+# is stateless and cheap, but sharing one default instance keeps memory usage
+# predictable and gives a single injection point. ``_INSTANCE`` is a cache of
+# the default-configured instance only — it does NOT hold lexicon/mutable
+# scoring state, and callers needing custom lexicon/weights still construct (or
+# inject) their own ``EmotionEstimator`` directly.
+_INSTANCE: EmotionEstimator | None = None
+
+
+def get_emotion_estimator() -> EmotionEstimator:
+    """Return the shared default :class:`EmotionEstimator` singleton.
+
+    Lazily constructs the default-configured instance on first call and reuses
+    it thereafter. Inject this accessor (or its result) rather than calling
+    ``EmotionEstimator()`` directly at call sites so there is a single place to
+    swap the default instance — e.g. for tests or global reconfiguration.
+    """
+    global _INSTANCE
+    if _INSTANCE is None:
+        _INSTANCE = EmotionEstimator()
+    return _INSTANCE

@@ -177,32 +177,19 @@ class SkillRegistry:
 def create_default_registry(
     tracer: SkillActivationTracer | None = None,
 ) -> SkillRegistry:
-    """Register all MVP and stub skills for standalone testing."""
+    """Factory: register all MVP skills for standalone testing.
+
+    The skill framework (BaseSkill, SkillRegistry, this factory) is extensible —
+    new skills subclass BaseSkill and are registered here. Stub placeholders
+    were removed; only activated MVP skills remain.
+    """
     from app.domain.skills.crisis_detector import CrisisDetectorSkill
     from app.domain.skills.sentiment_skill import SentimentSkill
-    from app.domain.skills.stubs import (
-        AddressSkill,
-        HabitTrackerSkill,
-        MemoryReaderSkill,
-        MemoryWriterSkill,
-        PatternDetectorSkill,
-        SearchDiarySkill,
-        SummaryGeneratorSkill,
-        WeatherSkill,
-    )
 
     registry = SkillRegistry(tracer=tracer)
     for skill in (
         CrisisDetectorSkill(),
         SentimentSkill(),
-        PatternDetectorSkill(),
-        HabitTrackerSkill(),
-        MemoryReaderSkill(),
-        MemoryWriterSkill(),
-        SummaryGeneratorSkill(),
-        SearchDiarySkill(),
-        WeatherSkill(),
-        AddressSkill(),
     ):
         registry.register(skill)
     return registry

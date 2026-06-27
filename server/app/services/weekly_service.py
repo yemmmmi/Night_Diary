@@ -13,7 +13,7 @@ Two flows mirror ``analysis_service``:
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import desc
@@ -45,7 +45,7 @@ _MAX_CARD_LINES = 30
 
 def week_bounds(reference: date | None = None) -> tuple[date, date]:
     """Return (Monday, Sunday) of the ISO week containing ``reference``."""
-    ref = reference or datetime.utcnow().date()
+    ref = reference or datetime.now(UTC).date()
     monday = ref - timedelta(days=ref.weekday())
     sunday = monday + timedelta(days=6)
     return monday, sunday
@@ -121,13 +121,6 @@ def _build_context(content: str) -> dict[str, str]:
 
 
 # ── persistence ──────────────────────────────────────────────────────────
-
-
-def get_report(db: Session, report_id: int) -> WeeklyReportRow:
-    row = db.query(WeeklyReportRow).filter(WeeklyReportRow.id == report_id).first()
-    if row is None:
-        raise WeeklyReportNotFoundError(report_id=report_id)
-    return row
 
 
 def get_report_by_period(db: Session, period_start: date) -> WeeklyReportRow | None:
@@ -211,7 +204,7 @@ def create_weekly_report(
         avg_mood=_avg_mood(cards),
         token_cost=result.token_cost,
         execution_tier=result.execution_tier,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
     db.add(row)
     db.commit()

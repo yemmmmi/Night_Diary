@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -55,7 +55,7 @@ def submit_feedback(
         feedback_type=feedback_type,
         reason=reason,
         source="explicit",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
     db.add(row)
     db.commit()

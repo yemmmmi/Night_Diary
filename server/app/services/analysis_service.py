@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ from app.infrastructure.models.analysis import AnalysisRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.services import diary_service
 from app.services.ai.router import ExecutionPlanner
-from app.shared.emotion_estimator import EmotionEstimator
+from app.shared.emotion_estimator import get_emotion_estimator
 
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
@@ -25,9 +25,6 @@ from app.shared.errors import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Module-level estimator — lightweight, stateless, safe to share.
-_emotion_estimator = EmotionEstimator()
 
 # Importance threshold for diary-derived episodic entries.  Diary entries are
 # the primary content of the product, so they default above the 0.5 store
@@ -55,7 +52,7 @@ def _persist_analysis(
 ) -> AnalysisRow:
     analysis = AnalysisRow(
         diary_id=entry.id,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
         token_cost=result.token_cost,
         cache_hit_tokens=result.cache_hit_tokens,
         cache_miss_tokens=result.cache_miss_tokens,
@@ -96,7 +93,7 @@ def _sync_diary_to_memory(
         return
 
     content = entry.content or ""
-    estimate = _emotion_estimator.estimate(content)
+    estimate = get_emotion_estimator().estimate(content)
 
     # Build a concise event summary from the diary content.
     event_summary = content.strip().replace("\n", " ")[:120]
@@ -108,7 +105,7 @@ def _sync_diary_to_memory(
         emotion=estimate.label,
         ai_suggestion=(ai_ans or "")[:200],
         user_feedback="none",
-        timestamp=datetime.utcnow().timestamp(),
+        timestamp=datetime.now(UTC).timestamp(),
         diary_ids=[str(entry.id)],
         importance=_DIARY_EPISODIC_IMPORTANCE,
         entry_id="",
@@ -227,7 +224,7 @@ def update_analysis(
         style_fragment=style_fragment,
     )
 
-    existing.created_at = datetime.utcnow()
+    existing.created_at = datetime.now(UTC)
     existing.token_cost = result.token_cost
     existing.cache_hit_tokens = result.cache_hit_tokens
     existing.cache_miss_tokens = result.cache_miss_tokens

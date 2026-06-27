@@ -75,7 +75,6 @@ describe('App', () => {
       history: createMemoryHistory(),
       routes: [
         { path: '/', component: HomeScene },
-        { path: '/design-system', component: HomeScene },
         { path: '/settings', component: HomeScene },
       ],
     })

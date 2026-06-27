@@ -76,7 +76,7 @@ def run_agent(
         thk_log_parts.append("no tools needed")
 
     thk_log_parts.append(
-        f"[Token] total={token_info['total_tokens']} "
+        f"[Token] total={token_info['total_tokens_used']} "
         f"cache_hit={token_info['cache_hit_tokens']} "
         f"miss={token_info['cache_miss_tokens']} "
         f"output={token_info['output_tokens']}"

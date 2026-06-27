@@ -24,12 +24,6 @@ const router = createRouter({
       component: () => import('@/pages/DiaryScene.vue'),
     },
     {
-      path: '/design-system',
-      name: 'design-system',
-      component: () => import('@/pages/DesignSystemScene.vue'),
-      meta: { skipOnboarding: true },
-    },
-    {
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('@/pages/OnboardingScene.vue'),

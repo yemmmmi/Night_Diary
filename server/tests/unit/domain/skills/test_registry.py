@@ -151,13 +151,17 @@ def test_select_skills_handles_activation_errors(activation_tracer) -> None:
     assert "error_skill" not in [skill.metadata.name for skill in selected]
 
 
-def test_default_registry_has_ten_skills() -> None:
+def test_default_registry_has_two_mvp_skills() -> None:
+    """Stub skills were removed; only CrisisDetector and Sentiment remain."""
     registry = create_default_registry()
-    assert len(registry.skills) == 10
+    assert len(registry.skills) == 2
+    assert "crisis_detector" in registry.skills
+    assert "sentiment_skill" in registry.skills
 
 
-def test_stub_skills_do_not_activate_on_neutral_text(activation_tracer) -> None:
-    registry = create_default_registry(tracer=activation_tracer)
+def test_no_stub_skills_registered() -> None:
+    """Stub skills were removed in the dedup cleanup; verify they're gone."""
+    registry = create_default_registry()
     selected = registry.select_skills(
         "今天完成了日常工作，天气不错。",
         {"intent": "pure_record"},

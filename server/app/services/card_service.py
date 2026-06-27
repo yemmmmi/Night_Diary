@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import desc
@@ -196,7 +196,7 @@ def update_card(
     if importance is not None:
         row.importance = max(0.0, min(1.0, importance))
 
-    row.updated_at = datetime.utcnow()
+    row.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(row)
     logger.info("Card updated: card_id=%s", card_id)
@@ -304,7 +304,7 @@ def expand_to_diary(
 
     diary_entry = DiaryEntryRow(
         content="",
-        date=entry_date if entry_date is not None else datetime.utcnow().date(),
+        date=entry_date if entry_date is not None else datetime.now(UTC).date(),
     )
     db.add(diary_entry)
     db.commit()
@@ -368,8 +368,8 @@ def get_mood_trends(
     """
     from sqlalchemy import func, text
 
-    cutoff = datetime.utcnow().date()
-    start = cutoff - __import__("datetime").timedelta(days=days - 1)
+    cutoff = datetime.now(UTC).date()
+    start = cutoff - timedelta(days=days - 1)
 
     rows = (
         db.query(
