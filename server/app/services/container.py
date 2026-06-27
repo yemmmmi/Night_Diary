@@ -11,8 +11,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings, get_settings
-from app.domain.agents.empathy_agent import EmpathyAgent
 from app.domain.agents.context_compressor import ContextCompressor
+from app.domain.agents.empathy_agent import EmpathyAgent
 from app.domain.agents.graph import MultiAgentGraph, create_multi_agent_graph
 from app.domain.agents.insight_agent import InsightAgent
 from app.domain.agents.intent_classifier import IntentClassifier
