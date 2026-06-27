@@ -34,6 +34,7 @@ function card(cardId: string, createdAt: string): KanbanItem {
       emotions: ['平静'],
       event_summary: null,
       mood_score: 0.5,
+      importance: 0.5,
       card_type: 'quick',
       tags: [],
       diary_id: null,
