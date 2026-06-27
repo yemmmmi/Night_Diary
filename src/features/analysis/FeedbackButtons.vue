@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import { PhThumbsDown, PhThumbsUp } from '@phosphor-icons/vue'
 
 import { submitFeedback, type FeedbackType } from '@/shared/api/feedback'
@@ -40,6 +40,14 @@ function scheduleHideConfirmation() {
     selectedType.value = null
   }, 2500)
 }
+
+// Clear pending timer on unmount to prevent ref writes after destroy
+onUnmounted(() => {
+  if (hideTimer) {
+    clearTimeout(hideTimer)
+    hideTimer = null
+  }
+})
 
 async function sendFeedback(type: FeedbackType, reason?: string) {
   loading.value = true

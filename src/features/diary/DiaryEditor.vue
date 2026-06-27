@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, onUnmounted, watch } from 'vue'
 
 import { countWordUnits } from '@/shared/utils/diaryFormat'
 
@@ -33,6 +33,14 @@ watch(
     }, 1000)
   },
 )
+
+// Clear pending autosave timer on unmount to prevent emit after destroy
+onUnmounted(() => {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer)
+    autosaveTimer = null
+  }
+})
 
 function onInput(event: Event) {
   const target = event.target as HTMLTextAreaElement
