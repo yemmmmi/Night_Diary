@@ -8,7 +8,6 @@ import EmotionChips from '@/features/card/EmotionChips.vue'
 import CardTypeBadge from '@/features/card/CardTypeBadge.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
-import { listTags, type Tag } from '@/shared/api/tags'
 import { diarySceneCopy as copy } from '@/shared/copy/diaryScene'
 import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
@@ -30,8 +29,6 @@ const diaryStore = useDiaryStore()
 const cardStore = useCardStore()
 
 const content = ref('')
-const tagIds = ref<number[]>([])
-const tags = ref<Tag[]>([])
 const loadError = ref<string | null>(null)
 const deleteError = ref<string | null>(null)
 const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -114,20 +111,11 @@ function setSaveState(state: 'idle' | 'saving' | 'saved' | 'error') {
   }
 }
 
-async function loadTags() {
-  try {
-    tags.value = await listTags()
-  } catch {
-    tags.value = []
-  }
-}
-
 async function loadEntry() {
   loadError.value = null
   if (!diaryId.value) {
     diaryStore.clearCurrent()
     content.value = ''
-    tagIds.value = []
     saveState.value = 'idle'
     return
   }
@@ -135,7 +123,6 @@ async function loadEntry() {
   try {
     const entry = await diaryStore.fetchEntry(diaryId.value)
     content.value = entry.content ?? ''
-    tagIds.value = entry.tags.map((tag) => tag.id)
     saveState.value = 'idle'
   } catch (err) {
     loadError.value = formatApiError(err, copy.loadFailed)
@@ -151,7 +138,6 @@ async function persist(showFeedback = true) {
     if (isEditing.value && diaryId.value) {
       await diaryStore.saveEntry(diaryId.value, {
         content: trimmed,
-        tag_ids: tagIds.value,
       })
       if (showFeedback) setSaveState('saved')
       else setSaveState('idle')
@@ -160,7 +146,6 @@ async function persist(showFeedback = true) {
 
     const created = await diaryStore.createEntry({
       content: trimmed,
-      tag_ids: tagIds.value,
       date: targetDate.value,
     })
     setSaveState('saved')
@@ -213,14 +198,8 @@ watch(
   },
 )
 
-watch(tagIds, async (value, oldValue) => {
-  if (!isEditing.value || !diaryId.value) return
-  if (value.join(',') === oldValue.join(',')) return
-  await diaryStore.saveEntry(diaryId.value, { tag_ids: value })
-})
-
 onMounted(async () => {
-  await Promise.all([loadTags(), cardStore.loadCards()])
+  await cardStore.loadCards()
   await loadEntry()
 })
 </script>
@@ -269,8 +248,6 @@ onMounted(async () => {
       <DiaryEditor
         v-if="!loadError"
         v-model="content"
-        v-model:tag-ids="tagIds"
-        :tags="tags"
         :placeholder="editorPlaceholder"
         @autosave="onAutosave"
       />
