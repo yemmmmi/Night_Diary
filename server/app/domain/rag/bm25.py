@@ -37,6 +37,10 @@ class BM25Index:
     def doc_count(self) -> int:
         return self._doc_count
 
+    def known_doc_ids(self) -> set[str]:
+        """Return the set of all doc_ids currently in the index."""
+        return set(self._docs.keys())
+
     @property
     def avgdl(self) -> float:
         if self._doc_count == 0:
