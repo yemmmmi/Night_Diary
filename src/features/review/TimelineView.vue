@@ -74,7 +74,10 @@ function formatEntryDate(entry: DiaryEntry): string {
       >
         <div class="timeline-entry__meta">
           <span>{{ formatEntryDate(entry) }}</span>
-          <span class="timeline-entry__chip">{{ diaryStatusLabel(diaryStatus(entry)) }}</span>
+          <span
+              v-if="diaryStatusLabel(diaryStatus(entry))"
+              class="timeline-entry__chip"
+            >{{ diaryStatusLabel(diaryStatus(entry)) }}</span>
         </div>
         <p class="timeline-entry__summary font-diary">{{ diarySummary(entry.content) }}</p>
         <PhEnvelopeSimple

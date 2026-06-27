@@ -47,9 +47,13 @@ export function weekdayLabel(date: Date): string {
   return WEEKDAY_LABELS[date.getDay()]
 }
 
-export function diarySummary(content: string | null | undefined, maxLen = 28): string {
+export function diarySummary(
+  content: string | null | undefined,
+  maxLen = 28,
+  fallback: string | null | undefined = '空白日记',
+): string {
   const raw = (content ?? '').trim()
-  if (!raw) return '空白日记'
+  if (!raw) return (fallback ?? '').trim() || '空白日记'
   const firstLine = (raw.split('\n')[0] ?? raw).replace(/\s+/g, ' ').trim()
   if (firstLine.length <= maxLen) return firstLine
   return `${firstLine.slice(0, maxLen)}…`
@@ -69,7 +73,7 @@ export function diaryStatusLabel(status: DiaryStatus): string {
     case 'pending':
       return '待分析'
     case 'draft':
-      return '续写'
+      return ''
   }
 }
 

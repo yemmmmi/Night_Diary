@@ -73,7 +73,10 @@ defineExpose({ refresh, entries })
         <button type="button" class="diary-list__item" @click="openEntry(entry)">
           <span class="diary-list__summary">{{ diarySummary(entry.content) }}</span>
           <span class="diary-list__meta">
-            <span class="diary-list__chip">{{ diaryStatusLabel(diaryStatus(entry)) }}</span>
+            <span
+              v-if="diaryStatusLabel(diaryStatus(entry))"
+              class="diary-list__chip"
+            >{{ diaryStatusLabel(diaryStatus(entry)) }}</span>
             <span v-if="entry.date">{{ entry.date }}</span>
           </span>
         </button>

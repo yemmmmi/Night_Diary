@@ -423,9 +423,12 @@ watch(
             <CardTypeBadge :card-type="linkedCard.card_type" />
           </div>
           <p class="review-scene__detail-summary font-diary">
-            {{ diarySummary(selectedEntry.content, 120) }}
+            {{ diarySummary(selectedEntry.content, 120, linkedCard?.event_summary) }}
           </p>
-          <span class="review-scene__detail-chip">
+          <span
+            v-if="diaryStatusLabel(diaryStatus(selectedEntry))"
+            class="review-scene__detail-chip"
+          >
             {{ diaryStatusLabel(diaryStatus(selectedEntry)) }}
           </span>
           <div v-if="showAiPreview" class="review-scene__ai-block">

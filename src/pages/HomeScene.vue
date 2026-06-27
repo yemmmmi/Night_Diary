@@ -328,7 +328,9 @@ watch(
             class="kanban-card"
             @click="openEntry(item.entry, diaryStatus(item.entry) === 'reply')"
           >
-            <span class="kanban-card__summary">{{ diarySummary(item.entry.content) }}</span>
+            <span class="kanban-card__summary">{{
+              diarySummary(item.entry.content, 28, item.linkedCard?.event_summary)
+            }}</span>
             <div class="kanban-card__footer">
               <EmotionChips
                 v-if="item.linkedCard"
@@ -339,7 +341,11 @@ watch(
                 compact
                 :max-count="1"
               />
-              <span class="kanban-card__chip" :class="statusClass(diaryStatus(item.entry))">
+              <span
+                v-if="diaryStatusLabel(diaryStatus(item.entry))"
+                class="kanban-card__chip"
+                :class="statusClass(diaryStatus(item.entry))"
+              >
                 {{ diaryStatusLabel(diaryStatus(item.entry)) }}
               </span>
             </div>

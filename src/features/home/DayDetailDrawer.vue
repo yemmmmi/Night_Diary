@@ -68,7 +68,9 @@ function onDiaryClick(entry: DiaryEntry) {
           @click="item.kind === 'diary' ? onDiaryClick(item.entry) : emit('openCard', item.card)"
         >
           <template v-if="item.kind === 'diary'">
-            <span class="day-drawer__summary">{{ diarySummary(item.entry.content, 48) }}</span>
+            <span class="day-drawer__summary">{{
+              diarySummary(item.entry.content, 48, item.linkedCard?.event_summary)
+            }}</span>
             <div class="day-drawer__footer">
               <EmotionChips
                 v-if="item.linkedCard"
@@ -78,7 +80,11 @@ function onDiaryClick(entry: DiaryEntry) {
                 compact
                 :max-count="1"
               />
-              <span class="day-drawer__chip" :class="statusClass(diaryStatus(item.entry))">
+              <span
+                v-if="diaryStatusLabel(diaryStatus(item.entry))"
+                class="day-drawer__chip"
+                :class="statusClass(diaryStatus(item.entry))"
+              >
                 {{ diaryStatusLabel(diaryStatus(item.entry)) }}
               </span>
             </div>

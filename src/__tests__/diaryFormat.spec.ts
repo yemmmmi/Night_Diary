@@ -4,6 +4,7 @@ import type { DiaryEntry } from '@/shared/api/diary'
 import {
   computeWritingStreak,
   diaryStatus,
+  diaryStatusLabel,
   diarySummary,
   groupEntriesForWeek,
   startOfWeekMonday,
@@ -25,6 +26,22 @@ function entry(partial: Partial<DiaryEntry> & Pick<DiaryEntry, 'id'>): DiaryEntr
 describe('diaryFormat', () => {
   it('summarizes first line', () => {
     expect(diarySummary('第一行\n第二行')).toBe('第一行')
+  })
+
+  it('returns fallback for empty content', () => {
+    expect(diarySummary('')).toBe('空白日记')
+    expect(diarySummary(null)).toBe('空白日记')
+  })
+
+  it('returns custom fallback for empty content', () => {
+    expect(diarySummary('', 28, '给夜记1.0收尾修bug')).toBe('给夜记1.0收尾修bug')
+    expect(diarySummary(null, 28, '卡片描述')).toBe('卡片描述')
+  })
+
+  it('returns empty label for draft status', () => {
+    expect(diaryStatusLabel('draft')).toBe('')
+    expect(diaryStatusLabel('reply')).toBe('已有回信')
+    expect(diaryStatusLabel('pending')).toBe('待分析')
   })
 
   it('derives diary status', () => {
