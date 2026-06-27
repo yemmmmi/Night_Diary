@@ -21,7 +21,6 @@ import EmotionChips from '@/features/card/EmotionChips.vue'
 import {
   computeWritingStreak,
   diaryStatus,
-  diaryStatusLabel,
   diarySummary,
   endOfWeekSunday,
   formatWeekRangeLabel,
@@ -158,10 +157,6 @@ const writeButtonLabel = computed(() =>
 const footerStatsLabel = computed(() =>
   copy.footerStats(stats.value?.diary_count ?? '\u2014', stats.value?.analysis_count ?? '\u2014'),
 )
-
-function statusClass(status: ReturnType<typeof diaryStatus>) {
-  return `kanban-card__chip--${status}`
-}
 
 function openEntry(entry: DiaryEntry, scrollToReply = false) {
   if (scrollToReply && entry.ai_ans?.trim()) {
@@ -326,9 +321,12 @@ watch(
             v-if="item.kind === 'diary'"
             type="button"
             class="kanban-card"
+            :class="{ 'kanban-card--replied': diaryStatus(item.entry) === 'reply' }"
             @click="openEntry(item.entry, diaryStatus(item.entry) === 'reply')"
           >
-            <span class="kanban-card__summary">{{ diarySummary(item.entry.content) }}</span>
+            <span class="kanban-card__summary">{{
+              diarySummary(item.entry.content, 28, item.linkedCard?.event_summary)
+            }}</span>
             <div class="kanban-card__footer">
               <EmotionChips
                 v-if="item.linkedCard"
@@ -339,9 +337,6 @@ watch(
                 compact
                 :max-count="1"
               />
-              <span class="kanban-card__chip" :class="statusClass(diaryStatus(item.entry))">
-                {{ diaryStatusLabel(diaryStatus(item.entry)) }}
-              </span>
             </div>
           </button>
 
@@ -646,6 +641,13 @@ watch(
   border-left-style: solid;
 }
 
+/* Diary card with AI reply: subtle green left edge */
+.kanban-card--replied {
+  border-left-width: 3px;
+  border-left-style: solid;
+  border-left-color: color-mix(in srgb, var(--color-success) 60%, var(--color-border));
+}
+
 .kanban-card__footer {
   display: flex;
   align-items: center;
@@ -673,28 +675,6 @@ watch(
   font-style: italic;
 }
 
-.kanban-card__chip {
-  display: inline-block;
-  margin-left: auto;
-  flex-shrink: 0;
-  border-radius: 999px;
-  padding: 0.0625rem 0.375rem;
-  font-size: 0.5625rem;
-  font-weight: 600;
-  line-height: 1.4;
-}
-.kanban-card__chip--reply {
-  background: color-mix(in srgb, var(--color-success) 18%, transparent);
-  color: var(--color-success);
-}
-.kanban-card__chip--pending {
-  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
-  color: var(--color-warning);
-}
-.kanban-card__chip--draft {
-  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
-  color: var(--color-accent-muted);
-}
 .kanban-more {
   width: 100%;
   border: none;
