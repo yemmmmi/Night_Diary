@@ -6,7 +6,6 @@ import { listDiaryEntries, type DiaryEntry } from '@/shared/api/diary'
 import { listEpisodic } from '@/shared/api/memory'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
-import { useCardStore } from '@/stores/card'
 import { diarySummary } from '@/shared/utils/diaryFormat'
 import ConversationList from '@/features/chat/ConversationList.vue'
 import ChatMessage from '@/features/chat/ChatMessage.vue'
@@ -22,7 +21,6 @@ const route = useRoute()
 const chatStore = useChatStore()
 const settings = useSettingsStore()
 settings.load()
-const cardStore = useCardStore()
 
 const messagesEl = ref<HTMLElement | null>(null)
 const showDeleteConfirm = ref(false)

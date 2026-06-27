@@ -8,6 +8,7 @@ import pytest
 
 from app.services import conversation_ai_service, conversation_service, diary_service
 from app.services.conversation_ai_service import ChatReplyResult
+from app.shared.errors import ValidationError
 
 
 class _StubLLM:
@@ -45,5 +46,5 @@ def test_generate_reply_uses_pinned_and_retrieved(db_session, monkeypatch) -> No
 
 
 def test_normalize_diary_ids_rejects_overflow() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         conversation_ai_service._normalize_diary_ids([1, 2, 3, 4])
