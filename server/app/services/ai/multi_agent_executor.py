@@ -97,7 +97,6 @@ def run_multi_agent(
         "final_response": "",
         "total_tokens_used": 0,
         "agent_mode": "multi_agent",
-        "thk_log": "",
         "cache_hit_tokens": 0,
         "cache_miss_tokens": 0,
         "output_tokens": 0,
@@ -132,7 +131,7 @@ def run_multi_agent(
     thk_log = "\n".join(thk_log_parts)
 
     token_info = {
-        "total_tokens": int(final_state.get("total_tokens_used", 0)),
+        "total_tokens_used": int(final_state.get("total_tokens_used", 0)),
         "cache_hit_tokens": int(final_state.get("cache_hit_tokens", 0)),
         "cache_miss_tokens": int(final_state.get("cache_miss_tokens", 0)),
         "output_tokens": int(final_state.get("output_tokens", 0)),

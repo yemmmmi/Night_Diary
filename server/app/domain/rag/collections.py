@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Any
 
-from app.config import Settings, get_settings
-from app.domain.knowledge.store import get_chroma_client
+from app.config import Settings
+from app.domain.rag.base_collection import BaseCollectionManager, EmbeddingFunction
 from app.domain.rag.chunker import ChunkSplitter
 from app.domain.rag.types import Chunk
 
@@ -15,16 +15,15 @@ logger = logging.getLogger(__name__)
 COLLECTION_NAME = "diary_chunks"
 
 
-class EmbeddingFunction(Protocol):
-    def __call__(self, input: list[str]) -> list[list[float]]: ...
-
-
-class DiaryCollectionManager:
+class DiaryCollectionManager(BaseCollectionManager):
     """Manage the ``diary_chunks`` Chroma collection for diary CRUD sync.
 
     Single-user desktop app: one shared collection, no per-user prefix.
     Write failures are logged and do not raise (SQLite remains source of truth).
     """
+
+    _collection_name = COLLECTION_NAME
+    _collection_description = "Diary text chunks for hybrid RAG"
 
     def __init__(
         self,
@@ -35,44 +34,12 @@ class DiaryCollectionManager:
         *,
         parent_child: bool = False,
     ) -> None:
-        self._settings = settings or get_settings()
-        self._client = chroma_client
-        self._embedding_function = embedding_function
+        super().__init__(
+            settings=settings,
+            chroma_client=chroma_client,
+            embedding_function=embedding_function,
+        )
         self._splitter = chunk_splitter or ChunkSplitter(parent_child=parent_child)
-        self._collection: Any | None = None
-
-    def _resolve_client(self) -> Any:
-        if self._client is not None:
-            return self._client
-        return get_chroma_client(self._settings.chroma_persist_dir)
-
-    def _collection_kwargs(self) -> dict[str, Any]:
-        if self._embedding_function is not None:
-            return {"embedding_function": self._embedding_function}
-        return {}
-
-    def get_collection(self, *, create: bool = False) -> Any | None:
-        """Return the diary chunks collection, optionally creating it."""
-        if self._collection is not None:
-            return self._collection
-
-        client = self._resolve_client()
-        kwargs = self._collection_kwargs()
-
-        try:
-            if create:
-                self._collection = client.get_or_create_collection(
-                    name=COLLECTION_NAME,
-                    metadata={"description": "Diary text chunks for hybrid RAG"},
-                    **kwargs,
-                )
-            else:
-                self._collection = client.get_collection(name=COLLECTION_NAME, **kwargs)
-        except Exception as exc:
-            logger.warning("Diary collection '%s' unavailable: %s", COLLECTION_NAME, exc)
-            return None
-
-        return self._collection
 
     def upsert_diary(
         self,
@@ -140,16 +107,6 @@ class DiaryCollectionManager:
         except Exception as exc:
             logger.error("Chroma delete failed for diary_id=%s: %s", diary_id, exc)
             return False
-
-    def count(self) -> int:
-        """Return total chunk count in the collection."""
-        collection = self.get_collection(create=False)
-        if collection is None:
-            return 0
-        try:
-            return int(collection.count())
-        except Exception:
-            return 0
 
     @staticmethod
     def _chunk_metadata(chunk: Chunk) -> dict[str, str | int]:

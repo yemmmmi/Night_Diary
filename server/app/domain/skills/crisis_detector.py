@@ -7,7 +7,7 @@ from typing import Any
 
 from app.domain.skills.base import BaseSkill
 from app.domain.skills.types import SkillCategory, SkillMetadata, SkillProfileContext
-from app.shared.emotion_estimator import EmotionEstimator
+from app.shared.emotion_estimator import EmotionEstimator, get_emotion_estimator
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class CrisisDetectorSkill(BaseSkill):
     )
 
     def __init__(self, emotion_estimator: EmotionEstimator | None = None) -> None:
-        self._emotion = emotion_estimator or EmotionEstimator()
+        self._emotion = emotion_estimator or get_emotion_estimator()
 
     def activation_score(
         self,

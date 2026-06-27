@@ -9,26 +9,25 @@ event summaries + emotion labels).
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Any
 
-from app.config import Settings, get_settings
-from app.domain.knowledge.store import get_chroma_client
+from app.config import Settings
+from app.domain.rag.base_collection import BaseCollectionManager, EmbeddingFunction
 
 logger = logging.getLogger(__name__)
 
 CARD_COLLECTION_NAME = "card_chunks"
 
 
-class EmbeddingFunction(Protocol):
-    def __call__(self, input: list[str]) -> list[list[float]]: ...
-
-
-class CardCollectionManager:
+class CardCollectionManager(BaseCollectionManager):
     """Manage the ``card_chunks`` Chroma collection for memory card search.
 
     Single-user desktop app: one shared collection.  Write failures are
     logged and do not raise — SQLite remains the source of truth.
     """
+
+    _collection_name = CARD_COLLECTION_NAME
+    _collection_description = "Memory card text for semantic search"
 
     def __init__(
         self,
@@ -36,46 +35,11 @@ class CardCollectionManager:
         chroma_client: Any | None = None,
         embedding_function: EmbeddingFunction | None = None,
     ) -> None:
-        self._settings = settings or get_settings()
-        self._client = chroma_client
-        self._embedding_function = embedding_function
-        self._collection: Any | None = None
-
-    def _resolve_client(self) -> Any:
-        if self._client is not None:
-            return self._client
-        return get_chroma_client(self._settings.chroma_persist_dir)
-
-    def _collection_kwargs(self) -> dict[str, Any]:
-        if self._embedding_function is not None:
-            return {"embedding_function": self._embedding_function}
-        return {}
-
-    def get_collection(self, *, create: bool = False) -> Any | None:
-        if self._collection is not None:
-            return self._collection
-
-        client = self._resolve_client()
-        kwargs = self._collection_kwargs()
-
-        try:
-            if create:
-                self._collection = client.get_or_create_collection(
-                    name=CARD_COLLECTION_NAME,
-                    metadata={"description": "Memory card text for semantic search"},
-                    **kwargs,
-                )
-            else:
-                self._collection = client.get_collection(
-                    name=CARD_COLLECTION_NAME, **kwargs
-                )
-        except Exception as exc:
-            logger.warning(
-                "Card collection '%s' unavailable: %s", CARD_COLLECTION_NAME, exc
-            )
-            return None
-
-        return self._collection
+        super().__init__(
+            settings=settings,
+            chroma_client=chroma_client,
+            embedding_function=embedding_function,
+        )
 
     def upsert_card(
         self,
@@ -169,12 +133,3 @@ class CardCollectionManager:
             })
 
         return items
-
-    def count(self) -> int:
-        collection = self.get_collection(create=False)
-        if collection is None:
-            return 0
-        try:
-            return int(collection.count())
-        except Exception:
-            return 0

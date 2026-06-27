@@ -97,7 +97,6 @@ class MultiAgentState(TypedDict, total=False):
     # ---- Final output ----
     final_response: str
     agent_mode: str
-    thk_log: str
 
     # ---- Token tracking (summed across nodes) ----
     total_tokens_used: Annotated[int, operator.add]

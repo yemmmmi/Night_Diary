@@ -24,15 +24,6 @@ export interface CardCreatePayload {
   card_type?: 'quick' | 'standard' | 'guided'
 }
 
-export interface CardUpdatePayload {
-  emotion?: string | null
-  emotions?: string[] | null
-  event_summary?: string | null
-  mood_score?: number | null
-  tags?: string[] | null
-  importance?: number | null
-}
-
 export interface ListCardsParams {
   skip?: number
   limit?: number
@@ -61,24 +52,9 @@ export async function listCards(params: ListCardsParams = {}): Promise<MemoryCar
   return data
 }
 
-export async function getCard(cardId: string): Promise<MemoryCard> {
-  const client = await getHttpClient()
-  const { data } = await client.get<MemoryCard>(`/api/v1/cards/${cardId}`)
-  return data
-}
-
 export async function createCard(payload: CardCreatePayload): Promise<MemoryCard> {
   const client = await getHttpClient()
   const { data } = await client.post<MemoryCard>('/api/v1/cards', payload)
-  return data
-}
-
-export async function updateCard(
-  cardId: string,
-  payload: CardUpdatePayload,
-): Promise<MemoryCard> {
-  const client = await getHttpClient()
-  const { data } = await client.put<MemoryCard>(`/api/v1/cards/${cardId}`, payload)
   return data
 }
 

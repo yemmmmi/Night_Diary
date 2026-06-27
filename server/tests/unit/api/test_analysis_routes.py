@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -104,7 +104,7 @@ def _patch_analysis_route(monkeypatch: pytest.MonkeyPatch, diary_id: int) -> dic
         return AnalysisResponse(
             id=1,
             diary_id=diary_id,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             token_cost=0,
             cache_hit_tokens=0,
             cache_miss_tokens=0,

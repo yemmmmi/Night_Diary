@@ -34,7 +34,7 @@ from app.domain.agents.prompts import (
 from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.knowledge.store import DomainKnowledgeStore
 from app.domain.skills.crisis_detector import CRISIS_RESOURCES
-from app.shared.emotion_estimator import EmotionEstimator
+from app.shared.emotion_estimator import EmotionEstimator, get_emotion_estimator
 from app.shared.llm import LLMClient, message_text
 from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
@@ -42,7 +42,6 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_STYLE = "warm"
 _DOMAIN_KNOWLEDGE_TOP_K = 2
-_MAX_EPISODIC_ENTRIES = 5
 
 
 class EmpathyAgent:
@@ -59,7 +58,7 @@ class EmpathyAgent:
     ) -> None:
         self._llm = llm
         self._knowledge = knowledge
-        self._emotion = emotion_estimator or EmotionEstimator()
+        self._emotion = emotion_estimator or get_emotion_estimator()
         self._tracer = tracer or NoOpLLMCallTracer()
         self._model = model
 
@@ -184,26 +183,6 @@ class EmpathyAgent:
             )
         parts.append(EMPATHY_GUIDELINES)
         return "\n".join(parts)
-
-    @staticmethod
-    def _format_episodic(entries: list[dict[str, Any]]) -> str:
-        lines: list[str] = []
-        for entry in entries[:_MAX_EPISODIC_ENTRIES]:
-            if not isinstance(entry, dict):
-                continue
-            parts: list[str] = []
-            if entry.get("event"):
-                parts.append(f"事件：{entry['event']}")
-            if entry.get("emotion"):
-                parts.append(f"情绪：{entry['emotion']}")
-            if entry.get("ai_suggestion"):
-                parts.append(f"当时的建议：{entry['ai_suggestion']}")
-            feedback = entry.get("user_feedback", "none")
-            if feedback and feedback != "none":
-                parts.append(f"用户反馈：{feedback}")
-            if parts:
-                lines.append("• " + "；".join(parts))
-        return "\n".join(lines)
 
     def _record_trace(
         self,

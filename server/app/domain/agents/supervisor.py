@@ -37,7 +37,7 @@ from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.agents.types import IntentCategory, IntentResult
 from app.domain.skills.registry import SkillRegistry
 from app.domain.skills.types import SkillProfileContext
-from app.shared.emotion_estimator import EmotionEstimator
+from app.shared.emotion_estimator import EmotionEstimator, get_emotion_estimator
 from app.shared.llm import LLMClient, message_text
 from app.shared.tracing import (
     AgentDecisionLogger,
@@ -115,7 +115,7 @@ class SupervisorAgent:
         self._classifier = intent_classifier
         self._skills = skill_registry
         self._llm = llm
-        self._emotion = emotion_estimator or EmotionEstimator()
+        self._emotion = emotion_estimator or get_emotion_estimator()
         self._decisions = decision_logger or NoOpAgentDecisionLogger()
         self._tracer = llm_tracer or NoOpLLMCallTracer()
         self._model = model

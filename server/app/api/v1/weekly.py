@@ -41,12 +41,6 @@ def latest_weekly(db: DbDep) -> WeeklyReportResponse:
     return weekly_to_response(row)
 
 
-@router.get("/{report_id}", response_model=WeeklyReportResponse)
-def get_weekly(report_id: int, db: DbDep) -> WeeklyReportResponse:
-    row = weekly_service.get_report(db, report_id)
-    return weekly_to_response(row)
-
-
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def delete_weekly(report_id: int, db: DbDep) -> Response:
     if not weekly_service.delete_report(db, report_id):
