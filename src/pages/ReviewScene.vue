@@ -535,9 +535,9 @@ watch(
 
 .review-scene {
   min-height: calc(100vh - 2.5rem);
-  max-width: 60rem;
+  max-width: 64rem;
   margin: 0 auto;
-  padding: 1.25rem 2rem 2rem;
+  padding: 1.25rem 1rem 2rem;
 }
 
 .review-scene__header {
@@ -589,7 +589,7 @@ watch(
 
 @media (min-width: 768px) {
   .review-scene__layout {
-    grid-template-columns: minmax(0, 28rem) 1fr;
+    grid-template-columns: 1fr min(20rem, 34%);
     align-items: start;
   }
 }
