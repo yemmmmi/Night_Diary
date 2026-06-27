@@ -62,10 +62,6 @@ function applyPreset(preset: ModelPreset) {
   testResult.value = null
 }
 
-function openKeyUrl(url: string) {
-  if (url) window.open(url, '_blank', 'noopener,noreferrer')
-}
-
 async function refresh() {
   loading.value = true
   error.value = null
@@ -251,26 +247,31 @@ onMounted(() => {
         <p class="llm-config__presets-title">{{ modelsCopy.presetSectionTitle }}</p>
         <p class="llm-config__presets-hint">{{ modelsCopy.presetSectionHint }}</p>
         <div class="preset-grid">
-          <button
+          <div
             v-for="preset in MODEL_PRESETS"
             :key="preset.key"
-            type="button"
             class="preset-card"
             :class="{ 'preset-card--active': selectedPreset?.key === preset.key }"
+            role="button"
+            tabindex="0"
             @click="applyPreset(preset)"
+            @keydown.enter="applyPreset(preset)"
+            @keydown.space.prevent="applyPreset(preset)"
           >
             <span class="preset-card__name">{{ preset.name }}</span>
             <span v-if="preset.freeHint" class="preset-card__free">{{ preset.freeHint }}</span>
             <span class="preset-card__desc">{{ preset.description }}</span>
-            <button
+            <a
               v-if="preset.keyUrl"
-              type="button"
+              :href="preset.keyUrl"
+              target="_blank"
+              rel="noopener noreferrer"
               class="preset-card__link"
-              @click.stop="openKeyUrl(preset.keyUrl)"
+              @click.stop
             >
               {{ modelsCopy.getKey }}
-            </button>
-          </button>
+            </a>
+          </div>
         </div>
       </div>
 
