@@ -60,6 +60,7 @@ def run_multi_agent(
     episodic: EpisodicMemory | None = None,
     long_term: LongTermMemory | None = None,
     working_memory: WorkingMemory | None = None,
+    style_fragment: str | None = None,
 ) -> MultiAgentRunResult:
     """Execute the multi-agent pipeline."""
     episodic_context = _load_episodic_context(episodic)
@@ -81,6 +82,7 @@ def run_multi_agent(
     initial_state: MultiAgentState = {
         "diary_id": str(diary_id),
         "diary_content": diary_content,
+        "style_fragment": style_fragment or "",
         "intent": "",
         "tier": "",
         "token_budget": 0,

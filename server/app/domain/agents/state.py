@@ -75,6 +75,7 @@ class MultiAgentState(TypedDict, total=False):
     # ---- Input ----
     diary_id: str
     diary_content: str
+    style_fragment: str  # per-request replier style override (warm/pragmatic/calm 或自定义人设文本)
 
     # ---- Supervisor output ----
     intent: str  # pure_record | emotional_support | retrospective_review | habit_tracking

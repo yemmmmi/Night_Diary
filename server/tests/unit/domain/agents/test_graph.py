@@ -53,9 +53,16 @@ class FakeWorker:
         self.observed: Any = None
         self.ran = False
         self.fallback_called = False
+        self.style_fragment_seen: str | None = None
 
-    async def run(self, state: dict[str, Any]) -> dict[str, Any]:
+    async def run(
+        self,
+        state: dict[str, Any],
+        *,
+        style_fragment: str | None = None,
+    ) -> dict[str, Any]:
         self.ran = True
+        self.style_fragment_seen = style_fragment
         if self.observe_key is not None:
             self.observed = state.get(self.observe_key)
         if self.delay:

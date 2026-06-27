@@ -230,7 +230,7 @@ def create_multi_agent_graph(
     )
     builder.add_worker(
         "empathy",
-        lambda state: empathy_agent.run(state),
+        lambda state: empathy_agent.run(state, style_fragment=state.get("style_fragment") or None),
         lambda state: empathy_agent.fallback(
             state.get("intent", "pure_record"),
             is_crisis=state.get("tier") == "crisis",
@@ -239,7 +239,7 @@ def create_multi_agent_graph(
     )
     builder.add_worker(
         "insight",
-        lambda state: insight_agent.run(state),
+        lambda state: insight_agent.run(state, style_fragment=state.get("style_fragment") or None),
         lambda state: insight_agent.fallback(),
         phase=CONSUMER_PHASE,
     )

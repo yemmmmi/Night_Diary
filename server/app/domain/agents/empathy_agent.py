@@ -29,6 +29,7 @@ from app.domain.agents.prompts import (
     EMPATHY_GUIDELINES,
     EMPATHY_RESPONSE_LENGTH,
     EMPATHY_STYLE_INSTRUCTIONS,
+    normalize_style_key,
 )
 from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.knowledge.store import DomainKnowledgeStore
@@ -39,7 +40,7 @@ from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_STYLE = "empathetic"
+_DEFAULT_STYLE = "warm"
 _DOMAIN_KNOWLEDGE_TOP_K = 2
 _MAX_EPISODIC_ENTRIES = 5
 
@@ -87,9 +88,8 @@ class EmpathyAgent:
             episodic_context=memory_context_from_state(state),
             domain_knowledge=domain_knowledge,
             is_crisis=is_crisis,
+            style_fragment=style_fragment,
         )
-        if style_fragment:
-            system_prompt = f"{system_prompt}\n{style_fragment}"
 
         prompt = f"{system_prompt}\n\n日记内容：{diary_content}\n\n请给予温暖的回应。"
 
@@ -149,18 +149,24 @@ class EmpathyAgent:
         episodic_context: str,
         domain_knowledge: str,
         is_crisis: bool,
+        style_fragment: str | None = None,
     ) -> str:
         length = EMPATHY_RESPONSE_LENGTH.get(intent, EMPATHY_RESPONSE_LENGTH["pure_record"])
-        style_desc = EMPATHY_STYLE_INSTRUCTIONS.get(
-            preferred_style,
-            EMPATHY_STYLE_INSTRUCTIONS[_DEFAULT_STYLE],
-        )
 
-        parts = [
-            EMPATHY_BASE,
-            f"\n## 回应风格\n{style_desc}",
-            f"\n## 回应长度\n请将回应控制在 {length['min']}-{length['max']} 个汉字之间。",
-        ]
+        parts = [EMPATHY_BASE]
+        # 有 per-request 风格覆盖时, 用 fragment 直接替代 profile 推导出的风格指令,
+        # 避免两段风格文案同时出现在 prompt 里互相打架。
+        if style_fragment:
+            parts.append(f"\n{style_fragment}")
+        else:
+            style_desc = EMPATHY_STYLE_INSTRUCTIONS.get(
+                normalize_style_key(preferred_style),
+                EMPATHY_STYLE_INSTRUCTIONS["warm"],
+            )
+            parts.append(f"\n## 回应风格\n{style_desc}")
+        parts.append(
+            f"\n## 回应长度\n请将回应控制在 {length['min']}-{length['max']} 个汉字之间。"
+        )
         if is_crisis:
             parts.append(EMPATHY_CRISIS_BLOCK)
         if episodic_context:
