@@ -1,4 +1,12 @@
-"""Export/Import API routes for full user data migration."""
+"""Export/Import API routes for full user data migration.
+
+This module handles two distinct resources (``/export`` and ``/import``),
+so it deliberately omits a router-level ``prefix`` — the full sub-path is
+declared in each route decorator. All other v1 modules manage a single
+resource and use ``prefix="/resource"``; export/import is the lone
+exception because splitting into two routers for two routes would be
+over-engineering.
+"""
 
 from __future__ import annotations
 

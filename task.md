@@ -1,5 +1,9 @@
 # Night Diary V2 — 任务总纲
 
+> ⚠️ **本文档为 Phase A–E 施工蓝图，已全部完成，仅作历史参考。**
+> 1.0.0 安装器已发布。后续整改任务见 `.trae/documents/mvp-整改任务拆分方案.md`。
+> 请勿在此文件中追加新任务。
+
 > **仓库级施工蓝图**（非 Cursor Plan 文件）。每个 **PR = 下方一个章节**，含 `Implementation Plan` 三段式。
 > **V1 只读参考**：`D:\work\night_diary`（不可修改）。**架构/协作细则**：`.cursor/rules/` 下 `architecture.mdc`、`collaboration.mdc`、`coding-standards.mdc`、`execution-plan.mdc`。
 
