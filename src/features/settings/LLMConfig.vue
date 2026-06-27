@@ -14,6 +14,7 @@ import {
   type ModelStatusResponse,
   type ModelTier,
 } from '@/shared/api/models'
+import { MODEL_PRESETS, modelsCopy, type ModelPreset } from '@/shared/copy/models'
 import { formatApiError } from '@/shared/utils/apiError'
 
 const tierLabels: Record<ModelTier, string> = {
@@ -49,6 +50,15 @@ const editForm = reactive({
   tier: 'default' as ModelTier,
   is_active: false,
 })
+
+function applyPreset(preset: ModelPreset) {
+  form.base_url = preset.baseUrl
+  if (preset.defaultModel) form.model_name = preset.defaultModel
+  form.tier = preset.suggestedTier
+  error.value = null
+  success.value = null
+  testResult.value = null
+}
 
 async function refresh() {
   loading.value = true
@@ -231,6 +241,34 @@ onMounted(() => {
     <p v-if="activeTierSummary" class="llm-config__status">{{ activeTierSummary }}</p>
 
     <form class="settings-form" @submit.prevent="submit">
+      <div class="llm-config__presets">
+        <p class="llm-config__presets-title">{{ modelsCopy.presetSectionTitle }}</p>
+        <p class="llm-config__presets-hint">{{ modelsCopy.presetSectionHint }}</p>
+        <div class="preset-grid">
+          <button
+            v-for="preset in MODEL_PRESETS"
+            :key="preset.key"
+            type="button"
+            class="preset-card"
+            @click="applyPreset(preset)"
+          >
+            <span class="preset-card__name">{{ preset.name }}</span>
+            <span v-if="preset.freeHint" class="preset-card__free">{{ preset.freeHint }}</span>
+            <span class="preset-card__desc">{{ preset.description }}</span>
+            <a
+              v-if="preset.keyUrl"
+              :href="preset.keyUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="preset-card__link"
+              @click.stop
+            >
+              {{ modelsCopy.getKey }} →
+            </a>
+          </button>
+        </div>
+      </div>
+
       <label class="settings-form__field">
         <span class="settings-form__label">模型名称</span>
         <input v-model="form.model_name" required class="settings-form__input" placeholder="如 deepseek-chat" />
@@ -457,5 +495,78 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
+}
+
+.llm-config__presets {
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 0.25rem;
+}
+
+.llm-config__presets-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.llm-config__presets-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.625rem;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated-2);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.preset-card:hover {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-elevated-2));
+}
+
+.preset-card__name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.preset-card__free {
+  font-size: 0.6875rem;
+  color: var(--color-success);
+}
+
+.preset-card__desc {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.preset-card__link {
+  font-size: 0.6875rem;
+  color: var(--color-accent);
+  text-decoration: none;
+  margin-top: 0.125rem;
+}
+
+.preset-card__link:hover {
+  text-decoration: underline;
 }
 </style>

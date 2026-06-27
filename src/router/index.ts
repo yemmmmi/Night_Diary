@@ -43,7 +43,7 @@ const router = createRouter({
     },
     {
       path: '/settings/llm',
-      redirect: { path: '/settings', hash: '#llm' },
+      redirect: { name: 'models' },
     },
     {
       path: '/settings/backup',
@@ -68,6 +68,12 @@ const router = createRouter({
       path: '/chat',
       name: 'chat',
       component: () => import('@/pages/ChatScene.vue'),
+    },
+    {
+      path: '/models',
+      name: 'models',
+      component: () => import('@/pages/ModelsScene.vue'),
+      meta: { skipOnboarding: true },
     },
     {
       path: '/review',
