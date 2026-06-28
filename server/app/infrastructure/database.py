@@ -57,6 +57,7 @@ def _run_lightweight_migrations(engine: Engine) -> None:
     """
     additive_columns: dict[str, dict[str, str]] = {
         "memory_cards": {"emotions_json": "TEXT"},
+        "chat_messages": {"token_info": "TEXT"},
     }
 
     inspector = inspect(engine)

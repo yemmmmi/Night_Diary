@@ -36,6 +36,9 @@ def create_conversation(db: DbDep) -> ConversationResponse:
 def delete_conversation(conversation_id: str, db: DbDep) -> Response:
     if not conversation_service.delete_conversation(db, conversation_id):
         raise ConversationNotFoundError(conversation_id=conversation_id)
+    # Clear the in-memory session context to avoid stale state
+    from app.services.ai.session_context import clear_session
+    clear_session(conversation_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -75,6 +78,7 @@ def send_message(
         reply_content=result.reply_text,
         retrieved_diary_ids=result.retrieved_diary_ids,
         retrieved_memory_ids=result.retrieved_memory_ids,
+        token_info=result.token_info,
     )
     return SendMessageResponse(
         message=message_to_response(user_msg),
