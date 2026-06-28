@@ -99,21 +99,25 @@ fn open_splash(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+fn dismiss_splash_show_main(app: &tauri::AppHandle) {
+    if let Some(splash) = app.get_webview_window("splash") {
+        let _ = splash.close();
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.show();
+        let _ = main.set_focus();
+    }
+}
+
 fn finish_external_attach(app: tauri::AppHandle, port: u16) {
     if let Some(state) = app.try_state::<AppState>() {
         state.backend_ready.store(true, Ordering::SeqCst);
         state.external_backend.store(true, Ordering::SeqCst);
     }
     let _ = app.emit("backend-ready", port);
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if let Some(splash) = handle.get_webview_window("splash") {
-            let _ = splash.close();
-        }
-        if let Some(main) = handle.get_webview_window("main") {
-            let _ = main.set_focus();
-        }
-    });
+    // setup() runs on the main thread — close splash synchronously so always_on_top
+    // splash does not block modal clicks during `tauri dev` attach.
+    dismiss_splash_show_main(&app);
 }
 
 fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
@@ -137,12 +141,7 @@ fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
             let app_ui = app.clone();
             let handle = app_ui.clone();
             let _ = app_ui.run_on_main_thread(move || {
-                if let Some(splash) = handle.get_webview_window("splash") {
-                    let _ = splash.close();
-                }
-                if let Some(main) = handle.get_webview_window("main") {
-                    let _ = main.set_focus();
-                }
+                dismiss_splash_show_main(&handle);
             });
 
             Ok(())
@@ -162,12 +161,7 @@ fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
             let app_ui = app.clone();
             let handle = app_ui.clone();
             let _ = app_ui.run_on_main_thread(move || {
-                if let Some(splash) = handle.get_webview_window("splash") {
-                    let _ = splash.close();
-                }
-                if let Some(main) = handle.get_webview_window("main") {
-                    let _ = main.show();
-                }
+                dismiss_splash_show_main(&handle);
             });
         }
     });
