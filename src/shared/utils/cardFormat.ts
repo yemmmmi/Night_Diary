@@ -10,5 +10,5 @@ export function cardTypeLabel(cardType: string): string {
 
 /** Find the memory card expanded into a diary entry, if any. */
 export function findCardForDiary(cards: MemoryCard[], diaryId: number): MemoryCard | null {
-  return cards.find((c) => c.diary_id === diaryId) ?? null
+  return cards.find((c) => c.diary_id != null && Number(c.diary_id) === diaryId) ?? null
 }

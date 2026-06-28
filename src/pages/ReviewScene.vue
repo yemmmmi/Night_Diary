@@ -16,7 +16,7 @@ import { useAnalysisStore } from '@/stores/analysis'
 import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
 import { formatApiError } from '@/shared/utils/apiError'
-import { diaryStatus, diaryStatusLabel, diarySummary } from '@/shared/utils/diaryFormat'
+import { diaryStatus, diaryStatusLabel, diaryEntrySummary, diarySummary } from '@/shared/utils/diaryFormat'
 import { findCardForDiary } from '@/shared/utils/cardFormat'
 
 type ReviewMode = 'calendar' | 'timeline' | 'cards'
@@ -69,6 +69,10 @@ const linkedCard = computed(() => {
   if (!selectedEntry.value) return null
   return findCardForDiary(cardStore.cards, selectedEntry.value.id)
 })
+
+function entrySummary(entry: DiaryEntry, maxLen = 28): string {
+  return diaryEntrySummary(entry, cardStore.cards, maxLen)
+}
 
 function syncFromRoute() {
   if (!routeDiaryId.value) {
@@ -286,8 +290,10 @@ watch(
         />
         <TimelineView
           v-else-if="mode === 'timeline'"
+          :key="`${diaryStore.entries.length}:${cardStore.cards.length}`"
           :entries="diaryStore.entries"
           :selected-id="selectedEntry?.id ?? null"
+          :cards="cardStore.cards"
           @select="selectEntry"
         />
 
@@ -439,7 +445,7 @@ watch(
               <CardTypeBadge :card-type="linkedCard.card_type" />
             </div>
             <p class="review-scene__detail-summary font-diary">
-              {{ diarySummary(selectedEntry.content, 120, linkedCard?.event_summary) }}
+              {{ entrySummary(selectedEntry, 120) }}
             </p>
             <span
               v-if="diaryStatusLabel(diaryStatus(selectedEntry))"
@@ -492,7 +498,7 @@ watch(
             class="review-scene__multi-item"
             @click="selectEntry(entry)"
           >
-            {{ diarySummary(entry.content) }}
+            {{ entrySummary(entry) }}
           </button>
         </GlassPanel>
       </aside>

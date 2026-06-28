@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import type { MemoryCard } from '@/shared/api/card'
 import type { DiaryEntry } from '@/shared/api/diary'
 import {
   computeWritingStreak,
+  diaryEntrySummary,
   diaryStatus,
   diaryStatusLabel,
   diarySummary,
@@ -36,6 +38,26 @@ describe('diaryFormat', () => {
   it('returns custom fallback for empty content', () => {
     expect(diarySummary('', 28, '给夜记1.0收尾修bug')).toBe('给夜记1.0收尾修bug')
     expect(diarySummary(null, 28, '卡片描述')).toBe('卡片描述')
+  })
+
+  it('uses linked card event when diary content is empty', () => {
+    const cards: MemoryCard[] = [
+      {
+        card_id: 'c1',
+        emotion: '疲惫',
+        emotions: ['疲惫'],
+        event_summary: '给夜记1.0收尾修bug，累死了',
+        mood_score: 0.3,
+        tags: [],
+        importance: 0.5,
+        card_type: 'standard',
+        diary_id: 7,
+        created_at: '2026-06-27T10:00:00',
+        updated_at: '2026-06-27T10:00:00',
+      },
+    ]
+    const diary = entry({ id: 7, content: '', date: '2026-06-27' })
+    expect(diaryEntrySummary(diary, cards)).toBe('给夜记1.0收尾修bug，累死了')
   })
 
   it('returns empty label for draft status', () => {

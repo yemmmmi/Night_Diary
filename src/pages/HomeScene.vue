@@ -47,11 +47,13 @@ const stats = ref<AppStats | null>(null)
 const weekStart = computed(() => startOfWeekMonday(new Date(), weekOffset.value))
 const weekEnd = computed(() => endOfWeekSunday(weekStart.value))
 const weekLabel = computed(() => formatWeekRangeLabel(weekStart.value, weekEnd.value))
+const todayIso = computed(() => toIsoDate(new Date()))
 
 type WeekColumn = {
   key: string
   label: string
-  dayNumber: number | null
+  isToday: boolean
+  dayNumber: number
   visibleItems: KanbanItem[]
   overflowCount: number
   allItems: KanbanItem[]
@@ -64,7 +66,7 @@ function cardDateIso(card: MemoryCard): string {
 }
 
 const weekColumns = computed(() => {
-  const { dayColumns, inbox } = groupEntriesForWeek(
+  const { dayColumns } = groupEntriesForWeek(
     diaryStore.entries,
     weekStart.value,
     weekEnd.value,
@@ -106,6 +108,7 @@ const weekColumns = computed(() => {
     return {
       key: iso,
       label: weekdayLabel(date),
+      isToday: iso === todayIso.value,
       dayNumber: date.getDate(),
       visibleItems: visible,
       overflowCount,
@@ -113,24 +116,7 @@ const weekColumns = computed(() => {
     }
   })
 
-  const inboxDiaries = diaryStore.entries
-    .slice()
-    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
-    .slice(0, 1)
-    .map((e): KanbanItem => ({ kind: 'diary', entry: e, linkedCard: cardByDiaryId.get(e.id) ?? null }))
-  const inboxItems: KanbanItem[] = inboxDiaries
-
-  return [
-    ...days,
-    {
-      key: 'inbox',
-      label: copy.inboxColumn,
-      dayNumber: null,
-      visibleItems: inboxItems,
-      overflowCount: 0,
-      allItems: inboxItems,
-    },
-  ] as WeekColumn[]
+  return days as WeekColumn[]
 })
 
 const streak = computed(() => computeWritingStreak(diaryStore.entries))
@@ -138,8 +124,6 @@ const streak = computed(() => computeWritingStreak(diaryStore.entries))
 const replyCount = computed(() =>
   diaryStore.entries.filter((e) => e.ai_ans && e.ai_ans.trim()).length,
 )
-
-const todayIso = computed(() => toIsoDate(new Date()))
 
 const hasTodayEntry = computed(() =>
   diaryStore.entries.some((e) => e.date === todayIso.value),
@@ -167,10 +151,9 @@ function openEntry(entry: DiaryEntry, scrollToReply = false) {
 
 function openDayDrawer(column: WeekColumn) {
   if (column.allItems.length === 0) return
-  const title =
-    column.dayNumber != null
-      ? copy.dayDrawerTitle(column.label, column.dayNumber)
-      : column.label
+  const title = column.isToday
+    ? `${column.label} ${copy.todayTag} ${column.dayNumber}日`
+    : copy.dayDrawerTitle(column.label, column.dayNumber)
   dayDrawer.value = { title, items: column.allItems }
 }
 
@@ -279,11 +262,11 @@ watch(
 
     <div v-if="replyCount > 0" class="home-scene__companion">
       <p v-if="replyCount > 0">{{ copy.replyBanner(settings.replierHasName ? settings.replierName : '', replyCount) }}</p>
-      <p v-if="!hasTodayEntry && !isEmpty" class="home-scene__nudge">{{ copy.nudge }}</p>
+      <p v-if="!hasTodayEntry && !isEmpty" class="home-scene__nudge">{{ copy.nudge(settings.nickname) }}</p>
     </div>
 
     <section v-if="isEmpty" class="home-scene__empty">
-      <p class="home-scene__empty-title">{{ copy.emptyTitle }}</p>
+      <p class="home-scene__empty-title">{{ copy.emptyTitle(settings.nickname) }}</p>
       <p class="home-scene__empty-desc">{{ copy.emptyDesc }}</p>
       <GameButton variant="primary" class="home-scene__empty-cta" @click="writeToday">
         {{ copy.emptyCta }}
@@ -308,10 +291,13 @@ watch(
     </div>
 
     <div v-if="!isEmpty" class="home-scene__kanban" :class="{ 'is-loading': diaryStore.loading }">
-      <div v-for="column in weekColumns" :key="column.key" class="kanban-col">
+      <div v-for="column in weekColumns" :key="column.key" class="kanban-col" :class="{ 'kanban-col--today': column.isToday }">
         <div class="kanban-col__head">
-          <span>{{ column.label }}</span>
-          <span v-if="column.dayNumber != null" class="kanban-col__day">{{ column.dayNumber }}</span>
+          <span class="kanban-col__label">
+            {{ column.label }}
+            <span v-if="column.isToday" class="kanban-col__today">{{ copy.todayTag }}</span>
+          </span>
+          <span class="kanban-col__day">{{ column.dayNumber }}</span>
         </div>
 
         <template v-for="item in column.visibleItems" :key="item.kind === 'diary' ? `d-${item.entry.id}` : `c-${item.card.card_id}`">
@@ -374,7 +360,6 @@ watch(
         </button>
 
         <button
-          v-if="column.key !== 'inbox'"
           type="button"
           class="kanban-add"
           @click="createForDate(column.key)"
@@ -613,6 +598,49 @@ watch(
   color: var(--color-text-secondary);
   padding: 0 0.125rem;
 }
+
+.kanban-col--today {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 20%, transparent),
+    0 2px 8px color-mix(in srgb, var(--color-accent) 10%, transparent);
+  position: relative;
+  overflow: hidden;
+}
+
+.kanban-col--today::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 60%, #fff));
+  border-bottom-left-radius: 0.875rem;
+  border-bottom-right-radius: 0.875rem;
+}
+
+.kanban-col--today .kanban-col__day {
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.kanban-col__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.kanban-col__today {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-accent);
+  padding: 0.125rem 0.375rem;
+  border-radius: 999px;
+  line-height: 1;
+}
+
 .kanban-col__day {
   font-size: 0.875rem;
   color: var(--color-text-primary);

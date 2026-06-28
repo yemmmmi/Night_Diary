@@ -1,4 +1,6 @@
 import type { DiaryEntry } from '@/shared/api/diary'
+import type { MemoryCard } from '@/shared/api/card'
+import { findCardForDiary } from '@/shared/utils/cardFormat'
 
 export type DiaryStatus = 'reply' | 'pending' | 'draft'
 
@@ -57,6 +59,16 @@ export function diarySummary(
   const firstLine = (raw.split('\n')[0] ?? raw).replace(/\s+/g, ' ').trim()
   if (firstLine.length <= maxLen) return firstLine
   return `${firstLine.slice(0, maxLen)}…`
+}
+
+/** Summary for list/timeline views: diary body, then linked card event. */
+export function diaryEntrySummary(
+  entry: DiaryEntry,
+  cards: readonly MemoryCard[] = [],
+  maxLen = 28,
+): string {
+  const card = findCardForDiary([...cards], entry.id)
+  return diarySummary(entry.content, maxLen, card?.event_summary ?? undefined)
 }
 
 export function diaryStatus(entry: DiaryEntry): DiaryStatus {

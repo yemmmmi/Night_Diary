@@ -2,20 +2,22 @@
 import { computed, ref } from 'vue'
 
 import type { DiaryEntry } from '@/shared/api/diary'
+import type { MemoryCard } from '@/shared/api/card'
 import { chatCopy } from '@/shared/copy/chat'
-import { diarySummary, toIsoDate } from '@/shared/utils/diaryFormat'
+import { findCardForDiary } from '@/shared/utils/cardFormat'
+import { diaryEntrySummary, diarySummary, toIsoDate } from '@/shared/utils/diaryFormat'
 
 const props = withDefaults(
   defineProps<{
     modelValue: number[]
     entries: DiaryEntry[]
+    cards?: MemoryCard[]
     max?: number
     loading?: boolean
-    cardSummaries?: Map<number, string> | null
   }>(),
   {
+    cards: () => [],
     loading: false,
-    cardSummaries: null,
   },
 )
 
@@ -40,10 +42,15 @@ function entryDateIso(entry: DiaryEntry): string {
   return entry.date ?? entry.created_at.slice(0, 10)
 }
 
+function linkedCard(entry: DiaryEntry): MemoryCard | null {
+  return findCardForDiary(props.cards, entry.id)
+}
+
 function isReferencable(entry: DiaryEntry): boolean {
   if (entry.content?.trim()) return true
   if (entry.ai_ans?.trim()) return true
   if (entry.weather?.trim()) return true
+  if (linkedCard(entry)?.event_summary?.trim()) return true
   return entryDateIso(entry) === toIsoDate(new Date())
 }
 
@@ -51,9 +58,7 @@ function entryPreview(entry: DiaryEntry, maxLen = 36): string {
   if (entry.content?.trim()) return diarySummary(entry.content, maxLen)
   if (entry.weather?.trim()) return `天气：${entry.weather.trim()}`
   if (entry.ai_ans?.trim()) return `回信：${diarySummary(entry.ai_ans, Math.min(maxLen, 28))}`
-  const cardSummary = props.cardSummaries?.get(entry.id)
-  if (cardSummary) return diarySummary(cardSummary, maxLen)
-  return '空白日记'
+  return diaryEntrySummary(entry, props.cards, maxLen)
 }
 
 const availableDiaries = computed(() =>

@@ -1,8 +1,10 @@
 /** Copy strings for the chat conversation feature. */
 export const chatCopy = {
   tab: '会话',
-  emptyTitle: '还没有会话',
-  emptyDesc: '开始一场对话，和你的回信者聊聊天',
+  emptyTitle: (name: string) =>
+    name ? `${name}\uff0c\u8fd8\u6ca1\u6709\u4f1a\u8bdd\u54e6` : '\u8fd8\u6ca1\u6709\u4f1a\u8bdd',
+  emptyDesc: (name: string) =>
+    name ? `\u548c ${name} \u804a\u804a\u5929\u5427` : '\u5f00\u59cb\u4e00\u573a\u5bf9\u8bdd\uff0c\u548c\u4f60\u7684\u56de\u4fe1\u8005\u804a\u804a\u5929',
   newConversation: '新建会话',
   inputPlaceholder: '输入你想说的...',
   confirmDelete: '确定删除这个会话吗？',

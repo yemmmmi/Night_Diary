@@ -2,13 +2,20 @@
 import { computed } from 'vue'
 import { PhBooks, PhEnvelopeSimple } from '@phosphor-icons/vue'
 
+import type { MemoryCard } from '@/shared/api/card'
 import type { DiaryEntry } from '@/shared/api/diary'
-import { diaryStatus, diaryStatusLabel, diarySummary } from '@/shared/utils/diaryFormat'
+import { diaryEntrySummary, diaryStatus, diaryStatusLabel } from '@/shared/utils/diaryFormat'
 
-const props = defineProps<{
-  entries: DiaryEntry[]
-  selectedId: number | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    entries: DiaryEntry[]
+    selectedId: number | null
+    cards?: MemoryCard[]
+  }>(),
+  {
+    cards: () => [],
+  },
+)
 
 const emit = defineEmits<{
   select: [entry: DiaryEntry]
@@ -48,6 +55,14 @@ const shelves = computed(() => {
   return result.sort((a, b) => b.key.localeCompare(a.key))
 })
 
+const entrySummaries = computed(() => {
+  const summaries = new Map<number, string>()
+  for (const entry of props.entries) {
+    summaries.set(entry.id, diaryEntrySummary(entry, props.cards, 28))
+  }
+  return summaries
+})
+
 function formatEntryDate(entry: DiaryEntry): string {
   const raw = entry.date ?? entry.created_at.slice(0, 10)
   const date = new Date(`${raw}T00:00:00`)
@@ -79,7 +94,7 @@ function formatEntryDate(entry: DiaryEntry): string {
               class="timeline-entry__chip"
             >{{ diaryStatusLabel(diaryStatus(entry)) }}</span>
         </div>
-        <p class="timeline-entry__summary font-diary">{{ diarySummary(entry.content) }}</p>
+        <p class="timeline-entry__summary font-diary">{{ entrySummaries.get(entry.id) }}</p>
         <PhEnvelopeSimple
           v-if="entry.ai_ans?.trim()"
           :size="14"
