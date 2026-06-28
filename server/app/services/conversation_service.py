@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -94,7 +95,7 @@ def add_message(
     content: str,
     retrieved_diary_ids: list[int] | None = None,
     retrieved_memory_ids: list[str] | None = None,
-    token_info: dict | None = None,
+    token_info: dict[str, Any] | None = None,
 ) -> ChatMessageRow:
     row = ChatMessageRow(
         id=_new_id(),
@@ -120,7 +121,7 @@ def add_user_message_and_reply(
     reply_content: str,
     retrieved_diary_ids: list[int] | None = None,
     retrieved_memory_ids: list[str] | None = None,
-    token_info: dict | None = None,
+    token_info: dict[str, Any] | None = None,
 ) -> tuple[ChatMessageRow, ChatMessageRow]:
     user_msg = add_message(db, conversation_id=conversation_id, role="user", content=content)
     reply_msg = add_message(
