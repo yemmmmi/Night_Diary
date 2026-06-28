@@ -22,7 +22,7 @@ Example::
         diary_ids=["d01"],
     )
     memory.store(entry)
-    hits = memory.retrieve_relevant(top_k=3)
+    hits = memory.retrieve_relevant(query="睡眠", top_k=3)
 """
 
 from __future__ import annotations
@@ -31,10 +31,37 @@ import logging
 import time
 import uuid
 from collections import deque
+from collections.abc import Callable
 
 from app.domain.memory.types import EpisodicEntry, EpisodicMemoryStore
 
 logger = logging.getLogger(__name__)
+
+SimilarityFn = Callable[[str, str], float]
+
+#: Weight of query relevance when blending with importance×decay.
+#: final_score = time_score × (1.0 + relevance × RELEVANCE_WEIGHT)
+#: At 1.0, a perfectly relevant entry doubles its base score — enough to
+#: overcome a moderate importance gap (e.g. 0.6 relevant > 0.7 irrelevant)
+#: while still preserving the importance-decay ordering when relevance is 0.
+RELEVANCE_WEIGHT = 1.0
+
+
+def char_jaccard(left: str, right: str) -> float:
+    """Character-level Jaccard overlap for short Chinese text.
+
+    Episodic ``event`` labels are typically 2-4 characters ("失眠", "加班").
+    Word-level jieba tokenisation treats these as single tokens, yielding zero
+    overlap between semantically related labels like "失眠" and "睡眠".
+    Character-level matching catches the shared "眠" character.
+    """
+    left_chars = {c for c in left if c.strip()}
+    right_chars = {c for c in right if c.strip()}
+    if not left_chars or not right_chars:
+        return 0.0
+    intersection = left_chars & right_chars
+    union = left_chars | right_chars
+    return len(intersection) / len(union)
 
 
 class EpisodicMemory:
@@ -50,11 +77,14 @@ class EpisodicMemory:
         store: EpisodicMemoryStore | None = None,
         user_id: str = "default",
         persist: bool = True,
+        similarity: SimilarityFn | None = None,
     ) -> None:
         self._store = store
         self._user_id = user_id
         self._persist = persist and store is not None
         self._entries: deque[EpisodicEntry] = deque()
+        # Lazy import to avoid jieba load cost when no query is ever passed.
+        self._similarity = similarity
 
     def load(self) -> None:
         """Load persisted entries into the in-process deque."""
@@ -98,21 +128,41 @@ class EpisodicMemory:
         top_k: int = 5,
         now: float | None = None,
     ) -> list[EpisodicEntry]:
-        """Return top entries ranked by importance * time decay."""
-        _ = query  # reserved for semantic matching in later phases
+        """Return top entries ranked by importance × decay, boosted by query relevance.
+
+        When *query* is non-empty, entries whose ``event`` text overlaps with the
+        query receive a multiplicative boost (up to ``1 + RELEVANCE_WEIGHT``).
+        Entries that don't overlap keep their base score, so relevance affects
+        ranking order but never lowers a qualified entry below its natural
+        importance-decay position.
+        """
         if now is None:
             now = time.time()
 
         self.purge_stale(now=now)
 
+        use_relevance = bool(query and query.strip())
+        sim_fn = self._resolve_similarity() if use_relevance else None
+
         scored: list[tuple[float, EpisodicEntry]] = []
         for entry in self._entries:
-            score = self._effective_score(entry, now)
-            if score >= self.IMPORTANCE_THRESHOLD:
-                scored.append((score, entry))
+            base = self._effective_score(entry, now)
+            if base < self.IMPORTANCE_THRESHOLD:
+                continue
+            final = base
+            if sim_fn is not None:
+                relevance = sim_fn(query, entry.event)
+                final = base * (1.0 + relevance * RELEVANCE_WEIGHT)
+            scored.append((final, entry))
 
         scored.sort(key=lambda item: item[0], reverse=True)
         return [entry for _, entry in scored[:top_k]]
+
+    def _resolve_similarity(self) -> SimilarityFn:
+        """Return the configured similarity function, defaulting to char Jaccard."""
+        if self._similarity is not None:
+            return self._similarity
+        return char_jaccard
 
     def evict_lowest(self, now: float | None = None) -> int:
         """Evict stale entries and enforce the LRU capacity limit."""

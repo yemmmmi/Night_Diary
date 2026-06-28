@@ -141,3 +141,29 @@ def test_multiturn_insomnia_context_retained(episodic_store: SqliteEpisodicMemor
 
     hits = memory.retrieve_relevant(query="睡眠", now=day3, top_k=2)
     assert any(hit.event == "失眠" for hit in hits)
+
+
+def test_query_relevance_ranks_related_entry_higher(episodic_store: SqliteEpisodicMemoryStore) -> None:
+    """A query-relevant entry should outrank a higher-importance but irrelevant entry."""
+    memory = EpisodicMemory(store=episodic_store, user_id="default")
+    now = time.time()
+
+    # "加班" has higher importance but zero character overlap with "失眠"
+    memory.store(_entry(importance=0.7, timestamp=now, event="加班", emotion="疲惫"))
+    # "失眠" has lower importance but shares "眠" with the query "睡眠"
+    memory.store(_entry(importance=0.6, timestamp=now, event="失眠", emotion="焦虑"))
+
+    hits = memory.retrieve_relevant(query="睡眠", now=now, top_k=2)
+    assert hits[0].event == "失眠"
+
+
+def test_empty_query_keeps_importance_order(episodic_store: SqliteEpisodicMemoryStore) -> None:
+    """Without a query, pure importance×decay ranking is preserved."""
+    memory = EpisodicMemory(store=episodic_store, user_id="default")
+    now = time.time()
+
+    memory.store(_entry(importance=0.6, timestamp=now, event="失眠"))
+    memory.store(_entry(importance=0.9, timestamp=now, event="加班"))
+
+    hits = memory.retrieve_relevant(query="", now=now, top_k=2)
+    assert hits[0].event == "加班"

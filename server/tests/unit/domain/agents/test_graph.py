@@ -89,7 +89,9 @@ def _make_graph(
     worker_timeout_s: float = 30.0,
 ) -> Any:
     supervisor = SupervisorAgent(
-        StubIntentClassifier(IntentResult(intent_category=intent, confidence=confidence)),
+        StubIntentClassifier(
+            IntentResult(intent_category=intent, confidence=confidence, need_retrieval=True)
+        ),
         create_default_registry(InMemorySkillActivationTracer()),
         llm=None,
         decision_logger=InMemoryAgentDecisionLogger(),
