@@ -57,7 +57,7 @@ def _make_supervisor(
     decision_logger = InMemoryAgentDecisionLogger()
     skill_tracer = InMemorySkillActivationTracer()
     classifier = classifier or StubIntentClassifier(
-        IntentResult(intent_category=intent, confidence=confidence)
+        IntentResult(intent_category=intent, confidence=confidence, need_retrieval=True)
     )
     supervisor = SupervisorAgent(
         classifier,
@@ -209,6 +209,51 @@ async def test_synthesize_single_output_skips_llm(fake_llm: Any) -> None:
     update = await supervisor.synthesize(state)
     assert update["final_response"] == "只有共情。"
     assert not fake_llm.calls
+
+
+async def test_synthesize_empathy_plus_retrieval_skips_llm(fake_llm: Any) -> None:
+    """retrieval_context was already consumed by empathy — no need to re-merge."""
+    supervisor, _, _ = _make_supervisor(llm=fake_llm)
+    state = {
+        "empathy_response": "我理解你今天的疲惫。",
+        "retrieval_context": "你曾在 Day1 提到加班…",
+    }
+    update = await supervisor.synthesize(state)
+    assert update["final_response"] == "我理解你今天的疲惫。"
+    assert not fake_llm.calls  # LLM synthesize was not invoked
+
+
+async def test_classify_need_retrieval_false_strips_retrieval() -> None:
+    """When classifier says need_retrieval=False, retrieval worker is not activated."""
+    supervisor, _, _ = _make_supervisor(
+        IntentCategory.EMOTIONAL_SUPPORT.value,
+        classifier=StubIntentClassifier(
+            IntentResult(
+                intent_category=IntentCategory.EMOTIONAL_SUPPORT.value,
+                confidence=0.9,
+                need_retrieval=False,
+            )
+        ),
+    )
+    update = await supervisor.classify({"diary_content": "今天好累，什么都不想做。"})
+    assert "retrieval" not in update["activated_agents"]
+    assert "empathy" in update["activated_agents"]
+
+
+async def test_classify_need_retrieval_true_keeps_retrieval() -> None:
+    """When classifier says need_retrieval=True, routing table is honoured."""
+    supervisor, _, _ = _make_supervisor(
+        IntentCategory.EMOTIONAL_SUPPORT.value,
+        classifier=StubIntentClassifier(
+            IntentResult(
+                intent_category=IntentCategory.EMOTIONAL_SUPPORT.value,
+                confidence=0.9,
+                need_retrieval=True,
+            )
+        ),
+    )
+    update = await supervisor.classify({"diary_content": "昨天又失眠了，和上次一样。"})
+    assert "retrieval" in update["activated_agents"]
 
 
 async def test_synthesize_fallback_when_all_empty() -> None:

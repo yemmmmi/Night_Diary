@@ -29,11 +29,14 @@ class MultiAgentRunResult:
     referenced_memory_count: int = 0
 
 
-def _load_episodic_context(episodic: EpisodicMemory | None) -> list[dict[str, Any]]:
+def _load_episodic_context(
+    episodic: EpisodicMemory | None,
+    query: str = "",
+) -> list[dict[str, Any]]:
     if episodic is None:
         return []
     try:
-        entries = episodic.retrieve_relevant(top_k=5)
+        entries = episodic.retrieve_relevant(query=query, top_k=5)
         return [
             {
                 "event": entry.event,
@@ -63,7 +66,7 @@ def run_multi_agent(
     style_fragment: str | None = None,
 ) -> MultiAgentRunResult:
     """Execute the multi-agent pipeline."""
-    episodic_context = _load_episodic_context(episodic)
+    episodic_context = _load_episodic_context(episodic, query=diary_content)
     long_term_profile: dict[str, Any] = {}
     if long_term is not None:
         try:
@@ -78,6 +81,15 @@ def run_multi_agent(
             str(diary_id),
             UserProfile.model_validate(long_term_profile) if long_term_profile else UserProfile(),
         )
+        # Seed working memory with session data (without episodic_context to
+        # avoid premature compression — the graph handles that in
+        # prepare_compressed_history).
+        ctx = working_memory.context
+        if ctx is not None:
+            working_memory.update_context(
+                ctx,
+                {"diary_content": diary_content, "long_term_profile": long_term_profile},
+            )
 
     initial_state: MultiAgentState = {
         "diary_id": str(diary_id),
@@ -118,6 +130,30 @@ def run_multi_agent(
     final_response = final_state.get("final_response", "")
     if not final_response or not str(final_response).strip():
         final_response = FALLBACK_FEEDBACK
+
+    # Sync final state back to working memory — enforces token limits on
+    # generated context fields and persists the session context.
+    if working_memory is not None and working_memory.is_active:
+        ctx = working_memory.context
+        if ctx is not None:
+            working_memory.update_context(
+                ctx,
+                {
+                    "retrieval_context": final_state.get("retrieval_context", ""),
+                    "empathy_response": final_state.get("empathy_response", ""),
+                    "insight_response": final_state.get("insight_response", ""),
+                    "compressed_history": final_state.get("compressed_history", ""),
+                    "final_response": final_response,
+                },
+            )
+            wm_tokens = working_memory.get_context_tokens_used()
+            if wm_tokens > 0:
+                logger.info(
+                    "WorkingMemory final tokens=%d/%d diary_id=%s",
+                    wm_tokens,
+                    WorkingMemory.MAX_CONTEXT_TOKENS,
+                    diary_id,
+                )
 
     tier = str(final_state.get("tier", "medium"))
     activated_agents = list(final_state.get("activated_agents", []))

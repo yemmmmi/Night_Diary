@@ -11,6 +11,9 @@ from sqlalchemy.orm import Session
 from app.services import conversation_service, diary_service
 from app.services.ai.prompts import CHAT_SYSTEM_PROMPT, CHAT_USER_PROMPT_TEMPLATE, FALLBACK_FEEDBACK
 from app.services.ai.utils import extract_token_usage
+from app.services.memory_gateway import MemoryGateway
+from app.shared.crisis_guard import CrisisGuard, get_crisis_guard
+from app.shared.emotion_estimator import get_emotion_estimator
 from app.shared.errors import ValidationError
 from app.shared.llm import LLMClient, message_text
 
@@ -30,6 +33,8 @@ class ChatReplyResult:
     reply_text: str
     retrieved_diary_ids: list[int]
     retrieved_memory_ids: list[str]
+    is_crisis: bool = False
+    profile_style: str = ""
 
 
 def _normalize_diary_ids(diary_ids: list[int]) -> list[int]:
@@ -127,10 +132,38 @@ def generate_reply(
     content: str,
     diary_ids: list[int],
     auto_retrieve: bool = True,
+    crisis_guard: CrisisGuard | None = None,
 ) -> ChatReplyResult:
-    """Build chat context and generate an assistant reply."""
+    """Build chat context and generate an assistant reply.
+
+    Includes crisis detection (short-circuits to safety resources) and
+    long-term profile loading (preferred_style, recurring_topics) that were
+    previously missing from the conversation scene.
+    """
     pinned_ids = _normalize_diary_ids(diary_ids)
     container.ensure_ai_stack()
+
+    # ── Crisis guard: P0 safety, checked before any LLM call ──
+    guard = crisis_guard or get_crisis_guard()
+    if guard.detect(content):
+        logger.warning("Crisis detected in conversation=%s, returning safety resources", conversation_id)
+        return ChatReplyResult(
+            reply_text=guard.safe_response,
+            retrieved_diary_ids=pinned_ids,
+            retrieved_memory_ids=[],
+            is_crisis=True,
+        )
+
+    # ── Load long-term profile (was missing from scene 2) ──
+    profile_style = ""
+    profile_topics: list[str] = []
+    if container.long_term_memory is not None:
+        try:
+            profile = container.long_term_memory.get_profile("default")
+            profile_style = profile.preferred_response_style or ""
+            profile_topics = list(profile.recurring_topics or [])
+        except Exception as exc:
+            logger.warning("Long-term profile load failed: %s", exc)
 
     pinned_entries = diary_service.get_entries_by_ids(db, pinned_ids)
     if len(pinned_entries) != len(pinned_ids):
@@ -146,6 +179,9 @@ def generate_reply(
     episodic_text, memory_ids = _format_episodic_memories(container, content)
     chat_history = _format_chat_history(db, conversation_id)
 
+    # Include recurring topics in the prompt when available
+    topics_text = "、".join(profile_topics) if profile_topics else "（暂无）"
+
     prompt = (
         f"{CHAT_SYSTEM_PROMPT}\n\n"
         + CHAT_USER_PROMPT_TEMPLATE.format(
@@ -156,6 +192,8 @@ def generate_reply(
             user_message=content.strip(),
         )
     )
+    if profile_style or profile_topics:
+        prompt += f"\n\n【用户画像】偏好风格：{profile_style or '自然'}；近期关注：{topics_text}"
 
     llm: LLMClient | None = container._llm_for_tier(db, "medium", agent_name="chat")
     if llm is None:
@@ -164,6 +202,7 @@ def generate_reply(
             reply_text=FALLBACK_FEEDBACK,
             retrieved_diary_ids=all_context_ids,
             retrieved_memory_ids=memory_ids,
+            profile_style=profile_style,
         )
 
     try:
@@ -171,21 +210,67 @@ def generate_reply(
         reply_text = message_text(response).strip() or FALLBACK_FEEDBACK
         token_info = extract_token_usage(response)
         logger.info(
-            "Chat reply generated: conversation=%s tokens=%s pinned=%s retrieved=%s",
+            "Chat reply generated: conversation=%s tokens=%s pinned=%s retrieved=%s style=%s",
             conversation_id,
             token_info.get("total_tokens_used"),
             pinned_ids,
             retrieved_ids,
+            profile_style or "default",
         )
     except Exception as exc:
         logger.warning("Chat LLM invoke failed: %s", exc)
         reply_text = FALLBACK_FEEDBACK
 
+    # ── Conditional episodic write-back (best-effort) ──
+    _maybe_persist_episodic(container, content=content, reply_text=reply_text)
+
     return ChatReplyResult(
         reply_text=reply_text,
         retrieved_diary_ids=all_context_ids,
         retrieved_memory_ids=memory_ids,
+        profile_style=profile_style,
     )
+
+
+#: Minimum emotion intensity (abs score) to trigger episodic write-back.
+_EPISODIC_WRITE_THRESHOLD = 0.3
+
+
+def _maybe_persist_episodic(
+    container: ServiceContainer,
+    *,
+    content: str,
+    reply_text: str,
+) -> None:
+    """Persist an episodic entry when the turn carries strong emotion.
+
+    Conditions (either triggers):
+    - Emotion score abs value ≥ 0.3 (meaningful positive or negative shift).
+    - Severe signal detected (crisis-level — always write for safety audit trail).
+
+    The write is best-effort: failures are logged and never propagate.
+    """
+    try:
+        estimator = get_emotion_estimator()
+        score = estimator.score(content)
+        if abs(score) < _EPISODIC_WRITE_THRESHOLD and not estimator.has_severe_signal(content):
+            return
+
+        gw = MemoryGateway.from_container(container)
+        emotion_label = estimator.estimate(content).label
+        # Use first 50 chars of user message as event label (heuristic).
+        event_label = content.strip()[:50]
+
+        stored = gw.persist_episodic(
+            event=event_label,
+            emotion=emotion_label,
+            ai_suggestion=reply_text[:200],
+            importance=min(abs(score) + 0.3, 1.0),
+        )
+        if stored:
+            logger.info("Episodic write-back: event=%s emotion=%s score=%.2f", event_label[:20], emotion_label, score)
+    except Exception as exc:
+        logger.warning("Episodic write-back failed (best-effort): %s", exc)
 
 
 # ── Card generation from conversation ─────────────────────────────────

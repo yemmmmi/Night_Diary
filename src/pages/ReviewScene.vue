@@ -101,6 +101,13 @@ function selectEntry(entry: DiaryEntry) {
   router.replace({ name: 'review-detail', params: { diaryId: entry.id } })
 }
 
+function closeDetail() {
+  selectedEntry.value = null
+  selectedDate.value = null
+  analysisStore.clear()
+  router.replace({ name: 'review' })
+}
+
 function exportMarkdown() {
   const entry = selectedEntry.value
   if (!entry) return
@@ -410,54 +417,72 @@ watch(
       </section>
 
       <aside v-if="selectedEntry" class="review-scene__detail">
-        <GlassPanel elevated>
-          <p class="review-scene__detail-date">
-            {{ selectedEntry.date ?? selectedEntry.created_at.slice(0, 10) }}
-          </p>
-          <div v-if="linkedCard" class="review-scene__card-origin">
-            <EmotionChips
-              :emotions="linkedCard.emotions"
-              :emotion="linkedCard.emotion"
-              :size="12"
-            />
-            <CardTypeBadge :card-type="linkedCard.card_type" />
-          </div>
-          <p class="review-scene__detail-summary font-diary">
-            {{ diarySummary(selectedEntry.content, 120, linkedCard?.event_summary) }}
-          </p>
-          <span
-            v-if="diaryStatusLabel(diaryStatus(selectedEntry))"
-            class="review-scene__detail-chip"
-          >
-            {{ diaryStatusLabel(diaryStatus(selectedEntry)) }}
-          </span>
-          <div v-if="showAiPreview" class="review-scene__ai-block">
-            <p class="review-scene__ai-label">回信</p>
-            <p class="review-scene__ai-preview font-diary">{{ aiReplyPreview }}</p>
-          </div>
-          <div class="review-scene__detail-actions">
-            <GameButton variant="secondary" @click="openWrite(selectedEntry)">继续编辑</GameButton>
-            <GameButton
-              v-if="diaryStatus(selectedEntry) !== 'draft'"
-              variant="primary"
-              @click="openAnalysis(selectedEntry)"
+        <Transition name="detail-fade" mode="out-in">
+          <GlassPanel :key="selectedEntry.id" elevated>
+            <button
+              type="button"
+              class="review-scene__detail-close"
+              title="关闭"
+              @click="closeDetail"
             >
-              {{ selectedEntry.ai_ans?.trim() ? '查看回信' : '获取回信' }}
-            </GameButton>
-            <GameButton variant="ghost" @click="exportMarkdown">导出 Markdown</GameButton>
-            <GameButton
-              variant="ghost"
-              class="review-scene__delete-btn"
-              @click="showDeleteConfirm = true"
+              <PhXCircle :size="16" />
+            </button>
+            <p class="review-scene__detail-date">
+              {{ selectedEntry.date ?? selectedEntry.created_at.slice(0, 10) }}
+            </p>
+            <div v-if="linkedCard" class="review-scene__card-origin">
+              <EmotionChips
+                :emotions="linkedCard.emotions"
+                :emotion="linkedCard.emotion"
+                :size="12"
+              />
+              <CardTypeBadge :card-type="linkedCard.card_type" />
+            </div>
+            <p class="review-scene__detail-summary font-diary">
+              {{ diarySummary(selectedEntry.content, 120, linkedCard?.event_summary) }}
+            </p>
+            <span
+              v-if="diaryStatusLabel(diaryStatus(selectedEntry))"
+              class="review-scene__detail-chip"
             >
-              删除日记
-            </GameButton>
-          </div>
-        </GlassPanel>
+              {{ diaryStatusLabel(diaryStatus(selectedEntry)) }}
+            </span>
+            <div v-if="showAiPreview" class="review-scene__ai-block">
+              <p class="review-scene__ai-label">回信</p>
+              <p class="review-scene__ai-preview font-diary">{{ aiReplyPreview }}</p>
+            </div>
+            <div class="review-scene__detail-actions">
+              <GameButton variant="secondary" @click="openWrite(selectedEntry)">继续编辑</GameButton>
+              <GameButton
+                v-if="diaryStatus(selectedEntry) !== 'draft'"
+                variant="primary"
+                @click="openAnalysis(selectedEntry)"
+              >
+                {{ selectedEntry.ai_ans?.trim() ? '查看回信' : '获取回信' }}
+              </GameButton>
+              <GameButton variant="ghost" @click="exportMarkdown">导出 Markdown</GameButton>
+              <GameButton
+                variant="ghost"
+                class="review-scene__delete-btn"
+                @click="showDeleteConfirm = true"
+              >
+                删除日记
+              </GameButton>
+            </div>
+          </GlassPanel>
+        </Transition>
       </aside>
 
       <aside v-else-if="mode === 'calendar' && selectedDate && entriesOnSelectedDate.length > 1" class="review-scene__detail">
         <GlassPanel elevated>
+          <button
+            type="button"
+            class="review-scene__detail-close"
+            title="关闭"
+            @click="closeDetail"
+          >
+            <PhXCircle :size="16" />
+          </button>
           <p class="review-scene__detail-date">{{ selectedDate }}</p>
           <p class="review-scene__multi-hint">这一天有多篇日记，请选择：</p>
           <button
@@ -495,9 +520,22 @@ watch(
 </template>
 
 <style scoped>
+.detail-fade-enter-active,
+.detail-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.detail-fade-enter-from {
+  opacity: 0.5;
+}
+
+.detail-fade-leave-to {
+  opacity: 0;
+}
+
 .review-scene {
   min-height: calc(100vh - 2.5rem);
-  max-width: 56rem;
+  max-width: 64rem;
   margin: 0 auto;
   padding: 1.25rem 1rem 2rem;
 }
@@ -514,7 +552,6 @@ watch(
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-text-primary);
-  flex: 1;
 }
 
 .review-scene__tabs {
@@ -551,9 +588,30 @@ watch(
 
 @media (min-width: 768px) {
   .review-scene__layout {
-    grid-template-columns: 1fr min(18rem, 34%);
+    grid-template-columns: 1fr min(20rem, 34%);
     align-items: start;
   }
+}
+
+.review-scene__detail {
+  position: relative;
+}
+
+.review-scene__detail-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  line-height: 1;
+  z-index: 1;
+}
+
+.review-scene__detail-close:hover {
+  color: var(--color-text-secondary);
 }
 
 .review-scene__detail-date {

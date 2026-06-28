@@ -37,6 +37,7 @@ from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.agents.types import IntentCategory, IntentResult
 from app.domain.skills.registry import SkillRegistry
 from app.domain.skills.types import SkillProfileContext
+from app.shared.crisis_guard import CrisisGuard, get_crisis_guard
 from app.shared.emotion_estimator import EmotionEstimator, get_emotion_estimator
 from app.shared.llm import LLMClient, message_text
 from app.shared.tracing import (
@@ -108,6 +109,7 @@ class SupervisorAgent:
         *,
         llm: LLMClient | None = None,
         emotion_estimator: EmotionEstimator | None = None,
+        crisis_guard: CrisisGuard | None = None,
         decision_logger: AgentDecisionLogger | None = None,
         llm_tracer: LLMCallTracer | None = None,
         model: str = "",
@@ -116,6 +118,7 @@ class SupervisorAgent:
         self._skills = skill_registry
         self._llm = llm
         self._emotion = emotion_estimator or get_emotion_estimator()
+        self._crisis_guard = crisis_guard or get_crisis_guard()
         self._decisions = decision_logger or NoOpAgentDecisionLogger()
         self._tracer = llm_tracer or NoOpLLMCallTracer()
         self._model = model
@@ -144,7 +147,12 @@ class SupervisorAgent:
         is_crisis = self._detect_crisis(diary_content)
         tier = "crisis" if is_crisis else TIER_BY_INTENT.get(intent, "light")
         token_budget = allocate_token_budget(intent, is_crisis=is_crisis)
-        activated_agents = self._route(intent, is_crisis, intent_result.confidence)
+        activated_agents = self._route(
+            intent,
+            is_crisis,
+            intent_result.confidence,
+            need_retrieval=intent_result.need_retrieval,
+        )
 
         self._log_decisions(
             diary_id=diary_id,
@@ -198,10 +206,25 @@ class SupervisorAgent:
         if tier == "crisis" and "empathy" in outputs:
             return {"final_response": outputs["empathy"], "agent_mode": "multi_agent"}
 
-        if self._llm is not None and len(outputs) > 1:
+        # Only call LLM synthesize when multiple content-producing workers
+        # (empathy + insight) need merging. retrieval_context was already
+        # consumed by empathy/insight during generation, so merging it again
+        # is redundant work.
+        content_outputs = {k: v for k, v in outputs.items() if k != "retrieval"}
+
+        if self._llm is not None and len(content_outputs) > 1:
             final_response, usage = await self._llm_synthesize(outputs, state)
             return {"final_response": final_response, "agent_mode": "multi_agent", **usage}
 
+        # Single content worker — its output is already the final reply.
+        if len(content_outputs) == 1:
+            return {
+                "final_response": next(iter(content_outputs.values())),
+                "agent_mode": "multi_agent",
+            }
+
+        # Multiple content workers but no LLM available, or only retrieval
+        # produced output — fall back to simple join.
         return {
             "final_response": self._simple_synthesize(outputs),
             "agent_mode": "multi_agent",
@@ -228,23 +251,34 @@ class SupervisorAgent:
         return context
 
     def _detect_crisis(self, diary_content: str) -> bool:
-        if not diary_content.strip():
-            return False
-        if self._emotion.has_severe_signal(diary_content):
-            logger.warning("supervisor.crisis severe signal detected")
-            return True
-        if self._emotion.score(diary_content) < self._emotion.crisis_threshold:
-            logger.warning("supervisor.crisis low emotion score")
-            return True
-        return False
+        """Delegate to the shared CrisisGuard (same logic, single source of truth)."""
+        return self._crisis_guard.detect(diary_content)
 
     @staticmethod
-    def _route(intent: str, is_crisis: bool, confidence: float) -> tuple[str, ...]:
+    def _route(
+        intent: str,
+        is_crisis: bool,
+        confidence: float,
+        *,
+        need_retrieval: bool = True,
+    ) -> tuple[str, ...]:
+        """Route to workers based on intent, crisis state, and retrieval need.
+
+        ``need_retrieval`` defaults to ``True`` so that the intent-based routing
+        table is honoured when the classifier doesn't explicitly signal that
+        retrieval is unnecessary. When ``False``, the ``retrieval`` worker is
+        stripped — e.g. a short emotional vent ("今天好累") classified as
+        ``emotional_support`` without temporal references doesn't need RAG.
+        """
         if is_crisis:
             return CRISIS_AGENTS
         if confidence < LOW_CONFIDENCE_THRESHOLD:
             return DEFAULT_AGENTS
-        return INTENT_ROUTING.get(intent, DEFAULT_AGENTS)
+        base = INTENT_ROUTING.get(intent, DEFAULT_AGENTS)
+        if not need_retrieval:
+            stripped = tuple(a for a in base if a != "retrieval")
+            return stripped if stripped else DEFAULT_AGENTS
+        return base
 
     def _log_decisions(
         self,
