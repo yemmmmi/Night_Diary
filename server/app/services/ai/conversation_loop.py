@@ -31,7 +31,7 @@ from app.services.ai.prompts import (
     FALLBACK_FEEDBACK,
     TEMPORAL_KEYWORDS,
 )
-from app.services.ai.session_context import SessionContext, get_or_create_session
+from app.services.ai.session_context import get_or_create_session
 from app.services.ai.tool_factory import ToolFn
 from app.services.ai.utils import extract_token_usage, merge_token_info
 from app.shared.llm import LLMClient, message_text
@@ -241,7 +241,7 @@ def run_conversation_loop(
 
 
 __all__ = [
-    "LoopResult",
     "MAX_LOOP_ITERATIONS",
+    "LoopResult",
     "run_conversation_loop",
 ]

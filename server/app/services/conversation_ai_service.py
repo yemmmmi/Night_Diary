@@ -9,8 +9,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.orm import Session
 
 from app.services import conversation_service, diary_service
-from app.services.ai.conversation_loop import LoopResult, run_conversation_loop
-from app.services.ai.prompts import FALLBACK_FEEDBACK
+from app.services.ai.conversation_loop import run_conversation_loop
 from app.services.ai.tool_factory import ToolFn, build_tool_map
 from app.services.memory_gateway import MemoryGateway
 from app.shared.crisis_guard import CrisisGuard, get_crisis_guard

@@ -41,7 +41,7 @@ SimilarityFn = Callable[[str, str], float]
 
 #: Weight of query relevance when blending with importance * decay.
 #: final_score = time_score * (1.0 + relevance * RELEVANCE_WEIGHT)
-#: At 1.0, a perfectly relevant entry doubles its base score — enough to
+#: At 1.0, a perfectly relevant entry doubles its base score -- enough to
 #: overcome a moderate importance gap (e.g. 0.6 relevant > 0.7 irrelevant)
 #: while still preserving the importance-decay ordering when relevance is 0.
 RELEVANCE_WEIGHT = 1.0

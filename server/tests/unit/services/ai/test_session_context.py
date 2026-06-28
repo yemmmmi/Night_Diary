@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from app.services.ai.session_context import (
-    MAX_HISTORY_TOKENS,
     SessionContext,
     UsageAccumulator,
     clear_session,

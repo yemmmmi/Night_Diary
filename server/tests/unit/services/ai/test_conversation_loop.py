@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from app.services.ai.conversation_loop import (
-    LoopResult,
-    MAX_LOOP_ITERATIONS,
     _needs_tool_call,
     _parse_tool_calls,
     run_conversation_loop,
