@@ -12,7 +12,7 @@ from app.domain.memory.episodic import EpisodicMemory
 from app.domain.memory.types import EmotionBaseline, EpisodicEntry, UserProfile
 from app.infrastructure.database import create_db_engine, create_session_factory, init_db
 from app.infrastructure.memory_repository import SqliteEpisodicMemoryStore
-from app.services.memory_gateway import LoadedMemory, MemoryGateway, SessionType
+from app.services.memory_gateway import MemoryGateway, SessionType
 
 
 @pytest.fixture

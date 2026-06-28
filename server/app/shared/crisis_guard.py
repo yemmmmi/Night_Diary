@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 #: Pre-built response returned when crisis is detected.
 #: Appended to the empathy reply in scene 1, returned directly in scene 2.
 CRISIS_SAFE_RESPONSE = (
-    "我能感受到你现在正承受着巨大的痛苦，我在这里陪着你。\n"
-    "你的感受是真实的，但请不要独自承受这些。\n\n"
+    "我能感受到你现在正承受着巨大的痛苦, 我在这里陪着你。\n"
+    "你的感受是真实的, 但请不要独自承受这些。\n\n"
     + CRISIS_RESOURCES
 )
 

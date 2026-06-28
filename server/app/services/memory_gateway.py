@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from app.domain.memory.types import EpisodicEntry
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SessionType(str, Enum):
+class SessionType(StrEnum):
     """Distinguishes the two conversation scenarios."""
 
     DIARY = "diary"   # Scene 1: single diary, single analysis turn

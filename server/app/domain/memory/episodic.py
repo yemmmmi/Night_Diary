@@ -39,8 +39,8 @@ logger = logging.getLogger(__name__)
 
 SimilarityFn = Callable[[str, str], float]
 
-#: Weight of query relevance when blending with importance×decay.
-#: final_score = time_score × (1.0 + relevance × RELEVANCE_WEIGHT)
+#: Weight of query relevance when blending with importance * decay.
+#: final_score = time_score * (1.0 + relevance * RELEVANCE_WEIGHT)
 #: At 1.0, a perfectly relevant entry doubles its base score — enough to
 #: overcome a moderate importance gap (e.g. 0.6 relevant > 0.7 irrelevant)
 #: while still preserving the importance-decay ordering when relevance is 0.
@@ -128,7 +128,7 @@ class EpisodicMemory:
         top_k: int = 5,
         now: float | None = None,
     ) -> list[EpisodicEntry]:
-        """Return top entries ranked by importance × decay, boosted by query relevance.
+        """Return top entries ranked by importance * decay, boosted by query relevance.
 
         When *query* is non-empty, entries whose ``event`` text overlaps with the
         query receive a multiplicative boost (up to ``1 + RELEVANCE_WEIGHT``).

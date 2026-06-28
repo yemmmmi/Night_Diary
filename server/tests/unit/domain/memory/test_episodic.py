@@ -158,7 +158,7 @@ def test_query_relevance_ranks_related_entry_higher(episodic_store: SqliteEpisod
 
 
 def test_empty_query_keeps_importance_order(episodic_store: SqliteEpisodicMemoryStore) -> None:
-    """Without a query, pure importance×decay ranking is preserved."""
+    """Without a query, pure importance * decay ranking is preserved."""
     memory = EpisodicMemory(store=episodic_store, user_id="default")
     now = time.time()
 
