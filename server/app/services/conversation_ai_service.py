@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.orm import Session
 
 from app.services import conversation_service, diary_service
-from app.services.ai.prompts import CHAT_SYSTEM_PROMPT, CHAT_USER_PROMPT_TEMPLATE, FALLBACK_FEEDBACK
-from app.services.ai.utils import extract_token_usage
+from app.services.ai.conversation_loop import LoopResult, run_conversation_loop
+from app.services.ai.prompts import FALLBACK_FEEDBACK
+from app.services.ai.tool_factory import ToolFn, build_tool_map
 from app.services.memory_gateway import MemoryGateway
 from app.shared.crisis_guard import CrisisGuard, get_crisis_guard
 from app.shared.emotion_estimator import get_emotion_estimator
@@ -23,7 +24,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MAX_PINNED_DIARIES = 3
-MAX_HISTORY_MESSAGES = 10
 MAX_RETRIEVAL_RESULTS = 3
 MAX_EPISODIC_RESULTS = 3
 
@@ -35,6 +35,9 @@ class ChatReplyResult:
     retrieved_memory_ids: list[str]
     is_crisis: bool = False
     profile_style: str = ""
+    token_info: dict[str, int] | None = None
+    stop_reason: str = ""
+    tool_calls_made: list[str] | None = None
 
 
 def _normalize_diary_ids(diary_ids: list[int]) -> list[int]:
@@ -48,21 +51,6 @@ def _normalize_diary_ids(diary_ids: list[int]) -> list[int]:
     if len(normalized) > MAX_PINNED_DIARIES:
         raise ValidationError(f"最多引用 {MAX_PINNED_DIARIES} 篇日记")
     return normalized
-
-
-def _format_chat_history(db: Session, conversation_id: str) -> str:
-    rows = conversation_service.list_messages(db, conversation_id)
-    if not rows:
-        return "（暂无历史）"
-    recent = rows[-MAX_HISTORY_MESSAGES:]
-    lines: list[str] = []
-    for row in recent:
-        role = "用户" if row.role == "user" else "回信者"
-        content = (row.content or "").strip().replace("\n", " ")
-        if len(content) > 300:
-            content = content[:300] + "..."
-        lines.append(f"{role}：{content}")
-    return "\n".join(lines)
 
 
 def _retrieve_related_diary_ids(
@@ -124,6 +112,18 @@ def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[
     return "\n".join(lines), [mid for mid in memory_ids if mid]
 
 
+def _build_tools(db: Session, container: ServiceContainer) -> dict[str, ToolFn] | None:
+    """Build the tool map for the Agentic Loop, or None if unavailable."""
+    try:
+        llm = container._llm_for_tier(db, "light", agent_name="tool")
+        if llm is None or container.retriever is None:
+            return None
+        return build_tool_map(db, retriever=container.retriever, llm=llm)
+    except Exception as exc:
+        logger.warning("Tool map build failed: %s", exc)
+        return None
+
+
 def generate_reply(
     db: Session,
     container: ServiceContainer,
@@ -134,16 +134,19 @@ def generate_reply(
     auto_retrieve: bool = True,
     crisis_guard: CrisisGuard | None = None,
 ) -> ChatReplyResult:
-    """Build chat context and generate an assistant reply.
+    """Build chat context and generate an assistant reply via the Agentic Loop.
 
-    Includes crisis detection (short-circuits to safety resources) and
-    long-term profile loading (preferred_style, recurring_topics) that were
-    previously missing from the conversation scene.
+    Flow (5-stage framework):
+    1. Session routing: SessionContext maintains history/usage/profile across turns
+    2. Input processing: normalize, crisis detection
+    3. Context assembly: pinned diaries + RAG retrieval + episodic + profile
+    4. Agentic Loop: model call → tool check → execute → backfill → repeat
+    5. Output: reply + token_info + stop_reason + episodic write-back
     """
     pinned_ids = _normalize_diary_ids(diary_ids)
     container.ensure_ai_stack()
 
-    # ── Crisis guard: P0 safety, checked before any LLM call ──
+    # ── Stage 2: Crisis guard (P0 safety) ──
     guard = crisis_guard or get_crisis_guard()
     if guard.detect(content):
         logger.warning("Crisis detected in conversation=%s, returning safety resources", conversation_id)
@@ -154,21 +157,12 @@ def generate_reply(
             is_crisis=True,
         )
 
-    # ── Load long-term profile (was missing from scene 2) ──
-    profile_style = ""
-    profile_topics: list[str] = []
-    if container.long_term_memory is not None:
-        try:
-            profile = container.long_term_memory.get_profile("default")
-            profile_style = profile.preferred_response_style or ""
-            profile_topics = list(profile.recurring_topics or [])
-        except Exception as exc:
-            logger.warning("Long-term profile load failed: %s", exc)
-
+    # ── Validate pinned diaries ──
     pinned_entries = diary_service.get_entries_by_ids(db, pinned_ids)
     if len(pinned_entries) != len(pinned_ids):
         raise ValidationError("引用的日记不存在或已被删除")
 
+    # ── Stage 3: Context assembly ──
     exclude_ids = set(pinned_ids)
     retrieved_ids: list[int] = []
     if auto_retrieve:
@@ -177,58 +171,49 @@ def generate_reply(
     all_context_ids = pinned_ids + [did for did in retrieved_ids if did not in pinned_ids]
 
     episodic_text, memory_ids = _format_episodic_memories(container, content)
-    chat_history = _format_chat_history(db, conversation_id)
+    pinned_text = _format_retrieved_diaries(db, pinned_ids)
+    retrieved_text = _format_retrieved_diaries(db, retrieved_ids)
 
-    # Include recurring topics in the prompt when available
-    topics_text = "、".join(profile_topics) if profile_topics else "（暂无）"
+    # ── Build tools (task 12: MCP/Skills integration) ──
+    tools = _build_tools(db, container)
 
-    prompt = (
-        f"{CHAT_SYSTEM_PROMPT}\n\n"
-        + CHAT_USER_PROMPT_TEMPLATE.format(
-            pinned_diaries=_format_retrieved_diaries(db, pinned_ids),
-            retrieved_diaries=_format_retrieved_diaries(db, retrieved_ids),
-            episodic_memories=episodic_text,
-            chat_history=chat_history,
-            user_message=content.strip(),
-        )
+    # ── Stage 4: Agentic Loop ──
+    loop_result = run_conversation_loop(
+        db,
+        container,
+        conversation_id=conversation_id,
+        content=content,
+        pinned_diaries_text=pinned_text,
+        retrieved_diaries_text=retrieved_text,
+        episodic_text=episodic_text,
+        memory_ids=memory_ids,
+        tools=tools,
+        crisis_guard=guard,
     )
-    if profile_style or profile_topics:
-        prompt += f"\n\n【用户画像】偏好风格：{profile_style or '自然'}；近期关注：{topics_text}"
 
-    llm: LLMClient | None = container._llm_for_tier(db, "medium", agent_name="chat")
-    if llm is None:
-        logger.warning("Chat LLM unavailable; returning fallback")
-        return ChatReplyResult(
-            reply_text=FALLBACK_FEEDBACK,
-            retrieved_diary_ids=all_context_ids,
-            retrieved_memory_ids=memory_ids,
-            profile_style=profile_style,
-        )
+    # ── Stage 5: Output + episodic write-back ──
+    _maybe_persist_episodic(container, content=content, reply_text=loop_result.reply_text)
 
-    try:
-        response = llm.invoke(prompt)
-        reply_text = message_text(response).strip() or FALLBACK_FEEDBACK
-        token_info = extract_token_usage(response)
-        logger.info(
-            "Chat reply generated: conversation=%s tokens=%s pinned=%s retrieved=%s style=%s",
-            conversation_id,
-            token_info.get("total_tokens_used"),
-            pinned_ids,
-            retrieved_ids,
-            profile_style or "default",
-        )
-    except Exception as exc:
-        logger.warning("Chat LLM invoke failed: %s", exc)
-        reply_text = FALLBACK_FEEDBACK
+    # Get profile style from session (cached, loaded once)
+    from app.services.ai.session_context import get_or_create_session
+    session = get_or_create_session(conversation_id, container=container)
 
-    # ── Conditional episodic write-back (best-effort) ──
-    _maybe_persist_episodic(container, content=content, reply_text=reply_text)
+    logger.info(
+        "Chat reply generated: conversation=%s tokens=%s tools=%s stop=%s",
+        conversation_id,
+        loop_result.token_info.get("total_tokens_used", 0),
+        loop_result.tool_calls_made,
+        loop_result.stop_reason,
+    )
 
     return ChatReplyResult(
-        reply_text=reply_text,
+        reply_text=loop_result.reply_text,
         retrieved_diary_ids=all_context_ids,
         retrieved_memory_ids=memory_ids,
-        profile_style=profile_style,
+        profile_style=session.profile_style,
+        token_info=loop_result.token_info,
+        stop_reason=loop_result.stop_reason,
+        tool_calls_made=loop_result.tool_calls_made,
     )
 
 

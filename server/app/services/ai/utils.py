@@ -58,4 +58,6 @@ def format_diary_result(item: dict[str, Any]) -> str:
 
 
 def merge_token_info(base: dict[str, int], extra: dict[str, int]) -> dict[str, int]:
-    return {key: base.get(key, 0) + extra.get(key, 0) for key in base}
+    """Merge two token-info dicts, summing shared keys and keeping unique ones."""
+    all_keys = set(base) | set(extra)
+    return {key: base.get(key, 0) + extra.get(key, 0) for key in all_keys}

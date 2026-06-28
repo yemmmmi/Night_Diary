@@ -94,6 +94,7 @@ def add_message(
     content: str,
     retrieved_diary_ids: list[int] | None = None,
     retrieved_memory_ids: list[str] | None = None,
+    token_info: dict | None = None,
 ) -> ChatMessageRow:
     row = ChatMessageRow(
         id=_new_id(),
@@ -102,6 +103,7 @@ def add_message(
         content=content,
         retrieved_diary_ids=json.dumps(retrieved_diary_ids) if retrieved_diary_ids else None,
         retrieved_memory_ids=json.dumps(retrieved_memory_ids) if retrieved_memory_ids else None,
+        token_info=json.dumps(token_info) if token_info else None,
         created_at=_now(),
     )
     db.add(row)
@@ -118,6 +120,7 @@ def add_user_message_and_reply(
     reply_content: str,
     retrieved_diary_ids: list[int] | None = None,
     retrieved_memory_ids: list[str] | None = None,
+    token_info: dict | None = None,
 ) -> tuple[ChatMessageRow, ChatMessageRow]:
     user_msg = add_message(db, conversation_id=conversation_id, role="user", content=content)
     reply_msg = add_message(
@@ -127,6 +130,7 @@ def add_user_message_and_reply(
         content=reply_content,
         retrieved_diary_ids=retrieved_diary_ids,
         retrieved_memory_ids=retrieved_memory_ids,
+        token_info=token_info,
     )
     touch_conversation(db, conversation_id)
 
