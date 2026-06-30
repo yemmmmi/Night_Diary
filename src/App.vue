@@ -158,6 +158,7 @@ const statusBanner = computed(() => {
   align-items: flex-end;
   justify-content: center;
   padding: 1rem;
+  pointer-events: none;
 }
 
 .app-error-card {
