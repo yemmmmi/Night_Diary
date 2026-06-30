@@ -7,8 +7,9 @@ use std::time::Duration;
 
 use tauri::Emitter;
 
-const HEALTH_INTERVAL_MS: u64 = 100;
-const HEALTH_MAX_ATTEMPTS: u32 = 150;
+// 200ms × 600 = 120 seconds total (sidecar needs 30+ seconds to start)
+const HEALTH_INTERVAL_MS: u64 = 200;
+const HEALTH_MAX_ATTEMPTS: u32 = 600;
 const SHUTDOWN_GRACE_SECS: u64 = 3;
 
 pub struct BackendProcess {
@@ -18,6 +19,25 @@ pub struct BackendProcess {
 impl BackendProcess {
     pub fn child_mut(&mut self) -> &mut Child {
         &mut self.child
+    }
+}
+
+/// Write a log message to both stderr (dev console) and the log file (release debug).
+fn log_msg(msg: &str) {
+    eprintln!("{msg}");
+    if let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+    {
+        let log_path = dir.join("nightdiary.log");
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
+            let _ = writeln!(f, "{msg}");
+        }
     }
 }
 
@@ -130,10 +150,43 @@ fn sidecar_executable() -> Option<PathBuf> {
         "nightdiary-backend"
     };
 
-    std::env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(|dir| dir.join(exe_name)))
-        .filter(|path| path.exists())
+    let current_exe = std::env::current_exe().ok();
+    log_msg(&format!("[tauri] current_exe: {:?}", current_exe));
+
+    // ONEDIR: prefer bundled resources/nightdiary-backend/ directory
+    if let Some(ref exe) = current_exe {
+        if let Some(parent) = exe.parent() {
+            let resource_path = parent.join("resources").join("nightdiary-backend").join(exe_name);
+            log_msg(&format!(
+                "[tauri] checking onedir path: {} (exists={})",
+                resource_path.display(),
+                resource_path.exists()
+            ));
+            if resource_path.exists() {
+                log_msg(&format!("[tauri] sidecar found at: {}", resource_path.display()));
+                return Some(resource_path);
+            }
+        }
+    }
+
+    // Fallback: old externalBin layout (same dir as main exe)
+    if let Some(ref exe) = current_exe {
+        if let Some(parent) = exe.parent() {
+            let fallback = parent.join(exe_name);
+            log_msg(&format!(
+                "[tauri] checking fallback path: {} (exists={})",
+                fallback.display(),
+                fallback.exists()
+            ));
+            if fallback.exists() {
+                log_msg(&format!("[tauri] sidecar found at fallback: {}", fallback.display()));
+                return Some(fallback);
+            }
+        }
+    }
+
+    log_msg("[tauri] ERROR: sidecar executable not found in any location!");
+    None
 }
 
 /// Spawn the Python FastAPI sidecar on the given port and data directory.
@@ -141,15 +194,20 @@ pub fn spawn_backend(port: u16, data_dir: &str) -> Result<BackendProcess, String
     std::fs::create_dir_all(data_dir).map_err(|err| format!("create data dir: {err}"))?;
 
     let child = if cfg!(debug_assertions) {
+        log_msg("[tauri] spawn mode: DEV (debug assertions enabled)");
         spawn_dev_backend(port, data_dir)?
     } else if let Some(sidecar) = sidecar_executable() {
+        log_msg("[tauri] spawn mode: RELEASE (sidecar found)");
         spawn_release_backend(&sidecar, port, data_dir)?
     } else {
+        log_msg("[tauri] spawn mode: DEV FALLBACK (no sidecar found, trying python)");
         spawn_dev_backend(port, data_dir)?
     };
 
-    // Log spawn immediately; health polling begins while Python imports modules.
-    eprintln!("[tauri] backend process spawned, waiting for /health on port {port}");
+    log_msg(&format!(
+        "[tauri] backend process spawned (pid={}), waiting for /health on port {port}",
+        child.id()
+    ));
 
     Ok(BackendProcess { child })
 }
@@ -164,7 +222,9 @@ fn spawn_dev_backend(port: u16, data_dir: &str) -> Result<Child, String> {
     }
 
     let python = python_executable();
-    eprintln!("[tauri] starting backend: {python} -m app.main --port {port} --data-dir {data_dir}");
+    log_msg(&format!(
+        "[tauri] starting backend: {python} -m app.main --port {port} --data-dir {data_dir}"
+    ));
 
     let mut child = Command::new(&python)
         .args([
@@ -193,7 +253,7 @@ fn spawn_dev_backend(port: u16, data_dir: &str) -> Result<Child, String> {
             let reader = std::io::BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(line) = line {
-                    eprintln!("[python] {line}");
+                    log_msg(&format!("[python] {line}"));
                 }
             }
         });
@@ -205,7 +265,7 @@ fn spawn_dev_backend(port: u16, data_dir: &str) -> Result<Child, String> {
             let reader = std::io::BufReader::new(stdout);
             for line in reader.lines() {
                 if let Ok(line) = line {
-                    eprintln!("[python:out] {line}");
+                    log_msg(&format!("[python:out] {line}"));
                 }
             }
         });
@@ -215,12 +275,77 @@ fn spawn_dev_backend(port: u16, data_dir: &str) -> Result<Child, String> {
 }
 
 fn spawn_release_backend(sidecar: &Path, port: u16, data_dir: &str) -> Result<Child, String> {
-    Command::new(sidecar)
+    log_msg(&format!(
+        "[tauri] starting sidecar: {} --port {} --data-dir {}",
+        sidecar.display(),
+        port,
+        data_dir
+    ));
+
+    let sidecar_dir = sidecar.parent().unwrap_or(Path::new(".")).to_path_buf();
+
+    let mut child = match Command::new(sidecar)
         .args(["--port", &port.to_string(), "--data-dir", data_dir])
+        .env("NO_PROXY", "127.0.0.1,localhost")
+        .env("no_proxy", "127.0.0.1,localhost")
+        .env("HTTP_PROXY", "")
+        .env("HTTPS_PROXY", "")
+        .env("PYTHONUNBUFFERED", "1")
+        .current_dir(&sidecar_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|err| format!("spawn sidecar binary: {err}"))
+    {
+        Ok(c) => c,
+        Err(err) => {
+            log_msg(&format!("[tauri] FAILED to spawn sidecar: {err}"));
+            return Err(format!("spawn sidecar binary: {err}"));
+        }
+    };
+    log_msg(&format!("[tauri] sidecar process started (pid={})", child.id()));
+
+    // Check if process exited immediately (crash detection)
+    std::thread::sleep(Duration::from_millis(500));
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            log_msg(&format!(
+                "[tauri] CRITICAL: sidecar exited immediately with code {status}"
+            ));
+            return Err(format!("sidecar exited immediately: {status}"));
+        }
+        Ok(None) => {
+            log_msg("[tauri] sidecar process is running");
+        }
+        Err(err) => {
+            log_msg(&format!("[tauri] failed to check sidecar status: {err}"));
+        }
+    }
+
+    // Drain stderr/stdout in background to prevent pipe buffer from blocking
+    if let Some(stderr) = child.stderr.take() {
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let reader = std::io::BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    log_msg(&format!("[python] {line}"));
+                }
+            }
+        });
+    }
+    if let Some(stdout) = child.stdout.take() {
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let reader = std::io::BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    log_msg(&format!("[python:out] {line}"));
+                }
+            }
+        });
+    }
+
+    Ok(child)
 }
 
 fn health_client() -> Result<reqwest::blocking::Client, String> {
@@ -249,24 +374,47 @@ pub fn health_check_once(port: u16) -> bool {
 pub fn health_poll(port: u16, app: Option<&tauri::AppHandle>) -> Result<(), String> {
     let client = health_client()?;
     let url = format!("http://127.0.0.1:{port}/health");
+    log_msg(&format!(
+        "[tauri] health_poll start: polling {} up to {} attempts ({}s timeout)",
+        url,
+        HEALTH_MAX_ATTEMPTS,
+        HEALTH_MAX_ATTEMPTS as u64 * HEALTH_INTERVAL_MS / 1000
+    ));
 
     for attempt in 1..=HEALTH_MAX_ATTEMPTS {
         if let Some(handle) = app {
             let _ = handle.emit("backend-startup-progress", attempt);
         }
         match client.get(&url).send() {
-            Ok(response) if response.status().is_success() => return Ok(()),
-            Ok(response) => eprintln!(
-                "backend health attempt {attempt}/{HEALTH_MAX_ATTEMPTS}: HTTP {}",
-                response.status()
-            ),
-            Err(err) => eprintln!(
-                "backend health attempt {attempt}/{HEALTH_MAX_ATTEMPTS}: {err}"
-            ),
+            Ok(response) if response.status().is_success() => {
+                log_msg(&format!(
+                    "[tauri] health_poll: OK on attempt {attempt}/{HEALTH_MAX_ATTEMPTS}"
+                ));
+                return Ok(());
+            }
+            Ok(response) => {
+                if attempt <= 5 || attempt % 50 == 0 {
+                    log_msg(&format!(
+                        "backend health attempt {attempt}/{HEALTH_MAX_ATTEMPTS}: HTTP {}",
+                        response.status()
+                    ));
+                }
+            }
+            Err(err) => {
+                if attempt <= 5 || attempt % 50 == 0 {
+                    log_msg(&format!(
+                        "backend health attempt {attempt}/{HEALTH_MAX_ATTEMPTS}: {err}"
+                    ));
+                }
+            }
         }
         std::thread::sleep(Duration::from_millis(HEALTH_INTERVAL_MS));
     }
 
+    log_msg(&format!(
+        "[tauri] health_poll: TIMED OUT after {} attempts",
+        HEALTH_MAX_ATTEMPTS
+    ));
     Err(format!(
         "backend health check timed out after {} ms",
         HEALTH_MAX_ATTEMPTS as u64 * HEALTH_INTERVAL_MS
@@ -288,7 +436,7 @@ pub fn dev_backend_port() -> Option<u16> {
 pub fn try_attach_dev_backend() -> Option<u16> {
     let port = dev_backend_port()?;
     if health_check_once(port) {
-        eprintln!("[tauri] attached to existing dev backend on port {port}");
+        log_msg(&format!("[tauri] attached to existing dev backend on port {port}"));
         Some(port)
     } else {
         None

@@ -168,11 +168,46 @@ fn start_backend(app: tauri::AppHandle, port: u16, data_dir: String) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Write a log message to both stderr (dev console) and the log file (release debug).
+fn log_msg(msg: &str) {
+    eprintln!("{msg}");
+    if let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+    {
+        let log_path = dir.join("nightdiary.log");
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
+            let _ = writeln!(f, "{msg}");
+        }
+    }
+}
+
 pub fn run() {
+    // Clear previous log on each start
+    if let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+    {
+        let _ = std::fs::write(dir.join("nightdiary.log"), "");
+    }
+    log_msg("[tauri] === 夜记 starting ===");
     let data_dir = default_data_dir();
+    log_msg(&format!("[tauri] data_dir: {data_dir}"));
     let (backend_port, use_external) = match try_attach_dev_backend() {
-        Some(port) => (port, true),
-        None => (allocate_port(), false),
+        Some(port) => {
+            log_msg(&format!("[tauri] attached to existing dev backend on port {port}"));
+            (port, true)
+        }
+        None => {
+            let port = allocate_port();
+            log_msg(&format!("[tauri] no dev backend found, allocated port {port}"));
+            (port, false)
+        }
     };
 
     tauri::Builder::default()
