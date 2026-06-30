@@ -7,7 +7,12 @@ edition = "2021"
 
 [lib]
 name = "night_diary_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["rlib"]
+
+# NOTE: staticlib/cdylib were removed because they are only needed for mobile
+# (Android/iOS) builds. On Windows desktop they generate 467MB+ lib artifacts
+# that trigger E0786 corrupt metadata errors. Re-add them if mobile support is
+# needed: crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
