@@ -1,29 +1,31 @@
 /**
- * Copy PyInstaller output into src-tauri/binaries/ for Tauri externalBin bundling.
+ * Copy PyInstaller ONEDIR output into src-tauri/resources/ for Tauri bundling.
  *
- * Usage (from repo root, after `pyinstaller server/build.spec`):
+ * ONEDIR layout: dist/nightdiary-backend/nightdiary-backend.exe (+ _internal/)
+ * Tauri bundles the entire directory as resources.
+ *
+ * Usage (from repo root, after `python -m PyInstaller server/build.spec`):
  *   node scripts/prepare-sidecar.mjs
  */
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
 
-const triple = process.env.TAURI_TARGET_TRIPLE ?? 'x86_64-pc-windows-msvc'
-const isWindows = triple.includes('windows')
-const sidecarName = isWindows ? 'nightdiary-backend.exe' : 'nightdiary-backend'
-const src = path.join(ROOT, 'dist', sidecarName)
-const destDir = path.join(ROOT, 'src-tauri', 'binaries')
-const dest = path.join(destDir, `nightdiary-backend-${triple}${isWindows ? '.exe' : ''}`)
+const onedirDir = path.join(ROOT, 'dist', 'nightdiary-backend')
+const destDir = path.join(ROOT, 'src-tauri', 'resources', 'nightdiary-backend')
 
-if (!existsSync(src)) {
-  console.error(`Sidecar not found: ${src}`)
-  console.error('Run: pyinstaller server/build.spec')
+if (!existsSync(onedirDir)) {
+  console.error(`PyInstaller onedir output not found: ${onedirDir}`)
+  console.error('Run: python -m PyInstaller server/build.spec')
   process.exit(1)
 }
 
+if (existsSync(destDir)) {
+  rmSync(destDir, { recursive: true, force: true })
+}
 mkdirSync(destDir, { recursive: true })
-copyFileSync(src, dest)
-console.log(`Copied sidecar → ${dest}`)
+cpSync(onedirDir, destDir, { recursive: true, force: true })
+console.log(`Copied onedir sidecar → ${destDir}`)
