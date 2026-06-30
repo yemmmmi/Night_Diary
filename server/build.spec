@@ -1,17 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for the Night Diary Python sidecar.
+"""PyInstaller spec for the Night Diary Python sidecar — ONEDIR mode.
+
+Only collects packages that are actually imported by the server code.
+The anaconda base env contains hundreds of unrelated scientific packages
+that must NOT be bundled.
 
 Build (from repo root)::
 
-    pyinstaller server/build.spec
+    python -m PyInstaller server/build.spec
 
 Output::
 
-    dist/nightdiary-backend.exe   # Windows (repo root)
-    dist/nightdiary-backend       # Linux / macOS
-
-When Phase B AI dependencies are installed, ``collect_all`` hooks bundle their
-data files and native libraries (onnxruntime DLLs, tokenizers, etc.).
+    dist/nightdiary-backend/nightdiary-backend.exe   (+ _internal/)
 """
 
 from __future__ import annotations
@@ -20,25 +20,40 @@ import os
 
 block_cipher = None
 
-# task.md phase-a-5 / E-1: hidden imports for the Phase B AI stack + runtime deps.
+# --- Hidden imports that PyInstaller's static analysis cannot discover ---
 HIDDEN_IMPORTS: list[str] = [
+    # Web framework
+    "uvicorn.logging",
+    "uvicorn.loops",
+    "uvicorn.loops.auto",
+    "uvicorn.protocols",
+    "uvicorn.protocols.http",
+    "uvicorn.protocols.http.auto",
+    "uvicorn.protocols.websockets",
+    "uvicorn.protocols.websockets.auto",
+    "uvicorn.lifespan.on",
+    "uvicorn.lifespan.off",
+    # Database
+    "sqlalchemy.dialects.sqlite",
+    "aiosqlite",
+    "pydantic_settings",
+    # ChromaDB runtime
     "chromadb",
-    "onnxruntime",
+    # AI / embedding (lazy-loaded at runtime, but needed in bundle)
     "sentence_transformers",
-    "jieba",
-    "torch",
-    "tokenizers",
-    "transformers",
+    "onnxruntime",
     "huggingface_hub",
     "safetensors",
-    "sklearn",
-    "scipy",
-    "numpy",
+    "tokenizers",
+    "transformers",
+    # Chinese tokenisation
+    "jieba",
+    # LLM
     "langchain_text_splitters",
     "langchain_openai",
     "langchain_core",
     "openai",
-    "cryptography",
+    # HTTP stack
     "httpx",
     "httpcore",
     "anyio",
@@ -53,29 +68,12 @@ HIDDEN_IMPORTS: list[str] = [
     "tqdm",
     "regex",
     "yaml",
-    "tiktoken",
-    # FastAPI / uvicorn runtime (one-file bundle)
-    "uvicorn.logging",
-    "uvicorn.loops",
-    "uvicorn.loops.auto",
-    "uvicorn.protocols",
-    "uvicorn.protocols.http",
-    "uvicorn.protocols.http.auto",
-    "uvicorn.protocols.websockets",
-    "uvicorn.protocols.websockets.auto",
-    "uvicorn.lifespan.on",
-    "uvicorn.lifespan.off",
-    "sqlalchemy.dialects.sqlite",
-    "aiosqlite",
-    "pydantic_settings",
+    # Crypto
+    "cryptography",
 ]
 
-datas: list[tuple[str, str]] = []
-binaries: list[tuple[str, str, str]] = []
-hiddenimports = list(HIDDEN_IMPORTS)
-
-# Packages whose native binaries / data should be collected when installed.
-_COLLECT_PACKAGES = (
+# --- Packages whose data / native libs we need at runtime ---
+_COLLECT_DATA_PACKAGES = (
     "uvicorn",
     "fastapi",
     "starlette",
@@ -93,18 +91,105 @@ _COLLECT_PACKAGES = (
     "cryptography",
 )
 
+# --- Exclude unrelated anaconda base packages ---
+EXCLUDES: list[str] = [
+    # Unused ML backends (we only use PyTorch)
+    "tensorflow",
+    "tensorflow_intel",
+    "tensorboard",
+    "tensorboard_data_server",
+    "keras",
+    "jax",
+    "jaxlib",
+    "flax",
+    # Anaconda bloat — not imported by our code
+    "botocore",
+    "boto3",
+    "s3transfer",
+    "awscli",
+    "PyQt5",
+    "PyQt6",
+    "PySide2",
+    "PySide6",
+    "panel",
+    "bokeh",
+    "numba",
+    "llvmlite",
+    "jupyterlab",
+    "notebook",
+    "jupyter_server",
+    "nbconvert",
+    "nbformat",
+    "ipykernel",
+    "ipywidgets",
+    "traitlets",
+    "astropy",
+    "skimage",
+    "scikit_image",
+    "sphinx",
+    "matplotlib",
+    "pandas",
+    "pyarrow",
+    "scipy",
+    "sklearn",
+    "nltk",
+    "nltk_data",
+    "IPython",
+    "ipython",
+    "conda",
+    "conda_package_handling",
+    "menuinst",
+    "navigator",
+    "anaconda_navigator",
+    "distlib",
+    "bleach",
+    "defusedxml",
+    "json5",
+    "mistune",
+    "nbclient",
+    "prometheus_client",
+    "terminado",
+    "tornado",
+    "winpty",
+    "pytest",
+    "mypy",
+    "ruff",
+    # tiktoken not used (project has its own token estimator)
+    "tiktoken",
+    # PyInstaller hook-torch auto-pulls these, but project doesn't use them
+    "torchvision",
+    "torchaudio",
+    # Other auto-pulled packages not used by project
+    "lxml",
+    "PIL",
+    "Pillow",
+    "h5py",
+    "distributed",
+    "zstandard",
+    "paramiko",
+    "bcrypt",
+    "nacl",
+    "zmq",
+    "win32com",
+    "pythoncom",
+    "pywintypes",
+    "pywin32",
+]
 
-def _collect_package(name: str) -> None:
+datas: list[tuple[str, str]] = []
+binaries: list[tuple[str, str, str]] = []
+hiddenimports = list(HIDDEN_IMPORTS)
+
+
+def _collect_package_data(name: str) -> None:
+    """Collect data files and dynamic libs for *name* only — no submodules."""
     try:
-        from PyInstaller.utils.hooks import collect_all, collect_dynamic_libs
+        from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
     except ImportError:
         return
 
     try:
-        pkg_datas, pkg_binaries, pkg_hidden = collect_all(name)
-        datas.extend(pkg_datas)
-        binaries.extend(pkg_binaries)
-        hiddenimports.extend(pkg_hidden)
+        datas.extend(collect_data_files(name))
     except Exception:
         pass
 
@@ -114,8 +199,8 @@ def _collect_package(name: str) -> None:
         pass
 
 
-for _package in _COLLECT_PACKAGES:
-    _collect_package(_package)
+for _pkg in _COLLECT_DATA_PACKAGES:
+    _collect_package_data(_pkg)
 
 a = Analysis(
     [os.path.join(SPECPATH, "app", "main.py")],
@@ -126,7 +211,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=EXCLUDES,
     win_no_prefer_forwarders=False,
     cipher=block_cipher,
     noarchive=False,
@@ -134,24 +219,32 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# === ONEDIR MODE: exclude binaries from EXE, use COLLECT ===
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="nightdiary-backend",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
     upx_exclude=[],
-    runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="nightdiary-backend",
 )
