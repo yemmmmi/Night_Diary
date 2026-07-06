@@ -12,6 +12,7 @@ class LlmCallLogRow(Base):
     __tablename__ = "llm_call_logs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     decision_id: Mapped[str] = mapped_column(String(64), index=True, default="")
     agent_name: Mapped[str] = mapped_column(String(64), index=True)
     call_type: Mapped[str] = mapped_column(String(32))

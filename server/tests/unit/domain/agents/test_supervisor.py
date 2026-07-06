@@ -106,9 +106,7 @@ async def test_classify_routes_by_intent(intent: str, expected: list[str]) -> No
 
 
 async def test_low_confidence_routes_to_empathy_only() -> None:
-    supervisor, _, _ = _make_supervisor(
-        IntentCategory.RETROSPECTIVE_REVIEW.value, confidence=0.3
-    )
+    supervisor, _, _ = _make_supervisor(IntentCategory.RETROSPECTIVE_REVIEW.value, confidence=0.3)
     update = await supervisor.classify({"diary_content": "今天做了很多事情。"})
     assert update["activated_agents"] == ["empathy"]
 
@@ -134,9 +132,7 @@ async def test_classifier_failure_defaults_to_pure_record() -> None:
 
 
 async def test_skills_selected_and_linked_to_decision() -> None:
-    supervisor, decisions, skill_tracer = _make_supervisor(
-        IntentCategory.EMOTIONAL_SUPPORT.value
-    )
+    supervisor, decisions, skill_tracer = _make_supervisor(IntentCategory.EMOTIONAL_SUPPORT.value)
     update = await supervisor.classify(
         {"diary_id": "d1", "diary_content": "今天特别难过，心里很堵，想找人说说话。"}
     )

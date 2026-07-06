@@ -25,6 +25,18 @@ def smoke_client(tmp_path) -> TestClient:
             if getattr(client.app.state, "bootstrap_done", False):
                 break
             time.sleep(0.05)
+        # Register a test user and obtain auth token
+        client.post(
+            "/api/v1/auth/register",
+            json={"email": "smoke@test.com", "password": "password123", "nickname": "Smoke"},
+        )
+        resp = client.post(
+            "/api/v1/auth/login",
+            data={"username": "smoke@test.com", "password": "password123"},
+        )
+        assert resp.status_code == 200, resp.text
+        token = resp.json()["access_token"]
+        client.headers["Authorization"] = f"Bearer {token}"
         yield client
 
 

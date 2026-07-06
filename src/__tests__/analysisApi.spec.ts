@@ -38,13 +38,13 @@ describe('analysis API', () => {
         agent_mode: 'multi_agent',
         execution_tier: 'medium',
         activated_agents: 'empathy,insight',
-        ai_ans: '谢谢你愿意分享这些。',
+        reply: '谢谢你愿意分享这些。',
       },
     })
 
     const result = await triggerAnalysis(3)
     expect(post).toHaveBeenCalledWith('/api/v1/analysis/3', {})
-    expect(result.ai_ans).toBe('谢谢你愿意分享这些。')
+    expect(result.reply).toBe('谢谢你愿意分享这些。')
   })
 
   it('fetches analysis by diary id', async () => {
@@ -61,7 +61,7 @@ describe('analysis API', () => {
         agent_mode: 'multi_agent',
         execution_tier: 'medium',
         activated_agents: 'empathy,insight',
-        ai_ans: '已有回信',
+        reply: '已有回信',
       },
     })
 

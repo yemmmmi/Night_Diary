@@ -48,7 +48,7 @@ def test_execute_chain_records_decision_trace() -> None:
         },
         content="今天心情平静。",
     )
-    assert result.ai_ans
+    assert result.reply
     assert result.agent_mode == "chain"
     assert len(logger.records) == 1
     assert logger.records[0].tier in {"light", "medium", "heavy"}

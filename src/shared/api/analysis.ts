@@ -11,7 +11,7 @@ export interface AnalysisRecord {
   agent_mode: string | null
   execution_tier: string | null
   activated_agents: string | null
-  ai_ans: string | null
+  reply: string | null
   model_name: string | null
   status_detail: string | null
   referenced_memory_count?: number

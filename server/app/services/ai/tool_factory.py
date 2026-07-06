@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.infrastructure.models.app_config import AppConfigRow
 from app.services.ai.utils import filter_diary_results, format_diary_result
 from app.shared.llm import LLMClient, message_text
+from app.shared.tool_protocol import ToolSpec
 
 logger = logging.getLogger(__name__)
 
@@ -132,16 +133,234 @@ def create_sentiment_tool(llm: LLMClient) -> ToolFn:
     return analyze_sentiment
 
 
+def create_entity_graph_tool(user_id: str = "default") -> ToolFn:
+    """Create a tool that queries the Neo4j entity graph for related entities."""
+
+    def query_entity_graph(
+        entity_name: str = "",
+        emotion: str = "",
+        max_depth: int = 2,
+    ) -> str:
+        from app.infrastructure.entity_graph import (
+            is_neo4j_available,
+            query_entities_by_emotion,
+            query_related_entities,
+        )
+
+        if not is_neo4j_available():
+            return "实体图不可用（未配置 Neo4j）"
+
+        try:
+            if emotion and not entity_name:
+                results = query_entities_by_emotion(user_id, emotion, limit=10)
+                if not results:
+                    return f"未找到与情绪「{emotion}」相关的实体"
+                lines = [f"情绪「{emotion}」相关实体："]
+                for r in results:
+                    lines.append(f"- {r['name']}（{r['type']}）被提及 {r['mention_count']} 次")
+                return "\n".join(lines)
+
+            if entity_name:
+                results = query_related_entities(
+                    user_id, entity_name, max_depth=max_depth, limit=10
+                )
+                if not results:
+                    return f"未找到与「{entity_name}」相关的实体"
+                lines = [f"与「{entity_name}」相关的实体："]
+                for r in results:
+                    rels = "→".join(r.get("relation_types", []))
+                    lines.append(f"- {r['name']}（{r['type']}）关系:{rels} 深度:{r['depth']}")
+                return "\n".join(lines)
+
+            return "请提供 entity_name 或 emotion 参数"
+        except Exception as exc:
+            logger.error("实体图查询失败: %s", exc)
+            return "实体图查询暂时不可用"
+
+    return query_entity_graph
+
+
 def build_tool_map(
     db: Session,
     *,
     retriever: Any,
     llm: LLMClient,
     weather_api_key: str = "",
+    user_id: str = "default",
 ) -> dict[str, ToolFn]:
     return {
         "search_diary": create_diary_search_tool(retriever),
         "get_weather_info": create_weather_tool(db, weather_api_key=weather_api_key),
         "get_user_address": create_address_tool(db),
         "analyze_sentiment": create_sentiment_tool(llm),
+        "query_entity_graph": create_entity_graph_tool(user_id=user_id),
     }
+
+
+def build_tool_specs() -> list[ToolSpec]:
+    """Return ToolSpec schemas for all built-in tools (for native function calling)."""
+    return [
+        ToolSpec(
+            name="search_diary",
+            description="搜索历史日记，支持关键词/日期/标签多维度查询",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "搜索关键词"},
+                    "start_date": {"type": "string", "description": "开始日期 YYYY-MM-DD"},
+                    "end_date": {"type": "string", "description": "结束日期 YYYY-MM-DD"},
+                    "tag": {"type": "string", "description": "标签过滤"},
+                },
+                "required": ["query"],
+            },
+        ),
+        ToolSpec(
+            name="get_weather_info",
+            description="查询用户地址的当前天气",
+            parameters={"type": "object", "properties": {}},
+        ),
+        ToolSpec(
+            name="get_user_address",
+            description="获取用户设置的地址信息",
+            parameters={"type": "object", "properties": {}},
+        ),
+        ToolSpec(
+            name="analyze_sentiment",
+            description="分析文本的情感倾向、强度和关键情感词",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "待分析文本"},
+                },
+                "required": ["text"],
+            },
+        ),
+        ToolSpec(
+            name="query_entity_graph",
+            description="查询实体图中人物/实体的关系和情感关联",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "entity_name": {"type": "string", "description": '实体名称（如"妈妈"）'},
+                    "emotion": {"type": "string", "description": '情绪标签（如"低落"）'},
+                    "max_depth": {"type": "integer", "description": "关系查询深度，默认2"},
+                },
+            },
+        ),
+    ]
+
+
+def specs_for_names(names: list[str]) -> list[ToolSpec]:
+    """Filter ToolSpec list to only the named tools (for intent-driven subset)."""
+    all_specs = {s.name: s for s in build_tool_specs()}
+    return [all_specs[n] for n in names if n in all_specs]
+
+
+def _load_mcp_tools(endpoint: str) -> dict[str, ToolFn]:
+    """Load tools from an external MCP server endpoint.
+
+    Uses the MCP client protocol to discover tools and wraps them as ToolFn
+    callables. Best-effort: returns empty dict on failure.
+
+    Args:
+        endpoint: MCP server SSE endpoint URL (e.g. http://localhost:8081/sse).
+    """
+    try:
+        import asyncio
+
+        from mcp import ClientSession
+        from mcp.client.sse import sse_client
+    except ImportError:
+        logger.warning("mcp package not installed; cannot load MCP tools from %s", endpoint)
+        return {}
+
+    async def _discover_and_create() -> dict[str, ToolFn]:
+        tools: dict[str, ToolFn] = {}
+        try:
+            async with sse_client(endpoint) as (read, write), ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.list_tools()
+
+                for mcp_tool in result.tools:
+                    # Capture tool name in closure
+                    tool_name = mcp_tool.name
+
+                    def make_fn(name: str) -> Any:
+                        async def _call_async(**kwargs: Any) -> str:
+                            resp = await session.call_tool(name, kwargs)
+                            # Extract text from response content
+                            texts = [c.text for c in resp.content if hasattr(c, "text")]
+                            return "\n".join(texts) if texts else str(resp)
+
+                        def _call_sync(**kwargs: Any) -> str:
+                            try:
+                                return asyncio.run(_call_async(**kwargs))
+                            except Exception as exc:
+                                logger.error("MCP tool %s failed: %s", name, exc)
+                                return f"MCP tool {name} error: {exc}"
+
+                        return _call_sync
+
+                    tools[tool_name] = make_fn(tool_name)
+                    logger.info("Loaded MCP tool: %s from %s", tool_name, endpoint)
+
+        except Exception as exc:
+            logger.error("Failed to load MCP tools from %s: %s", endpoint, exc)
+
+        return tools
+
+    try:
+        return asyncio.run(_discover_and_create())
+    except Exception as exc:
+        logger.error("MCP discovery failed for %s: %s", endpoint, exc)
+        return {}
+
+
+def build_tool_map_with_mcp(
+    db: Session,
+    *,
+    retriever: Any,
+    llm: LLMClient,
+    weather_api_key: str = "",
+    user_id: str = "default",
+    mcp_endpoints: list[str] | None = None,
+) -> dict[str, ToolFn]:
+    """Build tool map with optional external MCP tools.
+
+    Combines built-in tools (from build_tool_map) with external tools loaded
+    from MCP server endpoints. MCP tools are loaded best-effort — failures
+    are logged and don't block the built-in tools.
+
+    Args:
+        mcp_endpoints: List of MCP server SSE endpoint URLs. If None or empty,
+            only built-in tools are returned.
+
+    Returns:
+        Combined tool map (built-in + MCP).
+    """
+    # Start with built-in tools
+    tools = build_tool_map(
+        db,
+        retriever=retriever,
+        llm=llm,
+        weather_api_key=weather_api_key,
+        user_id=user_id,
+    )
+
+    # Load external MCP tools
+    if mcp_endpoints:
+        for endpoint in mcp_endpoints:
+            endpoint = endpoint.strip()
+            if not endpoint:
+                continue
+            logger.info("Loading MCP tools from endpoint: %s", endpoint)
+            mcp_tools = _load_mcp_tools(endpoint)
+            if mcp_tools:
+                tools.update(mcp_tools)
+                logger.info(
+                    "MCP tools loaded from %s: %s",
+                    endpoint,
+                    list(mcp_tools.keys()),
+                )
+
+    return tools

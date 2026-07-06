@@ -39,6 +39,13 @@ class _FakeEpisodic:
         self._entries.append(entry)
         return True
 
+    @property
+    def user_id(self) -> str:
+        return self._user_id
+
+    def get_entries(self) -> list[EpisodicEntry]:
+        return self.stored_entries
+
 
 class _FakeLongTerm:
     """Minimal long-term memory mock."""
@@ -72,11 +79,11 @@ class TestSyncDiaryToMemory:
 
         assert len(episodic.stored_entries) == 1
         stored = episodic.stored_entries[0]
-        assert "加班" in stored.event
+        assert "加班" in stored.event_summary
         assert stored.emotion in ("negative", "neutral", "positive", "crisis")
         assert stored.diary_ids == ["1"]
         assert stored.importance == pytest.approx(0.6)
-        assert stored.ai_suggestion == "AI建议好好休息"
+        assert stored.reply_insight == "AI建议好好休息"
 
     def test_triggers_profile_promotion_after_store(self):
         """Long-term profile promotion is triggered after a successful store."""
@@ -122,12 +129,13 @@ class TestSyncDiaryToMemory:
         _sync_diary_to_memory(_FakeDiaryEntry(content=long_content), "ai", container)
 
         stored = episodic.stored_entries[0]
-        assert len(stored.event) <= 124  # 120 + "…"
-        assert stored.event.endswith("…")
+        assert len(stored.event_summary) <= 124  # 120 + "…"
+        assert stored.event_summary.endswith("…")
 
     def test_store_exception_does_not_propagate(self):
         """If episodic.store raises, the exception is swallowed (best-effort)."""
         episodic = MagicMock()
+        episodic.user_id = "default"  # _episodic_user_id returns this string
         episodic.store.side_effect = RuntimeError("DB locked")
         long_term = _FakeLongTerm()
         container = _FakeContainer(episodic, long_term)

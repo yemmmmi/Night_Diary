@@ -55,8 +55,11 @@ def test_update_context_compresses_episodic_history() -> None:
         {
             "diary_content": "今天又失眠了。",
             "episodic_context": [
-                {"event": "连续三天失眠", "content": "连续三天失眠到凌晨两点，白天无法集中"},
-                {"event": "周末爬山", "content": "周末爬山心情不错，拍了好多照片"},
+                {
+                    "event_summary": "连续三天失眠",
+                    "content": "连续三天失眠到凌晨两点，白天无法集中",
+                },
+                {"event_summary": "周末爬山", "content": "周末爬山心情不错，拍了好多照片"},
             ],
         },
     )

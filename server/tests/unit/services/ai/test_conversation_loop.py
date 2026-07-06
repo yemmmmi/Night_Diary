@@ -2,34 +2,36 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
+from app.domain.agents.types import ChatIntentResult
 from app.services.ai.conversation_loop import (
     _needs_tool_call,
-    _parse_tool_calls,
     run_conversation_loop,
 )
 from app.services.ai.session_context import clear_session
+from app.shared.llm_factory import StubLLMClient
+from app.shared.tool_protocol import ToolCallResult, parse_text_tag_calls
 
 
 def test_parse_tool_calls_extracts_name_and_args() -> None:
     text = '我来查一下 <tool>search_diary</tool> <args>{"query": "失眠"}</args>'
-    calls = _parse_tool_calls(text)
+    calls = parse_text_tag_calls(text)
     assert len(calls) == 1
-    assert calls[0][0] == "search_diary"
-    assert calls[0][1] == {"query": "失眠"}
+    assert calls[0].name == "search_diary"
+    assert calls[0].args == {"query": "失眠"}
 
 
 def test_parse_tool_calls_no_calls() -> None:
     text = "今天天气不错，去公园散步了。"
-    assert _parse_tool_calls(text) == []
+    assert parse_text_tag_calls(text) == []
 
 
 def test_parse_tool_calls_invalid_json_fallback() -> None:
     text = "<tool>search_diary</tool> <args>失眠记录</args>"
-    calls = _parse_tool_calls(text)
+    calls = parse_text_tag_calls(text)
     assert len(calls) == 1
-    assert calls[0][1] == {"query": "失眠记录"}
+    assert calls[0].args == {"query": "失眠记录"}
 
 
 def test_needs_tool_call_with_temporal_keyword() -> None:
@@ -59,6 +61,7 @@ def test_run_conversation_loop_no_llm_returns_fallback() -> None:
         episodic_text="（无）",
         memory_ids=[],
         tools=None,
+        use_graph=False,
     )
 
     assert result.stop_reason == "no_llm"
@@ -92,6 +95,7 @@ def test_run_conversation_loop_simple_reply() -> None:
         episodic_text="（无）",
         memory_ids=[],
         tools=None,
+        use_graph=False,
     )
 
     assert result.stop_reason == "completed"
@@ -121,6 +125,8 @@ def test_run_conversation_loop_tool_call_executes() -> None:
 
     llm = MagicMock()
     llm.invoke.side_effect = [tool_response, final_response]
+    # Ensure fallback text-tag path (MagicMock auto-creates bind_tools)
+    llm.bind_tools = None
 
     container = MagicMock()
     container.long_term_memory = None
@@ -140,6 +146,7 @@ def test_run_conversation_loop_tool_call_executes() -> None:
         episodic_text="（无）",
         memory_ids=[],
         tools=tools,
+        use_graph=False,
     )
 
     assert result.stop_reason == "completed"
@@ -149,3 +156,105 @@ def test_run_conversation_loop_tool_call_executes() -> None:
     # Token usage should be accumulated across both iterations
     assert result.token_info.get("total_tokens_used", 0) == 170
     clear_session("tool-test")
+
+
+# ── Citation tracking tests (result integration enhancement) ──
+
+
+def test_citations_tracked_for_context_sources(db_session) -> None:
+    """Citations are tracked for pinned diaries, retrieved diaries, and episodic memories."""
+    container = MagicMock()
+    container._llm_for_tier = MagicMock(return_value=StubLLMClient(reply="好的回复"))
+    container.ensure_ai_stack = MagicMock()
+    container.session_factory = None
+
+    result = run_conversation_loop(
+        db_session,
+        container,
+        conversation_id="citation-test",
+        content="今天怎么样",
+        pinned_diaries_text="置顶日记内容：昨天很开心",
+        retrieved_diaries_text="检索日记内容：上周去了公园",
+        episodic_text="情景记忆：之前聊过工作压力",
+        memory_ids=[],
+        use_graph=False,
+    )
+
+    # Should have 3 citations: pinned diary, retrieved diary, episodic memory
+    assert len(result.citations) >= 3
+    source_types = [c.source_type for c in result.citations]
+    assert "diary" in source_types
+    assert "memory" in source_types
+
+    # The reply should contain a "参考来源" section
+    assert "参考来源" in result.reply_text
+    clear_session("citation-test")
+
+
+def test_citations_tracked_for_tool_calls(db_session) -> None:
+    """Tool call results are tracked as citations."""
+    search_tool = MagicMock(return_value="找到3条相关日记")
+    tools = {"search_diary": search_tool}
+
+    container = MagicMock()
+    container._llm_for_tier = MagicMock(
+        return_value=StubLLMClient(reply='<tool>search_diary</tool><args>{"query": "工作"}</args>')
+    )
+    container.ensure_ai_stack = MagicMock()
+
+    with patch("app.services.ai.conversation_loop.parse_text_tag_calls") as mock_parse:
+        mock_parse.side_effect = [
+            [ToolCallResult(name="search_diary", args={"query": "工作"})],
+            [],
+        ]
+        result = run_conversation_loop(
+            db_session,
+            container,
+            conversation_id="tool-citation-test",
+            content="查一下工作的日记",
+            pinned_diaries_text="",
+            retrieved_diaries_text="",
+            episodic_text="",
+            memory_ids=[],
+            tools=tools,
+            use_graph=False,
+            intent_result=ChatIntentResult(
+                intent_category="retrospective_query",
+                confidence=0.9,
+                need_retrieval=False,
+                need_tools=["search_diary"],
+                need_entity_query=False,
+                tier="medium",
+                max_iterations=2,
+            ),
+        )
+
+    # Should have at least 1 tool citation
+    tool_citations = [c for c in result.citations if c.source_type == "tool"]
+    assert len(tool_citations) >= 1
+    assert tool_citations[0].source_name == "search_diary"
+    clear_session("tool-citation-test")
+
+
+def test_no_citations_when_no_context(db_session) -> None:
+    """No citations when all context sources are empty."""
+    container = MagicMock()
+    container._llm_for_tier = MagicMock(return_value=StubLLMClient(reply="简单回复"))
+    container.ensure_ai_stack = MagicMock()
+
+    result = run_conversation_loop(
+        db_session,
+        container,
+        conversation_id="no-citation-test",
+        content="你好",
+        pinned_diaries_text="",
+        retrieved_diaries_text="",
+        episodic_text="",
+        memory_ids=[],
+        use_graph=False,
+    )
+
+    # No citations, no "参考来源" section
+    assert len(result.citations) == 0
+    assert "参考来源" not in result.reply_text
+    clear_session("no-citation-test")

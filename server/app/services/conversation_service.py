@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.infrastructure.models.conversation import ChatMessageRow, ConversationRow
+from app.shared.errors import ConversationNotFoundError
 
 
 def _new_id() -> str:
@@ -22,9 +23,13 @@ def _now() -> datetime:
 
 # ── Conversations ────────────────────────────────────────────────────
 
-def create_conversation(db: Session, *, replier_id: str = "preset-warm") -> ConversationRow:
+
+def create_conversation(
+    db: Session, *, user_id: str, replier_id: str = "preset-warm"
+) -> ConversationRow:
     row = ConversationRow(
         id=_new_id(),
+        user_id=user_id,
         title="新会话",
         active_replier_id=replier_id,
         created_at=_now(),
@@ -36,21 +41,31 @@ def create_conversation(db: Session, *, replier_id: str = "preset-warm") -> Conv
     return row
 
 
-def list_conversations(db: Session, *, limit: int = 50) -> list[ConversationRow]:
+def list_conversations(db: Session, *, user_id: str, limit: int = 50) -> list[ConversationRow]:
     return (
         db.query(ConversationRow)
+        .filter(ConversationRow.user_id == user_id)
         .order_by(ConversationRow.updated_at.desc())
         .limit(limit)
         .all()
     )
 
 
-def get_conversation(db: Session, conversation_id: str) -> ConversationRow | None:
-    return db.query(ConversationRow).filter(ConversationRow.id == conversation_id).first()
+def get_conversation(db: Session, *, user_id: str, conversation_id: str) -> ConversationRow | None:
+    return (
+        db.query(ConversationRow)
+        .filter(
+            ConversationRow.id == conversation_id,
+            ConversationRow.user_id == user_id,
+        )
+        .first()
+    )
 
 
-def update_conversation_title(db: Session, conversation_id: str, title: str) -> ConversationRow | None:
-    row = get_conversation(db, conversation_id)
+def update_conversation_title(
+    db: Session, *, user_id: str, conversation_id: str, title: str
+) -> ConversationRow | None:
+    row = get_conversation(db, user_id=user_id, conversation_id=conversation_id)
     if row is None:
         return None
     row.title = title
@@ -60,15 +75,15 @@ def update_conversation_title(db: Session, conversation_id: str, title: str) -> 
     return row
 
 
-def touch_conversation(db: Session, conversation_id: str) -> None:
-    row = get_conversation(db, conversation_id)
+def touch_conversation(db: Session, *, user_id: str, conversation_id: str) -> None:
+    row = get_conversation(db, user_id=user_id, conversation_id=conversation_id)
     if row is not None:
         row.updated_at = _now()
         db.commit()
 
 
-def delete_conversation(db: Session, conversation_id: str) -> bool:
-    row = get_conversation(db, conversation_id)
+def delete_conversation(db: Session, *, user_id: str, conversation_id: str) -> bool:
+    row = get_conversation(db, user_id=user_id, conversation_id=conversation_id)
     if row is None:
         return False
     db.delete(row)
@@ -77,8 +92,15 @@ def delete_conversation(db: Session, conversation_id: str) -> bool:
 
 
 # ── Messages ─────────────────────────────────────────────────────────
+#
+# ChatMessageRow has no ``user_id`` column — ownership is established through
+# the parent ConversationRow. Every message operation therefore verifies the
+# conversation belongs to the requesting user first.
 
-def list_messages(db: Session, conversation_id: str) -> list[ChatMessageRow]:
+
+def list_messages(db: Session, *, user_id: str, conversation_id: str) -> list[ChatMessageRow]:
+    if get_conversation(db, user_id=user_id, conversation_id=conversation_id) is None:
+        return []
     return (
         db.query(ChatMessageRow)
         .filter(ChatMessageRow.conversation_id == conversation_id)
@@ -90,6 +112,7 @@ def list_messages(db: Session, conversation_id: str) -> list[ChatMessageRow]:
 def add_message(
     db: Session,
     *,
+    user_id: str,
     conversation_id: str,
     role: str,
     content: str,
@@ -97,6 +120,8 @@ def add_message(
     retrieved_memory_ids: list[str] | None = None,
     token_info: dict[str, Any] | None = None,
 ) -> ChatMessageRow:
+    if get_conversation(db, user_id=user_id, conversation_id=conversation_id) is None:
+        raise ConversationNotFoundError(conversation_id=conversation_id)
     row = ChatMessageRow(
         id=_new_id(),
         conversation_id=conversation_id,
@@ -116,6 +141,7 @@ def add_message(
 def add_user_message_and_reply(
     db: Session,
     *,
+    user_id: str,
     conversation_id: str,
     content: str,
     reply_content: str,
@@ -123,9 +149,16 @@ def add_user_message_and_reply(
     retrieved_memory_ids: list[str] | None = None,
     token_info: dict[str, Any] | None = None,
 ) -> tuple[ChatMessageRow, ChatMessageRow]:
-    user_msg = add_message(db, conversation_id=conversation_id, role="user", content=content)
+    user_msg = add_message(
+        db,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        role="user",
+        content=content,
+    )
     reply_msg = add_message(
         db,
+        user_id=user_id,
         conversation_id=conversation_id,
         role="assistant",
         content=reply_content,
@@ -133,12 +166,12 @@ def add_user_message_and_reply(
         retrieved_memory_ids=retrieved_memory_ids,
         token_info=token_info,
     )
-    touch_conversation(db, conversation_id)
+    touch_conversation(db, user_id=user_id, conversation_id=conversation_id)
 
     # Auto-title from first user message
-    conv = get_conversation(db, conversation_id)
+    conv = get_conversation(db, user_id=user_id, conversation_id=conversation_id)
     if conv and conv.title == "新会话":
         title = content[:20].replace("\n", " ")
-        update_conversation_title(db, conversation_id, title)
+        update_conversation_title(db, user_id=user_id, conversation_id=conversation_id, title=title)
 
     return user_msg, reply_msg

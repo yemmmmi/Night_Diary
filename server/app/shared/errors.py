@@ -111,3 +111,25 @@ class NotFoundError(AppError):
         super().__init__(message=f"{resource} {resource_id} 不存在", http_status=404)
         self.resource = resource
         self.resource_id = resource_id
+
+
+class UnauthorizedError(AppError):
+    """Raised when authentication is missing or invalid (HTTP 401)."""
+
+    def __init__(self, message: str = "未授权，请登录") -> None:
+        super().__init__(message=message, http_status=401)
+
+
+class ForbiddenError(AppError):
+    """Raised when a user lacks permission for a resource (HTTP 403)."""
+
+    def __init__(self, message: str = "无权访问此资源") -> None:
+        super().__init__(message=message, http_status=403)
+
+
+class EmailAlreadyExistsError(AppError):
+    """Raised when registering an email that is already taken (HTTP 409)."""
+
+    def __init__(self, email: str = "") -> None:
+        msg = f"邮箱 {email} 已注册" if email else "邮箱已注册"
+        super().__init__(message=msg, http_status=409)

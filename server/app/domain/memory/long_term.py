@@ -56,7 +56,15 @@ class LongTermMemory:
         daily_topics: dict[str, set[str]] = {}
         for date_key, entries in entries_by_date.items():
             daily_emotions[date_key] = {entry.emotion for entry in entries if entry.emotion}
-            daily_topics[date_key] = {entry.event for entry in entries if entry.event}
+            # Use structured tags for topic detection (P2-2 fix).
+            # Fallback to event_summary only if no tags available.
+            topics: set[str] = set()
+            for entry in entries:
+                if entry.tags:
+                    topics.update(entry.tags)
+                elif entry.event_summary:
+                    topics.add(entry.event_summary[:30])
+            daily_topics[date_key] = topics
 
         promoted_emotions = self._find_consecutive_items(
             daily_emotions,

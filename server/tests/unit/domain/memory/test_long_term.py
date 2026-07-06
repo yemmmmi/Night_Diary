@@ -28,9 +28,9 @@ def test_update_and_reload_profile(profile_store: SqliteLongTermProfileStore) ->
 def _entries_for_days(emotion: str, event: str, days: int, start_ts: float) -> list[EpisodicEntry]:
     return [
         EpisodicEntry(
-            event=event,
+            event_summary=event,
             emotion=emotion,
-            ai_suggestion="建议",
+            reply_insight="建议",
             timestamp=start_ts + index * 86400,
             diary_ids=[f"d{index + 1}"],
             importance=0.7,

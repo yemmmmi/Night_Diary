@@ -31,7 +31,11 @@ def register_error_handlers(app: FastAPI) -> None:
         if errors:
             first = errors[0]
             loc = ".".join(str(p) for p in first.get("loc", []))
-            detail = f"{loc}: {first.get('msg', '参数校验失败')}" if loc else first.get("msg", "参数校验失败")
+            detail = (
+                f"{loc}: {first.get('msg', '参数校验失败')}"
+                if loc
+                else first.get("msg", "参数校验失败")
+            )
         else:
             detail = "参数校验失败"
         return JSONResponse(
@@ -40,9 +44,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(
-        _request: Request, exc: Exception
-    ) -> JSONResponse:
+    async def unhandled_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
         """Catch-all for non-AppError exceptions — return 500 without leaking stack traces."""
         logger.exception("Unhandled exception: %s", exc)
         return JSONResponse(

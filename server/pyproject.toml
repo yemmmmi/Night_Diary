@@ -17,8 +17,22 @@ dependencies = [
     "langchain-openai>=0.2,<1.0",
     "openai>=1.40,<2.0",
     "cryptography>=43.0",
+    "pyjwt>=2.8",
+    "bcrypt>=4.0",
     "httpx>=0.27",
     "huggingface_hub>=0.26",
+
+    # Database (dual-engine: SQLite dev default + MySQL production)
+    "pymysql>=1.1.0",
+    "alembic>=1.13.0",
+
+    # Background task queue (RQ workers; falls back to threading without Redis)
+    "rq>=1.16.0",
+
+    # Entity graph (Neo4j; optional, falls back to SQLite)
+    "neo4j>=5.0.0",
+    "mcp>=1.0",
+    "langgraph>=0.2,<1.0",
 ]
 
 [project.optional-dependencies]
@@ -94,10 +108,26 @@ ignore = ["E501"]
 "tests/eval/judge.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/eval/rubric.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/eval/generation/**" = ["RUF001", "RUF002", "RUF003"]
+"tests/eval/_http_llm.py" = ["RUF001"]
+"tests/eval/_stub_llm.py" = ["RUF001"]
+"tests/eval/tool_call/**" = ["RUF001"]
+"tests/eval/intent/**" = ["RUF001", "RUF002", "RUF003"]
+"tests/eval/skill_call/**" = ["RUF001", "RUF002", "RUF003"]
+"training/finetune_intent/**" = ["RUF001", "RUF002", "RUF003"]
 "app/shared/emotion_estimator.py" = ["RUF001"]
 "app/shared/crisis_guard.py" = ["RUF001"]
 "tests/unit/shared/test_crisis_guard.py" = ["RUF001"]
 "app/domain/memory/episodic.py" = ["RUF001", "RUF002", "RUF003"]
+"app/domain/agents/chat_intent_classifier.py" = ["RUF001", "RUF002"]
+"app/domain/agents/entity_extractor.py" = ["RUF001"]
+"app/domain/agents/query_understander.py" = ["RUF001"]
+"app/domain/orchestrator.py" = ["RUF001"]
+"app/domain/skills/entity_tracker_skill.py" = ["RUF001"]
+"app/domain/skills/memory_recall_skill.py" = ["RUF001"]
+"app/domain/skills/skill_loader.py" = ["RUF001"]
+"app/domain/skills/injection.py" = ["RUF001"]
+"app/shared/tool_protocol.py" = ["RUF001"]
+"tests/unit/domain/test_orchestrator.py" = ["RUF001"]
 
 # ---- Mypy ----
 [tool.mypy]
@@ -108,6 +138,18 @@ warn_return_any = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
 exclude = ["tests/", "alembic/"]
+
+# These modules depend on optional packages (chromadb, langgraph, mcp) whose
+# type stubs availability varies between local and CI environments. Disable
+# warn_unused_ignores to avoid breakage when stubs are present locally but
+# absent in CI (or vice versa).
+[[tool.mypy.overrides]]
+module = [
+    "app.shared.embeddings",
+    "app.services.ai.conversation_graph",
+    "app.infrastructure.mcp_server",
+]
+warn_unused_ignores = false
 
 # ---- Pytest ----
 [tool.pytest.ini_options]

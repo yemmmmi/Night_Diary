@@ -44,7 +44,7 @@ function cardEmotionColor(card: MemoryCard): string {
 }
 
 function onDiaryClick(entry: DiaryEntry) {
-  const scrollToReply = Boolean(entry.ai_ans?.trim())
+  const scrollToReply = Boolean(entry.reply?.trim())
   emit('openDiary', entry, scrollToReply)
 }
 </script>

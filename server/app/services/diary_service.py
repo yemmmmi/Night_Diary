@@ -1,4 +1,4 @@
-"""Diary CRUD with Chroma vector sync (single-user, no ``user_id``)."""
+"""Diary CRUD with Chroma vector sync, scoped per-user via ``user_id``."""
 
 from __future__ import annotations
 
@@ -24,8 +24,18 @@ RECENT_HISTORY_LIMIT = 10
 MAX_SNIPPET = 200
 
 
-def _format_emotion_for_chroma(db: Session, entry: DiaryEntryRow) -> str:
-    card = db.query(MemoryCardRow).filter(MemoryCardRow.diary_id == entry.id).first()
+def _format_emotion_for_chroma(
+    db: Session,
+    entry: DiaryEntryRow,
+    *,
+    user_id: str,
+) -> str:
+    card = (
+        db.query(MemoryCardRow)
+        .filter(MemoryCardRow.user_id == user_id)
+        .filter(MemoryCardRow.diary_id == entry.id)
+        .first()
+    )
     if card is None:
         return ""
     emotions = _json_to_emotions(card.emotions_json, card.emotion)
@@ -36,11 +46,13 @@ def _sync_to_chroma(
     db: Session,
     collection_manager: DiaryCollectionManager | None,
     entry: DiaryEntryRow,
+    *,
+    user_id: str,
 ) -> None:
     if collection_manager is None:
         return
     date_str = entry.date.isoformat() if entry.date else ""
-    emotion_str = _format_emotion_for_chroma(db, entry)
+    emotion_str = _format_emotion_for_chroma(db, entry, user_id=user_id)
     try:
         collection_manager.update_diary(
             str(entry.id),
@@ -55,6 +67,7 @@ def _sync_to_chroma(
 def create_entry(
     db: Session,
     *,
+    user_id: str,
     content: str,
     entry_date: date | None = None,
     weather: str | None = None,
@@ -64,6 +77,7 @@ def create_entry(
         raise ValidationError("日记内容不能为空")
 
     entry = DiaryEntryRow(
+        user_id=user_id,
         content=content.strip(),
         weather=weather,
         date=entry_date if entry_date is not None else datetime.now(UTC).date(),
@@ -72,18 +86,20 @@ def create_entry(
     db.add(entry)
     db.commit()
     db.refresh(entry)
-    _sync_to_chroma(db, collection_manager, entry)
+    _sync_to_chroma(db, collection_manager, entry, user_id=user_id)
     return entry
 
 
 def list_entries(
     db: Session,
     *,
+    user_id: str,
     skip: int = 0,
     limit: int = 20,
 ) -> list[DiaryEntryRow]:
     return (
         db.query(DiaryEntryRow)
+        .filter(DiaryEntryRow.user_id == user_id)
         .order_by(desc(DiaryEntryRow.created_at))
         .offset(skip)
         .limit(limit)
@@ -91,17 +107,32 @@ def list_entries(
     )
 
 
-def get_entry(db: Session, diary_id: int) -> DiaryEntryRow:
-    entry = db.query(DiaryEntryRow).filter(DiaryEntryRow.id == diary_id).first()
+def get_entry(db: Session, diary_id: int, *, user_id: str) -> DiaryEntryRow:
+    entry = (
+        db.query(DiaryEntryRow)
+        .filter(DiaryEntryRow.user_id == user_id)
+        .filter(DiaryEntryRow.id == diary_id)
+        .first()
+    )
     if entry is None:
         raise DiaryNotFoundError(diary_id=diary_id)
     return entry
 
 
-def get_entries_by_ids(db: Session, diary_ids: list[int]) -> list[DiaryEntryRow]:
+def get_entries_by_ids(
+    db: Session,
+    diary_ids: list[int],
+    *,
+    user_id: str,
+) -> list[DiaryEntryRow]:
     if not diary_ids:
         return []
-    rows = db.query(DiaryEntryRow).filter(DiaryEntryRow.id.in_(diary_ids)).all()
+    rows = (
+        db.query(DiaryEntryRow)
+        .filter(DiaryEntryRow.user_id == user_id)
+        .filter(DiaryEntryRow.id.in_(diary_ids))
+        .all()
+    )
     by_id = {row.id: row for row in rows}
     return [by_id[did] for did in diary_ids if did in by_id]
 
@@ -109,6 +140,7 @@ def get_entries_by_ids(db: Session, diary_ids: list[int]) -> list[DiaryEntryRow]
 def get_recent_entries(
     db: Session,
     *,
+    user_id: str,
     days: int = RECENT_HISTORY_DAYS,
     limit: int = RECENT_HISTORY_LIMIT,
 ) -> list[DiaryEntryRow]:
@@ -116,6 +148,7 @@ def get_recent_entries(
     cutoff = datetime.now(UTC) - timedelta(days=days)
     return (
         db.query(DiaryEntryRow)
+        .filter(DiaryEntryRow.user_id == user_id)
         .filter(DiaryEntryRow.created_at >= cutoff)
         .order_by(desc(DiaryEntryRow.created_at))
         .limit(limit)
@@ -127,11 +160,12 @@ def update_entry(
     db: Session,
     diary_id: int,
     *,
+    user_id: str,
     content: str | None = None,
     weather: str | None = None,
     collection_manager: DiaryCollectionManager | None = None,
 ) -> DiaryEntryRow:
-    entry = get_entry(db, diary_id)
+    entry = get_entry(db, diary_id, user_id=user_id)
 
     if content is not None:
         if not content.strip():
@@ -144,7 +178,7 @@ def update_entry(
     entry.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(entry)
-    _sync_to_chroma(db, collection_manager, entry)
+    _sync_to_chroma(db, collection_manager, entry, user_id=user_id)
     return entry
 
 
@@ -152,9 +186,10 @@ def delete_entry(
     db: Session,
     diary_id: int,
     *,
+    user_id: str,
     collection_manager: DiaryCollectionManager | None = None,
 ) -> None:
-    entry = get_entry(db, diary_id)
+    entry = get_entry(db, diary_id, user_id=user_id)
     if collection_manager is not None:
         try:
             collection_manager.delete_diary(str(diary_id))
@@ -185,9 +220,19 @@ def format_history_summary(
     return "\n".join(lines) if lines else "（暂无历史记录）"
 
 
-def format_emotion_context(db: Session, entry: DiaryEntryRow) -> str:
+def format_emotion_context(
+    db: Session,
+    entry: DiaryEntryRow,
+    *,
+    user_id: str,
+) -> str:
     """Build mood context from linked memory card, or prompt AI to infer from text."""
-    card = db.query(MemoryCardRow).filter(MemoryCardRow.diary_id == entry.id).first()
+    card = (
+        db.query(MemoryCardRow)
+        .filter(MemoryCardRow.user_id == user_id)
+        .filter(MemoryCardRow.diary_id == entry.id)
+        .first()
+    )
     if card is None:
         return "（未标注，请从正文推断情绪）"
     emotions = _json_to_emotions(card.emotions_json, card.emotion)

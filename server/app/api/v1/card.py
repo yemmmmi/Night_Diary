@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query, Response, status
 
-from app.api.deps import ContainerDep, DbDep
+from app.api.deps import ContainerDep, CurrentUserDep, DbDep
 from app.api.mappers import card_to_response
 from app.api.schemas import (
     CardCreateRequest,
@@ -48,6 +48,7 @@ def _sync_card_to_chroma(
 @router.get("", response_model=list[CardResponse])
 def list_cards(
     db: DbDep,
+    user: CurrentUserDep,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     emotion: str | None = Query(None),
@@ -56,6 +57,7 @@ def list_cards(
 ) -> list[dict[str, Any]]:
     rows = card_service.list_cards(
         db,
+        user_id=str(user.id),
         skip=skip,
         limit=limit,
         emotion=emotion,
@@ -69,10 +71,12 @@ def list_cards(
 def create_card(
     body: CardCreateRequest,
     db: DbDep,
+    user: CurrentUserDep,
     container: ContainerDep,
 ) -> dict[str, Any]:
     row = card_service.create_card(
         db,
+        user_id=str(user.id),
         emotion=body.emotion,
         emotions=body.emotions,
         event_summary=body.event_summary,
@@ -82,7 +86,7 @@ def create_card(
         card_type=body.card_type,
     )
     # Ensure memory layers + card collection are ready (lazy on cold start)
-    container.ensure_memory()
+    container.ensure_memory(user_id=str(user.id))
     # Sync to episodic memory pipeline (best-effort)
     card_service.sync_card_to_episodic(row, container.episodic_memory)
     # Sync to Chroma for semantic search (best-effort)
@@ -91,8 +95,8 @@ def create_card(
 
 
 @router.get("/{card_id}", response_model=CardResponse)
-def get_card(card_id: str, db: DbDep) -> dict[str, Any]:
-    row = card_service.get_card(db, card_id)
+def get_card(card_id: str, db: DbDep, user: CurrentUserDep) -> dict[str, Any]:
+    row = card_service.get_card(db, card_id, user_id=str(user.id))
     return card_to_response(row)
 
 
@@ -101,11 +105,13 @@ def update_card(
     card_id: str,
     body: CardUpdateRequest,
     db: DbDep,
+    user: CurrentUserDep,
     container: ContainerDep,
 ) -> dict[str, Any]:
     row = card_service.update_card(
         db,
         card_id,
+        user_id=str(user.id),
         emotion=body.emotion,
         emotions=body.emotions,
         event_summary=body.event_summary,
@@ -113,7 +119,7 @@ def update_card(
         tags=body.tags,
         importance=body.importance,
     )
-    container.ensure_memory()
+    container.ensure_memory(user_id=str(user.id))
     card_service.sync_card_to_episodic(row, container.episodic_memory)
     _sync_card_to_chroma(row, container)
     return card_to_response(row)
@@ -124,9 +130,14 @@ def update_card(
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
 )
-def delete_card(card_id: str, db: DbDep, container: ContainerDep) -> Response:
-    card_service.delete_card(db, card_id)
-    container.ensure_memory()
+def delete_card(
+    card_id: str,
+    db: DbDep,
+    user: CurrentUserDep,
+    container: ContainerDep,
+) -> Response:
+    card_service.delete_card(db, card_id, user_id=str(user.id))
+    container.ensure_memory(user_id=str(user.id))
     if container.card_collection is not None:
         container.card_collection.delete_card(card_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -140,9 +151,12 @@ def expand_card_to_diary(
     card_id: str,
     _body: CardExpandRequest,
     db: DbDep,
+    user: CurrentUserDep,
     container: ContainerDep,
 ) -> dict[str, Any]:
-    diary = card_service.expand_to_diary(db, card_id)
+    diary, analysis = card_service.expand_to_diary(
+        db, card_id, user_id=str(user.id), container=container
+    )
 
     if container.diary_collection is not None:
         with contextlib.suppress(Exception):
@@ -153,27 +167,32 @@ def expand_card_to_diary(
                 tags="",
             )
 
-    return {
+    result: dict[str, Any] = {
         "card_id": card_id,
         "diary_id": diary.id,
         "message": f"已展开为日记 #{diary.id}",
     }
+    if analysis is not None:
+        result["analysis_id"] = analysis.id
+        result["auto_analyzed"] = True
+    return result
 
 
 # -- Stats ------------------------------------------------------------------
 
 
 @router.get("/stats/summary", response_model=dict[str, Any])
-def card_stats(db: DbDep) -> dict[str, Any]:
-    return card_service.get_card_stats(db)
+def card_stats(db: DbDep, user: CurrentUserDep) -> dict[str, Any]:
+    return card_service.get_card_stats(db, user_id=str(user.id))
 
 
 @router.get("/stats/mood-trends", response_model=list[dict[str, Any]])
 def mood_trends(
     db: DbDep,
+    user: CurrentUserDep,
     days: int = Query(30, ge=7, le=365),
 ) -> list[dict[str, Any]]:
-    return card_service.get_mood_trends(db, days=days)
+    return card_service.get_mood_trends(db, user_id=str(user.id), days=days)
 
 
 # -- Guided prompt ----------------------------------------------------------
@@ -182,28 +201,31 @@ def mood_trends(
 @router.post("/prompt", response_model=dict[str, Any])
 def generate_prompt(
     db: DbDep,
+    user: CurrentUserDep,
     container: ContainerDep,
 ) -> dict[str, Any]:
     """Generate 3 personalised guided questions for the card guided mode."""
+    user_id = str(user.id)
     # Build context from recent data
-    recent_cards = card_service.list_cards(db, skip=0, limit=10)
+    recent_cards = card_service.list_cards(db, user_id=user_id, skip=0, limit=10)
     cards_summary = "; ".join(
         f"{c.emotion}: {c.event_summary}" for c in recent_cards if c.event_summary
     )[:500]
 
     from app.services import diary_service
-    recent_diaries = diary_service.get_recent_entries(db, days=7, limit=5)
-    diary_summary = "; ".join(
-        (d.content or "")[:80] for d in recent_diaries
-    )[:500]
+
+    recent_diaries = diary_service.get_recent_entries(db, user_id=user_id, days=7, limit=5)
+    diary_summary = "; ".join((d.content or "")[:80] for d in recent_diaries)[:500]
 
     # Resolve LLM
     from app.services.ai.router import resolve_llm_clients_by_tier
+
     llm_map = resolve_llm_clients_by_tier(
         db,
         llm_factory=container.llm_factory,
         tracer=container.llm_tracer,
         prefer_active=True,
+        user_id=user_id,
     )
     llm = llm_map.get("light") or llm_map.get("default")
     if llm is None:
@@ -225,12 +247,13 @@ def generate_prompt(
 @router.get("/search", response_model=dict[str, Any])
 def search_cards(
     db: DbDep,
+    user: CurrentUserDep,
     container: ContainerDep,
     q: str = Query(..., min_length=1, max_length=200),
     limit: int = Query(10, ge=1, le=50),
 ) -> dict[str, Any]:
     """Semantic search across memory cards using ChromaDB vector index."""
-    container.ensure_memory()
+    container.ensure_memory(user_id=str(user.id))
     if container.card_collection is None:
         return {"results": [], "query": q}
 
@@ -241,11 +264,13 @@ def search_cards(
         if not card_id:
             continue
         try:
-            row = card_service.get_card(db, card_id)
-            results.append({
-                **card_to_response(row),
-                "_distance": round(hit.get("distance", 1.0), 4),
-            })
+            row = card_service.get_card(db, card_id, user_id=str(user.id))
+            results.append(
+                {
+                    **card_to_response(row),
+                    "_distance": round(hit.get("distance", 1.0), 4),
+                }
+            )
         except Exception:
             continue
 

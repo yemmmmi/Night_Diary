@@ -26,9 +26,9 @@ const draftSuggestion = ref('')
 const draftImportance = ref(50)
 
 function startEdit() {
-  draftEvent.value = props.entry.event
+  draftEvent.value = props.entry.event_summary
   draftEmotion.value = props.entry.emotion
-  draftSuggestion.value = props.entry.ai_suggestion
+  draftSuggestion.value = props.entry.reply_insight
   draftImportance.value = Math.round(props.entry.importance * 100)
   editing.value = true
 }
@@ -42,9 +42,9 @@ function onSave() {
   const emotion = draftEmotion.value.trim()
   if (!event || !emotion) return
   emit('save', props.entry.entry_id, {
-    event,
+    event_summary: event,
     emotion,
-    ai_suggestion: draftSuggestion.value.trim(),
+    reply_insight: draftSuggestion.value.trim(),
     importance: draftImportance.value / 100,
   })
 }
@@ -57,7 +57,7 @@ watch(
 )
 
 watch(
-  () => [props.entry.event, props.entry.emotion, props.entry.ai_suggestion, props.entry.importance],
+  () => [props.entry.event_summary, props.entry.emotion, props.entry.reply_insight, props.entry.importance],
   () => {
     if (editing.value) editing.value = false
   },
@@ -137,9 +137,9 @@ defineExpose({ cancelEdit })
     </template>
 
     <template v-else>
-      <p class="memory-entry__event font-diary">{{ entry.event }}</p>
-      <p v-if="entry.ai_suggestion" class="memory-entry__suggestion">
-        {{ entry.ai_suggestion }}
+      <p class="memory-entry__event font-diary">{{ entry.event_summary }}</p>
+      <p v-if="entry.reply_insight" class="memory-entry__suggestion">
+        {{ entry.reply_insight }}
       </p>
       <div class="memory-entry__footer">
         <span class="memory-entry__time">{{ formattedTime }}</span>

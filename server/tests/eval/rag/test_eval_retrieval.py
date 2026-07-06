@@ -67,9 +67,7 @@ def ndcg_at_k(ranked: list[str], gold: set[str], k: int = FINAL_K) -> float:
     if not gold:
         return 0.0
     dcg = sum(
-        1.0 / math.log2(index + 2)
-        for index, diary_id in enumerate(ranked[:k])
-        if diary_id in gold
+        1.0 / math.log2(index + 2) for index, diary_id in enumerate(ranked[:k]) if diary_id in gold
     )
     ideal_hits = min(len(gold), k)
     idcg = sum(1.0 / math.log2(index + 2) for index in range(ideal_hits))
@@ -89,12 +87,8 @@ def _build_branches(
         "bm25": HybridRetriever(_EmptyCollections(), bm25_index, final_top_k=FINAL_K),
     }
     if vector_collection is not None:
-        branches["vector"] = HybridRetriever(
-            vector_collection, BM25Index(), final_top_k=FINAL_K
-        )
-        branches["hybrid_rrf"] = HybridRetriever(
-            vector_collection, bm25_index, final_top_k=FINAL_K
-        )
+        branches["vector"] = HybridRetriever(vector_collection, BM25Index(), final_top_k=FINAL_K)
+        branches["hybrid_rrf"] = HybridRetriever(vector_collection, bm25_index, final_top_k=FINAL_K)
         if reranker is not None:
             branches["hybrid_rerank"] = HybridRetriever(
                 vector_collection, bm25_index, reranker=reranker, final_top_k=FINAL_K
@@ -111,9 +105,7 @@ def _evaluate(
     cases: list[dict[str, Any]],
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
     """Return per-branch averaged metrics and human-readable failure samples."""
-    sums: dict[str, dict[str, float]] = {
-        name: dict.fromkeys(METRIC_KEYS, 0.0) for name in branches
-    }
+    sums: dict[str, dict[str, float]] = {name: dict.fromkeys(METRIC_KEYS, 0.0) for name in branches}
     failures: list[str] = []
 
     for case in cases:
@@ -156,9 +148,7 @@ def _print_report(
     for name in order:
         if name in metrics:
             m = metrics[name]
-            print(
-                f"{name:<16}{m['recall@5']:>10.4f}{m['mrr']:>10.4f}{m['ndcg@5']:>10.4f}"
-            )
+            print(f"{name:<16}{m['recall@5']:>10.4f}{m['mrr']:>10.4f}{m['ndcg@5']:>10.4f}")
         elif name in skipped:
             print(f"{name:<16}{'SKIPPED':>10}  ({skipped[name]})")
     if failures:
@@ -230,9 +220,7 @@ def test_hybrid_rrf_branch(eval_report: dict[str, Any]) -> None:
 
 def test_hybrid_rerank_branch(eval_report: dict[str, Any]) -> None:
     if "hybrid_rerank" not in eval_report["metrics"]:
-        pytest.skip(
-            eval_report["skipped"].get("hybrid_rerank", "rerank branch unavailable")
-        )
+        pytest.skip(eval_report["skipped"].get("hybrid_rerank", "rerank branch unavailable"))
     assert eval_report["metrics"]["hybrid_rerank"]["recall@5"] >= 0.0
 
 
@@ -240,9 +228,7 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any]) -> None:
     """Per-branch soft check: fail only on a real drop below the recorded value."""
     baseline = _load_baseline()
     if baseline is None:
-        pytest.skip(
-            "no baseline.json; seed with EVAL_UPDATE_BASELINE=1 make eval-rag"
-        )
+        pytest.skip("no baseline.json; seed with EVAL_UPDATE_BASELINE=1 make eval-rag")
 
     regressions: list[str] = []
     for branch, scores in eval_report["metrics"].items():

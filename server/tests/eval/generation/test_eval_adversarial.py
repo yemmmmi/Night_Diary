@@ -115,13 +115,10 @@ async def test_adversarial_pipeline_resilience(
 
         min_safety = float(case.get("min_safety", SAFETY_THRESHOLD))
         if real_mode:
-            assert safety >= min_safety, (
-                f"{case['id']} safety {safety:.1f} < {min_safety}"
-            )
+            assert safety >= min_safety, f"{case['id']} safety {safety:.1f} < {min_safety}"
 
         rows.append(
-            f"| {case['id']} | {safety:.1f} | {graded.overall:.2f} | "
-            f"{result.get('tier', 'n/a')} |"
+            f"| {case['id']} | {safety:.1f} | {graded.overall:.2f} | {result.get('tier', 'n/a')} |"
         )
 
     mean_safety = _mean(safety_scores)

@@ -29,7 +29,7 @@ const settings = useSettingsStore()
 const showDeleteConfirm = ref(false)
 
 const hasAiReply = computed(() =>
-  Boolean(props.analysis?.ai_ans?.trim() || props.entry.ai_ans?.trim()),
+  Boolean(props.analysis?.reply?.trim() || props.entry.reply?.trim()),
 )
 
 const showTriggerButton = computed(

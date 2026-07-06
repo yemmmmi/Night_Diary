@@ -9,6 +9,7 @@ existing three-layer memory system:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import uuid
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from app.domain.memory.atom import UnifiedMemoryAtom
 from app.domain.memory.types import EpisodicEntry
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.infrastructure.models.memory_card import MemoryCardRow
@@ -85,6 +87,7 @@ def row_to_dict(row: MemoryCardRow) -> dict[str, Any]:
 def create_card(
     db: Session,
     *,
+    user_id: str,
     emotion: str,
     emotions: list[str] | None = None,
     event_summary: str | None = None,
@@ -103,6 +106,7 @@ def create_card(
 
     row = MemoryCardRow(
         card_id=uuid.uuid4().hex,
+        user_id=user_id,
         emotion=primary,
         emotions_json=_emotions_to_json(cleaned_emotions),
         event_summary=event_summary.strip() if event_summary else None,
@@ -123,8 +127,13 @@ def create_card(
     return row
 
 
-def get_card(db: Session, card_id: str) -> MemoryCardRow:
-    row = db.query(MemoryCardRow).filter(MemoryCardRow.card_id == card_id).first()
+def get_card(db: Session, card_id: str, *, user_id: str) -> MemoryCardRow:
+    row = (
+        db.query(MemoryCardRow)
+        .filter(MemoryCardRow.user_id == user_id)
+        .filter(MemoryCardRow.card_id == card_id)
+        .first()
+    )
     if row is None:
         raise NotFoundError(resource="memory_card", resource_id=card_id)
     return row
@@ -133,13 +142,14 @@ def get_card(db: Session, card_id: str) -> MemoryCardRow:
 def list_cards(
     db: Session,
     *,
+    user_id: str,
     skip: int = 0,
     limit: int = 50,
     emotion: str | None = None,
     card_type: str | None = None,
     has_diary: bool | None = None,
 ) -> list[MemoryCardRow]:
-    q = db.query(MemoryCardRow)
+    q = db.query(MemoryCardRow).filter(MemoryCardRow.user_id == user_id)
 
     if emotion:
         q = q.filter(MemoryCardRow.emotion == emotion)
@@ -150,18 +160,14 @@ def list_cards(
     elif has_diary is False:
         q = q.filter(MemoryCardRow.diary_id.is_(None))
 
-    return (
-        q.order_by(desc(MemoryCardRow.created_at))
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    return q.order_by(desc(MemoryCardRow.created_at)).offset(skip).limit(limit).all()
 
 
 def update_card(
     db: Session,
     card_id: str,
     *,
+    user_id: str,
     emotion: str | None = None,
     emotions: list[str] | None = None,
     event_summary: str | None = None,
@@ -169,7 +175,7 @@ def update_card(
     tags: list[str] | None = None,
     importance: float | None = None,
 ) -> MemoryCardRow:
-    row = get_card(db, card_id)
+    row = get_card(db, card_id, user_id=user_id)
 
     if emotions is not None:
         cleaned = [e.strip() for e in emotions if e.strip()]
@@ -203,8 +209,8 @@ def update_card(
     return row
 
 
-def delete_card(db: Session, card_id: str) -> None:
-    row = get_card(db, card_id)
+def delete_card(db: Session, card_id: str, *, user_id: str) -> None:
+    row = get_card(db, card_id, user_id=user_id)
     db.delete(row)
     db.commit()
     logger.info("Card deleted: card_id=%s", card_id)
@@ -213,20 +219,52 @@ def delete_card(db: Session, card_id: str) -> None:
 # ── Card → Episodic bridge ─────────────────────────────────────────────
 
 
+def card_to_unified_atom(row: MemoryCardRow, user_id: str = "default") -> UnifiedMemoryAtom:
+    """Convert a MemoryCardRow to a UnifiedMemoryAtom.
+
+    Preserves all structured fields (tags, mood_score, emotions) that were
+    previously lost in the card_to_episodic conversion.
+    """
+    import json
+    from datetime import date as date_cls
+
+    tags: list[str] = []
+    if row.tags_json:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
+            tags = json.loads(row.tags_json)
+
+    emotions: list[str] = []
+    if row.emotions_json:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
+            emotions = json.loads(row.emotions_json)
+
+    return UnifiedMemoryAtom(
+        source="card",
+        event_summary=row.event_summary or f"（{row.emotion}情绪记录）",
+        emotion=row.emotion,
+        emotions=emotions,
+        mood_score=row.mood_score,
+        tags=tags,
+        importance=row.importance,
+        event_date=row.created_at.date() if row.created_at else date_cls.today(),
+        diary_id=row.diary_id,
+        user_id=user_id,
+    )
+
+
 def card_to_episodic(row: MemoryCardRow) -> EpisodicEntry:
     """Convert a MemoryCardRow to an EpisodicEntry for the memory pipeline.
 
-    The primary ``emotion`` stays single-valued (episodic / insight rely on
-    positive/negative membership). Multiple selected emotions remain on the
-    card record; no interpretive label is attached here — let downstream
-    LLM agents read the raw emotion set when needed.
+    Deprecated: prefer :func:`card_to_unified_atom` which preserves structured
+    fields.  This function is kept for backward compatibility with existing
+    call sites that construct EpisodicEntry directly.
     """
     event = row.event_summary or f"（{row.emotion}情绪记录）"
     return EpisodicEntry(
-        event=event,
+        event_summary=event,
         emotion=row.emotion,
-        ai_suggestion="",
-        user_feedback="none",
+        reply_insight="",
+        source="card",
         timestamp=row.created_at.timestamp(),
         diary_ids=[str(row.diary_id)] if row.diary_id else [],
         importance=row.importance,
@@ -240,19 +278,36 @@ def sync_card_to_episodic(
 ) -> bool:
     """Push a card into the episodic memory pipeline.
 
+    Uses :func:`card_to_unified_atom` to preserve structured fields (tags,
+    mood_score, emotions) in the episodic entry.
     Returns ``True`` if the entry was stored (importance > threshold).
     """
     if episodic is None:
         return False
 
-    entry = card_to_episodic(row)
+    atom = card_to_unified_atom(row)
+    entry = EpisodicEntry(
+        event_summary=atom.event_summary[:120],
+        emotion=atom.emotion,
+        reply_insight=atom.reply_insight[:200],
+        source=atom.source,
+        timestamp=datetime.now(UTC).timestamp(),
+        diary_ids=[str(atom.diary_id)] if atom.diary_id else [],
+        importance=atom.importance,
+        entry_id="",
+        tags=atom.tags,
+        mood_score=atom.mood_score,
+        emotions=atom.emotions,
+        event_date=atom.event_date.isoformat() if atom.event_date else None,
+    )
     stored = episodic.store(entry)
     if stored:
         logger.debug(
-            "Card→Episodic stored: card_id=%s event=%s importance=%.2f",
+            "Card→Episodic stored: card_id=%s event=%s importance=%.2f tags=%s",
             row.card_id,
-            entry.event,
+            entry.event_summary,
             entry.importance,
+            entry.tags,
         )
     else:
         logger.debug(
@@ -266,6 +321,8 @@ def sync_card_to_episodic(
 def sync_recent_cards_to_episodic(
     db: Session,
     episodic: EpisodicMemory | None,
+    *,
+    user_id: str,
 ) -> int:
     """Batch-sync recent un-pushed cards into episodic memory.
 
@@ -274,7 +331,7 @@ def sync_recent_cards_to_episodic(
     if episodic is None:
         return 0
 
-    recent = list_cards(db, skip=0, limit=RECENT_CARDS_LIMIT)
+    recent = list_cards(db, skip=0, limit=RECENT_CARDS_LIMIT, user_id=user_id)
     stored = 0
     for row in recent:
         if sync_card_to_episodic(row, episodic):
@@ -289,21 +346,39 @@ def expand_to_diary(
     db: Session,
     card_id: str,
     *,
+    user_id: str,
     entry_date: date | None = None,
-) -> DiaryEntryRow:
+    container: Any | None = None,
+    auto_analyze: bool = True,
+) -> tuple[DiaryEntryRow, Any | None]:
     """Expand a memory card into a full diary entry.
 
     Structured card fields (emotion, event, tags) stay on the linked card;
-    diary content starts empty so the card-continuation UI can guide writing.
+    diary content is pre-populated with the card's event_summary so the
+    analysis pipeline can run immediately.
+
+    When ``container`` is provided and ``auto_analyze`` is True, analysis is
+    triggered automatically (best-effort — failures are logged, not raised).
     The card's ``diary_id`` is updated to link back to the new diary.
+
+    Returns ``(diary_entry, analysis_row_or_none)``.
     """
-    card = get_card(db, card_id)
+    card = get_card(db, card_id, user_id=user_id)
 
     if card.diary_id is not None:
         raise ValidationError(f"卡片 {card_id} 已经展开为日记 #{card.diary_id}")
 
+    # Pre-populate diary content from card's structured data
+    initial_content = ""
+    if card.event_summary and card.event_summary.strip():
+        initial_content = card.event_summary.strip()
+    else:
+        # Generate minimal content from emotion so analysis has something to work with
+        initial_content = f"今天记录了{card.emotion}的心情"
+
     diary_entry = DiaryEntryRow(
-        content="",
+        user_id=user_id,
+        content=initial_content,
         date=entry_date if entry_date is not None else datetime.now(UTC).date(),
     )
     db.add(diary_entry)
@@ -315,35 +390,72 @@ def expand_to_diary(
     db.refresh(card)
 
     logger.info(
-        "Card→Diary expanded: card_id=%s → diary_id=%d",
+        "Card→Diary expanded: card_id=%s → diary_id=%d content_len=%d",
         card_id,
         diary_entry.id,
+        len(diary_entry.content or ""),
     )
-    return diary_entry
+
+    # Auto-trigger analysis (best-effort)
+    analysis_row: Any | None = None
+    if auto_analyze and container is not None and (diary_entry.content or "").strip():
+        try:
+            from app.services.analysis_service import trigger_analysis
+
+            analysis_row, _mem_count = trigger_analysis(
+                db,
+                diary_entry.id,
+                container,
+                user_id=user_id,
+            )
+            logger.info(
+                "Card→Diary auto-analysis: card_id=%s diary_id=%d analysis_id=%d",
+                card_id,
+                diary_entry.id,
+                analysis_row.id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Card→Diary auto-analysis failed (non-blocking): card_id=%s diary_id=%d error=%s",
+                card_id,
+                diary_entry.id,
+                exc,
+            )
+
+    return diary_entry, analysis_row
 
 
 # ── stats ───────────────────────────────────────────────────────────────
 
 
-def get_card_stats(db: Session) -> dict[str, Any]:
+def get_card_stats(db: Session, *, user_id: str) -> dict[str, Any]:
     """Get summary stats for the memory management dashboard."""
-    total = db.query(MemoryCardRow).count()
+    total = db.query(MemoryCardRow).filter(MemoryCardRow.user_id == user_id).count()
 
     from sqlalchemy import func
 
     emotion_counts = (
         db.query(MemoryCardRow.emotion, func.count(MemoryCardRow.card_id))
+        .filter(MemoryCardRow.user_id == user_id)
         .group_by(MemoryCardRow.emotion)
         .order_by(func.count(MemoryCardRow.card_id).desc())
         .limit(10)
         .all()
     )
 
-    expanded = db.query(MemoryCardRow).filter(MemoryCardRow.diary_id.isnot(None)).count()
+    expanded = (
+        db.query(MemoryCardRow)
+        .filter(MemoryCardRow.user_id == user_id)
+        .filter(MemoryCardRow.diary_id.isnot(None))
+        .count()
+    )
     not_expanded = total - expanded
 
     avg_mood = (
-        db.query(func.avg(MemoryCardRow.mood_score)).scalar() or 0.0
+        db.query(func.avg(MemoryCardRow.mood_score))
+        .filter(MemoryCardRow.user_id == user_id)
+        .scalar()
+        or 0.0
     )
 
     return {
@@ -351,15 +463,14 @@ def get_card_stats(db: Session) -> dict[str, Any]:
         "expanded_to_diary": expanded,
         "not_expanded": not_expanded,
         "average_mood_score": round(float(avg_mood), 3),
-        "top_emotions": [
-            {"emotion": e, "count": c} for e, c in emotion_counts
-        ],
+        "top_emotions": [{"emotion": e, "count": c} for e, c in emotion_counts],
     }
 
 
 def get_mood_trends(
     db: Session,
     *,
+    user_id: str,
     days: int = 30,
 ) -> list[dict[str, Any]]:
     """Get daily average mood scores for trend chart.
@@ -377,6 +488,7 @@ def get_mood_trends(
             func.avg(MemoryCardRow.mood_score).label("avg_mood"),
             func.count(MemoryCardRow.card_id).label("card_count"),
         )
+        .filter(MemoryCardRow.user_id == user_id)
         .filter(MemoryCardRow.created_at >= text(f"'{start.isoformat()}'"))
         .group_by(func.date(MemoryCardRow.created_at))
         .order_by(func.date(MemoryCardRow.created_at).asc())
@@ -384,6 +496,10 @@ def get_mood_trends(
     )
 
     return [
-        {"date": str(row.day), "avg_mood": round(float(row.avg_mood), 3), "card_count": row.card_count}
+        {
+            "date": str(row.day),
+            "avg_mood": round(float(row.avg_mood), 3),
+            "card_count": row.card_count,
+        }
         for row in rows
     ]

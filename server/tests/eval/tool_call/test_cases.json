@@ -1,0 +1,626 @@
+[
+  {
+    "case_id": "tc_kw_01",
+    "category": "single_tool_keyword",
+    "user_message": "帮我搜索一下关于失眠的日记",
+    "intent": "明确关键词触发单工具搜索",
+    "enabled_tools": ["search_diary", "get_weather_info", "analyze_sentiment"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "search_diary",
+          "args_match": { "query": "失眠" },
+          "args_required": ["query"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_kw_02",
+    "category": "single_tool_keyword",
+    "user_message": "现在外面的天气怎么样",
+    "intent": "明确关键词触发天气查询",
+    "enabled_tools": ["get_weather_info", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "get_weather_info",
+          "args_match": {},
+          "args_required": []
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_kw_03",
+    "category": "single_tool_keyword",
+    "user_message": "我的地址信息是什么",
+    "intent": "明确关键词触发地址查询",
+    "enabled_tools": ["get_user_address", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "get_user_address",
+          "args_match": {},
+          "args_required": []
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_kw_04",
+    "category": "single_tool_keyword",
+    "user_message": "帮我分析一下这段文字的情感：今天被表扬了特别开心",
+    "intent": "明确关键词触发情感分析",
+    "enabled_tools": ["analyze_sentiment", "search_diary", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "analyze_sentiment",
+          "args_match": { "text": "今天被表扬了特别开心" },
+          "args_required": ["text"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_kw_05",
+    "category": "single_tool_keyword",
+    "user_message": "查一下关系图里妈妈的相关实体",
+    "intent": "明确关键词触发实体图查询",
+    "enabled_tools": ["query_entity_graph", "search_diary", "analyze_sentiment"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "query_entity_graph",
+          "args_match": { "entity_name": "妈妈" },
+          "args_required": ["entity_name"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_kw_06",
+    "category": "single_tool_keyword",
+    "user_message": "查查关于猫咪的日记",
+    "intent": "明确关键词触发日记搜索",
+    "enabled_tools": ["search_diary", "get_weather_info"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "search_diary",
+          "args_match": { "query": "猫咪" },
+          "args_required": ["query"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_kw_07",
+    "category": "single_tool_keyword",
+    "user_message": "分析这段话的情感倾向：考试没考好很沮丧",
+    "intent": "明确关键词触发情感分析",
+    "enabled_tools": ["analyze_sentiment", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "analyze_sentiment",
+          "args_match": { "text": "考试没考好很沮丧" },
+          "args_required": ["text"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_kw_08",
+    "category": "single_tool_keyword",
+    "user_message": "查查同事在关系图里的关联",
+    "intent": "明确关键词触发实体图查询",
+    "enabled_tools": ["query_entity_graph", "analyze_sentiment", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "query_entity_graph",
+          "args_match": { "entity_name": "同事" },
+          "args_required": ["entity_name"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_sm_01",
+    "category": "single_tool_semantic",
+    "user_message": "最近总是翻来覆去睡不踏实",
+    "intent": "语义理解：睡眠问题→搜索失眠相关日记",
+    "enabled_tools": ["search_diary", "get_weather_info", "analyze_sentiment"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "search_diary",
+          "args_match": { "query": "失眠" },
+          "args_required": ["query"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_sm_02",
+    "category": "single_tool_semantic",
+    "user_message": "外面在下雨吗，要不要带伞",
+    "intent": "语义理解：出行关心天气→天气查询",
+    "enabled_tools": ["get_weather_info", "search_diary", "get_user_address"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "get_weather_info",
+          "args_match": {},
+          "args_required": []
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_sm_03",
+    "category": "single_tool_semantic",
+    "user_message": "我住的地方是哪里来着",
+    "intent": "语义理解：询问住址→地址查询",
+    "enabled_tools": ["get_user_address", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "get_user_address",
+          "args_match": {},
+          "args_required": []
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_sm_04",
+    "category": "single_tool_semantic",
+    "user_message": "这段话写得好丧，帮我看看情绪走向：感觉一切都没有意义",
+    "intent": "语义理解：情绪低落文本→情感分析",
+    "enabled_tools": ["analyze_sentiment", "query_entity_graph", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "analyze_sentiment",
+          "args_match": { "text": "感觉一切都没有意义" },
+          "args_required": ["text"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_sm_05",
+    "category": "single_tool_semantic",
+    "user_message": "我和父亲之间的关系怎么样",
+    "intent": "语义理解：人物关系→实体图查询",
+    "enabled_tools": ["query_entity_graph", "search_diary", "analyze_sentiment"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "query_entity_graph",
+          "args_match": { "entity_name": "父亲" },
+          "args_required": ["entity_name"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_sm_06",
+    "category": "single_tool_semantic",
+    "user_message": "帮我回忆一下上次去公园玩的事情",
+    "intent": "语义理解：回忆事件→日记搜索",
+    "enabled_tools": ["search_diary", "get_weather_info"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "search_diary",
+          "args_match": { "query": "公园" },
+          "args_required": ["query"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_mt_01",
+    "category": "multi_tool",
+    "user_message": "查一下今天的天气，顺便告诉我我的地址",
+    "intent": "多工具并行：天气+地址（均无参数）",
+    "enabled_tools": ["get_weather_info", "get_user_address", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "get_weather_info",
+          "args_match": {},
+          "args_required": []
+        },
+        {
+          "name": "get_user_address",
+          "args_match": {},
+          "args_required": []
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_mt_02",
+    "user_message": "搜索关于失眠的日记，并分析这句话的情感：总是失眠好焦虑",
+    "category": "multi_tool",
+    "intent": "多工具并行：日记搜索+情感分析",
+    "enabled_tools": ["search_diary", "analyze_sentiment", "get_weather_info"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "search_diary",
+          "args_match": { "query": "失眠" },
+          "args_required": ["query"]
+        },
+        {
+          "name": "analyze_sentiment",
+          "args_match": { "text": "总是失眠好焦虑" },
+          "args_required": ["text"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_mt_03",
+    "category": "multi_tool",
+    "user_message": "看看现在的天气，再帮我搜一下关于雨天的日记",
+    "intent": "多工具并行：天气+日记搜索",
+    "enabled_tools": ["get_weather_info", "search_diary", "get_user_address"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "get_weather_info",
+          "args_match": {},
+          "args_required": []
+        },
+        {
+          "name": "search_diary",
+          "args_match": { "query": "雨天" },
+          "args_required": ["query"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_mt_04",
+    "category": "multi_tool",
+    "user_message": "分析这段话的情感并查同事的关系图：今天和同事闹矛盾了",
+    "intent": "多工具并行：情感分析+实体图查询",
+    "enabled_tools": ["analyze_sentiment", "query_entity_graph", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "analyze_sentiment",
+          "args_match": { "text": "今天和同事闹矛盾了" },
+          "args_required": ["text"]
+        },
+        {
+          "name": "query_entity_graph",
+          "args_match": { "entity_name": "同事" },
+          "args_required": ["entity_name"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_mt_05",
+    "category": "multi_tool",
+    "user_message": "搜一下最近的日记，顺便看看妈妈在关系图里怎么样",
+    "intent": "多工具并行：日记搜索+实体图查询",
+    "enabled_tools": ["search_diary", "query_entity_graph", "analyze_sentiment"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "search_diary",
+          "args_match": { "query": "最近" },
+          "args_required": ["query"]
+        },
+        {
+          "name": "query_entity_graph",
+          "args_match": { "entity_name": "妈妈" },
+          "args_required": ["entity_name"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_mt_06",
+    "category": "multi_tool",
+    "user_message": "查我的地址，还有现在的天气",
+    "intent": "多工具并行：地址+天气",
+    "enabled_tools": ["get_user_address", "get_weather_info", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "get_user_address",
+          "args_match": {},
+          "args_required": []
+        },
+        {
+          "name": "get_weather_info",
+          "args_match": {},
+          "args_required": []
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_nc_01",
+    "category": "no_tool_casual",
+    "user_message": "你好呀",
+    "intent": "闲聊问候，不应调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_nc_02",
+    "category": "no_tool_casual",
+    "user_message": "今天过得怎么样",
+    "intent": "闲聊，不应调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_nc_03",
+    "category": "no_tool_casual",
+    "user_message": "你能做什么",
+    "intent": "询问能力，不应调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_nc_04",
+    "category": "no_tool_casual",
+    "user_message": "谢谢你",
+    "intent": "致谢闲聊，不应调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_nc_05",
+    "category": "no_tool_casual",
+    "user_message": "晚安",
+    "intent": "道别闲聊，不应调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_nc_06",
+    "category": "no_tool_casual",
+    "user_message": "随便聊聊吧",
+    "intent": "闲聊，不应调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_ne_01",
+    "category": "no_tool_emotional",
+    "user_message": "我今天真的好开心！",
+    "intent": "情绪表达，应共情而非调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_ne_02",
+    "category": "no_tool_emotional",
+    "user_message": "感觉好累，什么都不想做",
+    "intent": "情绪表达，应共情而非调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_ne_03",
+    "category": "no_tool_emotional",
+    "user_message": "我好想家",
+    "intent": "情绪表达，应共情而非调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_ne_04",
+    "category": "no_tool_emotional",
+    "user_message": "今天被领导骂了，好委屈",
+    "intent": "情绪表达，应共情而非调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_ne_05",
+    "category": "no_tool_emotional",
+    "user_message": "和朋友吵架了，心里很难受",
+    "intent": "情绪表达，应共情而非调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_ne_06",
+    "category": "no_tool_emotional",
+    "user_message": "最近压力好大，有点喘不过气",
+    "intent": "情绪表达，应共情而非调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_ae_01",
+    "category": "args_edge",
+    "user_message": "搜索日记",
+    "intent": "边界：查询词模糊但应调用搜索工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "analyze_sentiment"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "search_diary",
+          "args_match": { "query": "日记" },
+          "args_required": ["query"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_ae_02",
+    "category": "args_edge",
+    "user_message": "搜索2024年6月1日到6月30日关于会议的日记",
+    "intent": "边界：日期范围参数解析",
+    "enabled_tools": ["search_diary", "get_weather_info"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "search_diary",
+          "args_match": {
+            "query": "会议",
+            "start_date": "2024-06-01",
+            "end_date": "2024-06-30"
+          },
+          "args_required": ["query", "start_date", "end_date"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_ae_03",
+    "category": "args_edge",
+    "user_message": "查一下关系图里老板的关系，深度设为3",
+    "intent": "边界：整数参数 max_depth",
+    "enabled_tools": ["query_entity_graph", "search_diary", "analyze_sentiment"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "query_entity_graph",
+          "args_match": { "entity_name": "老板", "max_depth": 3 },
+          "args_required": ["entity_name"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_ae_04",
+    "category": "args_edge",
+    "user_message": "帮我分析一下情感：嗯",
+    "intent": "边界：极短文本参数",
+    "enabled_tools": ["analyze_sentiment", "search_diary"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "analyze_sentiment",
+          "args_match": { "text": "嗯" },
+          "args_required": ["text"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_am_01",
+    "category": "ambiguous",
+    "user_message": "工作",
+    "intent": "歧义：单个名词，过于模糊不应调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_am_02",
+    "category": "ambiguous",
+    "user_message": "帮我看看",
+    "intent": "歧义：无明确对象，不应调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  },
+  {
+    "case_id": "tc_am_03",
+    "category": "ambiguous",
+    "user_message": "天气日记",
+    "intent": "歧义：可天气可日记，以名词日记为主→搜索天气相关日记",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {
+          "name": "search_diary",
+          "args_match": { "query": "天气" },
+          "args_required": ["query"]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "tc_am_04",
+    "category": "ambiguous",
+    "user_message": "心情",
+    "intent": "歧义：单个名词，过于模糊不应调用工具",
+    "enabled_tools": ["search_diary", "get_weather_info", "get_user_address", "analyze_sentiment", "query_entity_graph"],
+    "expected": {
+      "should_call_tool": false,
+      "expected_tool_calls": []
+    }
+  }
+]

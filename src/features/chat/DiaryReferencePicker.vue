@@ -48,7 +48,7 @@ function linkedCard(entry: DiaryEntry): MemoryCard | null {
 
 function isReferencable(entry: DiaryEntry): boolean {
   if (entry.content?.trim()) return true
-  if (entry.ai_ans?.trim()) return true
+  if (entry.reply?.trim()) return true
   if (entry.weather?.trim()) return true
   if (linkedCard(entry)?.event_summary?.trim()) return true
   return entryDateIso(entry) === toIsoDate(new Date())
@@ -57,7 +57,7 @@ function isReferencable(entry: DiaryEntry): boolean {
 function entryPreview(entry: DiaryEntry, maxLen = 36): string {
   if (entry.content?.trim()) return diarySummary(entry.content, maxLen)
   if (entry.weather?.trim()) return `天气：${entry.weather.trim()}`
-  if (entry.ai_ans?.trim()) return `回信：${diarySummary(entry.ai_ans, Math.min(maxLen, 28))}`
+  if (entry.reply?.trim()) return `回信：${diarySummary(entry.reply, Math.min(maxLen, 28))}`
   return diaryEntrySummary(entry, props.cards, maxLen)
 }
 

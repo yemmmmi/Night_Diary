@@ -44,9 +44,13 @@ def _update_baseline_section(marker: str, body: str) -> None:
     end = f"<!-- END:{marker} -->"
     block = f"{begin}\n{body}\n{end}"
 
-    existing = BASELINE_PATH.read_text(encoding="utf-8") if BASELINE_PATH.exists() else (
-        "# Generation Quality Baseline\n\n"
-        "由 `EVAL_UPDATE_BASELINE=1 make eval` 生成。后续改动 prompt 后对照此文件做回归。\n\n"
+    existing = (
+        BASELINE_PATH.read_text(encoding="utf-8")
+        if BASELINE_PATH.exists()
+        else (
+            "# Generation Quality Baseline\n\n"
+            "由 `EVAL_UPDATE_BASELINE=1 make eval` 生成。后续改动 prompt 后对照此文件做回归。\n\n"
+        )
     )
     if begin in existing and end in existing:
         head = existing.split(begin)[0]

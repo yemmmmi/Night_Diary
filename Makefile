@@ -44,6 +44,18 @@ eval:
 eval-rag:
 	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/rag/ -v -s -m eval
 
+# Tool call accuracy eval (B-tool). Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-tool
+eval-tool:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/tool_call/ -v -s -m eval
+
+# Skill call accuracy eval (progressive disclosure A/B). Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-skill
+eval-skill:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/skill_call/ -v -s -m eval
+
+# Intent classification eval (fine-tune A/B). Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-intent
+eval-intent:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/intent/ -v -s -m eval
+
 test-web:
 	$(NPM) run test
 

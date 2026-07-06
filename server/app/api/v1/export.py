@@ -15,20 +15,20 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.api.deps import ContainerDep, DbDep
+from app.api.deps import ContainerDep, CurrentUserDep, DbDep
 from app.services import export_service
 
 router = APIRouter(tags=["export"])
 
 
 @router.get("/export/all")
-def export_all(db: DbDep) -> dict[str, Any]:
+def export_all(db: DbDep, user: CurrentUserDep) -> dict[str, Any]:
     """Export all user data as a JSON dict.
 
     Returns diary entries (with tags + analyses), memory cards,
     episodic memories, and long-term profile.
     """
-    return export_service.export_all(db)
+    return export_service.export_all(db, user_id=str(user.id))
 
 
 class ImportRequest(BaseModel):
@@ -38,7 +38,9 @@ class ImportRequest(BaseModel):
 
 
 @router.post("/import/json")
-def import_json(body: ImportRequest, db: DbDep, container: ContainerDep) -> dict[str, Any]:
+def import_json(
+    body: ImportRequest, db: DbDep, container: ContainerDep, user: CurrentUserDep
+) -> dict[str, Any]:
     """Import user data from JSON, replacing all existing data.
 
     Clears existing diaries, tags, analyses, memory cards, and memories,
@@ -49,5 +51,6 @@ def import_json(body: ImportRequest, db: DbDep, container: ContainerDep) -> dict
         db,
         body.data,
         collection_manager=container.diary_collection,
+        user_id=str(user.id),
     )
     return {"status": "ok", "imported": summary}

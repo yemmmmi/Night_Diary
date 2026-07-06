@@ -115,7 +115,9 @@ class AgentDecisionRecord:
     """
 
     agent_name: str  # "supervisor" | "empathy" | ...
-    decision_type: str  # "intent_classification" | "tier_routing" | "skill_activation" | "worker_routing"
+    decision_type: (
+        str  # "intent_classification" | "tier_routing" | "skill_activation" | "worker_routing"
+    )
     diary_id: str = ""
     intent: str = ""
     tier: str = ""

@@ -16,15 +16,16 @@ if TYPE_CHECKING:
 
 
 class DiaryEntryRow(Base):
-    """Single-user diary entry. No ``user_id`` — local desktop app."""
+    """A diary entry, scoped to a user via ``user_id``."""
 
     __tablename__ = "diary_entries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     date: Mapped[date | None] = mapped_column(Date, nullable=True)
     weather: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    ai_ans: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reply: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

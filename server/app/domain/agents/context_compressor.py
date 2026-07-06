@@ -51,10 +51,7 @@ def _generate_summary(content: str, llm: LLMClient | None) -> str:
     """Summarise a long entry via LLM, or truncate at a sentence boundary."""
     if llm is not None:
         try:
-            prompt = (
-                "请用一句话（不超过50字）概括以下日记内容的核心要点：\n\n"
-                f"{content[:500]}"
-            )
+            prompt = f"请用一句话（不超过50字）概括以下日记内容的核心要点：\n\n{content[:500]}"
             response = llm.invoke(prompt)
             summary = message_text(response).strip()
             if summary and len(summary) < len(content):
@@ -81,8 +78,8 @@ def _similarity_scores(
 
 
 def _entry_content(entry: dict[str, Any]) -> str:
-    """Merge episodic ``event`` + ``content`` so short labels still carry signal."""
-    event = str(entry.get("event") or "").strip()
+    """Merge episodic ``event_summary`` + ``content`` so short labels still carry signal."""
+    event = str(entry.get("event_summary") or "").strip()
     body = str(entry.get("content") or "").strip()
     if event and body and event != body:
         return f"{event}：{body}"
@@ -216,8 +213,8 @@ def memory_context_from_state(state: Mapping[str, Any]) -> str:
         if not isinstance(entry, dict):
             continue
         parts: list[str] = []
-        if entry.get("event"):
-            parts.append(f"事件：{entry['event']}")
+        if entry.get("event_summary"):
+            parts.append(f"事件：{entry['event_summary']}")
         if entry.get("emotion"):
             parts.append(f"情绪：{entry['emotion']}")
         if entry.get("content"):

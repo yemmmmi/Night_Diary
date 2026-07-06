@@ -165,9 +165,7 @@ class EmpathyAgent:
                 EMPATHY_STYLE_INSTRUCTIONS["warm"],
             )
             parts.append(f"\n## 回应风格\n{style_desc}")
-        parts.append(
-            f"\n## 回应长度\n请将回应控制在 {length['min']}-{length['max']} 个汉字之间。"
-        )
+        parts.append(f"\n## 回应长度\n请将回应控制在 {length['min']}-{length['max']} 个汉字之间。")
         if is_crisis:
             parts.append(EMPATHY_CRISIS_BLOCK)
         if episodic_context:

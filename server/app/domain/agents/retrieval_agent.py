@@ -91,9 +91,12 @@ class RetrievalAgent:
             return {"retrieval_context": ""}
 
         results = self._multi_hop_retrieve(diary_content)
-        domain_knowledge = [hit.content for hit in self._knowledge.query(
-            diary_content[:200], max_results=_DOMAIN_KNOWLEDGE_TOP_K
-        )]
+        domain_knowledge = [
+            hit.content
+            for hit in self._knowledge.query(
+                diary_content[:200], max_results=_DOMAIN_KNOWLEDGE_TOP_K
+            )
+        ]
         summary = self._build_summary(results, domain_knowledge)
 
         logger.info(

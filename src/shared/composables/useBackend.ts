@@ -1,13 +1,10 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
-import { onMounted, onUnmounted, ref, type Ref } from 'vue'
+import { onMounted, ref, type Ref } from 'vue'
 
 const DEFAULT_DEV_BASE_URL = 'http://127.0.0.1:8000'
 const HEALTH_PATH = '/health'
 const READY_PATH = '/ready'
 const HEALTH_INTERVAL_MS = 150
 const HEALTH_MAX_ATTEMPTS = 150
-const TAURI_POLL_INTERVAL_MS = 100
 const BOOTSTRAP_POLL_INTERVAL_MS = 150
 const BOOTSTRAP_MAX_WAIT_MS = 60_000
 
@@ -33,51 +30,15 @@ export function resetCoreReady(): void {
   coreWaitPromise = null
 }
 
-function isTauriRuntime(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export async function resolveBackendBaseUrl(): Promise<string> {
-  try {
-    const port = await invoke<number>('get_backend_port')
-    return `http://127.0.0.1:${port}`
-  } catch {
-    return import.meta.env.VITE_API_BASE_URL ?? DEFAULT_DEV_BASE_URL
-  }
-}
-
-async function isTauriBackendReady(): Promise<boolean> {
-  try {
-    return await invoke<boolean>('is_backend_ready')
-  } catch {
-    return false
-  }
-}
-
-async function isTauriCoreReady(): Promise<boolean> {
-  try {
-    return await invoke<boolean>('is_core_ready')
-  } catch {
-    return false
-  }
+  return import.meta.env.VITE_API_BASE_URL ?? DEFAULT_DEV_BASE_URL
 }
 
 async function probeBackendHealth(baseUrl: string): Promise<boolean> {
-  if (isTauriRuntime()) {
-    if (await isTauriBackendReady()) {
-      return true
-    }
-    try {
-      return await invoke<boolean>('check_backend_health')
-    } catch {
-      return false
-    }
-  }
-
   try {
     const url = new URL(HEALTH_PATH, baseUrl).toString()
     const response = await fetch(url)
@@ -88,12 +49,6 @@ async function probeBackendHealth(baseUrl: string): Promise<boolean> {
 }
 
 async function probeCoreReady(baseUrl: string): Promise<boolean> {
-  if (isTauriRuntime()) {
-    if (await isTauriCoreReady()) {
-      return true
-    }
-  }
-
   try {
     const url = new URL(READY_PATH, baseUrl).toString()
     const response = await fetch(url)
@@ -103,69 +58,11 @@ async function probeCoreReady(baseUrl: string): Promise<boolean> {
   }
 }
 
-/** Tauri: listen for `backend-ready` instead of redundant HTTP health polling. */
-async function waitForTauriBackend(maxWaitMs = 30_000): Promise<void> {
-  if (await isTauriBackendReady()) {
-    return
-  }
-
-  return new Promise((resolve, reject) => {
-    let settled = false
-    let unlistenReady: (() => void) | undefined
-    const timers: { poll?: ReturnType<typeof setInterval> } = {}
-
-    const cleanup = () => {
-      unlistenReady?.()
-      if (timers.poll !== undefined) clearInterval(timers.poll)
-    }
-
-    const finish = () => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeout)
-      cleanup()
-      resolve()
-    }
-
-    const fail = (message: string) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeout)
-      cleanup()
-      reject(new Error(message))
-    }
-
-    const timeout = setTimeout(
-      () => fail('Backend health check timed out'),
-      maxWaitMs,
-    )
-
-    void (async () => {
-      try {
-        unlistenReady = await listen<number>('backend-ready', () => finish())
-      } catch {
-        // fall back to polling
-      }
-
-      timers.poll = setInterval(() => {
-        void isTauriBackendReady().then((ready) => {
-          if (ready) finish()
-        })
-      }, TAURI_POLL_INTERVAL_MS)
-    })()
-  })
-}
-
 export async function waitForBackendHealth(
   baseUrl: string,
   maxAttempts: number = HEALTH_MAX_ATTEMPTS,
   intervalMs: number = HEALTH_INTERVAL_MS,
 ): Promise<void> {
-  if (isTauriRuntime()) {
-    await waitForTauriBackend(maxAttempts * intervalMs)
-    return
-  }
-
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (await probeBackendHealth(baseUrl)) {
       return
@@ -258,8 +155,6 @@ export function useBackend(): BackendState {
   const baseUrl = ref('')
   const startupProgress = ref<number | null>(null)
 
-  let unlistenProgress: (() => void) | undefined
-
   async function init(): Promise<void> {
     error.value = null
     ready.value = false
@@ -267,17 +162,6 @@ export function useBackend(): BackendState {
     loading.value = true
     startupProgress.value = null
     resetCoreReady()
-
-    if (isTauriRuntime()) {
-      try {
-        unlistenProgress?.()
-        unlistenProgress = await listen<number>('backend-startup-progress', (event) => {
-          startupProgress.value = event.payload
-        })
-      } catch {
-        // ignore if event API unavailable
-      }
-    }
 
     try {
       const url = await resolveBackendBaseUrl()
@@ -302,10 +186,6 @@ export function useBackend(): BackendState {
 
   onMounted(() => {
     void init()
-  })
-
-  onUnmounted(() => {
-    unlistenProgress?.()
   })
 
   return { ready, coreReady, loading, error, baseUrl, startupProgress, init }

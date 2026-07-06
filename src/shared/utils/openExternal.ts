@@ -1,19 +1,10 @@
 /**
- * Open an external URL in the system's default browser.
+ * Open an external URL in a new browser tab.
  *
- * In Tauri (packaged exe), uses the shell plugin to open the URL via the OS
- * default handler. In a regular browser (dev server), falls back to
- * window.open so the link still works during web testing.
+ * Pure web mode: always uses window.open so links work in any browser
+ * environment. The previous Tauri shell-plugin path has been removed.
  */
 export async function openExternal(url: string): Promise<void> {
   if (!url) return
-
-  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-
-  if (isTauri) {
-    const { open } = await import('@tauri-apps/plugin-shell')
-    await open(url)
-  } else {
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }
+  window.open(url, '_blank', 'noopener,noreferrer')
 }

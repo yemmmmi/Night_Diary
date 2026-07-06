@@ -12,6 +12,7 @@ class AgentDecisionRow(Base):
     __tablename__ = "agent_decisions"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     agent_name: Mapped[str] = mapped_column(String(64), index=True)
     decision_type: Mapped[str] = mapped_column(String(32), index=True)
     diary_id: Mapped[str] = mapped_column(String(64), index=True, default="")

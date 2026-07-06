@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
-import { invoke } from '@tauri-apps/api/core'
-
 import type { ThemePreference } from '@/shared/composables/useTheme'
 
 const STORAGE_KEY = 'night-diary-app-settings'
@@ -255,15 +253,6 @@ export const useSettingsStore = defineStore('settings', () => {
     persist,
     { deep: true },
   )
-
-  // Sync autoBackup flag to Rust shell so RunEvent::Exit can respect it
-  watch(autoBackup, (enabled) => {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      invoke('set_auto_backup', { enabled }).catch(() => {
-        // non-fatal: Rust side defaults to true
-      })
-    }
-  })
 
   return {
     loaded,

@@ -6,6 +6,9 @@ It mirrors V1's classifier contract (``need_retrieval`` / ``need_weather`` /
 but is a Pydantic model so callers get validation and JSON round-tripping for
 free, and ``intent_category`` is constrained to the four canonical intents that
 ``MultiAgentState.intent`` also uses.
+
+``ChatIntent`` / ``ChatIntentResult`` extend the intent system for the
+conversation (multi-turn dialogue) scenario with chat-specific categories.
 """
 
 from __future__ import annotations
@@ -34,4 +37,27 @@ class IntentResult(BaseModel):
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
-__all__ = ["IntentCategory", "IntentResult"]
+class ChatIntent(StrEnum):
+    """Chat-specific intents for the conversation (multi-turn dialogue) scenario."""
+
+    CASUAL_CHAT = "casual_chat"
+    EMOTIONAL_VENT = "emotional_vent"
+    RETROSPECTIVE_QUERY = "retrospective_query"
+    ADVICE_SEEKING = "advice_seeking"
+    CRISIS_SIGNAL = "crisis_signal"
+    ENTITY_QUERY = "entity_query"
+
+
+class ChatIntentResult(BaseModel):
+    """Structured intent-classification result for conversation turns."""
+
+    intent_category: str = ChatIntent.CASUAL_CHAT.value
+    need_retrieval: bool = False
+    need_tools: list[str] = Field(default_factory=list)
+    need_entity_query: bool = False
+    tier: str = "medium"
+    max_iterations: int = 1
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+__all__ = ["ChatIntent", "ChatIntentResult", "IntentCategory", "IntentResult"]

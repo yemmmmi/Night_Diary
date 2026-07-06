@@ -2,20 +2,23 @@ import { getHttpClient } from '@/shared/api/http'
 
 export interface EpisodicEntry {
   entry_id: string
-  event: string
+  event_summary: string
   emotion: string
-  ai_suggestion: string
-  user_feedback: string
+  reply_insight: string
   importance: number
   timestamp: number
   diary_ids: string[]
-  source: 'card' | 'diary'
+  source: string
+  tags: string[]
+  mood_score: number
+  emotions: string[]
+  event_date: string | null
 }
 
 export interface EpisodicEntryUpdate {
-  event?: string
+  event_summary?: string
   emotion?: string
-  ai_suggestion?: string
+  reply_insight?: string
   importance?: number
 }
 

@@ -35,6 +35,18 @@ def e2e_client(tmp_path) -> TestClient:
     app = create_app(settings)
     with TestClient(app) as client:
         _wait_for_bootstrap(client)
+        # Register a test user and obtain auth token
+        client.post(
+            "/api/v1/auth/register",
+            json={"email": "e2e@test.com", "password": "password123", "nickname": "E2E"},
+        )
+        resp = client.post(
+            "/api/v1/auth/login",
+            data={"username": "e2e@test.com", "password": "password123"},
+        )
+        assert resp.status_code == 200, resp.text
+        token = resp.json()["access_token"]
+        client.headers["Authorization"] = f"Bearer {token}"
         yield client
     get_settings.cache_clear()
 
@@ -54,7 +66,7 @@ def test_diary_analysis_feedback_flow(e2e_client: TestClient) -> None:
     analysis = e2e_client.post(f"/api/v1/analysis/{diary_id}")
     assert analysis.status_code == 201
     analysis_id = analysis.json()["id"]
-    assert analysis.json()["ai_ans"]
+    assert analysis.json()["reply"]
 
     feedback = e2e_client.post(
         f"/api/v1/feedback/{analysis_id}",

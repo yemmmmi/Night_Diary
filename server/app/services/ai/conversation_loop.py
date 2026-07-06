@@ -19,12 +19,12 @@ as the existing :mod:`agent_executor`.
 
 from __future__ import annotations
 
-import json
+import contextlib
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from app.domain.agents.types import ChatIntentResult
 from app.services.ai.prompts import (
     CHAT_SYSTEM_PROMPT,
     CHAT_USER_PROMPT_TEMPLATE,
@@ -32,9 +32,16 @@ from app.services.ai.prompts import (
     TEMPORAL_KEYWORDS,
 )
 from app.services.ai.session_context import get_or_create_session
-from app.services.ai.tool_factory import ToolFn
+from app.services.ai.tool_factory import ToolFn, specs_for_names
 from app.services.ai.utils import extract_token_usage, merge_token_info
 from app.shared.llm import LLMClient, message_text
+from app.shared.tool_protocol import (
+    build_tool_hint,
+    extract_native_tool_calls,
+    parse_text_tag_calls,
+    strip_tool_tags,
+    supports_native_tools,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -46,15 +53,18 @@ logger = logging.getLogger(__name__)
 #: Maximum loop iterations (1 initial + up to 2 tool rounds).
 MAX_LOOP_ITERATIONS = 3
 
-#: Pattern to parse tool calls from LLM output.
-_TOOL_CALL_PATTERN = re.compile(r"<tool>(\w+)</tool>\s*<args>(.*?)</args>", re.DOTALL)
 
-#: Tool-calling hint appended to the system prompt.
-_TOOL_HINT = (
-    "\n\n如需调用工具查询信息，请输出：<tool>工具名</tool> <args>{\"参数\": \"值\"}</args>"
-    "\n可用工具：search_diary（搜索历史日记）、analyze_sentiment（情感分析）"
-    "\n仅当用户提到回溯性表述（如\"昨天\"\"上次\"）时才调用 search_diary。"
-)
+@dataclass(frozen=True, slots=True)
+class Citation:
+    """Source citation for result integration — tracks where information came from.
+
+    Used to append a "参考来源" section to the final response so the user
+    can see which tools, diaries, or memories informed the AI's reply.
+    """
+
+    source_type: str  # "tool" | "diary" | "memory" | "skill"
+    source_name: str  # tool name, diary date, memory label, skill name
+    content_summary: str  # first 100 chars of the source content
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,20 +76,32 @@ class LoopResult:
     stop_reason: str  # "completed" | "tool_called" | "max_iterations" | "error" | "no_llm"
     tool_calls_made: list[str] = field(default_factory=list)
     is_crisis: bool = False
+    citations: list[Citation] = field(default_factory=list)
 
 
-def _parse_tool_calls(text: str) -> list[tuple[str, dict[str, Any]]]:
-    """Extract tool calls from LLM output text."""
-    calls: list[tuple[str, dict[str, Any]]] = []
-    for match in _TOOL_CALL_PATTERN.finditer(text):
-        name = match.group(1)
-        raw_args = match.group(2).strip()
-        try:
-            args = json.loads(raw_args) if raw_args else {}
-        except json.JSONDecodeError:
-            args = {"query": raw_args}
-        calls.append((name, args))
-    return calls
+def _format_citations(citations: list[Citation]) -> str:
+    """Format citations as a '参考来源' section appended to the reply.
+
+    Only appends if there are citations — empty list means no annotation.
+    """
+    if not citations:
+        return ""
+
+    lines = ["\n\n---\n📋 **参考来源**"]
+    type_labels = {
+        "tool": "工具",
+        "diary": "日记",
+        "memory": "记忆",
+        "skill": "技能",
+    }
+    for cite in citations:
+        label = type_labels.get(cite.source_type, cite.source_type)
+        summary = cite.content_summary[:80]
+        if len(cite.content_summary) > 80:
+            summary += "…"
+        lines.append(f"- [{label}] {cite.source_name}：{summary}")
+
+    return "\n".join(lines)
 
 
 def _needs_tool_call(content: str) -> bool:
@@ -108,6 +130,106 @@ def _execute_tool(
         return f"[{tool_name} error]: {exc}"
 
 
+def _run_via_graph(
+    *,
+    db: Session,
+    container: ServiceContainer,
+    conversation_id: str,
+    content: str,
+    pinned_diaries_text: str,
+    retrieved_diaries_text: str,
+    episodic_text: str,
+    tools: dict[str, ToolFn] | None,
+    intent_result: ChatIntentResult | None,
+    user_id: str,
+) -> LoopResult | None:
+    """Execute conversation via LangGraph StateGraph.
+
+    Returns LoopResult on success, None if graph is unavailable.
+    Raises on execution error (caught by caller for fallback).
+    """
+    from app.services.ai.conversation_graph import (
+        LANGGRAPH_AVAILABLE,
+        build_conversation_graph,
+        run_conversation_graph,
+    )
+    from app.services.ai.session_context import get_or_create_session
+
+    if not LANGGRAPH_AVAILABLE:
+        return None
+
+    # Get or create session for context
+    session = get_or_create_session(conversation_id, container=container, user_id=user_id)
+
+    # Get LLM
+    tier = intent_result.tier if intent_result else "medium"
+    llm = container._llm_for_tier(db, tier, agent_name="conversation_graph")
+    if llm is None:
+        return None
+
+    # Build tool specs
+    from app.services.ai.tool_factory import specs_for_names
+
+    tool_names = list((tools or {}).keys())
+    tool_specs = specs_for_names(tool_names) if tool_names else []
+
+    # Build system prompt (simplified for graph)
+    from app.services.ai.prompts import CHAT_SYSTEM_PROMPT
+
+    system_prompt = CHAT_SYSTEM_PROMPT
+    chat_history = session.get_history()
+    if chat_history:
+        system_prompt += f"\n\n## 对话历史\n{chat_history}"
+
+    # Get or build graph (cached in container)
+    # Note: use container.__dict__ to avoid auto-creating attributes on
+    # MagicMock containers (getattr never returns None for MagicMock).
+    graph = container.__dict__.get("_conversation_graph") if hasattr(container, "__dict__") else None
+    if graph is None:
+        graph = build_conversation_graph()
+        if graph is None:
+            return None
+        # Cache for reuse
+        with contextlib.suppress(Exception):
+            container._conversation_graph = graph
+
+    # Run graph
+    brief_context = session.compressed_history[:300] if session.compressed_history else ""
+    final_state = run_conversation_graph(
+        graph,
+        content=content,
+        intent_result=intent_result,
+        tools=tools,
+        tool_specs=tool_specs,
+        llm=llm,
+        system_prompt=system_prompt,
+        pinned_diaries_text=pinned_diaries_text,
+        retrieved_diaries_text=retrieved_diaries_text,
+        episodic_text=episodic_text,
+        brief_context=brief_context,
+        conversation_id=conversation_id,
+    )
+
+    # Convert graph output to LoopResult
+    final_response = final_state.get("final_response", FALLBACK_FEEDBACK)
+    total_usage = final_state.get("total_usage", {})
+    stop_reason = final_state.get("stop_reason", "completed")
+    tool_calls_made = final_state.get("tool_calls_made", [])
+    citations = final_state.get("citations", [])
+
+    # Update session
+    session.accumulate_usage(total_usage)
+    session.add_turn(content, final_response)
+
+    return LoopResult(
+        reply_text=final_response,
+        token_info=total_usage,
+        stop_reason=stop_reason,
+        tool_calls_made=tool_calls_made,
+        citations=citations,
+    )
+
+
 def run_conversation_loop(
     db: Session,
     container: ServiceContainer,
@@ -120,23 +242,65 @@ def run_conversation_loop(
     memory_ids: list[str],
     tools: dict[str, ToolFn] | None = None,
     crisis_guard: Any | None = None,
+    user_id: str = "default",
+    intent_result: ChatIntentResult | None = None,
+    use_graph: bool = True,
 ) -> LoopResult:
     """Execute the Agentic Loop for a single conversation turn.
+
+    When ``use_graph=True`` (default) and LangGraph is available, the loop
+    runs via the StateGraph pipeline with checkpointing. On any failure,
+    it falls back to the legacy synchronous loop.
+
+    Args:
+        use_graph: If True, try LangGraph StateGraph first (with fallback).
+                   If False, always use the legacy synchronous loop.
 
     This function is called by :func:`generate_reply` after context assembly
     (crisis check, profile loading, RAG retrieval) is complete. It handles the
     loop portion: model call → tool check → tool execution → re-call.
     """
-    # Get or create session context (task 8)
-    session = get_or_create_session(conversation_id, container=container)
+    # ── Graph-based execution (P3: LangGraph StateGraph) ──
+    if use_graph:
+        try:
+            graph_result = _run_via_graph(
+                db=db,
+                container=container,
+                conversation_id=conversation_id,
+                content=content,
+                pinned_diaries_text=pinned_diaries_text,
+                retrieved_diaries_text=retrieved_diaries_text,
+                episodic_text=episodic_text,
+                tools=tools,
+                intent_result=intent_result,
+                user_id=user_id,
+            )
+            if graph_result is not None:
+                return graph_result
+            # graph_result is None → graph unavailable, fall through to legacy
+        except Exception as exc:
+            logger.warning(
+                "Graph execution failed, falling back to legacy loop: %s",
+                exc,
+            )
 
-    # Determine if tools should be enabled for this turn
-    enable_tools = tools is not None and len(tools) > 0 and _needs_tool_call(content)
+    # ── Legacy synchronous loop (fallback) ──
+    # Get or create session context (task 8)
+    session = get_or_create_session(conversation_id, container=container, user_id=user_id)
+
+    # Intent-driven routing (replaces _needs_tool_call heuristic when available)
+    if intent_result is not None:
+        enable_tools = tools is not None and len(tools) > 0 and len(intent_result.need_tools) > 0
+        tier = intent_result.tier
+        max_iterations = intent_result.max_iterations
+    else:
+        # Fallback: legacy heuristic (backward compat for uncalled paths)
+        enable_tools = tools is not None and len(tools) > 0 and _needs_tool_call(content)
+        tier = "medium"
+        max_iterations = MAX_LOOP_ITERATIONS
 
     # Build the base prompt
     system_prompt = CHAT_SYSTEM_PROMPT
-    if enable_tools:
-        system_prompt += _TOOL_HINT
 
     chat_history = session.get_history()
     topics_text = "、".join(session.profile_topics) if session.profile_topics else "（暂无）"
@@ -154,7 +318,7 @@ def run_conversation_loop(
         )
 
     # Get LLM
-    llm: LLMClient | None = container._llm_for_tier(db, "medium", agent_name="chat")
+    llm: LLMClient | None = container._llm_for_tier(db, tier, agent_name="chat")
     if llm is None:
         logger.warning("ConversationLoop: LLM unavailable")
         return LoopResult(
@@ -163,21 +327,65 @@ def run_conversation_loop(
             stop_reason="no_llm",
         )
 
+    # Detect tool protocol path and build tool specs (after LLM is available)
+    tool_specs = specs_for_names(list((tools or {}).keys())) if tools else []
+    use_native = supports_native_tools(llm) and bool(tool_specs)
+    bound_llm = None
+    if use_native:
+        try:
+            bound_llm = llm.bind_tools(tool_specs)  # type: ignore[attr-defined]
+        except Exception as exc:
+            logger.warning("bind_tools failed, falling back to text-tag: %s", exc)
+            use_native = False
+
+    if enable_tools and not use_native:
+        system_prompt += build_tool_hint(tool_specs)
+
     # ── Agentic Loop (stage 4) ──
     total_usage: dict[str, int] = {}
     tool_calls_made: list[str] = []
     tool_results_text = ""
     current_prompt = f"{system_prompt}\n\n{base_user_prompt}"
+    citations: list[Citation] = []
 
-    for iteration in range(MAX_LOOP_ITERATIONS):
+    # Track context sources as citations (pinned diaries, retrieved diaries, episodic)
+    if pinned_diaries_text and pinned_diaries_text.strip():
+        citations.append(
+            Citation(
+                source_type="diary",
+                source_name="用户置顶日记",
+                content_summary=pinned_diaries_text[:100],
+            )
+        )
+    if retrieved_diaries_text and retrieved_diaries_text.strip():
+        citations.append(
+            Citation(
+                source_type="diary",
+                source_name="检索日记",
+                content_summary=retrieved_diaries_text[:100],
+            )
+        )
+    if episodic_text and episodic_text.strip():
+        citations.append(
+            Citation(
+                source_type="memory",
+                source_name="情景记忆",
+                content_summary=episodic_text[:100],
+            )
+        )
+
+    for iteration in range(max_iterations):
         # 4.1 Context governance: check token budget
         # (SessionContext already manages history compression)
 
-        # 4.2 Call model
+        # 4.2 Call model (native or fallback path)
         try:
-            if tool_results_text:
-                current_prompt += f"\n\n## 工具结果\n{tool_results_text}"
-            response = llm.invoke(current_prompt)
+            if use_native and bound_llm is not None:
+                response = bound_llm.invoke(current_prompt)
+            else:
+                if tool_results_text:
+                    current_prompt += f"\n\n## 工具结果\n{tool_results_text}"
+                response = llm.invoke(current_prompt)
         except Exception as exc:
             logger.warning("ConversationLoop LLM invoke failed (iter %d): %s", iteration, exc)
             return LoopResult(
@@ -192,44 +400,63 @@ def run_conversation_loop(
         result_text = message_text(response).strip()
 
         # 4.3 Check if tool call is needed
-        if not enable_tools or iteration == MAX_LOOP_ITERATIONS - 1:
+        if not enable_tools or iteration == max_iterations - 1:
             # No tools enabled, or max iterations reached
             stop_reason = "max_iterations" if (enable_tools and iteration > 0) else "completed"
             break
 
-        tool_calls = _parse_tool_calls(result_text)
-        if not tool_calls:
+        # Parse tool calls (native or fallback path)
+        if use_native:
+            tool_call_results = extract_native_tool_calls(response)
+        else:
+            tool_call_results = parse_text_tag_calls(result_text)
+
+        if not tool_call_results:
             # No tool calls in response — we're done
             stop_reason = "completed"
             break
 
         # 4.4 Execute tools and backfill results
         tool_results: list[str] = []
-        for tool_name, tool_args in tool_calls:
-            tool_calls_made.append(tool_name)
-            result = _execute_tool(tool_name, tool_args, tools or {})
+        for tc in tool_call_results:
+            tool_calls_made.append(tc.name)
+            result = _execute_tool(tc.name, tc.args, tools or {})
             tool_results.append(result)
+            # Track tool result as citation
+            citations.append(
+                Citation(
+                    source_type="tool",
+                    source_name=tc.name,
+                    content_summary=result[:100],
+                )
+            )
 
         tool_results_text = "\n".join(tool_results)
         stop_reason = "tool_called"
         # Loop continues to 4.1 for the next iteration
 
-    # Clean up tool-call tags from final response
-    final_text = _TOOL_CALL_PATTERN.sub("", result_text).strip()
+    # Clean up tool-call tags from final response (fallback path only)
+    final_text = result_text if use_native else strip_tool_tags(result_text)
     if not final_text:
         final_text = FALLBACK_FEEDBACK
+
+    # Append citations section (result integration enhancement)
+    citations_section = _format_citations(citations)
+    if citations_section:
+        final_text += citations_section
 
     # Stage 5: Output aggregation — accumulate usage in session
     session.accumulate_usage(total_usage)
     session.add_turn(content, final_text)
 
     logger.info(
-        "ConversationLoop completed: conversation=%s iterations=%d tools=%s tokens=%d stop=%s",
+        "ConversationLoop completed: conversation=%s iterations=%d tools=%s tokens=%d stop=%s citations=%d",
         conversation_id,
         iteration + 1,
         tool_calls_made,
         total_usage.get("total_tokens_used", 0),
         stop_reason,
+        len(citations),
     )
 
     return LoopResult(
@@ -237,11 +464,13 @@ def run_conversation_loop(
         token_info=total_usage,
         stop_reason=stop_reason,
         tool_calls_made=tool_calls_made,
+        citations=citations,
     )
 
 
 __all__ = [
     "MAX_LOOP_ITERATIONS",
+    "Citation",
     "LoopResult",
     "run_conversation_loop",
 ]

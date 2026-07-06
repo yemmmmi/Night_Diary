@@ -122,7 +122,7 @@ const weekColumns = computed(() => {
 const streak = computed(() => computeWritingStreak(diaryStore.entries))
 
 const replyCount = computed(() =>
-  diaryStore.entries.filter((e) => e.ai_ans && e.ai_ans.trim()).length,
+  diaryStore.entries.filter((e) => e.reply && e.reply.trim()).length,
 )
 
 const hasTodayEntry = computed(() =>
@@ -142,7 +142,7 @@ const footerStatsLabel = computed(() =>
 )
 
 function openEntry(entry: DiaryEntry, scrollToReply = false) {
-  if (scrollToReply && entry.ai_ans?.trim()) {
+  if (scrollToReply && entry.reply?.trim()) {
     router.push({ path: `/write/${entry.id}`, hash: '#reply' })
     return
   }

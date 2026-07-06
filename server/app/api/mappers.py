@@ -31,7 +31,7 @@ def diary_to_response(row: DiaryEntryRow) -> DiaryResponse:
         content=row.content,
         date=row.date,
         weather=row.weather,
-        ai_ans=row.ai_ans,
+        reply=row.reply,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -40,15 +40,18 @@ def diary_to_response(row: DiaryEntryRow) -> DiaryResponse:
 def analysis_to_response(
     row: AnalysisRow,
     *,
-    ai_ans: str | None = None,
+    reply: str | None = None,
     db: Session | None = None,
     referenced_memory_count: int = 0,
+    user_id: str | None = None,
 ) -> AnalysisResponse:
     model_name: str | None = None
     if db is not None and row.execution_tier:
-        provider = model_service.get_active_provider_for_tier(db, row.execution_tier)
+        provider = model_service.get_active_provider_for_tier(
+            db, row.execution_tier, user_id=user_id
+        )
         if provider is None and row.execution_tier != "default":
-            provider = model_service.get_active_provider_for_tier(db, "default")
+            provider = model_service.get_active_provider_for_tier(db, "default", user_id=user_id)
         if provider is not None:
             model_name = provider.model_name
 
@@ -67,7 +70,7 @@ def analysis_to_response(
         agent_mode=row.agent_mode,
         execution_tier=row.execution_tier,
         activated_agents=row.activated_agents,
-        ai_ans=ai_ans,
+        reply=reply,
         model_name=model_name,
         status_detail=status_detail,
         referenced_memory_count=referenced_memory_count,

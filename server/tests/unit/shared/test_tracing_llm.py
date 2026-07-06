@@ -20,6 +20,7 @@ class _FakeLLM:
     def invoke(self, prompt: str) -> str:
         if self._delay:
             import time
+
             time.sleep(self._delay)
         return self._response
 

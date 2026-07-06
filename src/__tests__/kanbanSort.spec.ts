@@ -18,7 +18,7 @@ function diary(id: number, partial: Partial<DiaryEntry> = {}): KanbanItem {
       content: partial.content ?? '这是一段足够长的日记正文内容',
       date: partial.date ?? '2026-06-10',
       weather: null,
-      ai_ans: partial.ai_ans ?? null,
+      reply: partial.reply ?? null,
       created_at: partial.created_at ?? `2026-06-10T10:0${id}:00`,
       updated_at: partial.updated_at ?? `2026-06-10T10:0${id}:00`,
     },
@@ -49,7 +49,7 @@ describe('kanbanSort', () => {
     const items: KanbanItem[] = [
       card('c1', '2026-06-10T12:00:00'),
       diary(1, { created_at: '2026-06-10T11:00:00' }),
-      diary(2, { ai_ans: '回信', created_at: '2026-06-10T09:00:00' }),
+      diary(2, { reply: '回信', created_at: '2026-06-10T09:00:00' }),
     ]
 
     const sorted = sortKanbanItems(items)

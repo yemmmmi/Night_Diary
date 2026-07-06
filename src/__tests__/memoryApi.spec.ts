@@ -17,10 +17,9 @@ vi.mock('@/shared/composables/useBackend', () => ({
 
 const sampleEpisodic = {
   entry_id: 'a1',
-  event: '搬家，既兴奋又疲惫',
+  event_summary: '搬家，既兴奋又疲惫',
   emotion: '兴奋',
-  ai_suggestion: '',
-  user_feedback: 'none',
+  reply_insight: '',
   importance: 0.7,
   timestamp: 1781510000,
   diary_ids: [],
@@ -94,15 +93,15 @@ describe('memory API', () => {
       mockAxiosClient({ get, patch }) as never,
     )
     patch.mockResolvedValue({
-      data: { ...sampleEpisodic, event: '更新后', emotion: '开心' },
+      data: { ...sampleEpisodic, event_summary: '更新后', emotion: '开心' },
     })
 
-    const result = await updateEpisodic('a1', { event: '更新后', emotion: '开心' })
+    const result = await updateEpisodic('a1', { event_summary: '更新后', emotion: '开心' })
     expect(patch).toHaveBeenCalledWith('/api/v1/memory/episodic/a1', {
-      event: '更新后',
+      event_summary: '更新后',
       emotion: '开心',
     })
-    expect(result.event).toBe('更新后')
+    expect(result.event_summary).toBe('更新后')
   })
 
   it('deletes an episodic entry', async () => {

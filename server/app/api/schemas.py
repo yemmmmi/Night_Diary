@@ -32,7 +32,7 @@ class DiaryResponse(BaseModel):
     content: str | None
     date: datetime.date | None
     weather: str | None
-    ai_ans: str | None
+    reply: str | None
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
@@ -50,7 +50,7 @@ class AnalysisResponse(BaseModel):
     agent_mode: str | None
     execution_tier: str | None
     activated_agents: str | None
-    ai_ans: str | None = None
+    reply: str | None = None
     model_name: str | None = None
     status_detail: str | None = None
     referenced_memory_count: int = 0
@@ -76,10 +76,17 @@ class FeedbackCreateRequest(BaseModel):
     response_style: str = "empathetic"
 
 
+class ConversationFeedbackCreateRequest(BaseModel):
+    feedback_type: Literal["positive", "negative"]
+    reason: str | None = None
+    response_style: str = "empathetic"
+
+
 class FeedbackResponse(BaseModel):
     id: int
-    analysis_id: int
-    diary_id: int
+    analysis_id: int | None = None
+    diary_id: int | None = None
+    conversation_id: str | None = None
     feedback_type: str
     response_style: str
     reason: str | None
@@ -163,7 +170,6 @@ class StatsResponse(BaseModel):
     total_tokens_out: int
 
 
-
 # ── Memory Card ────────────────────────────────────────────────────────
 
 
@@ -231,20 +237,23 @@ class WeeklyReportResponse(BaseModel):
 
 class EpisodicEntryResponse(BaseModel):
     entry_id: str
-    event: str
+    event_summary: str
     emotion: str
-    ai_suggestion: str
-    user_feedback: str
+    reply_insight: str
     importance: float
     timestamp: float
     diary_ids: list[str] = Field(default_factory=list)
-    source: Literal["card", "diary"]
+    source: str = "diary"
+    tags: list[str] = Field(default_factory=list)
+    mood_score: float = 0.5
+    emotions: list[str] = Field(default_factory=list)
+    event_date: str | None = None
 
 
 class EpisodicEntryUpdateRequest(BaseModel):
-    event: str | None = Field(default=None, min_length=1)
+    event_summary: str | None = Field(default=None, min_length=1)
     emotion: str | None = Field(default=None, min_length=1, max_length=32)
-    ai_suggestion: str | None = None
+    reply_insight: str | None = None
     importance: float | None = Field(default=None, ge=0.0, le=1.0)
 
 

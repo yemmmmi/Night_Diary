@@ -91,8 +91,7 @@ class ModelDownloadService:
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._items: dict[str, ModelDownloadItem] = {
-            key: ModelDownloadItem(key=key, repo_id=repo_id)
-            for key, repo_id in REQUIRED_MODELS
+            key: ModelDownloadItem(key=key, repo_id=repo_id) for key, repo_id in REQUIRED_MODELS
         }
 
     def snapshot(self) -> ModelDownloadSnapshot:
@@ -144,7 +143,9 @@ class ModelDownloadService:
                     self._items[key].progress = 0.0
                     self._items[key].error = None
 
-            self._thread = threading.Thread(target=self._run_downloads, name="model-download", daemon=True)
+            self._thread = threading.Thread(
+                target=self._run_downloads, name="model-download", daemon=True
+            )
             self._thread.start()
             return True
 

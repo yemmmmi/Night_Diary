@@ -54,21 +54,29 @@ def week_bounds(reference: date | None = None) -> tuple[date, date]:
 # ── aggregation ──────────────────────────────────────────────────────────
 
 
-def _diaries_in_week(db: Session, start: date, end: date) -> list[DiaryEntryRow]:
+def _diaries_in_week(db: Session, *, user_id: str, start: date, end: date) -> list[DiaryEntryRow]:
     return (
         db.query(DiaryEntryRow)
-        .filter(DiaryEntryRow.date >= start, DiaryEntryRow.date <= end)
+        .filter(
+            DiaryEntryRow.user_id == user_id,
+            DiaryEntryRow.date >= start,
+            DiaryEntryRow.date <= end,
+        )
         .order_by(DiaryEntryRow.date.asc())
         .all()
     )
 
 
-def _cards_in_week(db: Session, start: date, end: date) -> list[MemoryCardRow]:
+def _cards_in_week(db: Session, *, user_id: str, start: date, end: date) -> list[MemoryCardRow]:
     start_dt = datetime.combine(start, time.min)
     end_dt = datetime.combine(end, time.max)
     return (
         db.query(MemoryCardRow)
-        .filter(MemoryCardRow.created_at >= start_dt, MemoryCardRow.created_at <= end_dt)
+        .filter(
+            MemoryCardRow.user_id == user_id,
+            MemoryCardRow.created_at >= start_dt,
+            MemoryCardRow.created_at <= end_dt,
+        )
         .order_by(MemoryCardRow.created_at.asc())
         .all()
     )
@@ -123,17 +131,23 @@ def _build_context(content: str) -> dict[str, str]:
 # ── persistence ──────────────────────────────────────────────────────────
 
 
-def get_report_by_period(db: Session, period_start: date) -> WeeklyReportRow | None:
+def get_report_by_period(
+    db: Session, *, user_id: str, period_start: date
+) -> WeeklyReportRow | None:
     return (
         db.query(WeeklyReportRow)
-        .filter(WeeklyReportRow.period_start == period_start)
+        .filter(
+            WeeklyReportRow.user_id == user_id,
+            WeeklyReportRow.period_start == period_start,
+        )
         .first()
     )
 
 
-def get_latest_report(db: Session) -> WeeklyReportRow:
+def get_latest_report(db: Session, *, user_id: str) -> WeeklyReportRow:
     row = (
         db.query(WeeklyReportRow)
+        .filter(WeeklyReportRow.user_id == user_id)
         .order_by(desc(WeeklyReportRow.period_start))
         .first()
     )
@@ -142,9 +156,12 @@ def get_latest_report(db: Session) -> WeeklyReportRow:
     return row
 
 
-def list_reports(db: Session, *, skip: int = 0, limit: int = 20) -> list[WeeklyReportRow]:
+def list_reports(
+    db: Session, *, user_id: str, skip: int = 0, limit: int = 20
+) -> list[WeeklyReportRow]:
     return (
         db.query(WeeklyReportRow)
+        .filter(WeeklyReportRow.user_id == user_id)
         .order_by(desc(WeeklyReportRow.period_start))
         .offset(skip)
         .limit(limit)
@@ -152,8 +169,15 @@ def list_reports(db: Session, *, skip: int = 0, limit: int = 20) -> list[WeeklyR
     )
 
 
-def delete_report(db: Session, report_id: int) -> bool:
-    row = db.query(WeeklyReportRow).filter(WeeklyReportRow.id == report_id).first()
+def delete_report(db: Session, *, user_id: str, report_id: int) -> bool:
+    row = (
+        db.query(WeeklyReportRow)
+        .filter(
+            WeeklyReportRow.id == report_id,
+            WeeklyReportRow.user_id == user_id,
+        )
+        .first()
+    )
     if row is None:
         return False
     db.delete(row)
@@ -162,11 +186,11 @@ def delete_report(db: Session, report_id: int) -> bool:
     return True
 
 
-def delete_report_for_period(db: Session, period_start: date) -> bool:
-    row = get_report_by_period(db, period_start)
+def delete_report_for_period(db: Session, *, user_id: str, period_start: date) -> bool:
+    row = get_report_by_period(db, user_id=user_id, period_start=period_start)
     if row is None:
         return False
-    return delete_report(db, row.id)
+    return delete_report(db, user_id=user_id, report_id=row.id)
 
 
 # ── generation ───────────────────────────────────────────────────────────
@@ -175,16 +199,18 @@ def delete_report_for_period(db: Session, period_start: date) -> bool:
 def create_weekly_report(
     db: Session,
     *,
+    user_id: str,
     planner: ExecutionPlanner,
     reference: date | None = None,
 ) -> WeeklyReportRow:
     start, end = week_bounds(reference)
 
-    if get_report_by_period(db, start) is not None:
+    # Application-level uniqueness check scoped to (user_id, period_start).
+    if get_report_by_period(db, user_id=user_id, period_start=start) is not None:
         raise WeeklyReportExistsError()
 
-    diaries = _diaries_in_week(db, start, end)
-    cards = _cards_in_week(db, start, end)
+    diaries = _diaries_in_week(db, user_id=user_id, start=start, end=end)
+    cards = _cards_in_week(db, user_id=user_id, start=start, end=end)
     if not diaries and not cards:
         raise WeeklyReportEmptyError()
 
@@ -196,9 +222,10 @@ def create_weekly_report(
     )
 
     row = WeeklyReportRow(
+        user_id=user_id,
         period_start=start,
         period_end=end,
-        content=result.ai_ans,
+        content=result.reply,
         diary_count=len(diaries),
         card_count=len(cards),
         avg_mood=_avg_mood(cards),
@@ -225,21 +252,23 @@ def generate_weekly_report(
     db: Session,
     container: ServiceContainer,
     *,
+    user_id: str,
     reference: date | None = None,
 ) -> WeeklyReportRow:
     """End-to-end entry: build planner from container and create a weekly report."""
-    planner = container.build_execution_planner(db)
-    return create_weekly_report(db, planner=planner, reference=reference)
+    planner = container.build_execution_planner(db, user_id=user_id)
+    return create_weekly_report(db, user_id=user_id, planner=planner, reference=reference)
 
 
 def regenerate_weekly_report(
     db: Session,
     container: ServiceContainer,
     *,
+    user_id: str,
     reference: date | None = None,
 ) -> WeeklyReportRow:
     """Force a fresh weekly report — replaces any existing one for the week."""
     start, _ = week_bounds(reference)
-    delete_report_for_period(db, start)
-    planner = container.build_execution_planner(db)
-    return create_weekly_report(db, planner=planner, reference=reference)
+    delete_report_for_period(db, user_id=user_id, period_start=start)
+    planner = container.build_execution_planner(db, user_id=user_id)
+    return create_weekly_report(db, user_id=user_id, planner=planner, reference=reference)

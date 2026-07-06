@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, Response, status
 
-from app.api.deps import ContainerDep, DbDep
+from app.api.deps import ContainerDep, CurrentUserDep, DbDep
 from app.api.mappers import diary_to_response
 from app.api.schemas import DiaryCreateRequest, DiaryResponse, DiaryUpdateRequest
 from app.services import diary_service
@@ -15,10 +15,11 @@ router = APIRouter(prefix="/diary", tags=["diary"])
 @router.get("/entries", response_model=list[DiaryResponse])
 def list_entries(
     db: DbDep,
+    user: CurrentUserDep,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
 ) -> list[DiaryResponse]:
-    rows = diary_service.list_entries(db, skip=skip, limit=limit)
+    rows = diary_service.list_entries(db, user_id=str(user.id), skip=skip, limit=limit)
     return [diary_to_response(row) for row in rows]
 
 
@@ -26,10 +27,12 @@ def list_entries(
 def create_entry(
     body: DiaryCreateRequest,
     db: DbDep,
+    user: CurrentUserDep,
     container: ContainerDep,
 ) -> DiaryResponse:
     row = diary_service.create_entry(
         db,
+        user_id=str(user.id),
         content=body.content,
         entry_date=body.date,
         weather=body.weather,
@@ -39,8 +42,8 @@ def create_entry(
 
 
 @router.get("/entries/{diary_id}", response_model=DiaryResponse)
-def get_entry(diary_id: int, db: DbDep) -> DiaryResponse:
-    row = diary_service.get_entry(db, diary_id)
+def get_entry(diary_id: int, db: DbDep, user: CurrentUserDep) -> DiaryResponse:
+    row = diary_service.get_entry(db, diary_id, user_id=str(user.id))
     return diary_to_response(row)
 
 
@@ -49,11 +52,13 @@ def update_entry(
     diary_id: int,
     body: DiaryUpdateRequest,
     db: DbDep,
+    user: CurrentUserDep,
     container: ContainerDep,
 ) -> DiaryResponse:
     row = diary_service.update_entry(
         db,
         diary_id,
+        user_id=str(user.id),
         content=body.content,
         weather=body.weather,
         collection_manager=container.diary_collection,
@@ -61,7 +66,19 @@ def update_entry(
     return diary_to_response(row)
 
 
-@router.delete("/entries/{diary_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
-def delete_entry(diary_id: int, db: DbDep, container: ContainerDep) -> Response:
-    diary_service.delete_entry(db, diary_id, collection_manager=container.diary_collection)
+@router.delete(
+    "/entries/{diary_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response
+)
+def delete_entry(
+    diary_id: int,
+    db: DbDep,
+    user: CurrentUserDep,
+    container: ContainerDep,
+) -> Response:
+    diary_service.delete_entry(
+        db,
+        diary_id,
+        user_id=str(user.id),
+        collection_manager=container.diary_collection,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

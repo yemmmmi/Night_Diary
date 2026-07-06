@@ -117,6 +117,7 @@ def _parse_questions(text: str) -> list[str]:
 
     # Brute-force: extract quoted strings
     import re
+
     matches = re.findall(r'"([^"]+)"', text)
     if matches:
         return matches[:3]

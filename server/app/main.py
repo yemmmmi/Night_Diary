@@ -59,11 +59,15 @@ def _ensure_dirs(settings) -> None:  # type: ignore[no-untyped-def]
 
 def _bootstrap_core_sync(app: FastAPI) -> None:
     """SQLite + session factory — fast enough for ``/ready`` and diary CRUD."""
+    import time as _time
+
     from app.services.container import ServiceContainer
 
+    t0 = _time.perf_counter()
     app.state.container = ServiceContainer.create_core()
+    t1 = _time.perf_counter()
     app.state.bootstrap_done = True
-    logger.info("Core bootstrap ready (SQLite + diary CRUD)")
+    logger.info("Core bootstrap ready (SQLite + diary CRUD) in %.2fs", t1 - t0)
 
 
 def _bootstrap_ai_sync(app: FastAPI) -> None:
@@ -98,13 +102,20 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     app = FastAPI(title=cfg.app_name, version="0.0.1", lifespan=lifespan)
 
-    # WebView (Vite dev / Tauri) runs on a different origin than the sidecar.
-    # Loopback-only CORS so POST/PUT preflight succeeds; not exposed to the LAN.
+    # CORS: loopback is always allowed; additional origins via config.
+    import re as _re
+
     from fastapi.middleware.cors import CORSMiddleware
+
+    _cors_regex = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+    if cfg.cors_origins:
+        _extra = "|".join(_re.escape(o.strip()) for o in cfg.cors_origins.split(",") if o.strip())
+        if _extra:
+            _cors_regex = f"{_cors_regex}|{_extra}"
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://tauri\.localhost$|^tauri://localhost$",
+        allow_origin_regex=_cors_regex,
         allow_methods=["*"],
         allow_headers=["*"],
     )

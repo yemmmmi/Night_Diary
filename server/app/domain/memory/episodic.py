@@ -14,9 +14,9 @@ Example::
     memory.load()
 
     entry = EpisodicEntry(
-        event="失眠",
+        event_summary="失眠",
         emotion="焦虑",
-        ai_suggestion="尝试放松呼吸",
+        reply_insight="尝试放松呼吸",
         timestamp=time.time(),
         importance=0.8,
         diary_ids=["d01"],
@@ -50,7 +50,7 @@ RELEVANCE_WEIGHT = 1.0
 def char_jaccard(left: str, right: str) -> float:
     """Character-level Jaccard overlap for short Chinese text.
 
-    Episodic ``event`` labels are typically 2-4 characters ("失眠", "加班").
+    Episodic ``event_summary`` labels are typically 2-4 characters ("失眠", "加班").
     Word-level jieba tokenisation treats these as single tokens, yielding zero
     overlap between semantically related labels like "失眠" and "睡眠".
     Character-level matching catches the shared "眠" character.
@@ -130,7 +130,7 @@ class EpisodicMemory:
     ) -> list[EpisodicEntry]:
         """Return top entries ranked by importance * decay, boosted by query relevance.
 
-        When *query* is non-empty, entries whose ``event`` text overlaps with the
+        When *query* is non-empty, entries whose ``event_summary`` text overlaps with the
         query receive a multiplicative boost (up to ``1 + RELEVANCE_WEIGHT``).
         Entries that don't overlap keep their base score, so relevance affects
         ranking order but never lowers a qualified entry below its natural
@@ -151,7 +151,7 @@ class EpisodicMemory:
                 continue
             final = base
             if sim_fn is not None:
-                relevance = sim_fn(query, entry.event)
+                relevance = sim_fn(query, entry.event_summary)
                 final = base * (1.0 + relevance * RELEVANCE_WEIGHT)
             scored.append((final, entry))
 
@@ -225,3 +225,12 @@ class EpisodicMemory:
     @property
     def size(self) -> int:
         return len(self._entries)
+
+    def get_entries(self) -> list[EpisodicEntry]:
+        """Return a snapshot of all episodic entries (public API)."""
+        return list(self._entries)
+
+    @property
+    def user_id(self) -> str:
+        """Return the user_id this memory store is scoped to."""
+        return self._user_id

@@ -19,11 +19,7 @@ class InMemoryStylePreferenceStore:
         self._records: dict[tuple[str, str], StylePreferenceRecord] = {}
 
     def get_preferences(self, user_id: str) -> list[StylePreferenceRecord]:
-        return [
-            record
-            for (uid, _), record in self._records.items()
-            if uid == user_id
-        ]
+        return [record for (uid, _), record in self._records.items() if uid == user_id]
 
     def ensure_preferences(self, user_id: str, styles: list[str]) -> list[StylePreferenceRecord]:
         now = 0.0

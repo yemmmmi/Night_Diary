@@ -68,13 +68,16 @@ class LLMFactory:
             model_name=self._settings.llm_model,
         )
 
-    def create_for_tier(self, db: Session, tier: str) -> LLMClient:
-        """Return an LLM client for ``tier``, falling back to ``default`` then env."""
+    def create_for_tier(self, db: Session, tier: str, *, user_id: str | None = None) -> LLMClient:
+        """Return an LLM client for ``tier``, falling back to ``default`` then env.
+
+        When ``user_id`` is provided, providers are scoped to that user.
+        """
         from app.services import model_service
 
-        provider = model_service.get_active_provider_for_tier(db, tier)
+        provider = model_service.get_active_provider_for_tier(db, tier, user_id=user_id)
         if provider is None and tier != "default":
-            provider = model_service.get_active_provider_for_tier(db, "default")
+            provider = model_service.get_active_provider_for_tier(db, "default", user_id=user_id)
         if provider is not None:
             return self.create_from_provider(provider)
         return self.create_default()
@@ -85,13 +88,19 @@ class LLMFactory:
         *,
         tracer: Any | None = None,
         prefer_active: bool = True,
+        user_id: str | None = None,
     ) -> dict[str, LLMClient]:
-        """Build one client per tier from active ``model_providers`` rows."""
+        """Build one client per tier from active ``model_providers`` rows.
+
+        When ``user_id`` is provided, only that user's providers are resolved.
+        """
         from app.shared.tracing_llm import TracingLLMClient
 
         query = db.query(ModelProviderRow).filter(ModelProviderRow.api_key_encrypted.isnot(None))
         if prefer_active:
             query = query.filter(ModelProviderRow.is_active.is_(True))
+        if user_id is not None:
+            query = query.filter(ModelProviderRow.user_id == user_id)
         providers = query.order_by(ModelProviderRow.id.asc()).all()
 
         if not providers and prefer_active:
