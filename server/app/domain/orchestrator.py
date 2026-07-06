@@ -68,11 +68,13 @@ class OrchestratorInput:
 
     @property
     def pinned_diaries(self) -> list[int]:
-        return self.context.get("pinned_diaries", [])
+        val = self.context.get("pinned_diaries", [])
+        return val if isinstance(val, list) else []
 
     @property
     def use_graph(self) -> bool:
-        return self.context.get("use_graph", True)
+        val = self.context.get("use_graph", True)
+        return val if isinstance(val, bool) else True
 
 
 @dataclass
@@ -162,14 +164,14 @@ class DiaryOrchestrator:
             )
 
             return OrchestratorOutput(
-                reply=analysis_row.reply or "",
+                reply=(analysis_row.diary_entry.reply if analysis_row.diary_entry else "") or "",
                 token_info={
                     "total_tokens_used": getattr(analysis_row, "tokens_used", 0) or 0,
                 },
                 metadata={
                     "analysis_id": analysis_row.id,
                     "diary_id": diary_id,
-                    "mode": getattr(analysis_row, "mode", "unknown"),
+                    "mode": getattr(analysis_row, "agent_mode", "unknown"),
                     "memory_count": mem_count,
                     "session_type": SessionType.DIARY.value,
                 },
@@ -213,21 +215,20 @@ class ConversationOrchestrator:
             )
 
         try:
-            reply_text, token_info, metadata = generate_reply(
+            result = generate_reply(
                 db,
                 container,
                 conversation_id=conversation_id,
                 content=input.content,
-                pinned_diaries=input.pinned_diaries,
+                diary_ids=input.pinned_diaries,
                 user_id=input.user_id,
-                use_graph=input.use_graph,
             )
 
             return OrchestratorOutput(
-                reply=reply_text,
-                token_info=token_info,
+                reply=result.reply_text,
+                token_info=result.token_info or {},
                 metadata={
-                    **metadata,
+                    "retrieved_diary_ids": result.retrieved_diary_ids,
                     "conversation_id": conversation_id,
                     "session_type": SessionType.CHAT.value,
                 },

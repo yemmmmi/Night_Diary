@@ -21,6 +21,7 @@ import json
 import logging
 import re
 import time
+from typing import Any
 
 from app.domain.agents.types import ChatIntent, ChatIntentResult
 from app.shared.llm import LLMClient, message_text
@@ -129,7 +130,7 @@ _CASUAL_SIGNALS = (
 )
 
 #: Intent → routing table
-_INTENT_ROUTING = {
+_INTENT_ROUTING: dict[str, dict[str, Any]] = {
     ChatIntent.CASUAL_CHAT.value: {
         "need_retrieval": False,
         "need_tools": [],

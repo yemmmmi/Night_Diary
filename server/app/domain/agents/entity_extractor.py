@@ -17,6 +17,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from app.infrastructure.task_queue import enqueue_task
 
@@ -126,7 +127,7 @@ class HybridEntityExtractor:
     Only runs LLM layer when regex finds candidates (saves tokens on empty input).
     """
 
-    def __init__(self, llm=None) -> None:
+    def __init__(self, llm: Any = None) -> None:
         self._llm = llm
 
     def extract(self, text: str) -> list[ExtractedEntity]:
@@ -197,7 +198,7 @@ class HybridEntityExtractor:
 
 
 def _run_extraction_sync(
-    session_factory,
+    session_factory: Any,
     user_id: str,
     source_id: str,
     text: str,
@@ -269,7 +270,7 @@ def _run_extraction_sync(
 
 
 def schedule_entity_extraction(
-    container,
+    container: Any,
     *,
     user_id: str,
     conversation_id: str,

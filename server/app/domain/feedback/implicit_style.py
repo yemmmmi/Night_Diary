@@ -23,8 +23,12 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from app.domain.feedback.types import STYLES
+
+if TYPE_CHECKING:
+    from app.domain.feedback.thompson import ThompsonSampling
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +163,7 @@ def extract_implicit_style_signals(
 
 
 def apply_implicit_signals(
-    thompson,
+    thompson: ThompsonSampling | Any,
     signals: list[ImplicitStyleSignal],
     *,
     user_id: str,

@@ -53,3 +53,5 @@ testdata/
 *.sqlite
 *.sqlite3
 test.db
+~$*.docx
+*.docx

@@ -48,7 +48,7 @@ def is_redis_available() -> bool:
 
 def cache_get(key: str) -> Any:
     """Get a value from cache. Returns None if not found or expired."""
-    if _redis_available:
+    if _redis_available and _redis_client is not None:
         try:
             raw = _redis_client.get(key)
             if raw is None:
@@ -70,7 +70,7 @@ def cache_get(key: str) -> Any:
 
 def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
     """Set a value in cache with TTL."""
-    if _redis_available:
+    if _redis_available and _redis_client is not None:
         try:
             _redis_client.setex(key, ttl_seconds, json.dumps(value, default=str))
             return
@@ -82,7 +82,7 @@ def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
 
 def cache_delete(key: str) -> None:
     """Delete a key from cache."""
-    if _redis_available:
+    if _redis_available and _redis_client is not None:
         try:
             _redis_client.delete(key)
             return
@@ -93,7 +93,7 @@ def cache_delete(key: str) -> None:
 
 def cache_delete_pattern(pattern: str) -> None:
     """Delete all keys matching a pattern (e.g. 'session:*')."""
-    if _redis_available:
+    if _redis_available and _redis_client is not None:
         try:
             keys = _redis_client.keys(pattern)
             if keys:

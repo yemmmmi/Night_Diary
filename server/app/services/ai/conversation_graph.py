@@ -24,8 +24,8 @@ try:
     LANGGRAPH_AVAILABLE = True
 except ImportError:
     LANGGRAPH_AVAILABLE = False
-    StateGraph = None  # type: ignore[assignment, misc]
-    END = None  # type: ignore[assignment]
+    StateGraph = None
+    END = None
 
 
 class ConversationState(TypedDict, total=False):
@@ -84,7 +84,7 @@ class ConversationState(TypedDict, total=False):
     conversation_id: str
 
 
-def build_conversation_graph(checkpointer: Any | None = None):
+def build_conversation_graph(checkpointer: Any | None = None) -> Any:
     """Build and compile the conversation StateGraph.
 
     Graph structure::
@@ -159,7 +159,7 @@ def build_conversation_graph(checkpointer: Any | None = None):
 
 
 def run_conversation_graph(
-    graph,
+    graph: Any,
     *,
     content: str,
     intent_result: Any = None,
@@ -198,7 +198,7 @@ def run_conversation_graph(
 
     try:
         final_state = graph.invoke(initial_state)
-        return final_state
+        return dict(final_state) if final_state else {}
     except Exception as exc:
         logger.error("Conversation graph execution failed: %s", exc)
         # Return a minimal state with fallback

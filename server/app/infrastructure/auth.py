@@ -8,6 +8,7 @@ The JWT secret is resolved via the same priority chain as
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 import bcrypt
@@ -45,7 +46,7 @@ def resolve_jwt_secret(settings: Settings | None = None) -> str:
 
 
 def create_access_token(
-    data: dict,
+    data: dict[str, Any],
     settings: Settings | None = None,
 ) -> str:
     """Create a JWT access token.
@@ -67,7 +68,7 @@ def create_access_token(
 def decode_access_token(
     token: str,
     settings: Settings | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Decode and verify a JWT access token.
 
     Raises ``jwt.PyJWTError`` on invalid/expired tokens.

@@ -122,7 +122,7 @@ def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[
     lines: list[str] = []
     memory_ids: list[str] = []
 
-    def _format_section(title: str, items: list) -> None:
+    def _format_section(title: str, items: list[Any]) -> None:
         if not items:
             return
         lines.append(f"【{title}】")
@@ -515,7 +515,7 @@ NIGHT_TALK_DRAFT_PROMPT = """你是一个温暖的心理陪伴助手。请从以
 - 用温暖、日常的中文
 """
 
-NIGHT_TALK_REFINE_RULES = {
+NIGHT_TALK_REFINE_RULES: dict[str, Any] = {
     "min_event_summary_len": 5,
     "valid_emotions": {"积极", "低落", "平静", "焦虑", "感动", "释然"},
     "default_emotion": "平静",
@@ -630,7 +630,6 @@ def generate_night_talk(
             user_id=user_id,
             tags=tags,
             mood_score=max(0.0, min(1.0, 0.5 + score * 0.5)),
-            conversation_id=conversation_id if hasattr(gw, "_persist_with_conversation") else None,
         )
         if persisted:
             logger.info(

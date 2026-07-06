@@ -24,7 +24,8 @@ def cache_model_config(user_id: str, config: dict[str, Any]) -> None:
 
 def get_cached_model_config(user_id: str) -> dict[str, Any] | None:
     """Get a cached model provider config."""
-    return cache_get(f"{MODEL_CONFIG_PREFIX}{user_id}")
+    data = cache_get(f"{MODEL_CONFIG_PREFIX}{user_id}")
+    return data if isinstance(data, dict) else None
 
 
 def invalidate_model_config(user_id: str) -> None:

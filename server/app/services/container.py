@@ -250,7 +250,7 @@ class ServiceContainer:
         )
         return self._chat_intent_classifier
 
-    def get_chat_skill_registry(self):
+    def get_chat_skill_registry(self) -> Any:
         """Get the cached scene-2 SkillRegistry.
 
         Shares crisis_detector and sentiment_skill with scene 1, plus
@@ -263,7 +263,7 @@ class ServiceContainer:
         self._chat_skill_registry = create_chat_registry(tracer=self.skill_tracer)
         return self._chat_skill_registry
 
-    def get_conversation_graph(self):
+    def get_conversation_graph(self) -> Any:
         """Get the cached conversation StateGraph (LangGraph).
 
         Returns None if LangGraph is not installed. The graph is compiled

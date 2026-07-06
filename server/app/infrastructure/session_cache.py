@@ -25,7 +25,8 @@ def cache_session(conversation_id: str, session_data: dict[str, Any]) -> None:
 
 def get_cached_session(conversation_id: str) -> dict[str, Any] | None:
     """Get a cached session context."""
-    return cache_get(f"{SESSION_KEY_PREFIX}{conversation_id}")
+    data = cache_get(f"{SESSION_KEY_PREFIX}{conversation_id}")
+    return data if isinstance(data, dict) else None
 
 
 def delete_cached_session(conversation_id: str) -> None:

@@ -29,7 +29,7 @@ def _episodic_user_id(container: ServiceContainer) -> str:
     """Get the user_id from the container's episodic memory, or 'default'."""
     episodic = getattr(container, "episodic_memory", None)
     if episodic is not None:
-        return episodic.user_id
+        return str(getattr(episodic, "user_id", "default"))
     return "default"
 
 

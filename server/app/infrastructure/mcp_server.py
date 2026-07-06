@@ -76,7 +76,7 @@ class MCPServer:
         if fn is None:
             return f"Unknown tool: {name}"
         try:
-            return fn(**arguments)
+            return str(fn(**arguments))
         except Exception as exc:
             logger.error("MCP tool %s failed: %s", name, exc)
             return f"Tool {name} error: {exc}"
@@ -93,7 +93,7 @@ class MCPServer:
 
         server = Server("night-diary")
 
-        @server.list_tools()
+        @server.list_tools()  # type: ignore[untyped-decorator]
         async def list_tools() -> list[Tool]:
             return [
                 Tool(
@@ -104,8 +104,8 @@ class MCPServer:
                 for spec in self._specs
             ]
 
-        @server.call_tool()
-        async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+        @server.call_tool()  # type: ignore[untyped-decorator]
+        async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = self.call_tool(name, arguments)
             return [TextContent(type="text", text=result)]
 
@@ -132,8 +132,8 @@ class MCPServer:
         server = Server("night-diary-sse")
         sse = SseServerTransport("/messages/")
 
-        @server.list_tools()
-        async def list_tools() -> list:
+        @server.list_tools()  # type: ignore[untyped-decorator]
+        async def list_tools() -> list[Any]:
             from mcp.types import Tool
 
             return [
@@ -145,14 +145,14 @@ class MCPServer:
                 for spec in self._specs
             ]
 
-        @server.call_tool()
-        async def call_tool(name: str, arguments: dict) -> list:
+        @server.call_tool()  # type: ignore[untyped-decorator]
+        async def call_tool(name: str, arguments: dict[str, Any]) -> list[Any]:
             from mcp.types import TextContent
 
             result = self.call_tool(name, arguments)
             return [TextContent(type="text", text=result)]
 
-        async def handle_sse(request):
+        async def handle_sse(request: Any) -> Any:
             async with sse.connect_sse(request.scope, request.receive, request._send) as (
                 read,
                 write,

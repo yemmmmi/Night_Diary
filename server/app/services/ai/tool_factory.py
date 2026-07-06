@@ -285,7 +285,7 @@ def _load_mcp_tools(endpoint: str) -> dict[str, ToolFn]:
                     # Capture tool name in closure
                     tool_name = mcp_tool.name
 
-                    def make_fn(name: str):
+                    def make_fn(name: str) -> Any:
                         async def _call_async(**kwargs: Any) -> str:
                             resp = await session.call_tool(name, kwargs)
                             # Extract text from response content

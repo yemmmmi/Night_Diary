@@ -28,7 +28,7 @@ def build_embedding_function(settings: Settings | None = None) -> Any:
     resolved = settings or get_settings()
     # chromadb lazily exposes this class via __getattr__, so it is importable at
     # runtime but invisible to mypy's static analysis.
-    from chromadb.utils.embedding_functions import (  # type: ignore[attr-defined]
+    from chromadb.utils.embedding_functions import (
         SentenceTransformerEmbeddingFunction,
     )
 

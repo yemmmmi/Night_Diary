@@ -69,7 +69,7 @@ def enqueue_task(
         try:
             job = _redis_queue.enqueue(func, *args, **kwargs)
             logger.debug("RQ task enqueued: %s → job_id=%s", func, job.id)
-            return job.id
+            return str(job.id)
         except Exception as exc:
             logger.warning("RQ enqueue failed, falling back to thread: %s", exc)
 
@@ -93,7 +93,7 @@ def enqueue_task(
     return None
 
 
-def _run_safe(func: Callable, args: tuple, kwargs: dict) -> None:
+def _run_safe(func: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
     """Run a function safely, catching all exceptions."""
     try:
         func(*args, **kwargs)

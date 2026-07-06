@@ -19,12 +19,11 @@ def main() -> None:
     if not is_redis_available():
         logger.error("Redis is not available. Workers require Redis.")
         sys.exit(1)
-    from rq import Connection, Worker
+    from rq import Worker
 
-    with Connection(_redis_client):
-        worker = Worker(["default"])
-        logger.info("Starting RQ worker on queue 'default'...")
-        worker.work()
+    worker = Worker(["default"], connection=_redis_client)
+    logger.info("Starting RQ worker on queue 'default'...")
+    worker.work()
 
 
 if __name__ == "__main__":

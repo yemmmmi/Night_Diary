@@ -144,7 +144,7 @@ def test_diary_orchestrator_delegates_to_trigger_analysis() -> None:
     container = MagicMock()
     analysis_row = MagicMock()
     analysis_row.id = 1
-    analysis_row.reply = "回信内容"
+    analysis_row.diary_entry.reply = "回信内容"
     analysis_row.tokens_used = 150
 
     input = OrchestratorInput(
@@ -221,10 +221,10 @@ def test_conversation_orchestrator_delegates_to_generate_reply() -> None:
     )
 
     with patch("app.services.conversation_ai_service.generate_reply") as mock_gen:
-        mock_gen.return_value = (
-            "你好！今天怎么样？",
-            {"total_tokens_used": 80},
-            {"intent": "casual_chat"},
+        mock_gen.return_value = MagicMock(
+            reply_text="你好！今天怎么样？",
+            token_info={"total_tokens_used": 80},
+            retrieved_diary_ids=[1, 2],
         )
         orchestrator = ConversationOrchestrator()
         output = orchestrator.orchestrate(db, container, input)
@@ -232,7 +232,7 @@ def test_conversation_orchestrator_delegates_to_generate_reply() -> None:
     assert output.is_success is True
     assert output.reply == "你好！今天怎么样？"
     assert output.token_info["total_tokens_used"] == 80
-    assert output.metadata["intent"] == "casual_chat"
+    assert output.metadata["retrieved_diary_ids"] == [1, 2]
     assert output.metadata["conversation_id"] == "conv-123"
     mock_gen.assert_called_once()
 

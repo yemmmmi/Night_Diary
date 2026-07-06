@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from app.domain.agents.context_compressor import ContextCompressor
 from app.shared.token_utils import estimate_tokens
@@ -106,7 +106,7 @@ class SessionContext:
         self.usage.add(token_info)
         self._persist_to_l2()
 
-    def to_snapshot(self) -> dict:
+    def to_snapshot(self) -> dict[str, Any]:
         """Serialize session state for Redis persistence (L2 cache)."""
         return {
             "conversation_id": self.conversation_id,
@@ -120,7 +120,7 @@ class SessionContext:
         }
 
     @classmethod
-    def from_snapshot(cls, data: dict) -> SessionContext:
+    def from_snapshot(cls, data: dict[str, Any]) -> SessionContext:
         """Reconstruct a SessionContext from a Redis snapshot."""
         ctx = cls(
             conversation_id=data.get("conversation_id", ""),

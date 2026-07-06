@@ -286,8 +286,17 @@ class QueryUnderstander:
         error: str | None = None
         text = ""
         try:
+            llm = self._llm
+            if llm is None:
+                return QueryUnderstanding(
+                    original=content,
+                    rewritten=content,
+                    key_terms=[],
+                    confidence=0.0,
+                    used_llm=False,
+                )
             # Use async invoke if available, otherwise sync
-            if hasattr(self._llm, "ainvoke"):
+            if hasattr(llm, "ainvoke"):
                 try:
                     loop = asyncio.get_running_loop()
                 except RuntimeError:
@@ -296,11 +305,11 @@ class QueryUnderstander:
                 if loop is not None and loop.is_running():
                     # We're in an async context — but understand() is sync.
                     # Fall back to sync invoke.
-                    response = self._llm.invoke(prompt)
+                    response = llm.invoke(prompt)
                 else:
-                    response = asyncio.run(self._llm.ainvoke(prompt))
+                    response = asyncio.run(llm.ainvoke(prompt))
             else:
-                response = self._llm.invoke(prompt)
+                response = llm.invoke(prompt)
             text = message_text(response)
         except Exception as exc:
             error = str(exc)

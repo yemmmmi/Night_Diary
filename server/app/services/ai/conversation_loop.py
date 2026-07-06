@@ -331,7 +331,7 @@ def run_conversation_loop(
     bound_llm = None
     if use_native:
         try:
-            bound_llm = llm.bind_tools(tool_specs)  # type: ignore[union-attr]
+            bound_llm = llm.bind_tools(tool_specs)  # type: ignore[attr-defined]
         except Exception as exc:
             logger.warning("bind_tools failed, falling back to text-tag: %s", exc)
             use_native = False

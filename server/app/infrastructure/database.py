@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
@@ -29,7 +30,7 @@ def create_db_engine(database_url: str) -> Engine:
         )
 
         @event.listens_for(engine, "connect")
-        def _set_sqlite_pragma(dbapi_conn, connection_record):
+        def _set_sqlite_pragma(dbapi_conn: Any, connection_record: Any) -> None:
             """Enable WAL mode and related pragmas on every new connection.
 
             - ``journal_mode=WAL``: readers don't block writers and vice-versa.
@@ -91,7 +92,7 @@ def init_db(engine: Engine) -> None:
     _run_lightweight_migrations(engine)
 
 
-def _table_columns(conn, table: str) -> set[str]:
+def _table_columns(conn: Any, table: str) -> set[str]:
     """Return the set of existing column names for ``table`` via ``conn``."""
     return {col["name"] for col in inspect(conn).get_columns(table)}
 
