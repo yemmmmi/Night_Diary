@@ -182,7 +182,9 @@ def _run_via_graph(
         system_prompt += f"\n\n## 对话历史\n{chat_history}"
 
     # Get or build graph (cached in container)
-    graph = getattr(container, "_conversation_graph", None)
+    # Note: use container.__dict__ to avoid auto-creating attributes on
+    # MagicMock containers (getattr never returns None for MagicMock).
+    graph = container.__dict__.get("_conversation_graph") if hasattr(container, "__dict__") else None
     if graph is None:
         graph = build_conversation_graph()
         if graph is None:
