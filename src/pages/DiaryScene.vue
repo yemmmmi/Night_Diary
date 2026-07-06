@@ -16,6 +16,9 @@ import { useAnalysisStore } from '@/stores/analysis'
 import { findCardForDiary } from '@/shared/utils/cardFormat'
 import { formatApiError } from '@/shared/utils/apiError'
 import { countWordUnits, diaryStatus } from '@/shared/utils/diaryFormat'
+import { useSettingsStore } from '@/stores/settings'
+import { useDevStore } from '@/stores/dev'
+import DevPipelinePanel from '@/features/dev/DevPipelinePanel.vue'
 
 function parseQueryDate(raw: unknown): string | null {
   if (typeof raw !== 'string' || !raw.trim()) return null
@@ -30,6 +33,8 @@ const router = useRouter()
 const diaryStore = useDiaryStore()
 const cardStore = useCardStore()
 const analysisStore = useAnalysisStore()
+const settings = useSettingsStore()
+const devStore = useDevStore()
 
 const content = ref('')
 const loadError = ref<string | null>(null)
@@ -302,6 +307,10 @@ onMounted(async () => {
       </footer>
     </div>
 
+    <aside v-if="settings.developerMode" class="diary-scene__dev-panel">
+      <DevPipelinePanel />
+    </aside>
+
     <Teleport to="body">
       <div v-if="showDeleteConfirm" class="confirm-overlay" @click.self="showDeleteConfirm = false">
         <GlassPanel elevated class="confirm-dialog">
@@ -327,6 +336,7 @@ onMounted(async () => {
   padding: 0.75rem;
   display: flex;
   justify-content: center;
+  gap: 0.75rem;
 }
 
 .diary-scene__surface {
@@ -338,6 +348,16 @@ onMounted(async () => {
   padding: 1rem 1.25rem 1.25rem;
   display: flex;
   flex-direction: column;
+}
+
+.diary-scene__dev-panel {
+  width: 320px;
+  flex-shrink: 0;
+  max-height: calc(100vh - 4rem);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-outer);
+  overflow: hidden;
 }
 
 .diary-scene__header {

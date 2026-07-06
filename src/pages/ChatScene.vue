@@ -7,6 +7,7 @@ import { listCards, type MemoryCard } from '@/shared/api/card'
 import { listEpisodic } from '@/shared/api/memory'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
+import { useDevStore } from '@/stores/dev'
 import { diaryEntrySummary } from '@/shared/utils/diaryFormat'
 import ConversationList from '@/features/chat/ConversationList.vue'
 import ChatMessage from '@/features/chat/ChatMessage.vue'
@@ -15,12 +16,14 @@ import DiaryReferencePicker from '@/features/chat/DiaryReferencePicker.vue'
 import ReferencePanel from '@/features/chat/ReferencePanel.vue'
 import OutputPanel from '@/features/chat/OutputPanel.vue'
 import AITypingIndicator from '@/shared/components/AITypingIndicator.vue'
+import DevPipelinePanel from '@/features/dev/DevPipelinePanel.vue'
 
 defineOptions({ name: 'ChatScene' })
 
 const route = useRoute()
 const chatStore = useChatStore()
 const settings = useSettingsStore()
+const devStore = useDevStore()
 settings.load()
 
 const messagesEl = ref<HTMLElement | null>(null)
@@ -130,14 +133,23 @@ async function onSend(text: string) {
   if (!chatStore.activeConversationId) {
     await chatStore.startNewConversation()
   }
+  if (settings.developerMode) {
+    devStore.setActiveTrace(crypto.randomUUID())
+  }
   pendingUserText.value = text
   scrollToBottom()
 
-  const ok = await chatStore.send(text)
-  if (ok) {
-    pendingUserText.value = null
+  try {
+    const ok = await chatStore.send(text)
+    if (ok) {
+      pendingUserText.value = null
+    }
+    scrollToBottom()
+  } finally {
+    if (settings.developerMode) {
+      devStore.setActiveTrace(null)
+    }
   }
-  scrollToBottom()
 }
 
 async function onGenerateCard() {
@@ -286,7 +298,10 @@ watch(
           @generate-card="onGenerateCard"
         />
         <hr class="chat-scene__aside-divider" />
-        <section class="chat-scene__skill-panel">
+        <section v-if="settings.developerMode" class="chat-scene__dev-panel">
+          <DevPipelinePanel />
+        </section>
+        <section v-else class="chat-scene__skill-panel">
           <p class="chat-scene__skill-placeholder">{{ chatCopy.skillPlaceholder }}</p>
         </section>
       </div>
@@ -442,6 +457,13 @@ watch(
   opacity: 0.5;
   text-align: center;
   padding: 1rem 0;
+}
+
+.chat-scene__dev-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  max-height: 400px;
 }
 
 .confirm-overlay {
