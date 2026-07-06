@@ -6,16 +6,17 @@ import logging
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings, get_settings
+from app.domain.agents.chat_intent_classifier import ChatIntentClassifier
 from app.domain.agents.context_compressor import ContextCompressor
 from app.domain.agents.empathy_agent import EmpathyAgent
 from app.domain.agents.graph import MultiAgentGraph, create_multi_agent_graph
 from app.domain.agents.insight_agent import InsightAgent
-from app.domain.agents.chat_intent_classifier import ChatIntentClassifier
 from app.domain.agents.intent_classifier import IntentClassifier
 from app.domain.agents.retrieval_agent import RetrievalAgent
 from app.domain.agents.supervisor import SupervisorAgent
@@ -29,7 +30,7 @@ from app.domain.rag.bm25 import BM25Index
 from app.domain.rag.card_collections import CardCollectionManager
 from app.domain.rag.collections import DiaryCollectionManager
 from app.domain.rag.retriever import HybridRetriever
-from app.domain.skills.registry import create_default_registry, create_diary_registry
+from app.domain.skills.registry import create_diary_registry
 from app.infrastructure.agent_decision_logger import SqliteAgentDecisionLogger
 from app.infrastructure.database import create_db_engine, create_session_factory, init_db
 from app.infrastructure.feedback_repository import SqliteStylePreferenceStore
@@ -114,10 +115,15 @@ class ServiceContainer:
         t_tracers = _time.perf_counter()
 
         import logging
+
         logging.getLogger(__name__).info(
             "create_core: dirs=%.2fs engine=%.2fs init_db=%.2fs factory=%.2fs tracers=%.2fs total=%.2fs",
-            t_dirs - t0, t_engine - t_dirs, t_init - t_engine,
-            t_factory - t_init, t_tracers - t_factory, t_tracers - t0,
+            t_dirs - t0,
+            t_engine - t_dirs,
+            t_init - t_engine,
+            t_factory - t_init,
+            t_tracers - t_factory,
+            t_tracers - t0,
         )
         return container
 
@@ -138,7 +144,9 @@ class ServiceContainer:
             logger.warning("Episodic memory load skipped: %s", exc)
 
         self.episodic_memory = episodic
-        self.long_term_memory = LongTermMemory(store=SqliteLongTermProfileStore(self.session_factory))
+        self.long_term_memory = LongTermMemory(
+            store=SqliteLongTermProfileStore(self.session_factory)
+        )
         self.working_memory = WorkingMemory()
 
     def _ensure_card_collection_locked(self) -> None:
@@ -317,9 +325,7 @@ class ServiceContainer:
         self.prompt_tuner = prompt_tuner
         return graph
 
-    def build_execution_planner(
-        self, db: Session, *, user_id: str = "default"
-    ) -> ExecutionPlanner:
+    def build_execution_planner(self, db: Session, *, user_id: str = "default") -> ExecutionPlanner:
         self.ensure_ai_stack(user_id=user_id)
         assert (
             self.retriever is not None

@@ -66,8 +66,14 @@ _BANK_CARD_RE = re.compile(r"(?<!\d)\d{16,19}(?!\d)")
 
 # Omission markers — user references something from context without stating it
 _OMISSION_MARKERS = [
-    "那呢", "那个呢", "那怎么样", "然后呢", "后来呢",
-    "它呢", "他呢", "她呢",
+    "那呢",
+    "那个呢",
+    "那怎么样",
+    "然后呢",
+    "后来呢",
+    "它呢",
+    "他呢",
+    "她呢",
 ]
 
 # Negation / correction markers
@@ -241,9 +247,7 @@ class InputPreprocessor:
         flags.masked_text = masked
         return flags
 
-    def _complete_omission(
-        self, text: str, context: str
-    ) -> tuple[bool, str, str]:
+    def _complete_omission(self, text: str, context: str) -> tuple[bool, str, str]:
         """Detect omission markers and append context keywords.
 
         Lightweight rule-based approach: if the user's message contains an

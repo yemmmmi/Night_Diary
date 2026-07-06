@@ -24,7 +24,9 @@ def manager(mock_collection: MagicMock) -> DiaryCollectionManager:
     return DiaryCollectionManager(chroma_client=client)
 
 
-def test_upsert_diary_writes_chunks(manager: DiaryCollectionManager, mock_collection: MagicMock) -> None:
+def test_upsert_diary_writes_chunks(
+    manager: DiaryCollectionManager, mock_collection: MagicMock
+) -> None:
     content = "今天心情不错。" * 30
     written = manager.upsert_diary("entry-1", content, date="2025-06-01", tags="#心情")
 

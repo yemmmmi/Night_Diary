@@ -23,7 +23,10 @@ def _now() -> datetime:
 
 # ── Conversations ────────────────────────────────────────────────────
 
-def create_conversation(db: Session, *, user_id: str, replier_id: str = "preset-warm") -> ConversationRow:
+
+def create_conversation(
+    db: Session, *, user_id: str, replier_id: str = "preset-warm"
+) -> ConversationRow:
     row = ConversationRow(
         id=_new_id(),
         user_id=user_id,
@@ -93,6 +96,7 @@ def delete_conversation(db: Session, *, user_id: str, conversation_id: str) -> b
 # ChatMessageRow has no ``user_id`` column — ownership is established through
 # the parent ConversationRow. Every message operation therefore verifies the
 # conversation belongs to the requesting user first.
+
 
 def list_messages(db: Session, *, user_id: str, conversation_id: str) -> list[ChatMessageRow]:
     if get_conversation(db, user_id=user_id, conversation_id=conversation_id) is None:

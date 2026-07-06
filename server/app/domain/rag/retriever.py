@@ -86,9 +86,7 @@ class HybridRetriever:
         vector_results = self._filter_orphan_vectors(self._vector_search(query))
         bm25_results = self._bm25_search(query)
 
-        ranked_lists = [
-            results for results in (vector_results, bm25_results) if results
-        ]
+        ranked_lists = [results for results in (vector_results, bm25_results) if results]
         if not ranked_lists:
             self._log_trace(query, 0, 0, 0, started)
             return []

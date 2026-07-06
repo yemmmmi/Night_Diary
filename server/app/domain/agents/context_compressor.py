@@ -51,10 +51,7 @@ def _generate_summary(content: str, llm: LLMClient | None) -> str:
     """Summarise a long entry via LLM, or truncate at a sentence boundary."""
     if llm is not None:
         try:
-            prompt = (
-                "请用一句话（不超过50字）概括以下日记内容的核心要点：\n\n"
-                f"{content[:500]}"
-            )
+            prompt = f"请用一句话（不超过50字）概括以下日记内容的核心要点：\n\n{content[:500]}"
             response = llm.invoke(prompt)
             summary = message_text(response).strip()
             if summary and len(summary) < len(content):

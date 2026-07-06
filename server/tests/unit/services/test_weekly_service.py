@@ -19,7 +19,11 @@ from app.shared.tracing import InMemoryAgentDecisionLogger
 
 def _planner() -> ExecutionPlanner:
     return ExecutionPlanner(
-        llm_by_tier={"light": StubLLMClient(), "medium": StubLLMClient(), "default": StubLLMClient()},
+        llm_by_tier={
+            "light": StubLLMClient(),
+            "medium": StubLLMClient(),
+            "default": StubLLMClient(),
+        },
         decision_logger=InMemoryAgentDecisionLogger(),
         multi_agent_enabled=False,
     )
@@ -35,8 +39,12 @@ class _FakeContainer:
 
 def _seed_week(db_session) -> None:
     monday, _ = weekly_service.week_bounds()
-    diary_service.create_entry(db_session, user_id="default", content="今天过得还不错。", entry_date=monday)
-    card_service.create_card(db_session, user_id="default", emotion="平静", event_summary="散步", mood_score=0.6)
+    diary_service.create_entry(
+        db_session, user_id="default", content="今天过得还不错。", entry_date=monday
+    )
+    card_service.create_card(
+        db_session, user_id="default", emotion="平静", event_summary="散步", mood_score=0.6
+    )
 
 
 def test_week_bounds_returns_monday_to_sunday() -> None:

@@ -13,7 +13,11 @@ from app.shared.tracing import InMemoryAgentDecisionLogger
 
 def _planner() -> ExecutionPlanner:
     return ExecutionPlanner(
-        llm_by_tier={"light": StubLLMClient(), "medium": StubLLMClient(), "default": StubLLMClient()},
+        llm_by_tier={
+            "light": StubLLMClient(),
+            "medium": StubLLMClient(),
+            "default": StubLLMClient(),
+        },
         decision_logger=InMemoryAgentDecisionLogger(),
         multi_agent_enabled=False,
     )
@@ -29,7 +33,9 @@ class _FakeContainer:
 
 def test_create_analysis_persists_result(db_session) -> None:
     entry = diary_service.create_entry(db_session, user_id="default", content="今天工作很累。")
-    analysis, mem_count = analysis_service.create_analysis(db_session, entry.id, user_id="default", planner=_planner())
+    analysis, mem_count = analysis_service.create_analysis(
+        db_session, entry.id, user_id="default", planner=_planner()
+    )
 
     assert analysis.id is not None
     assert analysis.diary_id == entry.id
@@ -43,19 +49,25 @@ def test_create_analysis_rejects_duplicate(db_session) -> None:
     entry = diary_service.create_entry(db_session, user_id="default", content="重复分析测试")
     analysis_service.create_analysis(db_session, entry.id, user_id="default", planner=_planner())
     with pytest.raises(DiaryAlreadyExistsError):
-        analysis_service.create_analysis(db_session, entry.id, user_id="default", planner=_planner())
+        analysis_service.create_analysis(
+            db_session, entry.id, user_id="default", planner=_planner()
+        )
 
 
 def test_update_analysis_rejects_unchanged_content(db_session) -> None:
     entry = diary_service.create_entry(db_session, user_id="default", content="固定内容")
     analysis_service.create_analysis(db_session, entry.id, user_id="default", planner=_planner())
     with pytest.raises(AnalysisUnchangedError):
-        analysis_service.update_analysis(db_session, entry.id, user_id="default", planner=_planner())
+        analysis_service.update_analysis(
+            db_session, entry.id, user_id="default", planner=_planner()
+        )
 
 
 def test_regenerate_analysis_replaces_existing(db_session) -> None:
     entry = diary_service.create_entry(db_session, user_id="default", content="重新生成测试")
-    first, _ = analysis_service.create_analysis(db_session, entry.id, user_id="default", planner=_planner())
+    first, _ = analysis_service.create_analysis(
+        db_session, entry.id, user_id="default", planner=_planner()
+    )
     second, _ = analysis_service.regenerate_analysis(
         db_session,
         entry.id,
@@ -74,7 +86,9 @@ def test_regenerate_analysis_replaces_existing(db_session) -> None:
 def test_delete_analysis_for_diary_clears_reply(db_session) -> None:
     entry = diary_service.create_entry(db_session, user_id="default", content="删除分析测试")
     analysis_service.create_analysis(db_session, entry.id, user_id="default", planner=_planner())
-    assert analysis_service.delete_analysis_for_diary(db_session, entry.id, user_id="default") is True
+    assert (
+        analysis_service.delete_analysis_for_diary(db_session, entry.id, user_id="default") is True
+    )
     db_session.refresh(entry)
     assert entry.reply is None
     with pytest.raises(AnalysisNotFoundError):

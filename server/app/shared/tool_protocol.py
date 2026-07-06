@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 #: Text-tag fallback pattern (shared, single source of truth).
@@ -60,7 +60,7 @@ def strip_tool_tags(text: str) -> str:
 def build_tool_hint(tool_specs: list[ToolSpec]) -> str:
     """Build the text-tag hint appended to the prompt (fallback path)."""
     lines = [
-        "\n\n如需调用工具查询信息，请输出：<tool>工具名</tool> <args>{\"参数\": \"值\"}</args>",
+        '\n\n如需调用工具查询信息，请输出：<tool>工具名</tool> <args>{"参数": "值"}</args>',
         "可用工具：",
     ]
     for spec in tool_specs:
@@ -71,7 +71,7 @@ def build_tool_hint(tool_specs: list[ToolSpec]) -> str:
 
 def supports_native_tools(llm: Any) -> bool:
     """Detect whether an LLM client supports native function calling."""
-    return hasattr(llm, "bind_tools") and callable(getattr(llm, "bind_tools"))
+    return hasattr(llm, "bind_tools") and callable(llm.bind_tools)
 
 
 def extract_native_tool_calls(response: Any) -> list[ToolCallResult]:

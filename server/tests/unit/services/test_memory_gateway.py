@@ -49,7 +49,9 @@ def _make_long_term() -> MagicMock:
     lt.get_profile.return_value = UserProfile(
         preferred_response_style="warm",
         recurring_topics=["失眠", "加班"],
-        emotion_baseline=EmotionBaseline(average_sentiment=0.5, volatility=0.2, dominant_emotion="neutral"),
+        emotion_baseline=EmotionBaseline(
+            average_sentiment=0.5, volatility=0.2, dominant_emotion="neutral"
+        ),
     )
     return lt
 
@@ -69,7 +71,9 @@ def test_load_returns_episodic_and_profile(_session_factory: sessionmaker[Sessio
     assert "失眠" in result.profile_topics
 
 
-def test_load_with_empty_query_still_returns_entries(_session_factory: sessionmaker[Session]) -> None:
+def test_load_with_empty_query_still_returns_entries(
+    _session_factory: sessionmaker[Session],
+) -> None:
     store = SqliteEpisodicMemoryStore(_session_factory)
     episodic = _make_episodic(store)
     episodic.store(_entry(event="加班", importance=0.9))
@@ -89,7 +93,9 @@ def test_load_without_memory_returns_empty() -> None:
     assert result.profile_style == ""
 
 
-def test_persist_episodic_stores_and_triggers_promotion(_session_factory: sessionmaker[Session]) -> None:
+def test_persist_episodic_stores_and_triggers_promotion(
+    _session_factory: sessionmaker[Session],
+) -> None:
     store = SqliteEpisodicMemoryStore(_session_factory)
     episodic = _make_episodic(store)
     long_term = _make_long_term()
@@ -106,7 +112,9 @@ def test_persist_episodic_stores_and_triggers_promotion(_session_factory: sessio
     long_term.promote_from_episodic.assert_called_once()
 
 
-def test_persist_episodic_without_long_term_still_stores(_session_factory: sessionmaker[Session]) -> None:
+def test_persist_episodic_without_long_term_still_stores(
+    _session_factory: sessionmaker[Session],
+) -> None:
     store = SqliteEpisodicMemoryStore(_session_factory)
     episodic = _make_episodic(store)
 

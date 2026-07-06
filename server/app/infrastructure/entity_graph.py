@@ -34,7 +34,9 @@ def _init_neo4j() -> None:
         return
     try:
         from neo4j import GraphDatabase
+
         from app.config import get_settings
+
         settings = get_settings()
         _neo4j_driver = GraphDatabase.driver(
             _NEO4J_URL,
@@ -42,7 +44,9 @@ def _init_neo4j() -> None:
         )
         _neo4j_driver.verify_connectivity()
         _neo4j_available = True
-        logger.info("Neo4j connected: %s", _NEO4J_URL.split("@")[-1] if "@" in _NEO4J_URL else "(local)")
+        logger.info(
+            "Neo4j connected: %s", _NEO4J_URL.split("@")[-1] if "@" in _NEO4J_URL else "(local)"
+        )
     except ImportError:
         logger.debug("neo4j package not installed; using SQLite fallback for entity graph")
     except Exception as exc:
@@ -77,8 +81,12 @@ def write_entity(
     """
     if _neo4j_available:
         _write_to_neo4j(
-            user_id, entity_name, entity_type,
-            source=source, emotion=emotion, context=context,
+            user_id,
+            entity_name,
+            entity_type,
+            source=source,
+            emotion=emotion,
+            context=context,
             related_entities=related_entities or [],
         )
     # SQLite fallback is handled by DomainKnowledgeStore in entity_extractor.py

@@ -54,13 +54,49 @@ _QUESTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 # Stop words for key term extraction
-_STOP_WORDS = frozenset({
-    "的", "了", "是", "在", "我", "你", "他", "她", "它",
-    "这", "那", "和", "与", "或", "也", "都", "就", "还",
-    "不", "没", "有", "要", "会", "能", "可以", "应该",
-    "什么", "怎么", "为什么", "如何", "哪", "哪个", "哪些",
-    "吗", "呢", "吧", "啊", "哦", "嗯",
-})
+_STOP_WORDS = frozenset(
+    {
+        "的",
+        "了",
+        "是",
+        "在",
+        "我",
+        "你",
+        "他",
+        "她",
+        "它",
+        "这",
+        "那",
+        "和",
+        "与",
+        "或",
+        "也",
+        "都",
+        "就",
+        "还",
+        "不",
+        "没",
+        "有",
+        "要",
+        "会",
+        "能",
+        "可以",
+        "应该",
+        "什么",
+        "怎么",
+        "为什么",
+        "如何",
+        "哪",
+        "哪个",
+        "哪些",
+        "吗",
+        "呢",
+        "吧",
+        "啊",
+        "哦",
+        "嗯",
+    }
+)
 
 
 @dataclass
@@ -168,7 +204,9 @@ class QueryUnderstander:
                 # LLM result below threshold — merge with rule result
                 merged = QueryUnderstanding(
                     original=content,
-                    rewritten=result.rewritten if result.confidence > rule_confidence else rewritten,
+                    rewritten=result.rewritten
+                    if result.confidence > rule_confidence
+                    else rewritten,
                     key_terms=result.key_terms or key_terms,
                     confidence=max(result.confidence, rule_confidence),
                     used_llm=True,
@@ -225,10 +263,7 @@ class QueryUnderstander:
         """
         # Split on punctuation and whitespace
         parts = re.split(r"[，。！？；,\.!?\s\n]+", text.strip())
-        terms = [
-            p for p in parts
-            if p and p not in _STOP_WORDS and len(p) >= 2
-        ]
+        terms = [p for p in parts if p and p not in _STOP_WORDS and len(p) >= 2]
         # Deduplicate preserving order, take top 5
         seen: set[str] = set()
         unique: list[str] = []
@@ -312,4 +347,4 @@ class QueryUnderstander:
             )
 
 
-__all__ = ["QueryUnderstanding", "QueryUnderstander"]
+__all__ = ["QueryUnderstander", "QueryUnderstanding"]

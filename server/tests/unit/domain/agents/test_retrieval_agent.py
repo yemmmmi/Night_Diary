@@ -24,9 +24,7 @@ class StubRetriever:
 
 
 def _hit(doc_id: str, content: str, *, score: float, date: str = "") -> RetrievalResult:
-    return RetrievalResult(
-        doc_id=doc_id, content=content, diary_id=doc_id, score=score, date=date
-    )
+    return RetrievalResult(doc_id=doc_id, content=content, diary_id=doc_id, score=score, date=date)
 
 
 def test_lexical_similarity_bounds() -> None:
@@ -133,7 +131,9 @@ async def test_domain_knowledge_included_in_summary() -> None:
         )
     ]
     store = StubKnowledgeStore(hits)
-    retriever = StubRetriever([[_hit("d1", "相关日记", score=0.9), _hit("d2", "另一条", score=0.9)]])
+    retriever = StubRetriever(
+        [[_hit("d1", "相关日记", score=0.9), _hit("d2", "另一条", score=0.9)]]
+    )
     agent = RetrievalAgent(retriever, store)  # type: ignore[arg-type]
     result = await agent.run({"diary_content": "最近总是睡不好。"})
     assert "【领域参考】" in result["retrieval_context"]

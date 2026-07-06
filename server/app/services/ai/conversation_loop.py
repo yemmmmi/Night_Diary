@@ -19,10 +19,12 @@ as the existing :mod:`agent_executor`.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from app.domain.agents.types import ChatIntentResult
 from app.services.ai.prompts import (
     CHAT_SYSTEM_PROMPT,
     CHAT_USER_PROMPT_TEMPLATE,
@@ -32,10 +34,8 @@ from app.services.ai.prompts import (
 from app.services.ai.session_context import get_or_create_session
 from app.services.ai.tool_factory import ToolFn, specs_for_names
 from app.services.ai.utils import extract_token_usage, merge_token_info
-from app.domain.agents.types import ChatIntentResult
 from app.shared.llm import LLMClient, message_text
 from app.shared.tool_protocol import (
-    ToolCallResult,
     build_tool_hint,
     extract_native_tool_calls,
     parse_text_tag_calls,
@@ -159,9 +159,7 @@ def _run_via_graph(
         return None
 
     # Get or create session for context
-    session = get_or_create_session(
-        conversation_id, container=container, user_id=user_id
-    )
+    session = get_or_create_session(conversation_id, container=container, user_id=user_id)
 
     # Get LLM
     tier = intent_result.tier if intent_result else "medium"
@@ -190,10 +188,8 @@ def _run_via_graph(
         if graph is None:
             return None
         # Cache for reuse
-        try:
+        with contextlib.suppress(Exception):
             container._conversation_graph = graph
-        except Exception:
-            pass  # Container might be frozen
 
     # Run graph
     brief_context = session.compressed_history[:300] if session.compressed_history else ""
@@ -352,23 +348,29 @@ def run_conversation_loop(
 
     # Track context sources as citations (pinned diaries, retrieved diaries, episodic)
     if pinned_diaries_text and pinned_diaries_text.strip():
-        citations.append(Citation(
-            source_type="diary",
-            source_name="用户置顶日记",
-            content_summary=pinned_diaries_text[:100],
-        ))
+        citations.append(
+            Citation(
+                source_type="diary",
+                source_name="用户置顶日记",
+                content_summary=pinned_diaries_text[:100],
+            )
+        )
     if retrieved_diaries_text and retrieved_diaries_text.strip():
-        citations.append(Citation(
-            source_type="diary",
-            source_name="检索日记",
-            content_summary=retrieved_diaries_text[:100],
-        ))
+        citations.append(
+            Citation(
+                source_type="diary",
+                source_name="检索日记",
+                content_summary=retrieved_diaries_text[:100],
+            )
+        )
     if episodic_text and episodic_text.strip():
-        citations.append(Citation(
-            source_type="memory",
-            source_name="情景记忆",
-            content_summary=episodic_text[:100],
-        ))
+        citations.append(
+            Citation(
+                source_type="memory",
+                source_name="情景记忆",
+                content_summary=episodic_text[:100],
+            )
+        )
 
     for iteration in range(max_iterations):
         # 4.1 Context governance: check token budget
@@ -419,21 +421,20 @@ def run_conversation_loop(
             result = _execute_tool(tc.name, tc.args, tools or {})
             tool_results.append(result)
             # Track tool result as citation
-            citations.append(Citation(
-                source_type="tool",
-                source_name=tc.name,
-                content_summary=result[:100],
-            ))
+            citations.append(
+                Citation(
+                    source_type="tool",
+                    source_name=tc.name,
+                    content_summary=result[:100],
+                )
+            )
 
         tool_results_text = "\n".join(tool_results)
         stop_reason = "tool_called"
         # Loop continues to 4.1 for the next iteration
 
     # Clean up tool-call tags from final response (fallback path only)
-    if use_native:
-        final_text = result_text
-    else:
-        final_text = strip_tool_tags(result_text)
+    final_text = result_text if use_native else strip_tool_tags(result_text)
     if not final_text:
         final_text = FALLBACK_FEEDBACK
 

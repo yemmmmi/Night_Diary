@@ -29,7 +29,7 @@ def create_db_engine(database_url: str) -> Engine:
         )
 
         @event.listens_for(engine, "connect")
-        def _set_sqlite_pragma(dbapi_conn, connection_record):  # noqa: ANN001
+        def _set_sqlite_pragma(dbapi_conn, connection_record):
             """Enable WAL mode and related pragmas on every new connection.
 
             - ``journal_mode=WAL``: readers don't block writers and vice-versa.
@@ -136,23 +136,14 @@ def _run_lightweight_migrations(engine: Engine) -> None:
             present = {col["name"] for col in inspector.get_columns(table)}
             for column, ddl_type in columns.items():
                 if column not in present:
-                    conn.execute(
-                        text(
-                            f"ALTER TABLE {q(table)} ADD COLUMN "
-                            f"{q(column)} {ddl_type}"
-                        )
-                    )
+                    conn.execute(text(f"ALTER TABLE {q(table)} ADD COLUMN {q(column)} {ddl_type}"))
 
         # Rename ai_ans → reply (SQLite < 3.35 can't DROP COLUMN, so we add + copy)
         for table, col in [("diary_entries", "reply")]:
             cols = _table_columns(conn, table)
             if col not in cols and "ai_ans" in cols:
-                conn.execute(
-                    text(f"ALTER TABLE {q(table)} ADD COLUMN {q(col)} TEXT")
-                )
-                conn.execute(
-                    text(f"UPDATE {q(table)} SET {q(col)} = {q('ai_ans')}")
-                )
+                conn.execute(text(f"ALTER TABLE {q(table)} ADD COLUMN {q(col)} TEXT"))
+                conn.execute(text(f"UPDATE {q(table)} SET {q(col)} = {q('ai_ans')}"))
                 logger.info("Migrated %s.%s from ai_ans", table, col)
 
         # Backfill legacy single-user rows with the 'default' user sentinel.
@@ -171,8 +162,7 @@ def _run_lightweight_migrations(engine: Engine) -> None:
                 continue
             conn.execute(
                 text(
-                    f"UPDATE {q(table)} SET {q('user_id')} = 'default' "
-                    f"WHERE {q('user_id')} IS NULL"
+                    f"UPDATE {q(table)} SET {q('user_id')} = 'default' WHERE {q('user_id')} IS NULL"
                 )
             )
 

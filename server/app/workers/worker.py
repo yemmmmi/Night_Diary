@@ -3,6 +3,7 @@
 Starts an RQ worker that processes background tasks (entity extraction,
 consolidation, night talk generation, etc.).
 """
+
 from __future__ import annotations
 
 import logging
@@ -13,11 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    from app.infrastructure.redis_client import is_redis_available, _redis_client
+    from app.infrastructure.redis_client import _redis_client, is_redis_available
+
     if not is_redis_available():
         logger.error("Redis is not available. Workers require Redis.")
         sys.exit(1)
     from rq import Connection, Worker
+
     with Connection(_redis_client):
         worker = Worker(["default"])
         logger.info("Starting RQ worker on queue 'default'...")

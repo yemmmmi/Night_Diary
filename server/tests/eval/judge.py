@@ -122,7 +122,7 @@ class LLMJudge:
             f"【日记原文】\n{diary}\n{history_block}\n"
             f"【待评 AI 回复】\n{response}\n\n"
             "【输出格式】严格输出一个 JSON 对象，不要包含其他文字：\n"
-            f"{{{keys_schema}, \"rationale\": \"<评分理由>\"}}"
+            f'{{{keys_schema}, "rationale": "<评分理由>"}}'
         )
 
     def _parse(self, content: str) -> tuple[dict[str, float], str]:

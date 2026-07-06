@@ -78,7 +78,9 @@ class InsightAgent:
         deviation = self._detect_emotion_deviation(profile, episodic)
         domain_knowledge = "\n".join(
             hit.content
-            for hit in self._knowledge.query(diary_content[:100], max_results=_DOMAIN_KNOWLEDGE_TOP_K)
+            for hit in self._knowledge.query(
+                diary_content[:100], max_results=_DOMAIN_KNOWLEDGE_TOP_K
+            )
         )
         user_message = self._build_user_message(
             diary_content=diary_content,

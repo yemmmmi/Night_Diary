@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from app.infrastructure.redis_client import is_redis_available
 
@@ -37,7 +38,9 @@ def _init_rq() -> None:
         return
     try:
         from rq import Queue
+
         from app.infrastructure.redis_client import _redis_client
+
         _redis_queue = Queue(connection=_redis_client, default_timeout=300)
         logger.info("RQ task queue initialized")
     except ImportError:

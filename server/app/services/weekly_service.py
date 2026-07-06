@@ -131,7 +131,9 @@ def _build_context(content: str) -> dict[str, str]:
 # ── persistence ──────────────────────────────────────────────────────────
 
 
-def get_report_by_period(db: Session, *, user_id: str, period_start: date) -> WeeklyReportRow | None:
+def get_report_by_period(
+    db: Session, *, user_id: str, period_start: date
+) -> WeeklyReportRow | None:
     return (
         db.query(WeeklyReportRow)
         .filter(
@@ -154,7 +156,9 @@ def get_latest_report(db: Session, *, user_id: str) -> WeeklyReportRow:
     return row
 
 
-def list_reports(db: Session, *, user_id: str, skip: int = 0, limit: int = 20) -> list[WeeklyReportRow]:
+def list_reports(
+    db: Session, *, user_id: str, skip: int = 0, limit: int = 20
+) -> list[WeeklyReportRow]:
     return (
         db.query(WeeklyReportRow)
         .filter(WeeklyReportRow.user_id == user_id)

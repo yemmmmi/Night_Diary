@@ -68,9 +68,7 @@ class LLMFactory:
             model_name=self._settings.llm_model,
         )
 
-    def create_for_tier(
-        self, db: Session, tier: str, *, user_id: str | None = None
-    ) -> LLMClient:
+    def create_for_tier(self, db: Session, tier: str, *, user_id: str | None = None) -> LLMClient:
         """Return an LLM client for ``tier``, falling back to ``default`` then env.
 
         When ``user_id`` is provided, providers are scoped to that user.
@@ -79,9 +77,7 @@ class LLMFactory:
 
         provider = model_service.get_active_provider_for_tier(db, tier, user_id=user_id)
         if provider is None and tier != "default":
-            provider = model_service.get_active_provider_for_tier(
-                db, "default", user_id=user_id
-            )
+            provider = model_service.get_active_provider_for_tier(db, "default", user_id=user_id)
         if provider is not None:
             return self.create_from_provider(provider)
         return self.create_default()

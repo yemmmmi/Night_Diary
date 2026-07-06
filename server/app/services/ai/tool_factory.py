@@ -161,7 +161,9 @@ def create_entity_graph_tool(user_id: str = "default") -> ToolFn:
                 return "\n".join(lines)
 
             if entity_name:
-                results = query_related_entities(user_id, entity_name, max_depth=max_depth, limit=10)
+                results = query_related_entities(
+                    user_id, entity_name, max_depth=max_depth, limit=10
+                )
                 if not results:
                     return f"未找到与「{entity_name}」相关的实体"
                 lines = [f"与「{entity_name}」相关的实体："]
@@ -239,8 +241,8 @@ def build_tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "entity_name": {"type": "string", "description": "实体名称（如\"妈妈\"）"},
-                    "emotion": {"type": "string", "description": "情绪标签（如\"低落\"）"},
+                    "entity_name": {"type": "string", "description": '实体名称（如"妈妈"）'},
+                    "emotion": {"type": "string", "description": '情绪标签（如"低落"）'},
                     "max_depth": {"type": "integer", "description": "关系查询深度，默认2"},
                 },
             },
@@ -275,35 +277,32 @@ def _load_mcp_tools(endpoint: str) -> dict[str, ToolFn]:
     async def _discover_and_create() -> dict[str, ToolFn]:
         tools: dict[str, ToolFn] = {}
         try:
-            async with sse_client(endpoint) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    result = await session.list_tools()
+            async with sse_client(endpoint) as (read, write), ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.list_tools()
 
-                    for mcp_tool in result.tools:
-                        # Capture tool name in closure
-                        tool_name = mcp_tool.name
+                for mcp_tool in result.tools:
+                    # Capture tool name in closure
+                    tool_name = mcp_tool.name
 
-                        def make_fn(name: str):
-                            async def _call_async(**kwargs: Any) -> str:
-                                resp = await session.call_tool(name, kwargs)
-                                # Extract text from response content
-                                texts = [
-                                    c.text for c in resp.content if hasattr(c, "text")
-                                ]
-                                return "\n".join(texts) if texts else str(resp)
+                    def make_fn(name: str):
+                        async def _call_async(**kwargs: Any) -> str:
+                            resp = await session.call_tool(name, kwargs)
+                            # Extract text from response content
+                            texts = [c.text for c in resp.content if hasattr(c, "text")]
+                            return "\n".join(texts) if texts else str(resp)
 
-                            def _call_sync(**kwargs: Any) -> str:
-                                try:
-                                    return asyncio.run(_call_async(**kwargs))
-                                except Exception as exc:
-                                    logger.error("MCP tool %s failed: %s", name, exc)
-                                    return f"MCP tool {name} error: {exc}"
+                        def _call_sync(**kwargs: Any) -> str:
+                            try:
+                                return asyncio.run(_call_async(**kwargs))
+                            except Exception as exc:
+                                logger.error("MCP tool %s failed: %s", name, exc)
+                                return f"MCP tool {name} error: {exc}"
 
-                            return _call_sync
+                        return _call_sync
 
-                        tools[tool_name] = make_fn(tool_name)
-                        logger.info("Loaded MCP tool: %s from %s", tool_name, endpoint)
+                    tools[tool_name] = make_fn(tool_name)
+                    logger.info("Loaded MCP tool: %s from %s", tool_name, endpoint)
 
         except Exception as exc:
             logger.error("Failed to load MCP tools from %s: %s", endpoint, exc)

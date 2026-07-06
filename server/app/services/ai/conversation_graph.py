@@ -152,7 +152,9 @@ def build_conversation_graph(checkpointer: Any | None = None):
         compile_kwargs["checkpointer"] = checkpointer
 
     compiled = graph.compile(**compile_kwargs)
-    logger.info("Conversation StateGraph compiled with checkpointer=%s", type(checkpointer).__name__)
+    logger.info(
+        "Conversation StateGraph compiled with checkpointer=%s", type(checkpointer).__name__
+    )
     return compiled
 
 

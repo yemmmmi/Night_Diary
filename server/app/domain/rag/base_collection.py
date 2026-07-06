@@ -77,13 +77,9 @@ class BaseCollectionManager(ABC):
                     **kwargs,
                 )
             else:
-                self._collection = client.get_collection(
-                    name=self._collection_name, **kwargs
-                )
+                self._collection = client.get_collection(name=self._collection_name, **kwargs)
         except Exception as exc:
-            logger.warning(
-                "Collection '%s' unavailable: %s", self._collection_name, exc
-            )
+            logger.warning("Collection '%s' unavailable: %s", self._collection_name, exc)
             return None
 
         return self._collection

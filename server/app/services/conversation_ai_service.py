@@ -63,7 +63,9 @@ def _retrieve_related_diary_ids(
     if not query.strip() or container.retriever is None:
         return []
     try:
-        results = container.retriever.retrieve(query, top_k=MAX_RETRIEVAL_RESULTS + len(exclude_ids))
+        results = container.retriever.retrieve(
+            query, top_k=MAX_RETRIEVAL_RESULTS + len(exclude_ids)
+        )
     except Exception as exc:
         logger.warning("Chat RAG retrieve failed: %s", exc)
         return []
@@ -181,7 +183,9 @@ def generate_reply(
     # ── Stage 2: Crisis guard (P0 safety) ──
     guard = crisis_guard or get_crisis_guard()
     if guard.detect(content):
-        logger.warning("Crisis detected in conversation=%s, returning safety resources", conversation_id)
+        logger.warning(
+            "Crisis detected in conversation=%s, returning safety resources", conversation_id
+        )
         return ChatReplyResult(
             reply_text=guard.safe_response,
             retrieved_diary_ids=pinned_ids,
@@ -260,6 +264,7 @@ def generate_reply(
     # ── Stage 2.6: Skill selection (scene-2 SkillRegistry) ──
     skill_registry = container.get_chat_skill_registry()
     from app.domain.skills.types import SkillProfileContext as _SkillProfile
+
     skill_profile: _SkillProfile = {
         "intent": intent_result.intent_category,
         "user_id": user_id,
@@ -316,10 +321,15 @@ def generate_reply(
             understanding.confidence,
         )
 
-        retrieved_ids = _retrieve_related_diary_ids(container, retrieval_query, exclude_ids=exclude_ids)
+        retrieved_ids = _retrieve_related_diary_ids(
+            container, retrieval_query, exclude_ids=exclude_ids
+        )
     elif auto_retrieve:
         # No retrieval needed — still run query understanding for episodic search
-        logger.debug("Intent skips diary RAG, using raw content for episodic: %s", intent_result.intent_category)
+        logger.debug(
+            "Intent skips diary RAG, using raw content for episodic: %s",
+            intent_result.intent_category,
+        )
 
     all_context_ids = pinned_ids + [did for did in retrieved_ids if did not in pinned_ids]
 
@@ -333,10 +343,7 @@ def generate_reply(
     all_tools = _build_tools(db, container, user_id=user_id)
     tools: dict[str, ToolFn] | None = None
     if all_tools and intent_result.need_tools:
-        tools = {
-            name: fn for name, fn in all_tools.items()
-            if name in intent_result.need_tools
-        }
+        tools = {name: fn for name, fn in all_tools.items() if name in intent_result.need_tools}
         if not tools:
             tools = None
 
@@ -516,6 +523,8 @@ NIGHT_TALK_REFINE_RULES = {
 
 NIGHT_TALK_FALLBACK = {"event_summary": "一段温暖的夜话", "tags": ["夜话"], "emotion": "平静"}
 
+CARD_GEN_FALLBACK = {"event_summary": "对话摘要", "tags": ["对话"]}
+
 
 def generate_night_talk(
     db: Session,
@@ -535,9 +544,16 @@ def generate_night_talk(
     """
     from app.shared.emotion_estimator import EmotionEstimator
 
-    messages = conversation_service.list_messages(db, user_id=user_id, conversation_id=conversation_id)
+    messages = conversation_service.list_messages(
+        db, user_id=user_id, conversation_id=conversation_id
+    )
     if not messages:
-        return {"emotion": "平静", "event_summary": "暂无对话内容", "tags": ["夜话"], "persisted": False}
+        return {
+            "emotion": "平静",
+            "event_summary": "暂无对话内容",
+            "tags": ["夜话"],
+            "persisted": False,
+        }
 
     # Build conversation text for LLM and emotion estimation
     conv_lines: list[str] = []
@@ -547,9 +563,7 @@ def generate_night_talk(
     conv_text = "\n".join(conv_lines)
 
     # Estimate emotion from user messages only (more accurate)
-    user_text = " ".join(
-        (msg.content or "").strip() for msg in messages if msg.role == "user"
-    )
+    user_text = " ".join((msg.content or "").strip() for msg in messages if msg.role == "user")
     estimator = EmotionEstimator()
     estimate = estimator.estimate(user_text)
     emotion_label = estimate.label if estimate.label != "crisis" else "negative"
@@ -568,7 +582,12 @@ def generate_night_talk(
     llm: LLMClient | None = container._llm_for_tier(db, "light", agent_name="night-talk")
     if llm is None:
         logger.warning("Night-talk LLM unavailable; returning emotion-only result")
-        return {"emotion": emotion, "event_summary": conv_lines[0][:30] if conv_lines else "夜话", "tags": ["夜话"], "persisted": False}
+        return {
+            "emotion": emotion,
+            "event_summary": conv_lines[0][:30] if conv_lines else "夜话",
+            "tags": ["夜话"],
+            "persisted": False,
+        }
 
     prompt = NIGHT_TALK_DRAFT_PROMPT.format(conversation_text=conv_text[:2000])
     draft_result: dict[str, Any] = NIGHT_TALK_FALLBACK.copy()
@@ -577,7 +596,9 @@ def generate_night_talk(
         text = message_text(response).strip()
         draft_result = _parse_card_json(text)
         draft_result.setdefault("emotion", emotion)
-        logger.info("Night-talk draft generated for conversation=%s emotion=%s", conversation_id, emotion)
+        logger.info(
+            "Night-talk draft generated for conversation=%s emotion=%s", conversation_id, emotion
+        )
     except Exception as exc:
         logger.warning("Night-talk LLM invoke failed: %s", exc)
 
@@ -612,7 +633,12 @@ def generate_night_talk(
             conversation_id=conversation_id if hasattr(gw, "_persist_with_conversation") else None,
         )
         if persisted:
-            logger.info("Night-talk persisted: conversation=%s emotion=%s tags=%s", conversation_id, emotion, tags)
+            logger.info(
+                "Night-talk persisted: conversation=%s emotion=%s tags=%s",
+                conversation_id,
+                emotion,
+                tags,
+            )
     except Exception as exc:
         logger.warning("Night-talk persist failed (best-effort): %s", exc)
 

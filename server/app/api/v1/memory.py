@@ -55,9 +55,7 @@ def update_episodic_entry(
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
 )
-def delete_episodic_entry(
-    entry_id: str, container: ContainerDep, user: CurrentUserDep
-) -> Response:
+def delete_episodic_entry(entry_id: str, container: ContainerDep, user: CurrentUserDep) -> Response:
     container.ensure_memory(user_id=str(user.id))
     memory_service.delete_episodic(container, entry_id, user_id=str(user.id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

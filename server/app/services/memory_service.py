@@ -147,9 +147,7 @@ def get_profile(
     return _profile_to_dict(profile)
 
 
-def get_overview(
-    container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID
-) -> dict[str, Any]:
+def get_overview(container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
     """Return counts summarising the durable memory layers."""
     store = SqliteEpisodicMemoryStore(container.session_factory)
     entries = store.load_entries(user_id)
@@ -158,11 +156,7 @@ def get_overview(
     from_diaries = episodic_total - from_cards
 
     with container.session_factory() as session:
-        card_total = (
-            session.query(MemoryCardRow)
-            .filter(MemoryCardRow.user_id == user_id)
-            .count()
-        )
+        card_total = session.query(MemoryCardRow).filter(MemoryCardRow.user_id == user_id).count()
 
     profile = get_profile(container, user_id=user_id)
 

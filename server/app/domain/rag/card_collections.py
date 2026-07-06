@@ -61,11 +61,13 @@ class CardCollectionManager(BaseCollectionManager):
             collection.upsert(
                 ids=[f"card_{card_id}"],
                 documents=[content],
-                metadatas=[{
-                    "card_id": card_id,
-                    "emotion": emotion,
-                    "tags": tags,
-                }],
+                metadatas=[
+                    {
+                        "card_id": card_id,
+                        "emotion": emotion,
+                        "tags": tags,
+                    }
+                ],
             )
             logger.debug("Card indexed: card_id=%s", card_id)
             return 1
@@ -122,14 +124,13 @@ class CardCollectionManager(BaseCollectionManager):
         flat_docs = documents_list[0] if documents_list else []
 
         for i, doc_id in enumerate(flat_ids):
-            items.append({
-                "card_id": (
-                    flat_meta[i].get("card_id", "")
-                    if i < len(flat_meta) else doc_id
-                ),
-                "distance": flat_dist[i] if i < len(flat_dist) else 1.0,
-                "metadata": flat_meta[i] if i < len(flat_meta) else {},
-                "content": flat_docs[i] if i < len(flat_docs) else "",
-            })
+            items.append(
+                {
+                    "card_id": (flat_meta[i].get("card_id", "") if i < len(flat_meta) else doc_id),
+                    "distance": flat_dist[i] if i < len(flat_dist) else 1.0,
+                    "metadata": flat_meta[i] if i < len(flat_meta) else {},
+                    "content": flat_docs[i] if i < len(flat_docs) else "",
+                }
+            )
 
         return items

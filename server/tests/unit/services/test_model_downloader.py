@@ -31,9 +31,10 @@ def test_configure_hf_environment_sets_cache_dirs(tmp_path, monkeypatch) -> None
     settings = Settings(data_dir=str(tmp_path), hf_endpoint="https://hf-mirror.com")
     configure_hf_environment(settings)
 
-    assert Path(settings.models_dir).resolve().as_posix() in Path(
-        __import__("os").environ["HF_HOME"]
-    ).as_posix()
+    assert (
+        Path(settings.models_dir).resolve().as_posix()
+        in Path(__import__("os").environ["HF_HOME"]).as_posix()
+    )
     assert __import__("os").environ["HF_ENDPOINT"] == "https://hf-mirror.com"
 
 

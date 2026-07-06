@@ -7,7 +7,7 @@ The JWT secret is resolved via the same priority chain as
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import bcrypt
@@ -55,7 +55,7 @@ def create_access_token(
     """
     settings = settings or get_settings()
     to_encode = data.copy()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + timedelta(minutes=settings.jwt_expire_minutes)
     # ``jti`` (JWT ID) uniquely identifies a token so it can be blacklisted
     # on active logout; see ``app.infrastructure.jwt_blacklist``.

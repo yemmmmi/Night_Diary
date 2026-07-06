@@ -8,14 +8,11 @@ from app.shared.llm import LLMClient, message_text
 
 
 def run_chain(llm: LLMClient, context: dict[str, str]) -> tuple[str, dict[str, int], str]:
-    prompt = (
-        f"{SYSTEM_PROMPT}\n\n"
-        + USER_PROMPT_TEMPLATE.format(
-            current_content=context["current_content"],
-            tags_context=context["tags_context"],
-            history_summary=context["history_summary"],
-            weather_info=context["weather_info"],
-        )
+    prompt = f"{SYSTEM_PROMPT}\n\n" + USER_PROMPT_TEMPLATE.format(
+        current_content=context["current_content"],
+        tags_context=context["tags_context"],
+        history_summary=context["history_summary"],
+        weather_info=context["weather_info"],
     )
     response = llm.invoke(prompt)
     token_info = extract_token_usage(response)

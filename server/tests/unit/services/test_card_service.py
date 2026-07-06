@@ -29,7 +29,9 @@ def test_create_card_without_emotions_falls_back_to_single(db_session) -> None:
 
 
 def test_create_card_uses_first_emotion_when_primary_blank_in_list(db_session) -> None:
-    row = card_service.create_card(db_session, user_id="default", emotion="兴奋", emotions=["兴奋", "焦虑"])
+    row = card_service.create_card(
+        db_session, user_id="default", emotion="兴奋", emotions=["兴奋", "焦虑"]
+    )
     assert row.emotion == "兴奋"
     assert card_service.row_to_dict(row)["emotions"] == ["兴奋", "焦虑"]
 
@@ -49,7 +51,9 @@ def test_update_card_replaces_emotions(db_session) -> None:
 
 
 def test_update_card_single_emotion_syncs_emotions_list(db_session) -> None:
-    row = card_service.create_card(db_session, user_id="default", emotion="开心", emotions=["开心", "悲伤"])
+    row = card_service.create_card(
+        db_session, user_id="default", emotion="开心", emotions=["开心", "悲伤"]
+    )
     updated = card_service.update_card(db_session, row.card_id, user_id="default", emotion="疲惫")
     data = card_service.row_to_dict(updated)
 

@@ -11,11 +11,7 @@ from app.infrastructure.models.llm_call_log import LlmCallLogRow
 
 
 def get_stats(db: Session, *, user_id: str) -> dict[str, int]:
-    diary_count = (
-        db.query(DiaryEntryRow)
-        .filter(DiaryEntryRow.user_id == user_id)
-        .count()
-    )
+    diary_count = db.query(DiaryEntryRow).filter(DiaryEntryRow.user_id == user_id).count()
     # AnalysisRow has no user_id column — join through DiaryEntryRow to scope.
     analysis_count = (
         db.query(AnalysisRow)
@@ -30,11 +26,7 @@ def get_stats(db: Session, *, user_id: str) -> dict[str, int]:
         .scalar()
         or 0
     )
-    llm_call_count = (
-        db.query(LlmCallLogRow)
-        .filter(LlmCallLogRow.user_id == user_id)
-        .count()
-    )
+    llm_call_count = db.query(LlmCallLogRow).filter(LlmCallLogRow.user_id == user_id).count()
     total_tokens_in = int(
         db.query(func.coalesce(func.sum(LlmCallLogRow.tokens_in), 0))
         .filter(LlmCallLogRow.user_id == user_id)

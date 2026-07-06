@@ -12,7 +12,6 @@ from app.infrastructure.models.analysis import AnalysisRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.services import diary_service
 from app.services.ai.router import ExecutionPlanner
-from app.shared.emotion_estimator import get_emotion_estimator
 
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
@@ -33,13 +32,16 @@ def _episodic_user_id(container: ServiceContainer) -> str:
         return episodic.user_id
     return "default"
 
+
 # Importance threshold for diary-derived episodic entries.  Diary entries are
 # the primary content of the product, so they default above the 0.5 store
 # threshold to ensure they are actually persisted (not filtered out).
 _DIARY_EPISODIC_IMPORTANCE = 0.6
 
 
-def _build_context(db: Session, entry: DiaryEntryRow, recent_entries: list[DiaryEntryRow], *, user_id: str) -> dict[str, str]:
+def _build_context(
+    db: Session, entry: DiaryEntryRow, recent_entries: list[DiaryEntryRow], *, user_id: str
+) -> dict[str, str]:
     return {
         "current_content": entry.content or "",
         "tags_context": diary_service.format_emotion_context(db, entry, user_id=user_id),

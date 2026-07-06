@@ -116,7 +116,9 @@ def test_select_skills_orders_by_score_priority(activation_tracer) -> None:
     registry.register(_ExpensiveSkill())
     registry.register(_InactiveSkill())
 
-    selected = registry.select_skills("今天心情不好", {"intent": "emotional_support"}, token_budget=1000)
+    selected = registry.select_skills(
+        "今天心情不好", {"intent": "emotional_support"}, token_budget=1000
+    )
     names = [skill.metadata.name for skill in selected]
     assert names[0] == "high_priority"
     assert "inactive" not in names

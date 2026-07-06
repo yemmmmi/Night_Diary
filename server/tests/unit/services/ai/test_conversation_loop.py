@@ -194,15 +194,11 @@ def test_citations_tracked_for_tool_calls(db_session) -> None:
 
     container = MagicMock()
     container._llm_for_tier = MagicMock(
-        return_value=StubLLMClient(
-            reply="<tool>search_diary</tool><args>{\"query\": \"工作\"}</args>"
-        )
+        return_value=StubLLMClient(reply='<tool>search_diary</tool><args>{"query": "工作"}</args>')
     )
     container.ensure_ai_stack = MagicMock()
 
-    with patch(
-        "app.services.ai.conversation_loop.parse_text_tag_calls"
-    ) as mock_parse:
+    with patch("app.services.ai.conversation_loop.parse_text_tag_calls") as mock_parse:
         mock_parse.side_effect = [
             [ToolCallResult(name="search_diary", args={"query": "工作"})],
             [],

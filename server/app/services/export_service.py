@@ -39,12 +39,7 @@ def export_all(db: Session, *, user_id: str) -> dict[str, Any]:
         .order_by(DiaryEntryRow.id)
         .all()
     )
-    tags = (
-        db.query(TagRow)
-        .filter(TagRow.user_id == user_id)
-        .order_by(TagRow.id)
-        .all()
-    )
+    tags = db.query(TagRow).filter(TagRow.user_id == user_id).order_by(TagRow.id).all()
     analyses = (
         db.query(AnalysisRow)
         .filter(AnalysisRow.diary_id.in_(user_diary_ids))
@@ -63,11 +58,7 @@ def export_all(db: Session, *, user_id: str) -> dict[str, Any]:
         .order_by(EpisodicMemoryRow.timestamp)
         .all()
     )
-    profiles = (
-        db.query(LongTermProfileRow)
-        .filter(LongTermProfileRow.user_id == user_id)
-        .all()
-    )
+    profiles = db.query(LongTermProfileRow).filter(LongTermProfileRow.user_id == user_id).all()
 
     return {
         "version": EXPORT_VERSION,
@@ -167,15 +158,15 @@ def import_all(
             db.query(DiaryEntryRow.id).filter(DiaryEntryRow.user_id == user_id)
         )
     ).delete(synchronize_session=False)
-    db.query(MemoryCardRow).filter(
-        MemoryCardRow.user_id == user_id
-    ).delete(synchronize_session=False)
-    db.query(EpisodicMemoryRow).filter(
-        EpisodicMemoryRow.user_id == user_id
-    ).delete(synchronize_session=False)
-    db.query(LongTermProfileRow).filter(
-        LongTermProfileRow.user_id == user_id
-    ).delete(synchronize_session=False)
+    db.query(MemoryCardRow).filter(MemoryCardRow.user_id == user_id).delete(
+        synchronize_session=False
+    )
+    db.query(EpisodicMemoryRow).filter(EpisodicMemoryRow.user_id == user_id).delete(
+        synchronize_session=False
+    )
+    db.query(LongTermProfileRow).filter(LongTermProfileRow.user_id == user_id).delete(
+        synchronize_session=False
+    )
     db.execute(
         diary_tag_association.delete().where(
             diary_tag_association.c.diary_id.in_(
@@ -183,12 +174,10 @@ def import_all(
             )
         )
     )
-    db.query(DiaryEntryRow).filter(
-        DiaryEntryRow.user_id == user_id
-    ).delete(synchronize_session=False)
-    db.query(TagRow).filter(
-        TagRow.user_id == user_id
-    ).delete(synchronize_session=False)
+    db.query(DiaryEntryRow).filter(DiaryEntryRow.user_id == user_id).delete(
+        synchronize_session=False
+    )
+    db.query(TagRow).filter(TagRow.user_id == user_id).delete(synchronize_session=False)
     db.commit()
 
     # --- Import tags (track old_id -> new_id) ---
@@ -222,9 +211,9 @@ def import_all(
             collection_manager=collection_manager,
         )
         if new_tag_ids:
-            tags = db.query(TagRow).filter(
-                TagRow.id.in_(new_tag_ids), TagRow.user_id == user_id
-            ).all()
+            tags = (
+                db.query(TagRow).filter(TagRow.id.in_(new_tag_ids), TagRow.user_id == user_id).all()
+            )
             entry.tags = tags
         # Overwrite auto-generated fields with original values
         entry.reply = diary_data.get("reply")

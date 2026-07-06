@@ -60,9 +60,7 @@ async def test_fallback_when_llm_unreachable(
     llm_tracer: InMemoryLLMCallTracer,
 ) -> None:
     agent = EmpathyAgent(failing_llm, knowledge_store, tracer=llm_tracer)
-    result = await agent.run(
-        {"diary_content": "今天压力有点大。", "intent": "emotional_support"}
-    )
+    result = await agent.run({"diary_content": "今天压力有点大。", "intent": "emotional_support"})
     # No exception; safe template returned; the failed call is still traced.
     assert "empathy_response" in result
     assert result["empathy_response"]

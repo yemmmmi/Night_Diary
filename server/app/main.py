@@ -67,9 +67,7 @@ def _bootstrap_core_sync(app: FastAPI) -> None:
     app.state.container = ServiceContainer.create_core()
     t1 = _time.perf_counter()
     app.state.bootstrap_done = True
-    logger.info(
-        "Core bootstrap ready (SQLite + diary CRUD) in %.2fs", t1 - t0
-    )
+    logger.info("Core bootstrap ready (SQLite + diary CRUD) in %.2fs", t1 - t0)
 
 
 def _bootstrap_ai_sync(app: FastAPI) -> None:
@@ -111,11 +109,7 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     _cors_regex = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
     if cfg.cors_origins:
-        _extra = "|".join(
-            _re.escape(o.strip())
-            for o in cfg.cors_origins.split(",")
-            if o.strip()
-        )
+        _extra = "|".join(_re.escape(o.strip()) for o in cfg.cors_origins.split(",") if o.strip())
         if _extra:
             _cors_regex = f"{_cors_regex}|{_extra}"
 

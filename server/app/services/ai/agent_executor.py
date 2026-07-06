@@ -19,10 +19,7 @@ def run_agent(
     tools: dict[str, ToolFn],
 ) -> tuple[str, dict[str, int], str]:
     tool_hint = build_tool_hint(specs_for_names(list(tools.keys()))) if tools else ""
-    prompt = (
-        f"{AGENT_SYSTEM_PROMPT}{tool_hint}\n\n"
-        + USER_PROMPT_TEMPLATE.format(**context)
-    )
+    prompt = f"{AGENT_SYSTEM_PROMPT}{tool_hint}\n\n" + USER_PROMPT_TEMPLATE.format(**context)
     response = llm.invoke(prompt)
     token_info = extract_token_usage(response)
     result_text = message_text(response)

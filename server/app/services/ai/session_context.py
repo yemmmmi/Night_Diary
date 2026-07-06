@@ -326,7 +326,9 @@ def get_or_create_session(
             logger.warning("SessionContext profile load failed: %s", exc)
 
     _sessions[conversation_id] = ctx  # L1
-    cache_set(_session_key(conversation_id), ctx.to_snapshot(), ttl_seconds=_SESSION_TTL_SECONDS)  # L2
+    cache_set(
+        _session_key(conversation_id), ctx.to_snapshot(), ttl_seconds=_SESSION_TTL_SECONDS
+    )  # L2
     logger.debug("SessionContext created for conversation=%s", conversation_id)
     return ctx
 

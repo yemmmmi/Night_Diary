@@ -79,8 +79,7 @@ def test_incremental_add_faster_than_full_rebuild() -> None:
     """add_document() should be O(1)-ish vs rebuilding the full corpus."""
     index = BM25Index()
     base_docs = [
-        _doc(f"doc-{i}", f"日记内容编号{i}包含一些中文关键词和情绪描述。")
-        for i in range(500)
+        _doc(f"doc-{i}", f"日记内容编号{i}包含一些中文关键词和情绪描述。") for i in range(500)
     ]
     index.build(base_docs)
 

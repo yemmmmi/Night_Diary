@@ -17,12 +17,20 @@ def test_is_low_density_filters_greetings_and_short_text() -> None:
 
 
 def test_compress_keeps_query_relevant_entries() -> None:
-    compressor = ContextCompressor(max_tokens=50, similarity=lambda q, c: 1.0 if "失眠" in c else 0.0)
+    compressor = ContextCompressor(
+        max_tokens=50, similarity=lambda q, c: 1.0 if "失眠" in c else 0.0
+    )
     result = compressor.compress(
         "今天又失眠了，脑子里全是工作的事。",
         episodic=[
-            {"event_summary": "连续三天失眠", "content": "连续三天失眠，凌晨两点才睡着，白天精神很差"},
-            {"event_summary": "周末去爬山", "content": "周末去爬山，天气很好，心情不错，拍了好多照片"},
+            {
+                "event_summary": "连续三天失眠",
+                "content": "连续三天失眠，凌晨两点才睡着，白天精神很差",
+            },
+            {
+                "event_summary": "周末去爬山",
+                "content": "周末去爬山，天气很好，心情不错，拍了好多照片",
+            },
         ],
     )
     assert "失眠" in result
@@ -31,8 +39,7 @@ def test_compress_keeps_query_relevant_entries() -> None:
 
 def test_compress_respects_token_budget() -> None:
     long_episodic = [
-        {"event_summary": f"重要事件{i}", "content": "失眠焦虑压力" * 40}
-        for i in range(10)
+        {"event_summary": f"重要事件{i}", "content": "失眠焦虑压力" * 40} for i in range(10)
     ]
     compressor = ContextCompressor(max_tokens=200)
     result = compressor.compress("最近总是失眠。", episodic=long_episodic)
@@ -66,7 +73,9 @@ def test_compress_summarizes_long_entries_without_llm() -> None:
 def test_prepare_compressed_history_from_state() -> None:
     state = {
         "diary_content": "我又失眠了。",
-        "episodic_context": [{"event_summary": "上周也失眠", "content": "上周也失眠，整晚翻来覆去睡不着"}],
+        "episodic_context": [
+            {"event_summary": "上周也失眠", "content": "上周也失眠，整晚翻来覆去睡不着"}
+        ],
     }
     update = prepare_compressed_history(state)
     assert "compressed_history" in update

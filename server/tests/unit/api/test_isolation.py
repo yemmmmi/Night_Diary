@@ -64,16 +64,12 @@ class TestDiaryIsolation:
         )
         entry_id = resp.json()["id"]
 
-        resp = api_client.delete(
-            f"/api/v1/diary/entries/{entry_id}", headers=headers_b
-        )
+        resp = api_client.delete(f"/api/v1/diary/entries/{entry_id}", headers=headers_b)
         assert resp.status_code == 404
 
 
 class TestTagIsolation:
-    def test_tags_are_user_scoped(
-        self, api_client: TestClient, two_users: tuple[dict, dict]
-    ):
+    def test_tags_are_user_scoped(self, api_client: TestClient, two_users: tuple[dict, dict]):
         headers_a, headers_b = two_users
 
         # Alice creates a tag
@@ -106,9 +102,7 @@ class TestTagIsolation:
 
 
 class TestCardIsolation:
-    def test_cards_are_user_scoped(
-        self, api_client: TestClient, two_users: tuple[dict, dict]
-    ):
+    def test_cards_are_user_scoped(self, api_client: TestClient, two_users: tuple[dict, dict]):
         headers_a, headers_b = two_users
 
         # Alice creates a card

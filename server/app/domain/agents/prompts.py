@@ -90,6 +90,7 @@ def build_style_fragment(
         return f"## 回信风格（用户指定，优先级最高）\n{style_text}"
     return None
 
+
 EMPATHY_CRISIS_BLOCK = (
     "\n## ⚠️ 危机响应模式\n"
     "检测到用户可能正在经历极度痛苦。请：\n"
@@ -120,8 +121,7 @@ EMPATHY_FALLBACKS: dict[str, str] = {
 }
 
 EMPATHY_CRISIS_FALLBACK = (
-    "我注意到你现在可能正在经历很大的痛苦，我想让你知道，"
-    "你的感受是真实的，你不需要独自面对这一切。"
+    "我注意到你现在可能正在经历很大的痛苦，我想让你知道，你的感受是真实的，你不需要独自面对这一切。"
 )
 
 # Response length budget (Chinese characters) per intent.

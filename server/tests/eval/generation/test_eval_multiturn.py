@@ -39,9 +39,7 @@ from tests.eval.rubric import EvalRubric
 
 pytestmark = pytest.mark.eval
 
-MULTITURN_CASES = (
-    Path(__file__).resolve().parents[1] / "rag" / "test_cases_multiturn.json"
-)
+MULTITURN_CASES = Path(__file__).resolve().parents[1] / "rag" / "test_cases_multiturn.json"
 COHERENCE_THRESHOLD = 0.66  # ≥ 2 of 3 scenarios must reference earlier topics
 
 

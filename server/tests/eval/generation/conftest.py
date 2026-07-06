@@ -65,8 +65,7 @@ def _is_auth_error(exc: BaseException) -> bool:
     import httpx
 
     return (
-        isinstance(exc, httpx.HTTPStatusError)
-        and exc.response.status_code in _AUTH_ERROR_STATUSES
+        isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in _AUTH_ERROR_STATUSES
     )
 
 
@@ -160,7 +159,9 @@ class _HttpLLM:
         for attempt in range(self._max_retries):
             try:
                 async with httpx.AsyncClient(timeout=120.0, trust_env=False) as client:
-                    resp = await client.post(url, headers=self._headers(), json=self._payload(prompt))
+                    resp = await client.post(
+                        url, headers=self._headers(), json=self._payload(prompt)
+                    )
                     resp.raise_for_status()
                     return self._parse_response(resp.json())
             except (httpx.HTTPError, KeyError, IndexError) as exc:
@@ -208,7 +209,9 @@ class _StubJudgeLLM:
 class StubKnowledgeStore:
     """No-op domain knowledge store for the eval (no Chroma needed)."""
 
-    def query(self, query_text: str, max_results: int = 2, category_filter: str | None = None) -> list[Any]:
+    def query(
+        self, query_text: str, max_results: int = 2, category_filter: str | None = None
+    ) -> list[Any]:
         return []
 
 

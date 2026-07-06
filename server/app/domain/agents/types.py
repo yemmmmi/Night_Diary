@@ -60,4 +60,4 @@ class ChatIntentResult(BaseModel):
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
-__all__ = ["IntentCategory", "IntentResult", "ChatIntent", "ChatIntentResult"]
+__all__ = ["ChatIntent", "ChatIntentResult", "IntentCategory", "IntentResult"]

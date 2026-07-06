@@ -23,10 +23,9 @@ Usage::
 from __future__ import annotations
 
 import logging
-from datetime import date as date_cls
 from typing import TYPE_CHECKING
 
-from app.domain.memory.atom import EntityRef, UnifiedMemoryAtom
+from app.domain.memory.atom import UnifiedMemoryAtom
 from app.shared.emotion_estimator import get_emotion_estimator
 
 if TYPE_CHECKING:

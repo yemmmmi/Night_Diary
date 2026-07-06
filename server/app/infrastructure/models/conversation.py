@@ -21,7 +21,9 @@ class ConversationRow(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_new_uuid)
     user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
-    active_replier_id: Mapped[str] = mapped_column(String(64), nullable=False, default="preset-warm")
+    active_replier_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="preset-warm"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
@@ -44,4 +46,6 @@ class ChatMessageRow(Base):
     token_info: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
-    conversation: Mapped[ConversationRow] = relationship("ConversationRow", back_populates="messages")
+    conversation: Mapped[ConversationRow] = relationship(
+        "ConversationRow", back_populates="messages"
+    )

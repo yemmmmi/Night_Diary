@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 class SessionType(StrEnum):
     """Distinguishes the two conversation scenarios."""
 
-    DIARY = "diary"   # Scene 1: single diary, single analysis turn
-    CHAT = "chat"     # Scene 2: multi-turn conversation
+    DIARY = "diary"  # Scene 1: single diary, single analysis turn
+    CHAT = "chat"  # Scene 2: multi-turn conversation
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,7 +161,9 @@ class MemoryGateway:
             content=event_summary,
             existing_entries=existing,
         ):
-            logger.debug("Memory gate rejected write: source=%s summary=%s", source, event_summary[:50])
+            logger.debug(
+                "Memory gate rejected write: source=%s summary=%s", source, event_summary[:50]
+            )
             return False
 
         entry = EpisodicEntry(

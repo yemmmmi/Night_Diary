@@ -9,6 +9,7 @@ existing three-layer memory system:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import uuid
@@ -159,12 +160,7 @@ def list_cards(
     elif has_diary is False:
         q = q.filter(MemoryCardRow.diary_id.is_(None))
 
-    return (
-        q.order_by(desc(MemoryCardRow.created_at))
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    return q.order_by(desc(MemoryCardRow.created_at)).offset(skip).limit(limit).all()
 
 
 def update_card(
@@ -230,22 +226,17 @@ def card_to_unified_atom(row: MemoryCardRow, user_id: str = "default") -> Unifie
     previously lost in the card_to_episodic conversion.
     """
     import json
-
     from datetime import date as date_cls
 
     tags: list[str] = []
     if row.tags_json:
-        try:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
             tags = json.loads(row.tags_json)
-        except (json.JSONDecodeError, TypeError):
-            pass
 
     emotions: list[str] = []
     if row.emotions_json:
-        try:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
             emotions = json.loads(row.emotions_json)
-        except (json.JSONDecodeError, TypeError):
-            pass
 
     return UnifiedMemoryAtom(
         source="card",
@@ -439,11 +430,7 @@ def expand_to_diary(
 
 def get_card_stats(db: Session, *, user_id: str) -> dict[str, Any]:
     """Get summary stats for the memory management dashboard."""
-    total = (
-        db.query(MemoryCardRow)
-        .filter(MemoryCardRow.user_id == user_id)
-        .count()
-    )
+    total = db.query(MemoryCardRow).filter(MemoryCardRow.user_id == user_id).count()
 
     from sqlalchemy import func
 
@@ -476,9 +463,7 @@ def get_card_stats(db: Session, *, user_id: str) -> dict[str, Any]:
         "expanded_to_diary": expanded,
         "not_expanded": not_expanded,
         "average_mood_score": round(float(avg_mood), 3),
-        "top_emotions": [
-            {"emotion": e, "count": c} for e, c in emotion_counts
-        ],
+        "top_emotions": [{"emotion": e, "count": c} for e, c in emotion_counts],
     }
 
 
@@ -511,6 +496,10 @@ def get_mood_trends(
     )
 
     return [
-        {"date": str(row.day), "avg_mood": round(float(row.avg_mood), 3), "card_count": row.card_count}
+        {
+            "date": str(row.day),
+            "avg_mood": round(float(row.avg_mood), 3),
+            "card_count": row.card_count,
+        }
         for row in rows
     ]

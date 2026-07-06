@@ -32,26 +32,39 @@ def create_conversation(db: DbDep, user: CurrentUserDep) -> ConversationResponse
     return conversation_to_response(row)
 
 
-@router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+@router.delete(
+    "/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response
+)
 def delete_conversation(conversation_id: str, db: DbDep, user: CurrentUserDep) -> Response:
-    if not conversation_service.delete_conversation(db, user_id=str(user.id), conversation_id=conversation_id):
+    if not conversation_service.delete_conversation(
+        db, user_id=str(user.id), conversation_id=conversation_id
+    ):
         raise ConversationNotFoundError(conversation_id=conversation_id)
     # Clear the in-memory session context to avoid stale state
     from app.services.ai.session_context import clear_session
+
     clear_session(conversation_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageResponse])
 def get_messages(conversation_id: str, db: DbDep, user: CurrentUserDep) -> list[MessageResponse]:
-    conv = conversation_service.get_conversation(db, user_id=str(user.id), conversation_id=conversation_id)
+    conv = conversation_service.get_conversation(
+        db, user_id=str(user.id), conversation_id=conversation_id
+    )
     if conv is None:
         raise ConversationNotFoundError(conversation_id=conversation_id)
-    rows = conversation_service.list_messages(db, user_id=str(user.id), conversation_id=conversation_id)
+    rows = conversation_service.list_messages(
+        db, user_id=str(user.id), conversation_id=conversation_id
+    )
     return [message_to_response(r) for r in rows]
 
 
-@router.post("/{conversation_id}/messages", response_model=SendMessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{conversation_id}/messages",
+    response_model=SendMessageResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def send_message(
     conversation_id: str,
     body: SendMessageRequest,
@@ -59,7 +72,9 @@ def send_message(
     user: CurrentUserDep,
     container: ContainerDep,
 ) -> SendMessageResponse:
-    conv = conversation_service.get_conversation(db, user_id=str(user.id), conversation_id=conversation_id)
+    conv = conversation_service.get_conversation(
+        db, user_id=str(user.id), conversation_id=conversation_id
+    )
     if conv is None:
         raise ConversationNotFoundError(conversation_id=conversation_id)
 
@@ -94,9 +109,14 @@ def generate_night_talk(
     conversation_id: str, db: DbDep, user: CurrentUserDep, container: ContainerDep
 ) -> dict[str, Any]:
     """Generate a night talk (关系记忆) from conversation history."""
-    conv = conversation_service.get_conversation(db, user_id=str(user.id), conversation_id=conversation_id)
+    conv = conversation_service.get_conversation(
+        db, user_id=str(user.id), conversation_id=conversation_id
+    )
     if conv is None:
         raise ConversationNotFoundError(conversation_id=conversation_id)
     return conversation_ai_service.generate_night_talk(
-        db, container, user_id=str(user.id), conversation_id=conversation_id,
+        db,
+        container,
+        user_id=str(user.id),
+        conversation_id=conversation_id,
     )

@@ -178,12 +178,14 @@ class HybridEntityExtractor:
             if not name or (name, etype) in seen:
                 continue
             seen.add((name, etype))
-            refined.append(ExtractedEntity(
-                name=name,
-                entity_type=etype,
-                relation=str(e.get("relation", "")),
-                sentiment=float(e.get("sentiment", 0.0)),
-            ))
+            refined.append(
+                ExtractedEntity(
+                    name=name,
+                    entity_type=etype,
+                    relation=str(e.get("relation", "")),
+                    sentiment=float(e.get("sentiment", 0.0)),
+                )
+            )
 
         # Merge: include regex entities not covered by LLM
         llm_names = {(e.name, e.entity_type) for e in refined}
@@ -236,11 +238,7 @@ def _run_extraction_sync(
             entity_names = [(e.name, e.entity_type) for e in entities]
             for name, etype in entity_names:
                 # Find co-occurring entities as related
-                related = [
-                    (n, t, "co-occurs")
-                    for n, t in entity_names
-                    if n != name
-                ]
+                related = [(n, t, "co-occurs") for n, t in entity_names if n != name]
                 write_entity(
                     user_id=user_id,
                     entity_name=name,

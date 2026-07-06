@@ -14,13 +14,17 @@ router = APIRouter(prefix="/weekly", tags=["weekly"])
 
 
 @router.post("", response_model=WeeklyReportResponse, status_code=status.HTTP_201_CREATED)
-def generate_weekly(db: DbDep, user: CurrentUserDep, container: ContainerDep) -> WeeklyReportResponse:
+def generate_weekly(
+    db: DbDep, user: CurrentUserDep, container: ContainerDep
+) -> WeeklyReportResponse:
     row = weekly_service.generate_weekly_report(db, container, user_id=str(user.id))
     return weekly_to_response(row)
 
 
 @router.post("/regenerate", response_model=WeeklyReportResponse)
-def regenerate_weekly(db: DbDep, user: CurrentUserDep, container: ContainerDep) -> WeeklyReportResponse:
+def regenerate_weekly(
+    db: DbDep, user: CurrentUserDep, container: ContainerDep
+) -> WeeklyReportResponse:
     row = weekly_service.regenerate_weekly_report(db, container, user_id=str(user.id))
     return weekly_to_response(row)
 

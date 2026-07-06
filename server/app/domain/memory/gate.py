@@ -35,10 +35,20 @@ _DEDUP_WINDOW_HOURS = 24
 _DEDUP_SIMILARITY_THRESHOLD = 0.85  # char Jaccard threshold for dedup
 
 # Crisis keywords that should not be persisted as episodic memories
-_CRISIS_KEYWORDS = frozenset({
-    "不想活", "自杀", "结束生命", "活不下去", "想死",
-    "杀了", "伤害自己", "了结", "跳楼", "吃药结束",
-})
+_CRISIS_KEYWORDS = frozenset(
+    {
+        "不想活",
+        "自杀",
+        "结束生命",
+        "活不下去",
+        "想死",
+        "杀了",
+        "伤害自己",
+        "了结",
+        "跳楼",
+        "吃药结束",
+    }
+)
 
 
 @dataclass

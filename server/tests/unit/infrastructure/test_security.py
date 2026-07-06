@@ -16,7 +16,9 @@ from app.infrastructure.security import (
 from app.shared.errors import AppError
 
 
-def _make_settings(tmp_path: Path, *, app_env: str = "development", secret: str | None = None) -> Settings:
+def _make_settings(
+    tmp_path: Path, *, app_env: str = "development", secret: str | None = None
+) -> Settings:
     return Settings(
         app_env=app_env,
         data_dir=str(tmp_path),

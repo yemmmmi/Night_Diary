@@ -73,12 +73,8 @@ def auth_headers(api_client: TestClient) -> dict[str, str]:
 @pytest.fixture()
 def two_users(api_client: TestClient) -> tuple[dict[str, str], dict[str, str]]:
     """Register two users and return their auth headers."""
-    token_a, _ = _register_and_login(
-        api_client, email="alice@test.com", nickname="Alice"
-    )
-    token_b, _ = _register_and_login(
-        api_client, email="bob@test.com", nickname="Bob"
-    )
+    token_a, _ = _register_and_login(api_client, email="alice@test.com", nickname="Alice")
+    token_b, _ = _register_and_login(api_client, email="bob@test.com", nickname="Bob")
     return (
         {"Authorization": f"Bearer {token_a}"},
         {"Authorization": f"Bearer {token_b}"},

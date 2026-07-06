@@ -81,9 +81,7 @@ class ThompsonSampling:
 
         try:
             preferences = self._store.ensure_preferences(user_id, list(self.STYLES))
-            return {
-                pref.style: {"alpha": pref.alpha, "beta": pref.beta} for pref in preferences
-            }
+            return {pref.style: {"alpha": pref.alpha, "beta": pref.beta} for pref in preferences}
         except Exception as exc:
             logger.warning("Failed to load style params user_id=%s: %s", user_id, exc)
             return {style: {"alpha": 1.0, "beta": 1.0} for style in self.STYLES}
@@ -98,8 +96,7 @@ class ThompsonSampling:
         """Sample a style from explicit Beta parameters (used in tests/stat checks)."""
         random_source = rng or random
         samples = {
-            style: random_source.betavariate(alpha, beta)
-            for style, (alpha, beta) in params.items()
+            style: random_source.betavariate(alpha, beta) for style, (alpha, beta) in params.items()
         }
         return max(samples, key=lambda style: samples[style])
 

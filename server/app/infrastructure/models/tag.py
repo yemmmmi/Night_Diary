@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 diary_tag_association = Table(
     "diary_tags",
     Base.metadata,
-    Column("diary_id", Integer, ForeignKey("diary_entries.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "diary_id", Integer, ForeignKey("diary_entries.id", ondelete="CASCADE"), primary_key=True
+    ),
     Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
     Column("created_at", DateTime, default=datetime.utcnow),
 )

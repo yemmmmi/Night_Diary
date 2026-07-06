@@ -21,9 +21,7 @@ class UserRow(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    email: Mapped[str] = mapped_column(
-        String(255), unique=True, index=True, nullable=False
-    )
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     nickname: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -33,7 +31,4 @@ class UserRow(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<UserRow(id={self.id}, email={self.email!r}, "
-            f"nickname={self.nickname!r})>"
-        )
+        return f"<UserRow(id={self.id}, email={self.email!r}, nickname={self.nickname!r})>"

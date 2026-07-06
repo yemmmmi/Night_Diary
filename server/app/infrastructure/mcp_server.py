@@ -120,15 +120,13 @@ class MCPServer:
     def run_sse(self, *, port: int = 8080) -> None:
         """Run the MCP server over SSE transport (HTTP)."""
         try:
+            import uvicorn
             from mcp.server import Server
             from mcp.server.sse import SseServerTransport
             from starlette.applications import Starlette
             from starlette.routing import Mount, Route
-            import uvicorn
         except ImportError:
-            logger.error(
-                "mcp/SSE deps not installed; run: pip install mcp uvicorn starlette"
-            )
+            logger.error("mcp/SSE deps not installed; run: pip install mcp uvicorn starlette")
             return
 
         server = Server("night-diary-sse")

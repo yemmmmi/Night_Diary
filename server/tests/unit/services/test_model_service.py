@@ -86,6 +86,7 @@ def test_validate_model_connection_deepseek_405_then_root_ok() -> None:
 
     def fake_get(url: str, **kwargs: object) -> object:
         _ = kwargs
+
         class Resp:
             status_code = 405 if "/v1/models" in url else 200
 
@@ -102,6 +103,7 @@ def test_validate_model_connection_falls_back_to_chat() -> None:
 
     def fake_get(url: str, **kwargs: object) -> object:
         _ = url, kwargs
+
         class Resp:
             status_code = 405
 
@@ -109,6 +111,7 @@ def test_validate_model_connection_falls_back_to_chat() -> None:
 
     def fake_post(url: str, **kwargs: object) -> object:
         _ = url, kwargs
+
         class Resp:
             status_code = 200
 

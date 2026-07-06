@@ -80,7 +80,10 @@ def test_generate_card_returns_real_emotion_not_hardcoded(db_session) -> None:
     container._llm_for_tier = MagicMock(return_value=_StubCardLLM())
 
     result = conversation_ai_service.generate_card_from_conversation(
-        db_session, container, user_id="default", conversation_id=conv.id,
+        db_session,
+        container,
+        user_id="default",
+        conversation_id=conv.id,
     )
 
     # "焦虑" is a negative keyword → emotion should be "低落", not "平静"
@@ -107,7 +110,10 @@ def test_generate_card_positive_emotion(db_session) -> None:
     container._llm_for_tier = MagicMock(return_value=_StubCardLLM())
 
     result = conversation_ai_service.generate_card_from_conversation(
-        db_session, container, user_id="default", conversation_id=conv.id,
+        db_session,
+        container,
+        user_id="default",
+        conversation_id=conv.id,
     )
     assert result["emotion"] == "积极"
 
@@ -128,7 +134,10 @@ def test_generate_card_fallback_when_llm_unavailable(db_session) -> None:
     container._llm_for_tier = MagicMock(return_value=None)
 
     result = conversation_ai_service.generate_card_from_conversation(
-        db_session, container, user_id="default", conversation_id=conv.id,
+        db_session,
+        container,
+        user_id="default",
+        conversation_id=conv.id,
     )
     assert result["emotion"] == "低落"
     assert "event_summary" in result
@@ -143,7 +152,10 @@ def test_generate_card_empty_conversation(db_session) -> None:
     container.ensure_ai_stack = MagicMock()
 
     result = conversation_ai_service.generate_card_from_conversation(
-        db_session, container, user_id="default", conversation_id=conv.id,
+        db_session,
+        container,
+        user_id="default",
+        conversation_id=conv.id,
     )
     assert result["emotion"] == "平静"
     assert result["event_summary"] == "暂无对话内容"

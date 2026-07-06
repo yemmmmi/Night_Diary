@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from app.domain.agents.slot_extractor import SlotExtractor, SlotResult
-
+from app.domain.agents.slot_extractor import SlotExtractor
 
 # ── Time range extraction tests ─────────────────────────────────────
 

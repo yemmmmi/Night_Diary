@@ -67,9 +67,7 @@ class TracingLLMClient:
                 # with synchronous SQLite writes. Swallow tracing errors so
                 # they never mask the original LLM result/exception.
                 try:
-                    await asyncio.to_thread(
-                        self._record, prompt, response, started, error
-                    )
+                    await asyncio.to_thread(self._record, prompt, response, started, error)
                 except Exception as trace_exc:
                     logger.warning("Tracing record failed (non-fatal): %s", trace_exc)
 

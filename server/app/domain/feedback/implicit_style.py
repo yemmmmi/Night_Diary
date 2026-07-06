@@ -100,21 +100,25 @@ def extract_implicit_style_signals(
                 # Check if there's an appreciation pattern nearby
                 for pattern in _APPRECIATION_PATTERNS:
                     if pattern.search(text):
-                        signals.append(ImplicitStyleSignal(
-                            style=style,
-                            is_positive=True,
-                            confidence=0.35,
-                            matched_pattern=f"appreciation+{kw}",
-                        ))
+                        signals.append(
+                            ImplicitStyleSignal(
+                                style=style,
+                                is_positive=True,
+                                confidence=0.35,
+                                matched_pattern=f"appreciation+{kw}",
+                            )
+                        )
                         break
                 else:
                     # Style keyword without appreciation — weaker signal
-                    signals.append(ImplicitStyleSignal(
-                        style=style,
-                        is_positive=True,
-                        confidence=0.20,
-                        matched_pattern=f"keyword:{kw}",
-                    ))
+                    signals.append(
+                        ImplicitStyleSignal(
+                            style=style,
+                            is_positive=True,
+                            confidence=0.20,
+                            matched_pattern=f"keyword:{kw}",
+                        )
+                    )
                 break  # Only one signal per style
 
     # Check rejection patterns
@@ -122,27 +126,33 @@ def extract_implicit_style_signals(
         if pattern.search(text):
             # Rejection of current style (if known)
             if current_style and current_style in STYLES:
-                signals.append(ImplicitStyleSignal(
-                    style=current_style,
-                    is_positive=False,
-                    confidence=0.30,
-                    matched_pattern=f"rejection:{pattern.pattern}",
-                ))
+                signals.append(
+                    ImplicitStyleSignal(
+                        style=current_style,
+                        is_positive=False,
+                        confidence=0.30,
+                        matched_pattern=f"rejection:{pattern.pattern}",
+                    )
+                )
             # Check if rejection implies preference for another style
             if "直接" in text or "简单" in text or "具体" in text:
-                signals.append(ImplicitStyleSignal(
-                    style="practical",
-                    is_positive=True,
-                    confidence=0.25,
-                    matched_pattern="rejection→practical",
-                ))
+                signals.append(
+                    ImplicitStyleSignal(
+                        style="practical",
+                        is_positive=True,
+                        confidence=0.25,
+                        matched_pattern="rejection→practical",
+                    )
+                )
             elif "不需要" in text and "道理" in text:
-                signals.append(ImplicitStyleSignal(
-                    style="philosophical",
-                    is_positive=False,
-                    confidence=0.25,
-                    matched_pattern="rejection→not_philosophical",
-                ))
+                signals.append(
+                    ImplicitStyleSignal(
+                        style="philosophical",
+                        is_positive=False,
+                        confidence=0.25,
+                        matched_pattern="rejection→not_philosophical",
+                    )
+                )
             break  # One rejection signal is enough
 
     return signals

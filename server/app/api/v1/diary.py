@@ -66,7 +66,9 @@ def update_entry(
     return diary_to_response(row)
 
 
-@router.delete("/entries/{diary_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+@router.delete(
+    "/entries/{diary_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response
+)
 def delete_entry(
     diary_id: int,
     db: DbDep,

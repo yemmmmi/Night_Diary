@@ -18,14 +18,14 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from app.domain.agents.slot_extractor import SlotExtractor
-from app.services.ai.input_preprocessor import InputPreprocessor
-from app.services.ai.prompts import FALLBACK_FEEDBACK
 from app.services.ai.conversation_loop import (
     Citation,
     _execute_tool,
     _format_citations,
 )
-from app.services.ai.utils import extract_token_usage, merge_token_info
+from app.services.ai.input_preprocessor import InputPreprocessor
+from app.services.ai.prompts import FALLBACK_FEEDBACK
+from app.services.ai.utils import extract_token_usage
 from app.shared.llm import message_text
 from app.shared.tool_protocol import (
     build_tool_hint,
@@ -153,11 +153,13 @@ def execute_tools_node(state: dict[str, Any]) -> dict[str, Any]:
         tool_calls_made.append(tc.name)
         result = _execute_tool(tc.name, tc.args, tools)
         tool_results.append(result)
-        tool_citations.append(Citation(
-            source_type="tool",
-            source_name=tc.name,
-            content_summary=result[:100],
-        ))
+        tool_citations.append(
+            Citation(
+                source_type="tool",
+                source_name=tc.name,
+                content_summary=result[:100],
+            )
+        )
 
     return {
         "tool_results_text": "\n".join(tool_results),
@@ -224,23 +226,29 @@ def postprocess_node(state: dict[str, Any]) -> dict[str, Any]:
     episodic_text = state.get("episodic_text", "")
 
     if pinned_diaries_text and pinned_diaries_text.strip():
-        citations.append(Citation(
-            source_type="diary",
-            source_name="用户置顶日记",
-            content_summary=pinned_diaries_text[:100],
-        ))
+        citations.append(
+            Citation(
+                source_type="diary",
+                source_name="用户置顶日记",
+                content_summary=pinned_diaries_text[:100],
+            )
+        )
     if retrieved_diaries_text and retrieved_diaries_text.strip():
-        citations.append(Citation(
-            source_type="diary",
-            source_name="检索日记",
-            content_summary=retrieved_diaries_text[:100],
-        ))
+        citations.append(
+            Citation(
+                source_type="diary",
+                source_name="检索日记",
+                content_summary=retrieved_diaries_text[:100],
+            )
+        )
     if episodic_text and episodic_text.strip():
-        citations.append(Citation(
-            source_type="memory",
-            source_name="情景记忆",
-            content_summary=episodic_text[:100],
-        ))
+        citations.append(
+            Citation(
+                source_type="memory",
+                source_name="情景记忆",
+                content_summary=episodic_text[:100],
+            )
+        )
 
     # Tool citations
     tool_citations = state.get("tool_citations", [])
@@ -258,11 +266,11 @@ def postprocess_node(state: dict[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
-    "preprocess_node",
-    "understand_node",
-    "plan_node",
-    "should_execute_tools",
     "execute_tools_node",
     "generate_node",
+    "plan_node",
     "postprocess_node",
+    "preprocess_node",
+    "should_execute_tools",
+    "understand_node",
 ]

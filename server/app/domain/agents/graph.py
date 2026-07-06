@@ -112,9 +112,7 @@ class MultiAgentGraph:
         classify_update = await self._supervisor.classify(cast(MultiAgentState, merged))
         _merge(merged, classify_update)
 
-        activated = [
-            name for name in merged.get("activated_agents", []) if name in self._workers
-        ]
+        activated = [name for name in merged.get("activated_agents", []) if name in self._workers]
         for phase in sorted({self._phases.get(name, CONSUMER_PHASE) for name in activated}):
             phase_workers = [
                 name for name in activated if self._phases.get(name, CONSUMER_PHASE) == phase
@@ -144,7 +142,7 @@ class MultiAgentGraph:
         fallback = self._fallbacks[name]
         try:
             return await asyncio.wait_for(runner(state), timeout=self._timeout)
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError:  # noqa: UP041
             logger.warning("worker %s timed out after %.1fs, using fallback", name, self._timeout)
             update = dict(fallback(state))
             update["errors"] = [f"worker '{name}' timeout after {self._timeout}s"]

@@ -29,7 +29,10 @@ def trigger_analysis(
     )
     entry = diary_service.get_entry(db, diary_id, user_id=str(user.id))
     return analysis_to_response(
-        row, reply=entry.reply, db=db, referenced_memory_count=mem_count,
+        row,
+        reply=entry.reply,
+        db=db,
+        referenced_memory_count=mem_count,
         user_id=str(user.id),
     )
 
@@ -49,7 +52,10 @@ def regenerate_analysis(
     )
     entry = diary_service.get_entry(db, diary_id, user_id=str(user.id))
     return analysis_to_response(
-        row, reply=entry.reply, db=db, referenced_memory_count=mem_count,
+        row,
+        reply=entry.reply,
+        db=db,
+        referenced_memory_count=mem_count,
         user_id=str(user.id),
     )
 
@@ -59,7 +65,10 @@ def get_analysis(diary_id: int, db: DbDep, user: CurrentUserDep) -> AnalysisResp
     row = analysis_service.get_analysis(db, diary_id, user_id=str(user.id))
     entry = diary_service.get_entry(db, diary_id, user_id=str(user.id))
     return analysis_to_response(
-        row, reply=entry.reply, db=db, user_id=str(user.id),
+        row,
+        reply=entry.reply,
+        db=db,
+        user_id=str(user.id),
     )
 
 

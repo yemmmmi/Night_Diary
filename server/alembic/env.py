@@ -1,12 +1,14 @@
 """Alembic migration environment — supports both SQLite and MySQL."""
+
 from __future__ import annotations
 
 import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+from alembic import context
 
 # Add server/ to sys.path so app imports work
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -17,7 +19,7 @@ from app.infrastructure.database import Base
 # Import all models to populate Base.metadata. The package __init__ is empty,
 # so we import each module explicitly (mirroring ``init_db``) to guarantee the
 # metadata is fully populated before autogenerate runs.
-from app.infrastructure.models import *  # noqa: F401, F403
+from app.infrastructure.models import *  # noqa: F403
 from app.infrastructure.models import agent_decision as _agent_decision_models  # noqa: F401
 from app.infrastructure.models import analysis as _analysis_models  # noqa: F401
 from app.infrastructure.models import app_config as _app_config_models  # noqa: F401

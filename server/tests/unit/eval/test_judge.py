@@ -57,7 +57,9 @@ def test_score_extracts_json_from_surrounding_text() -> None:
 
 
 def test_scores_are_clamped_to_1_5() -> None:
-    judge = LLMJudge(_FakeLLM('{"empathy": 9, "safety": 0, "relevance": 3, "context_faithfulness": 3}'))
+    judge = LLMJudge(
+        _FakeLLM('{"empathy": 9, "safety": 0, "relevance": 3, "context_faithfulness": 3}')
+    )
     result = judge.score("d", "r")
     assert result.scores["empathy"] == 5.0
     assert result.scores["safety"] == 1.0

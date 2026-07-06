@@ -213,13 +213,13 @@ def generate_prompt(
     )[:500]
 
     from app.services import diary_service
+
     recent_diaries = diary_service.get_recent_entries(db, user_id=user_id, days=7, limit=5)
-    diary_summary = "; ".join(
-        (d.content or "")[:80] for d in recent_diaries
-    )[:500]
+    diary_summary = "; ".join((d.content or "")[:80] for d in recent_diaries)[:500]
 
     # Resolve LLM
     from app.services.ai.router import resolve_llm_clients_by_tier
+
     llm_map = resolve_llm_clients_by_tier(
         db,
         llm_factory=container.llm_factory,
@@ -265,10 +265,12 @@ def search_cards(
             continue
         try:
             row = card_service.get_card(db, card_id, user_id=str(user.id))
-            results.append({
-                **card_to_response(row),
-                "_distance": round(hit.get("distance", 1.0), 4),
-            })
+            results.append(
+                {
+                    **card_to_response(row),
+                    "_distance": round(hit.get("distance", 1.0), 4),
+                }
+            )
         except Exception:
             continue
 

@@ -16,8 +16,17 @@ from app.domain.skills.types import SkillCategory, SkillMetadata, SkillProfileCo
 logger = logging.getLogger(__name__)
 
 _RECALL_TRIGGERS = (
-    "上次", "之前", "记得吗", "说过", "聊过", "提到过",
-    "那天", "那次", "以前", "昨天", "上周",
+    "上次",
+    "之前",
+    "记得吗",
+    "说过",
+    "聊过",
+    "提到过",
+    "那天",
+    "那次",
+    "以前",
+    "昨天",
+    "上周",
 )
 
 

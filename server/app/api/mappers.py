@@ -51,9 +51,7 @@ def analysis_to_response(
             db, row.execution_tier, user_id=user_id
         )
         if provider is None and row.execution_tier != "default":
-            provider = model_service.get_active_provider_for_tier(
-                db, "default", user_id=user_id
-            )
+            provider = model_service.get_active_provider_for_tier(db, "default", user_id=user_id)
         if provider is not None:
             model_name = provider.model_name
 

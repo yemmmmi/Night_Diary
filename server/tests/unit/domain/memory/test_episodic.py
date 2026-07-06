@@ -142,7 +142,9 @@ def test_multiturn_insomnia_context_retained(episodic_store: SqliteEpisodicMemor
     assert any(hit.event_summary == "失眠" for hit in hits)
 
 
-def test_query_relevance_ranks_related_entry_higher(episodic_store: SqliteEpisodicMemoryStore) -> None:
+def test_query_relevance_ranks_related_entry_higher(
+    episodic_store: SqliteEpisodicMemoryStore,
+) -> None:
     """A query-relevant entry should outrank a higher-importance but irrelevant entry."""
     memory = EpisodicMemory(store=episodic_store, user_id="default")
     now = time.time()
