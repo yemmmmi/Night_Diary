@@ -9,6 +9,7 @@ from app.api.v1 import (
     auth,
     card,
     conversation,
+    dev,
     diary,
     export,
     feedback,
@@ -34,3 +35,4 @@ api_router.include_router(tags.router)
 api_router.include_router(weekly.router)
 api_router.include_router(memory.router)
 api_router.include_router(export.router)
+api_router.include_router(dev.router)
