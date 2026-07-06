@@ -65,6 +65,16 @@ export async function getHttpClient(): Promise<AxiosInstance> {
     headers: { Accept: 'application/json' },
   })
 
+  // JWT 请求拦截器：自动附加 Authorization 头
+  client.interceptors.request.use((config) => {
+    const token = localStorage.getItem('night_diary_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  })
+
+  // bootstrap 503 重试拦截器（保留原有逻辑）
   client.interceptors.response.use(
     (response) => response,
     async (error) => {
@@ -82,6 +92,21 @@ export async function getHttpClient(): Promise<AxiosInstance> {
 
       await sleep(BOOTSTRAP_RETRY_MS)
       return client.request(config)
+    },
+  )
+
+  // 401 响应拦截器：令牌失效时清理本地状态并跳转登录页
+  client.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (isAxiosError(error) && error.response?.status === 401) {
+        localStorage.removeItem('night_diary_token')
+        // 避免在登录页面循环跳转
+        if (!window.location.hash.includes('/login')) {
+          window.location.hash = '#/login'
+        }
+      }
+      return Promise.reject(error)
     },
   )
 

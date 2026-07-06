@@ -1,26 +1,10 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { invoke } from '@tauri-apps/api/core'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
 import App from '../App.vue'
 import HomeScene from '../pages/HomeScene.vue'
-
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}))
-
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({
-    minimize: vi.fn(),
-    maximize: vi.fn(),
-    unmaximize: vi.fn(),
-    isMaximized: vi.fn().mockResolvedValue(false),
-    close: vi.fn(),
-    onCloseRequested: vi.fn().mockResolvedValue(undefined),
-  }),
-}))
 
 vi.mock('@/shared/api/diary', () => ({
   listDiaryEntries: vi.fn().mockResolvedValue([{ id: 1 }]),
@@ -57,17 +41,8 @@ describe('App', () => {
       'night-diary-app-settings',
       JSON.stringify({ onboardingCompleted: true, themePreference: 'auto' }),
     )
-    vi.stubGlobal('__TAURI_INTERNALS__', {})
+    localStorage.setItem('night_diary_token', 'fake-token')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }))
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === 'get_backend_port') {
-        return Promise.resolve(18000)
-      }
-      if (cmd === 'is_backend_ready' || cmd === 'check_backend_health' || cmd === 'is_core_ready') {
-        return Promise.resolve(true)
-      }
-      return Promise.reject(new Error(`unexpected: ${cmd}`))
-    })
   })
 
   it('shows shell immediately then connects to backend', async () => {

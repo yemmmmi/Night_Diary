@@ -16,8 +16,6 @@ const working = ref(false)
 const message = ref<string | null>(null)
 const error = ref<string | null>(null)
 
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-
 async function refresh() {
   loading.value = true
   error.value = null
@@ -133,26 +131,23 @@ onMounted(() => {
       <span>退出应用时自动备份</span>
     </div>
 
-    <!-- Backup & restore (Tauri only) -->
-    <template v-if="isTauri">
-      <p class="backup-manager__hint">退出应用时会自动备份数据库（文件名以 <code>-auto.db</code> 结尾）。最多保留 20 份备份。</p>
-      <GameButton variant="secondary" :disabled="working" @click="onCreateBackup">
-        {{ working ? '处理中…' : '立即备份' }}
-      </GameButton>
-      <p v-if="message" class="backup-manager__msg backup-manager__msg--ok">{{ message }}</p>
-      <p v-if="error" class="backup-manager__msg backup-manager__msg--err">{{ error }}</p>
-      <div class="backup-manager__list">
-        <p v-if="loading" class="backup-manager__hint">加载备份列表…</p>
-        <p v-else-if="backups.length === 0" class="backup-manager__hint">暂无备份文件</p>
-        <ul v-else>
-          <li v-for="name in backups" :key="name">
-            <span>{{ name }}</span>
-            <GameButton variant="ghost" :disabled="working" @click="onRestore(name)">恢复</GameButton>
-          </li>
-        </ul>
-      </div>
-    </template>
-    <p v-else class="backup-manager__hint">整库备份与恢复功能仅在 Tauri 桌面应用中可用。</p>
+    <!-- Backup & restore -->
+    <p class="backup-manager__hint">退出应用时会自动备份数据库（文件名以 <code>-auto.db</code> 结尾）。最多保留 20 份备份。</p>
+    <GameButton variant="secondary" :disabled="working" @click="onCreateBackup">
+      {{ working ? '处理中…' : '立即备份' }}
+    </GameButton>
+    <p v-if="message" class="backup-manager__msg backup-manager__msg--ok">{{ message }}</p>
+    <p v-if="error" class="backup-manager__msg backup-manager__msg--err">{{ error }}</p>
+    <div class="backup-manager__list">
+      <p v-if="loading" class="backup-manager__hint">加载备份列表…</p>
+      <p v-else-if="backups.length === 0" class="backup-manager__hint">暂无备份文件</p>
+      <ul v-else>
+        <li v-for="name in backups" :key="name">
+          <span>{{ name }}</span>
+          <GameButton variant="ghost" :disabled="working" @click="onRestore(name)">恢复</GameButton>
+        </li>
+      </ul>
+    </div>
 
     <!-- JSON export/import (always available) -->
     <div class="backup-manager__divider" />

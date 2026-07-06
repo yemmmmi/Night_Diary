@@ -5,7 +5,7 @@ export interface DiaryEntry {
   content: string | null
   date: string | null
   weather: string | null
-  ai_ans: string | null
+  reply: string | null
   created_at: string
   updated_at: string
 }

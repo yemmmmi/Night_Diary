@@ -96,7 +96,7 @@ function formatEntryDate(entry: DiaryEntry): string {
         </div>
         <p class="timeline-entry__summary font-diary">{{ entrySummaries.get(entry.id) }}</p>
         <PhEnvelopeSimple
-          v-if="entry.ai_ans?.trim()"
+          v-if="entry.reply?.trim()"
           :size="14"
           class="timeline-entry__reply-icon"
           aria-label="已有回信"

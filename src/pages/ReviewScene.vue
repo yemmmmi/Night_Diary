@@ -54,7 +54,7 @@ const routeDiaryId = computed(() => {
 
 const aiReplyPreview = computed(() => {
   const text =
-    analysisStore.current?.ai_ans?.trim() || selectedEntry.value?.ai_ans?.trim() || ''
+    analysisStore.current?.reply?.trim() || selectedEntry.value?.reply?.trim() || ''
   return text ? diarySummary(text, 160) : null
 })
 
@@ -119,7 +119,7 @@ function exportMarkdown() {
   const date = entry.date || '未知日期'
   const weather = entry.weather ? `  \n*天气：${entry.weather}*` : ''
   const content = entry.content || ''
-  const aiAns = entry.ai_ans?.trim() || analysisStore.current?.ai_ans?.trim() || ''
+  const aiAns = entry.reply?.trim() || analysisStore.current?.reply?.trim() || ''
 
   const md = `# ${date}\n${weather}\n\n## 日记\n\n${content}\n${aiAns ? `\n---\n\n## 回信\n\n${aiAns}\n` : ''}`
 
@@ -464,7 +464,7 @@ watch(
                 variant="primary"
                 @click="openAnalysis(selectedEntry)"
               >
-                {{ selectedEntry.ai_ans?.trim() ? '查看回信' : '获取回信' }}
+                {{ selectedEntry.reply?.trim() ? '查看回信' : '获取回信' }}
               </GameButton>
               <GameButton variant="ghost" @click="exportMarkdown">导出 Markdown</GameButton>
               <GameButton

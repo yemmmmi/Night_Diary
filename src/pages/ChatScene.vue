@@ -78,7 +78,7 @@ async function loadReferenceData() {
     ])
     diaryCatalog.value = diaries
     referenceCards.value = cards
-    episodicMemories.value = episodic.slice(0, 3).map((entry) => `[${entry.emotion}] ${entry.event}`)
+    episodicMemories.value = episodic.slice(0, 3).map((entry) => `[${entry.emotion}] ${entry.event_summary}`)
   } catch {
     diaryCatalog.value = []
     referenceCards.value = []

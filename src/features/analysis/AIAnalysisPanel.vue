@@ -27,7 +27,7 @@ defineEmits<{
 const showTokenDetail = ref(false)
 
 const aiText = computed(
-  () => props.analysis?.ai_ans?.trim() || props.entry.ai_ans?.trim() || '',
+  () => props.analysis?.reply?.trim() || props.entry.reply?.trim() || '',
 )
 
 const hasAnalysis = computed(() => Boolean(aiText.value) && !props.triggering && !props.loading)

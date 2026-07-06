@@ -18,7 +18,7 @@ function entry(partial: Partial<DiaryEntry> & Pick<DiaryEntry, 'id'>): DiaryEntr
     content: partial.content ?? '内容',
     date: partial.date ?? null,
     weather: null,
-    ai_ans: partial.ai_ans ?? null,
+    reply: partial.reply ?? null,
     created_at: partial.created_at ?? '2026-06-08T10:00:00',
     updated_at: partial.updated_at ?? '2026-06-08T10:00:00',
     ...partial,
@@ -67,7 +67,7 @@ describe('diaryFormat', () => {
   })
 
   it('derives diary status', () => {
-    expect(diaryStatus(entry({ id: 1, ai_ans: '回信' }))).toBe('reply')
+    expect(diaryStatus(entry({ id: 1, reply: '回信' }))).toBe('reply')
     expect(diaryStatus(entry({ id: 2, content: '短' }))).toBe('draft')
     expect(diaryStatus(entry({ id: 3, content: '这是一段足够长的日记内容' }))).toBe('pending')
   })

@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
-import CustomTitlebar from '@/shared/components/CustomTitlebar.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import NavTabs from '@/shared/components/NavTabs.vue'
 import PageTransition from '@/shared/components/PageTransition.vue'
@@ -23,10 +22,6 @@ watch(error, () => {
 function dismissError() {
   errorDismissed.value = true
 }
-
-const isTauri = computed(
-  () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window,
-)
 
 const subtleParticles = computed(() => route.path.startsWith('/write'))
 
@@ -66,14 +61,9 @@ const statusBanner = computed(() => {
   <div class="app-root">
     <ParticleBackground :subtle="subtleParticles" />
 
-    <CustomTitlebar v-if="isTauri" />
+    <NavTabs v-if="isTabRoute" />
 
-    <NavTabs v-if="isTabRoute" :frameless="isTauri" />
-
-    <div
-      class="app-shell particle-layer"
-      :class="{ 'app-shell--frameless': isTauri }"
-    >
+    <div class="app-shell particle-layer">
       <p v-if="statusBanner" class="app-status-banner" role="status">
         {{ statusBanner }}
       </p>

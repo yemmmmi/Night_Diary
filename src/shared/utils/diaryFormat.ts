@@ -73,7 +73,7 @@ export function diaryEntrySummary(
 
 export function diaryStatus(entry: DiaryEntry): DiaryStatus {
   const text = (entry.content ?? '').trim()
-  if (entry.ai_ans && entry.ai_ans.trim()) return 'reply'
+  if (entry.reply && entry.reply.trim()) return 'reply'
   if (text.length < 12) return 'draft'
   return 'pending'
 }
