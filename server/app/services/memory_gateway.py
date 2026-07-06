@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from app.domain.memory.atom import UnifiedMemoryAtom
 from app.domain.memory.types import EpisodicEntry
 
 if TYPE_CHECKING:
@@ -91,10 +92,13 @@ class MemoryGateway:
                 entries = self._episodic.retrieve_relevant(query=query, top_k=top_k)
                 episodic_context = [
                     {
-                        "event": e.event,
+                        "event_summary": e.event_summary,
                         "emotion": e.emotion,
-                        "ai_suggestion": e.ai_suggestion,
+                        "reply_insight": e.reply_insight,
                         "timestamp": e.timestamp,
+                        "tags": e.tags,
+                        "mood_score": e.mood_score,
+                        "source": e.source,
                     }
                     for e in entries
                 ]
@@ -124,12 +128,17 @@ class MemoryGateway:
     def persist_episodic(
         self,
         *,
-        event: str,
+        event_summary: str,
         emotion: str,
-        ai_suggestion: str = "",
+        reply_insight: str = "",
+        source: str = "diary",
         diary_ids: list[str] | None = None,
         importance: float = 0.5,
         user_id: str = "default",
+        tags: list[str] | None = None,
+        mood_score: float = 0.5,
+        emotions: list[str] | None = None,
+        event_date: str | None = None,
     ) -> bool:
         """Store an episodic entry and trigger long-term promotion.
 
@@ -140,15 +149,34 @@ class MemoryGateway:
             logger.debug("MemoryGateway: episodic unavailable, skip store")
             return False
 
-        entry = EpisodicEntry(
-            event=event[:120],
+        # ── Dirty memory prevention gate (P2-8) ──
+        from app.domain.memory.gate import should_persist
+
+        existing = self._episodic.get_entries() if self._episodic else []
+        if not should_persist(
+            event_summary=event_summary,
             emotion=emotion,
-            ai_suggestion=ai_suggestion[:200],
-            user_feedback="none",
+            mood_score=mood_score,
+            importance=importance,
+            content=event_summary,
+            existing_entries=existing,
+        ):
+            logger.debug("Memory gate rejected write: source=%s summary=%s", source, event_summary[:50])
+            return False
+
+        entry = EpisodicEntry(
+            event_summary=event_summary[:121],
+            emotion=emotion,
+            reply_insight=reply_insight[:200],
+            source=source,
             timestamp=datetime.now(UTC).timestamp(),
             diary_ids=diary_ids or [],
             importance=importance,
             entry_id="",
+            tags=tags or [],
+            mood_score=mood_score,
+            emotions=emotions or [],
+            event_date=event_date,
         )
 
         try:
@@ -163,12 +191,33 @@ class MemoryGateway:
         # Best-effort long-term promotion.
         if self._long_term is not None:
             try:
-                all_entries = list(self._episodic._entries)
+                all_entries = self._episodic.get_entries()
                 self._long_term.promote_from_episodic(user_id=user_id, episodic_entries=all_entries)
             except Exception as exc:
                 logger.warning("MemoryGateway: profile promotion failed: %s", exc)
 
         return True
+
+    def persist_atom(self, atom: UnifiedMemoryAtom) -> bool:
+        """Persist a :class:`UnifiedMemoryAtom` to episodic memory.
+
+        This is the preferred write path for all three content sources.
+        It converts the atom to an ``EpisodicEntry`` with structured fields
+        and delegates to :meth:`persist_episodic`.
+        """
+        return self.persist_episodic(
+            event_summary=atom.event_summary,
+            emotion=atom.emotion,
+            reply_insight=atom.reply_insight,
+            source=atom.source,
+            diary_ids=[str(atom.diary_id)] if atom.diary_id else [],
+            importance=atom.importance,
+            user_id=atom.user_id,
+            tags=atom.tags,
+            mood_score=atom.mood_score,
+            emotions=atom.emotions,
+            event_date=atom.event_date.isoformat() if atom.event_date else None,
+        )
 
     @staticmethod
     def from_container(container: ServiceContainer) -> MemoryGateway:
@@ -180,4 +229,4 @@ class MemoryGateway:
         )
 
 
-__all__ = ["LoadedMemory", "MemoryGateway", "SessionType"]
+__all__ = ["LoadedMemory", "MemoryGateway", "SessionType", "UnifiedMemoryAtom"]
