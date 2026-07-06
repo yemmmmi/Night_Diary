@@ -70,6 +70,7 @@ export interface AppSettingsSnapshot {
   onboardingCompleted: boolean
   activeReplierId: string
   userRepliers: UserReplier[]
+  developerMode: boolean
 }
 
 const DEFAULTS: AppSettingsSnapshot = {
@@ -80,6 +81,7 @@ const DEFAULTS: AppSettingsSnapshot = {
   onboardingCompleted: false,
   activeReplierId: DEFAULT_ACTIVE_REPLIER_ID,
   userRepliers: [],
+  developerMode: false,
 }
 
 function validReplierId(parsed: Partial<AppSettingsSnapshot>): string {
@@ -117,6 +119,7 @@ function readStored(): AppSettingsSnapshot {
       onboardingCompleted: Boolean(parsed.onboardingCompleted),
       activeReplierId: validReplierId(parsed),
       userRepliers: validUserRepliers(parsed),
+      developerMode: Boolean(parsed.developerMode),
     }
   } catch {
     return { ...DEFAULTS }
@@ -138,6 +141,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const onboardingCompleted = ref(DEFAULTS.onboardingCompleted)
   const activeReplierId = ref(DEFAULTS.activeReplierId)
   const userRepliers = ref<UserReplier[]>(DEFAULTS.userRepliers)
+  const developerMode = ref(DEFAULTS.developerMode)
 
   const activeReplier = computed<ReplierConfig | null>(() =>
     resolveReplier(userRepliers.value, activeReplierId.value),
@@ -166,6 +170,7 @@ export const useSettingsStore = defineStore('settings', () => {
     onboardingCompleted.value = snapshot.onboardingCompleted
     activeReplierId.value = snapshot.activeReplierId
     userRepliers.value = snapshot.userRepliers
+    developerMode.value = snapshot.developerMode
   }
 
   function load() {
@@ -183,6 +188,7 @@ export const useSettingsStore = defineStore('settings', () => {
       onboardingCompleted: onboardingCompleted.value,
       activeReplierId: activeReplierId.value,
       userRepliers: userRepliers.value,
+      developerMode: developerMode.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
   }
@@ -249,6 +255,7 @@ export const useSettingsStore = defineStore('settings', () => {
       onboardingCompleted,
       activeReplierId,
       userRepliers,
+      developerMode,
     ],
     persist,
     { deep: true },
@@ -263,6 +270,7 @@ export const useSettingsStore = defineStore('settings', () => {
     onboardingCompleted,
     activeReplierId,
     userRepliers,
+    developerMode,
     activeReplier,
     replierName,
     replierHasName,
