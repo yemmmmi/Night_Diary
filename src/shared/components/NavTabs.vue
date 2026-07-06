@@ -11,10 +11,13 @@ import {
   PhChatsCircle,
   PhCpu,
   PhGear,
+  PhTerminal,
 } from '@phosphor-icons/vue'
+import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
 const router = useRouter()
+const settings = useSettingsStore()
 
 interface Tab {
   key: string
@@ -62,6 +65,16 @@ function navigate(tab: Tab) {
       <component :is="tab.icon" :size="16" :weight="activeKey === tab.key ? 'fill' : 'regular'" />
       <span>{{ tab.label }}</span>
     </button>
+
+    <RouterLink
+      v-if="settings.developerMode"
+      to="/dev"
+      class="nav-tabs__settings"
+      :class="{ 'is-active': route.name === 'dev' }"
+      aria-label="开发者"
+    >
+      <PhTerminal :size="18" :weight="route.name === 'dev' ? 'fill' : 'regular'" />
+    </RouterLink>
 
     <RouterLink
       to="/settings"

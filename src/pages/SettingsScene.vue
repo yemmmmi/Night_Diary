@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { PhArrowLeft, PhCaretRight } from '@phosphor-icons/vue'
 
 import BackupManager from '@/features/settings/BackupManager.vue'
+import DeveloperToggle from '@/features/settings/DeveloperToggle.vue'
 import SettingsSection from '@/features/settings/SettingsSection.vue'
 import ThemeToggle from '@/features/settings/ThemeToggle.vue'
 import ReplierManager from '@/features/settings/ReplierManager.vue'
@@ -96,6 +97,7 @@ watch(
           <input v-model="settings.soundEnabled" type="checkbox" />
           <span>启用界面音效</span>
         </label>
+        <DeveloperToggle />
       </SettingsSection>
 
       <RouterLink to="/models" class="settings-scene__llm-link">

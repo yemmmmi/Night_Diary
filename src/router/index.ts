@@ -97,6 +97,12 @@ const router = createRouter({
       name: 'review-detail',
       component: () => import('@/pages/ReviewScene.vue'),
     },
+    {
+      path: '/dev',
+      name: 'dev',
+      component: () => import('@/pages/DevScene.vue'),
+      meta: { skipOnboarding: true },
+    },
   ],
 })
 
