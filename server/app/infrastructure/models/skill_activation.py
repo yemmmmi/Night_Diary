@@ -21,3 +21,4 @@ class SkillActivationRow(Base):
     reason: Mapped[str] = mapped_column(Text)
     latency_ms: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[float] = mapped_column(Float)
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)

@@ -22,3 +22,4 @@ class AgentDecisionRow(Base):
     skill_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     reasoning: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[float] = mapped_column(Float)
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
