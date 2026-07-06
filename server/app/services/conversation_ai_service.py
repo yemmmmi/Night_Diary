@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -18,6 +19,14 @@ from app.shared.crisis_guard import CrisisGuard, get_crisis_guard
 from app.shared.emotion_estimator import get_emotion_estimator
 from app.shared.errors import ValidationError
 from app.shared.llm import LLMClient, message_text
+from app.shared.pipeline_trace import (
+    STATUS_DISPATCHED,
+    PipelineTrace,
+    reset_trace,
+    set_trace,
+    trace_span,
+)
+from app.shared.trace_persistence import persist_trace, publish_trace_complete
 
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
@@ -168,6 +177,7 @@ def generate_reply(
     auto_retrieve: bool = True,
     crisis_guard: CrisisGuard | None = None,
     use_graph: bool = True,
+    trace_id: str | None = None,
 ) -> ChatReplyResult:
     """Build chat context and generate an assistant reply via the Agentic Loop.
 
@@ -177,263 +187,345 @@ def generate_reply(
     3. Context assembly: pinned diaries + RAG retrieval + episodic + profile
     4. Agentic Loop: model call → tool check → execute → backfill → repeat
     5. Output: reply + token_info + stop_reason + episodic write-back
+
+    When *trace_id* is provided (developer mode), a :class:`PipelineTrace` is
+    created and set in the context so that nested ``trace_span`` calls record
+    their stages.  The trace is finalized, persisted, and published in the
+    ``finally`` block — all best-effort.
     """
-    pinned_ids = _normalize_diary_ids(diary_ids)
-    container.ensure_ai_stack(user_id=user_id)
-
-    # ── Stage 2: Crisis guard (P0 safety) ──
-    guard = crisis_guard or get_crisis_guard()
-    if guard.detect(content):
-        logger.warning(
-            "Crisis detected in conversation=%s, returning safety resources", conversation_id
+    trace: PipelineTrace | None = None
+    token = None
+    if trace_id:
+        trace = PipelineTrace(
+            trace_id=trace_id, scenario="chat_reply", user_id=user_id
         )
-        return ChatReplyResult(
-            reply_text=guard.safe_response,
-            retrieved_diary_ids=pinned_ids,
-            retrieved_memory_ids=[],
-            is_crisis=True,
-        )
+        token = set_trace(trace)
+    try:
+        pinned_ids = _normalize_diary_ids(diary_ids)
+        container.ensure_ai_stack(user_id=user_id)
 
-    # ── Validate pinned diaries ──
-    pinned_entries = diary_service.get_entries_by_ids(db, pinned_ids, user_id=user_id)
-    if len(pinned_entries) != len(pinned_ids):
-        raise ValidationError("引用的日记不存在或已被删除")
+        # ── Stage 2: Crisis guard (P0 safety) ──
+        guard = crisis_guard or get_crisis_guard()
+        with trace_span("S2_crisis", "危机检测", input_snapshot={"raw_text": content}) as span:
+            is_crisis = guard.detect(content)
+            if span:
+                span.metadata["is_crisis"] = is_crisis
+        if is_crisis:
+            logger.warning(
+                "Crisis detected in conversation=%s, returning safety resources",
+                conversation_id,
+            )
+            crisis_result = ChatReplyResult(
+                reply_text=guard.safe_response,
+                retrieved_diary_ids=pinned_ids,
+                retrieved_memory_ids=[],
+                is_crisis=True,
+            )
+            if trace is not None:
+                trace.end()
+            return crisis_result
 
-    # ── Stage 2.1: Input preprocessing (text cleaning + security + omission) ──
-    session_ctx = get_or_create_session(conversation_id, container=container, user_id=user_id)
-    brief_context = session_ctx.compressed_history[:300] if session_ctx.compressed_history else ""
+        # ── Validate pinned diaries ──
+        pinned_entries = diary_service.get_entries_by_ids(db, pinned_ids, user_id=user_id)
+        if len(pinned_entries) != len(pinned_ids):
+            raise ValidationError("引用的日记不存在或已被删除")
 
-    preprocessor = InputPreprocessor()
-    preprocess_result = preprocessor.process(content, context=brief_context)
-    content = preprocess_result.clean_text  # Use cleaned text for all downstream
+        # ── Stage 2.1: Session routing + Input preprocessing ──
+        with trace_span("S1_session", "会话路由", input_snapshot={"conversation_id": conversation_id}) as span:
+            session_ctx = get_or_create_session(
+                conversation_id, container=container, user_id=user_id
+            )
+            brief_context = (
+                session_ctx.compressed_history[:300]
+                if session_ctx.compressed_history
+                else ""
+            )
 
-    if preprocess_result.security_flags.has_injection:
-        logger.warning(
-            "input.injection_detected conversation=%s patterns=%s",
-            conversation_id,
-            preprocess_result.security_flags.injection_patterns,
-        )
-    if preprocess_result.negation_detected:
-        logger.info("input.negation_detected conversation=%s", conversation_id)
+        with trace_span("S3_preprocess", "输入预处理", input_snapshot={"raw_text": content}) as span:
+            preprocessor = InputPreprocessor()
+            preprocess_result = preprocessor.process(content, context=brief_context)
+            content = preprocess_result.clean_text  # Use cleaned text for all downstream
+            if span:
+                span.metadata["safety_flag"] = preprocess_result.security_flags.has_injection
+                span.metadata["omission_flag"] = preprocess_result.negation_detected
 
-    # ── Stage 2.5: Chat intent classification (drives routing) ──
-    intent_classifier = container.get_chat_intent_classifier(db, user_id=user_id)
-    intent_result = intent_classifier.classify_sync(content, context=brief_context)
+        if preprocess_result.security_flags.has_injection:
+            logger.warning(
+                "input.injection_detected conversation=%s patterns=%s",
+                conversation_id,
+                preprocess_result.security_flags.injection_patterns,
+            )
+        if preprocess_result.negation_detected:
+            logger.info("input.negation_detected conversation=%s", conversation_id)
 
-    # Crisis signal from intent classifier as a secondary safety net
-    if intent_result.intent_category == "crisis_signal" and not guard.detect(content):
-        logger.warning(
-            "Intent classifier detected crisis missed by guard: conversation=%s",
-            conversation_id,
-        )
-        return ChatReplyResult(
-            reply_text=guard.safe_response,
-            retrieved_diary_ids=pinned_ids,
-            retrieved_memory_ids=[],
-            is_crisis=True,
-        )
+        # ── Stage 2.5: Chat intent classification (drives routing) ──
+        with trace_span("S4_intent", "意图分类", input_snapshot={"raw_text": content}) as span:
+            intent_classifier = container.get_chat_intent_classifier(db, user_id=user_id)
+            intent_result = intent_classifier.classify_sync(content, context=brief_context)
+            if span:
+                span.metadata["intent_category"] = intent_result.intent_category
+                span.metadata["tier"] = intent_result.tier
 
-    logger.info(
-        "chat.intent conversation=%s category=%s tier=%s tools=%s retrieval=%s entity=%s",
-        conversation_id,
-        intent_result.intent_category,
-        intent_result.tier,
-        intent_result.need_tools,
-        intent_result.need_retrieval,
-        intent_result.need_entity_query,
-    )
+        # Crisis signal from intent classifier as a secondary safety net
+        if intent_result.intent_category == "crisis_signal" and not guard.detect(content):
+            logger.warning(
+                "Intent classifier detected crisis missed by guard: conversation=%s",
+                conversation_id,
+            )
+            crisis_result = ChatReplyResult(
+                reply_text=guard.safe_response,
+                retrieved_diary_ids=pinned_ids,
+                retrieved_memory_ids=[],
+                is_crisis=True,
+            )
+            if trace is not None:
+                trace.end()
+            return crisis_result
 
-    # ── Stage 2.5b: Slot extraction (task decomposition) ──
-    from app.domain.agents.slot_extractor import SlotExtractor
-
-    slot_extractor = SlotExtractor()
-    slot_result = slot_extractor.extract(content, intent=intent_result.intent_category)
-
-    if slot_result.is_multi_task:
         logger.info(
-            "chat.multi_task conversation=%s sub_tasks=%d",
+            "chat.intent conversation=%s category=%s tier=%s tools=%s retrieval=%s entity=%s",
             conversation_id,
-            len(slot_result.sub_tasks),
-        )
-    if slot_result.style_constraints:
-        logger.info(
-            "chat.style_constraints conversation=%s constraints=%s",
-            conversation_id,
-            slot_result.style_constraints,
-        )
-
-    # ── Stage 2.6: Skill selection (scene-2 SkillRegistry) ──
-    skill_registry = container.get_chat_skill_registry()
-    from app.domain.skills.types import SkillProfileContext as _SkillProfile
-
-    skill_profile: _SkillProfile = {
-        "intent": intent_result.intent_category,
-        "user_id": user_id,
-        "recurring_topics": session_ctx.profile_topics,
-    }
-    selected_skills = skill_registry.select_skills(
-        content,
-        skill_profile,
-        token_budget=4000,
-        decision_id=conversation_id,
-    )
-
-    # Execute analysis skills (crisis_detector, sentiment_skill) and append
-    # their output to context if they produce text
-    skill_outputs: list[str] = []
-    for skill in selected_skills:
-        if skill.metadata.category.value == "analysis":
-            try:
-                skill_ctx = {
-                    "diary_content": content,
-                    "user_id": user_id,
-                    "intent": intent_result.intent_category,
-                }
-                output = skill.execute(skill_ctx)
-                if output and not output.startswith("["):
-                    skill_outputs.append(f"【{skill.metadata.name}】{output}")
-            except Exception as exc:
-                logger.debug("Skill %s execute failed (best-effort): %s", skill.metadata.name, exc)
-
-    skill_context_text = "\n".join(skill_outputs) if skill_outputs else ""
-
-    # ── Stage 3: Context assembly (intent-driven) ──
-    exclude_ids = set(pinned_ids)
-    retrieved_ids: list[int] = []
-
-    retrieval_query = content
-    # Query understanding + RAG only when intent needs retrieval
-    if auto_retrieve and intent_result.need_retrieval:
-        from app.domain.agents.query_understander import QueryUnderstander
-
-        query_llm = container._llm_for_tier(db, "light", agent_name="query_understander")
-        understander = QueryUnderstander(
-            llm=query_llm,
-            tracer=container.llm_tracer,
-            model=getattr(query_llm, "model", "") if query_llm else "",
-        )
-        understanding = understander.understand(content, context=brief_context)
-        retrieval_query = understanding.rewritten
-        logger.debug(
-            "query.understood original=%s rewritten=%s terms=%s confidence=%.2f",
-            content[:50],
-            understanding.rewritten[:50],
-            understanding.key_terms,
-            understanding.confidence,
-        )
-
-        retrieved_ids = _retrieve_related_diary_ids(
-            container, retrieval_query, exclude_ids=exclude_ids
-        )
-    elif auto_retrieve:
-        # No retrieval needed — still run query understanding for episodic search
-        logger.debug(
-            "Intent skips diary RAG, using raw content for episodic: %s",
             intent_result.intent_category,
+            intent_result.tier,
+            intent_result.need_tools,
+            intent_result.need_retrieval,
+            intent_result.need_entity_query,
         )
 
-    all_context_ids = pinned_ids + [did for did in retrieved_ids if did not in pinned_ids]
+        # ── Stage 2.5b: Slot extraction (task decomposition) ──
+        from app.domain.agents.slot_extractor import SlotExtractor
 
-    episodic_text, memory_ids = _format_episodic_memories(container, retrieval_query)
-    if skill_context_text:
-        episodic_text = f"{episodic_text}\n\n## 技能分析\n{skill_context_text}"
-    pinned_text = _format_retrieved_diaries(db, pinned_ids, user_id=user_id)
-    retrieved_text = _format_retrieved_diaries(db, retrieved_ids, user_id=user_id)
+        with trace_span("S5_slot", "槽位抽取", input_snapshot={"raw_text": content}) as span:
+            slot_extractor = SlotExtractor()
+            slot_result = slot_extractor.extract(content, intent=intent_result.intent_category)
+            if span:
+                span.metadata["is_multi_task"] = slot_result.is_multi_task
 
-    # ── Build tools (intent-filtered subset) ──
-    all_tools = _build_tools(db, container, user_id=user_id)
-    tools: dict[str, ToolFn] | None = None
-    if all_tools and intent_result.need_tools:
-        tools = {name: fn for name, fn in all_tools.items() if name in intent_result.need_tools}
-        if not tools:
-            tools = None
+        if slot_result.is_multi_task:
+            logger.info(
+                "chat.multi_task conversation=%s sub_tasks=%d",
+                conversation_id,
+                len(slot_result.sub_tasks),
+            )
+        if slot_result.style_constraints:
+            logger.info(
+                "chat.style_constraints conversation=%s constraints=%s",
+                conversation_id,
+                slot_result.style_constraints,
+            )
 
-    # ── Stage 4: Agentic Loop ──
-    loop_result = run_conversation_loop(
-        db,
-        container,
-        conversation_id=conversation_id,
-        content=content,
-        pinned_diaries_text=pinned_text,
-        retrieved_diaries_text=retrieved_text,
-        episodic_text=episodic_text,
-        memory_ids=memory_ids,
-        tools=tools,
-        crisis_guard=guard,
-        user_id=user_id,
-        intent_result=intent_result,
-        use_graph=use_graph,
-    )
+        # ── Stage 2.6: Skill selection (scene-2 SkillRegistry) ──
+        skill_registry = container.get_chat_skill_registry()
+        from app.domain.skills.types import SkillProfileContext as _SkillProfile
 
-    # ── Stage 5: Output + episodic write-back ──
-    _maybe_persist_episodic(
-        container,
-        content=content,
-        reply_text=loop_result.reply_text,
-        conversation_id=conversation_id,
-        user_id=user_id,
-    )
+        skill_profile: _SkillProfile = {
+            "intent": intent_result.intent_category,
+            "user_id": user_id,
+            "recurring_topics": session_ctx.profile_topics,
+        }
+        with trace_span(
+            "S6_skills", "技能选择", input_snapshot={"intent": intent_result.intent_category}
+        ) as span:
+            selected_skills = skill_registry.select_skills(
+                content,
+                skill_profile,
+                token_budget=4000,
+                decision_id=conversation_id,
+            )
+            if span:
+                span.metadata["selected_count"] = len(selected_skills)
 
-    # Get profile style from session (cached, loaded once)
-    session = get_or_create_session(conversation_id, container=container, user_id=user_id)
+        # Execute analysis skills (crisis_detector, sentiment_skill) and append
+        # their output to context if they produce text
+        skill_outputs: list[str] = []
+        for skill in selected_skills:
+            if skill.metadata.category.value == "analysis":
+                try:
+                    skill_ctx = {
+                        "diary_content": content,
+                        "user_id": user_id,
+                        "intent": intent_result.intent_category,
+                    }
+                    output = skill.execute(skill_ctx)
+                    if output and not output.startswith("["):
+                        skill_outputs.append(f"【{skill.metadata.name}】{output}")
+                except Exception as exc:
+                    logger.debug("Skill %s execute failed (best-effort): %s", skill.metadata.name, exc)
 
-    logger.info(
-        "Chat reply generated: conversation=%s tokens=%s tools=%s stop=%s",
-        conversation_id,
-        loop_result.token_info.get("total_tokens_used", 0),
-        loop_result.tool_calls_made,
-        loop_result.stop_reason,
-    )
+        skill_context_text = "\n".join(skill_outputs) if skill_outputs else ""
 
-    # ── Implicit style feedback (P2-6) ──
-    # Extract style signals from user input and feed to Thompson Sampling
-    try:
-        from app.domain.feedback.implicit_style import (
-            apply_implicit_signals,
-            extract_implicit_style_signals,
+        # ── Stage 3: Context assembly (intent-driven) ──
+        exclude_ids = set(pinned_ids)
+        retrieved_ids: list[int] = []
+
+        retrieval_query = content
+        # Query understanding + RAG only when intent needs retrieval
+        if auto_retrieve and intent_result.need_retrieval:
+            from app.domain.agents.query_understander import QueryUnderstander
+
+            query_llm = container._llm_for_tier(db, "light", agent_name="query_understander")
+            understander = QueryUnderstander(
+                llm=query_llm,
+                tracer=container.llm_tracer,
+                model=getattr(query_llm, "model", "") if query_llm else "",
+            )
+            with trace_span("S7a_query_rewrite", "查询改写", input_snapshot={"raw_text": content}) as span:
+                understanding = understander.understand(content, context=brief_context)
+                retrieval_query = understanding.rewritten
+            logger.debug(
+                "query.understood original=%s rewritten=%s terms=%s confidence=%.2f",
+                content[:50],
+                understanding.rewritten[:50],
+                understanding.key_terms,
+                understanding.confidence,
+            )
+
+            with trace_span("S7b_rag", "RAG检索", input_snapshot={"query": retrieval_query}) as span:
+                retrieved_ids = _retrieve_related_diary_ids(
+                    container, retrieval_query, exclude_ids=exclude_ids
+                )
+                if span:
+                    span.metadata["retrieved_count"] = len(retrieved_ids)
+        elif auto_retrieve:
+            # No retrieval needed — still run query understanding for episodic search
+            logger.debug(
+                "Intent skips diary RAG, using raw content for episodic: %s",
+                intent_result.intent_category,
+            )
+
+        all_context_ids = pinned_ids + [did for did in retrieved_ids if did not in pinned_ids]
+
+        with trace_span("S7c_episodic", "情景记忆", input_snapshot={"query": retrieval_query}) as span:
+            episodic_text, memory_ids = _format_episodic_memories(container, retrieval_query)
+            if span:
+                span.metadata["memory_count"] = len(memory_ids)
+        if skill_context_text:
+            episodic_text = f"{episodic_text}\n\n## 技能分析\n{skill_context_text}"
+        pinned_text = _format_retrieved_diaries(db, pinned_ids, user_id=user_id)
+        retrieved_text = _format_retrieved_diaries(db, retrieved_ids, user_id=user_id)
+
+        # ── Build tools (intent-filtered subset) ──
+        with trace_span("S7d_tools", "工具构建") as span:
+            all_tools = _build_tools(db, container, user_id=user_id)
+            if span:
+                span.metadata["tool_count"] = len(all_tools) if all_tools else 0
+        tools: dict[str, ToolFn] | None = None
+        if all_tools and intent_result.need_tools:
+            tools = {name: fn for name, fn in all_tools.items() if name in intent_result.need_tools}
+            if not tools:
+                tools = None
+
+        # ── Stage 4: Agentic Loop ──
+        with trace_span("S8_loop", "Agentic Loop", input_snapshot={"content": content}) as span:
+            loop_result = run_conversation_loop(
+                db,
+                container,
+                conversation_id=conversation_id,
+                content=content,
+                pinned_diaries_text=pinned_text,
+                retrieved_diaries_text=retrieved_text,
+                episodic_text=episodic_text,
+                memory_ids=memory_ids,
+                tools=tools,
+                crisis_guard=guard,
+                user_id=user_id,
+                intent_result=intent_result,
+                use_graph=use_graph,
+            )
+            if span:
+                span.metadata["stop_reason"] = loop_result.stop_reason
+                span.metadata["tool_calls"] = loop_result.tool_calls_made
+
+        # ── Stage 5: Output + episodic write-back ──
+        with trace_span("S10_memory", "情景记忆写入") as span:
+            _maybe_persist_episodic(
+                container,
+                content=content,
+                reply_text=loop_result.reply_text,
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
+
+        # Get profile style from session (cached, loaded once)
+        session = get_or_create_session(conversation_id, container=container, user_id=user_id)
+
+        logger.info(
+            "Chat reply generated: conversation=%s tokens=%s tools=%s stop=%s",
+            conversation_id,
+            loop_result.token_info.get("total_tokens_used", 0),
+            loop_result.tool_calls_made,
+            loop_result.stop_reason,
         )
 
-        current_style = session.profile_style or "empathetic"
-        signals = extract_implicit_style_signals(content, current_style=current_style)
-        if signals:
-            thompson = getattr(container, "style_preference_store", None)
-            if thompson is not None:
-                from app.domain.feedback.thompson_sampling import ThompsonSampling
+        # ── Implicit style feedback (P2-6) ──
+        # Extract style signals from user input and feed to Thompson Sampling
+        try:
+            from app.domain.feedback.implicit_style import (
+                apply_implicit_signals,
+                extract_implicit_style_signals,
+            )
 
-                sampler = ThompsonSampling(store=thompson)
-                applied = apply_implicit_signals(sampler, signals, user_id=user_id)
-                if applied:
-                    logger.debug(
-                        "Implicit style signals: conversation=%s applied=%d/%d",
-                        conversation_id,
-                        applied,
-                        len(signals),
-                    )
-    except Exception as exc:
-        logger.debug("Implicit style signal extraction failed (best-effort): %s", exc)
+            current_style = session.profile_style or "empathetic"
+            signals = extract_implicit_style_signals(content, current_style=current_style)
+            if signals:
+                thompson = getattr(container, "style_preference_store", None)
+                if thompson is not None:
+                    from app.domain.feedback.thompson_sampling import ThompsonSampling
 
-    # ── Entity extraction sidecar (P2-7) ──
-    try:
-        from app.domain.agents.entity_extractor import schedule_entity_extraction
+                    sampler = ThompsonSampling(store=thompson)
+                    applied = apply_implicit_signals(sampler, signals, user_id=user_id)
+                    if applied:
+                        logger.debug(
+                            "Implicit style signals: conversation=%s applied=%d/%d",
+                            conversation_id,
+                            applied,
+                            len(signals),
+                        )
+        except Exception as exc:
+            logger.debug("Implicit style signal extraction failed (best-effort): %s", exc)
 
-        schedule_entity_extraction(
-            container,
-            user_id=user_id,
-            conversation_id=conversation_id,
-            text=content,
+        # ── Entity extraction sidecar (P2-7) ──
+        _entity_span = None
+        with trace_span("S10b_entity", "实体提取") as _entity_span:
+            try:
+                from app.domain.agents.entity_extractor import schedule_entity_extraction
+
+                schedule_entity_extraction(
+                    container,
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    text=content,
+                )
+            except Exception as exc:
+                logger.debug("Entity extraction scheduling failed (best-effort): %s", exc)
+        if _entity_span is not None:
+            _entity_span.status = STATUS_DISPATCHED
+
+        result = ChatReplyResult(
+            reply_text=loop_result.reply_text,
+            retrieved_diary_ids=all_context_ids,
+            retrieved_memory_ids=memory_ids,
+            profile_style=session.profile_style,
+            token_info=loop_result.token_info,
+            stop_reason=loop_result.stop_reason,
+            tool_calls_made=loop_result.tool_calls_made,
         )
-    except Exception as exc:
-        logger.debug("Entity extraction scheduling failed (best-effort): %s", exc)
-
-    return ChatReplyResult(
-        reply_text=loop_result.reply_text,
-        retrieved_diary_ids=all_context_ids,
-        retrieved_memory_ids=memory_ids,
-        profile_style=session.profile_style,
-        token_info=loop_result.token_info,
-        stop_reason=loop_result.stop_reason,
-        tool_calls_made=loop_result.tool_calls_made,
-    )
+        if trace is not None:
+            trace.end()
+        return result
+    except Exception:
+        if trace is not None:
+            trace.end(status="error")
+        raise
+    finally:
+        if trace is not None:
+            persist_trace(db, trace, ref_id=conversation_id)
+            try:
+                asyncio.run(publish_trace_complete(trace))
+            except Exception:
+                pass
+            if token is not None:
+                reset_trace(token)
 
 
 #: Minimum emotion intensity (abs score) to trigger episodic write-back.
