@@ -40,6 +40,7 @@ from app.domain.skills.types import SkillProfileContext
 from app.shared.crisis_guard import CrisisGuard, get_crisis_guard
 from app.shared.emotion_estimator import EmotionEstimator, get_emotion_estimator
 from app.shared.llm import LLMClient, message_text
+from app.shared.pipeline_trace import trace_span
 from app.shared.tracing import (
     AgentDecisionLogger,
     AgentDecisionRecord,
@@ -131,28 +132,61 @@ class SupervisorAgent:
         diary_id = state.get("diary_id", "")
         profile = state.get("long_term_profile", {}) or {}
 
-        intent_result = await self._safe_classify(diary_content)
-        intent = intent_result.intent_category or IntentCategory.PURE_RECORD.value
+        with trace_span(
+            "S4a_intent",
+            "意图分类",
+            input_snapshot={"diary_id": diary_id, "content_len": len(diary_content)},
+        ) as span:
+            intent_result = await self._safe_classify(diary_content)
+            intent = intent_result.intent_category or IntentCategory.PURE_RECORD.value
+            if span:
+                span.set_output(
+                    {"intent": intent, "confidence": intent_result.confidence}
+                )
 
         decision_id = uuid.uuid4().hex
         skill_context = self._skill_context(intent, profile)
-        selected = self._skills.select_skills(
-            diary_content,
-            skill_context,
-            token_budget=SKILL_SELECTION_BUDGET,
-            decision_id=decision_id,
-        )
-        activated_skills = [skill.metadata.name for skill in selected]
+        with trace_span(
+            "S4b_skills",
+            "技能选择",
+            input_snapshot={"intent": intent},
+        ) as span:
+            selected = self._skills.select_skills(
+                diary_content,
+                skill_context,
+                token_budget=SKILL_SELECTION_BUDGET,
+                decision_id=decision_id,
+            )
+            activated_skills = [skill.metadata.name for skill in selected]
+            if span:
+                span.set_output({"activated_skills": activated_skills})
 
-        is_crisis = self._detect_crisis(diary_content)
+        with trace_span(
+            "S4c_crisis",
+            "危机检测",
+            input_snapshot={"diary_id": diary_id},
+        ) as span:
+            is_crisis = self._detect_crisis(diary_content)
+            if span:
+                span.set_output({"is_crisis": is_crisis})
+
         tier = "crisis" if is_crisis else TIER_BY_INTENT.get(intent, "light")
         token_budget = allocate_token_budget(intent, is_crisis=is_crisis)
-        activated_agents = self._route(
-            intent,
-            is_crisis,
-            intent_result.confidence,
-            need_retrieval=intent_result.need_retrieval,
-        )
+        with trace_span(
+            "S4d_route",
+            "路由决策",
+            input_snapshot={"intent": intent, "is_crisis": is_crisis},
+        ) as span:
+            activated_agents = self._route(
+                intent,
+                is_crisis,
+                intent_result.confidence,
+                need_retrieval=intent_result.need_retrieval,
+            )
+            if span:
+                span.set_output(
+                    {"activated_agents": list(activated_agents), "tier": tier}
+                )
 
         self._log_decisions(
             diary_id=diary_id,
@@ -212,23 +246,36 @@ class SupervisorAgent:
         # is redundant work.
         content_outputs = {k: v for k, v in outputs.items() if k != "retrieval"}
 
-        if self._llm is not None and len(content_outputs) > 1:
-            final_response, usage = await self._llm_synthesize(outputs, state)
-            return {"final_response": final_response, "agent_mode": "multi_agent", **usage}
+        with trace_span(
+            "S5_synthesize_core",
+            "合成逻辑",
+            input_snapshot={"content_count": len(content_outputs), "tier": tier},
+        ) as span:
+            if self._llm is not None and len(content_outputs) > 1:
+                final_response, usage = await self._llm_synthesize(outputs, state)
+                if span:
+                    span.set_output({"method": "llm", "length": len(final_response)})
+                return {"final_response": final_response, "agent_mode": "multi_agent", **usage}
 
-        # Single content worker — its output is already the final reply.
-        if len(content_outputs) == 1:
+            # Single content worker — its output is already the final reply.
+            if len(content_outputs) == 1:
+                final = next(iter(content_outputs.values()))
+                if span:
+                    span.set_output({"method": "single", "length": len(final)})
+                return {
+                    "final_response": final,
+                    "agent_mode": "multi_agent",
+                }
+
+            # Multiple content workers but no LLM available, or only retrieval
+            # produced output — fall back to simple join.
+            final = self._simple_synthesize(outputs)
+            if span:
+                span.set_output({"method": "simple_join", "length": len(final)})
             return {
-                "final_response": next(iter(content_outputs.values())),
+                "final_response": final,
                 "agent_mode": "multi_agent",
             }
-
-        # Multiple content workers but no LLM available, or only retrieval
-        # produced output — fall back to simple join.
-        return {
-            "final_response": self._simple_synthesize(outputs),
-            "agent_mode": "multi_agent",
-        }
 
     # ----- internals -----
 

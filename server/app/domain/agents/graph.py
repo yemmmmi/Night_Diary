@@ -41,6 +41,7 @@ from typing import Any, cast, get_origin, get_type_hints
 from app.domain.agents.context_compressor import ContextCompressor, prepare_compressed_history
 from app.domain.agents.state import MultiAgentState
 from app.domain.agents.supervisor import SupervisorAgent
+from app.shared.pipeline_trace import trace_span
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,22 @@ class MultiAgentGraph:
         merged: dict[str, Any] = dict(state)
         _merge(merged, prepare_compressed_history(merged, self._compressor))
 
-        classify_update = await self._supervisor.classify(cast(MultiAgentState, merged))
+        with trace_span(
+            "S3_classify",
+            "意图分类与路由",
+            input_snapshot={"diary_id": merged.get("diary_id", "")},
+        ) as span:
+            classify_update = await self._supervisor.classify(
+                cast(MultiAgentState, merged)
+            )
+            if span:
+                span.set_output(
+                    {
+                        "intent": classify_update.get("intent"),
+                        "tier": classify_update.get("tier"),
+                        "activated_agents": classify_update.get("activated_agents"),
+                    }
+                )
         _merge(merged, classify_update)
 
         activated = [name for name in merged.get("activated_agents", []) if name in self._workers]
@@ -119,10 +135,25 @@ class MultiAgentGraph:
             ]
             if not phase_workers:
                 continue
-            results = await asyncio.gather(
-                *(self._run_safe(name, cast(MultiAgentState, merged)) for name in phase_workers),
-                return_exceptions=True,
-            )
+            phase_label = "检索阶段" if phase == PROVIDER_PHASE else "生成阶段"
+            with trace_span(
+                f"S4_phase{phase}",
+                phase_label,
+                input_snapshot={"workers": phase_workers},
+            ) as span:
+                results = await asyncio.gather(
+                    *(self._run_safe(name, cast(MultiAgentState, merged)) for name in phase_workers),
+                    return_exceptions=True,
+                )
+                if span:
+                    span.set_output(
+                        {
+                            "worker_count": len(phase_workers),
+                            "success_count": sum(
+                                1 for r in results if not isinstance(r, BaseException)
+                            ),
+                        }
+                    )
             for name, result in zip(phase_workers, results, strict=True):
                 if isinstance(result, BaseException):
                     # _run_safe should never raise; this guards against bugs in it.
@@ -133,7 +164,16 @@ class MultiAgentGraph:
                 else:
                     _merge(merged, result)
 
-        synth_update = await self._supervisor.synthesize(cast(MultiAgentState, merged))
+        with trace_span(
+            "S5_synthesize",
+            "回复合成",
+            input_snapshot={"tier": merged.get("tier", "")},
+        ) as span:
+            synth_update = await self._supervisor.synthesize(cast(MultiAgentState, merged))
+            if span:
+                span.set_output(
+                    {"final_response_len": len(synth_update.get("final_response", ""))}
+                )
         _merge(merged, synth_update)
         return cast(MultiAgentState, merged)
 

@@ -1,0 +1,78 @@
+"""Trace 持久化和事件推送辅助函数（best-effort，失败仅记日志）。"""
+
+from __future__ import annotations
+
+import json
+import logging
+
+from app.shared.pipeline_trace import PipelineTrace
+
+logger = logging.getLogger(__name__)
+
+
+def persist_trace(db, trace: PipelineTrace, ref_id: str | None = None) -> None:
+    """持久化 trace 到 pipeline_traces 表。best-effort，失败仅记日志不中断。"""
+    try:
+        from app.infrastructure.models.pipeline_trace import PipelineTraceRow
+
+        trace_dict = trace.to_dict()
+        row = PipelineTraceRow(
+            trace_id=trace.trace_id,
+            scenario=trace.scenario,
+            user_id=trace.user_id,
+            status=trace.status,
+            started_at=trace.started_at,
+            ended_at=trace.ended_at,
+            duration_ms=trace.duration_ms,
+            span_count=len(trace.spans),
+            ref_id=ref_id,
+            trace_json=json.dumps(trace_dict, ensure_ascii=False, default=str),
+        )
+        db.add(row)
+        db.commit()
+    except Exception as e:
+        logger.warning("Failed to persist trace %s: %s", trace.trace_id, e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
+async def publish_trace_complete(trace: PipelineTrace) -> None:
+    """通过 EventBus 推送 trace_complete 事件。best-effort。"""
+    try:
+        from app.shared.trace_event_bus import get_event_bus
+
+        event_bus = get_event_bus()
+        await event_bus.publish(
+            trace.trace_id,
+            {
+                "type": "trace_complete",
+                "trace_id": trace.trace_id,
+                "trace": {
+                    "status": trace.status,
+                    "duration_ms": trace.duration_ms,
+                    "span_count": len(trace.spans),
+                },
+            },
+        )
+    except Exception as e:
+        logger.warning("Failed to publish trace_complete: %s", e)
+
+
+async def publish_span_complete(trace: PipelineTrace, span) -> None:
+    """通过 EventBus 推送 span_complete 事件。best-effort。"""
+    try:
+        from app.shared.trace_event_bus import get_event_bus
+
+        event_bus = get_event_bus()
+        await event_bus.publish(
+            trace.trace_id,
+            {
+                "type": "span_complete",
+                "trace_id": trace.trace_id,
+                "span": span.to_dict(),
+            },
+        )
+    except Exception as e:
+        logger.warning("Failed to publish span_complete: %s", e)

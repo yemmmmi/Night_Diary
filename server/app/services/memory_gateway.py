@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.domain.memory.atom import UnifiedMemoryAtom
 from app.domain.memory.types import EpisodicEntry
+from app.shared.pipeline_trace import trace_span
 
 if TYPE_CHECKING:
     from app.domain.memory.episodic import EpisodicMemory
@@ -152,53 +153,77 @@ class MemoryGateway:
         # ── Dirty memory prevention gate (P2-8) ──
         from app.domain.memory.gate import should_persist
 
-        existing = self._episodic.get_entries() if self._episodic else []
-        if not should_persist(
-            event_summary=event_summary,
-            emotion=emotion,
-            mood_score=mood_score,
-            importance=importance,
-            content=event_summary,
-            existing_entries=existing,
-        ):
+        with trace_span(
+            "S8_memory_check",
+            "记忆四维检查",
+            input_snapshot={
+                "emotion": emotion,
+                "mood_score": mood_score,
+                "importance": importance,
+            },
+        ) as span:
+            existing = self._episodic.get_entries() if self._episodic else []
+            should = should_persist(
+                event_summary=event_summary,
+                emotion=emotion,
+                mood_score=mood_score,
+                importance=importance,
+                content=event_summary,
+                existing_entries=existing,
+            )
+            if span:
+                span.set_output({"should_persist": should})
+
+        if not should:
             logger.debug(
                 "Memory gate rejected write: source=%s summary=%s", source, event_summary[:50]
             )
             return False
 
-        entry = EpisodicEntry(
-            event_summary=event_summary[:121],
-            emotion=emotion,
-            reply_insight=reply_insight[:200],
-            source=source,
-            timestamp=datetime.now(UTC).timestamp(),
-            diary_ids=diary_ids or [],
-            importance=importance,
-            entry_id="",
-            tags=tags or [],
-            mood_score=mood_score,
-            emotions=emotions or [],
-            event_date=event_date,
-        )
+        with trace_span(
+            "S9_memory_write",
+            "记忆写入",
+            input_snapshot={"source": source, "event_summary": event_summary[:50]},
+        ) as span:
+            entry = EpisodicEntry(
+                event_summary=event_summary[:121],
+                emotion=emotion,
+                reply_insight=reply_insight[:200],
+                source=source,
+                timestamp=datetime.now(UTC).timestamp(),
+                diary_ids=diary_ids or [],
+                importance=importance,
+                entry_id="",
+                tags=tags or [],
+                mood_score=mood_score,
+                emotions=emotions or [],
+                event_date=event_date,
+            )
 
-        try:
-            stored = self._episodic.store(entry)
-            if not stored:
-                logger.debug("MemoryGateway: entry below threshold, not stored")
-                return False
-        except Exception as exc:
-            logger.warning("MemoryGateway: episodic store failed: %s", exc)
-            return False
-
-        # Best-effort long-term promotion.
-        if self._long_term is not None:
             try:
-                all_entries = self._episodic.get_entries()
-                self._long_term.promote_from_episodic(user_id=user_id, episodic_entries=all_entries)
+                stored = self._episodic.store(entry)
+                if not stored:
+                    if span:
+                        span.set_output({"stored": False})
+                    logger.debug("MemoryGateway: entry below threshold, not stored")
+                    return False
             except Exception as exc:
-                logger.warning("MemoryGateway: profile promotion failed: %s", exc)
+                if span:
+                    span.set_output({"stored": False, "error": str(exc)})
+                logger.warning("MemoryGateway: episodic store failed: %s", exc)
+                return False
 
-        return True
+            # Best-effort long-term promotion.
+            if self._long_term is not None:
+                try:
+                    all_entries = self._episodic.get_entries()
+                    self._long_term.promote_from_episodic(user_id=user_id, episodic_entries=all_entries)
+                except Exception as exc:
+                    logger.warning("MemoryGateway: profile promotion failed: %s", exc)
+
+            if span:
+                span.set_output({"stored": True})
+            return True
 
     def persist_atom(self, atom: UnifiedMemoryAtom) -> bool:
         """Persist a :class:`UnifiedMemoryAtom` to episodic memory.

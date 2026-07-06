@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Request, Response, status
 
 from app.api.deps import ContainerDep, CurrentUserDep, DbDep
 from app.api.mappers import analysis_to_response
@@ -20,12 +20,19 @@ def trigger_analysis(
     db: DbDep,
     container: ContainerDep,
     user: CurrentUserDep,
+    http_request: Request,
     request: AnalysisTriggerRequest | None = None,
 ) -> AnalysisResponse:
     req = request or AnalysisTriggerRequest()
     style_fragment = build_style_fragment(req.replier_preset, req.replier_persona)
+    trace_id = http_request.headers.get("X-Trace-Id")
     row, mem_count = analysis_service.trigger_analysis(
-        db, diary_id, container, user_id=str(user.id), style_fragment=style_fragment
+        db,
+        diary_id,
+        container,
+        user_id=str(user.id),
+        style_fragment=style_fragment,
+        trace_id=trace_id,
     )
     entry = diary_service.get_entry(db, diary_id, user_id=str(user.id))
     return analysis_to_response(
