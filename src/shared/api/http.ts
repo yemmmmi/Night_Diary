@@ -116,7 +116,7 @@ export async function getHttpClient(): Promise<AxiosInstance> {
   return httpClient
 }
 
-/** Run an API call; retries while the sidecar core bootstrap returns 503. */
+/** Run an API call; retries while the backend bootstrap returns 503. */
 export async function apiRequest<T>(request: () => Promise<T>): Promise<T> {
   const baseURL = await resolveBackendBaseUrl()
   return requestWithBootstrapRetry(baseURL, request)

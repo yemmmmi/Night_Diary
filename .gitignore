@@ -22,7 +22,6 @@ dist/
 build/
 server/dist/
 server/build/
-src-tauri/target/
 .vite/
 coverage/
 *.log

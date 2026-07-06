@@ -1,15 +1,13 @@
 {
-  "_placeholder": true,
-  "_note": "Placeholder. Run EVAL_UPDATE_BASELINE=1 make eval-tool to seed real values; the regression guard skips while _placeholder is true.",
   "native": {
-    "decision_accuracy": 0.0,
-    "tool_name_accuracy": 0.0,
-    "argument_accuracy": 0.0,
-    "exact_match": 0.0,
-    "false_positive_rate": 0.0,
-    "false_negative_rate": 0.0,
+    "decision_accuracy": 0.75,
+    "tool_name_accuracy": 0.9,
+    "argument_accuracy": 0.88,
+    "exact_match": 0.675,
+    "false_positive_rate": 0.6,
+    "false_negative_rate": 0.04,
     "parse_success_rate": 1.0,
-    "avg_tool_count": 0.0
+    "avg_tool_count": 1.25
   },
   "fallback": {
     "decision_accuracy": 1.0,
@@ -19,6 +17,6 @@
     "false_positive_rate": 0.0,
     "false_negative_rate": 0.0,
     "parse_success_rate": 1.0,
-    "avg_tool_count": 0.0
+    "avg_tool_count": 0.775
   }
 }

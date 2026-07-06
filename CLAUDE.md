@@ -1,15 +1,12 @@
 # Night Diary V2
 
-AI 心理陪伴日记系统，支持**双部署模式**：本地桌面端（Tauri + SQLite）和 Web 多用户端（Docker Compose + MySQL + Redis + Neo4j + JWT）。
+AI 心理陪伴日记系统（Web 多用户端，Docker Compose + MySQL + Redis + Neo4j + JWT）。
 
 ## 架构现状
 
-### 双部署模式
+### 架构模式
 
-| 模式 | 场景 | 数据库 | 缓存 | 实体图 | 认证 |
-|------|------|--------|------|--------|------|
-| 桌面端 | 单用户本地 | SQLite (WAL) | 内存 dict | SQLite DomainKnowledgeStore | 无 |
-| Web 端 | 多用户生产 | MySQL (utf8mb4) | Redis | Neo4j | JWT |
+Web 多用户端部署：Docker Compose 编排（MySQL + Redis + Neo4j + Backend + Worker + Frontend），支持 JWT 认证与多租户隔离。
 
 所有基础设施组件（Redis / Neo4j / MySQL / RQ）均实现**优雅降级**：不可用时自动回退到内存或 SQLite 方案，失败仅记日志不中断主流程。
 
@@ -73,15 +70,14 @@ AI 心理陪伴日记系统，支持**双部署模式**：本地桌面端（Taur
 ## 常用命令
 
 ```bash
-# 桌面端开发
-make dev-api      # Python 后端 → 127.0.0.1:8000
-make dev-web      # Tauri 桌面应用（npm run tauri dev）
-make dev-web-fast # Tauri attach 模式（不重启后端）
-
 # Web 端开发（Docker）
 docker compose up -d                          # 生产模式（MySQL + Redis + 全服务）
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up  # 开发模式（SQLite + 内存降级）
 docker compose --profile graph up -d neo4j    # 单独启动 Neo4j
+
+# 本地开发（无 Docker）
+make dev-api      # Python 后端 → 127.0.0.1:8000
+make dev-web      # Vue 3 前端 → localhost:5173
 
 # 测试与质量
 make test         # pytest + vitest
@@ -118,7 +114,7 @@ make smoke        # 性能冒烟检查
 - **Crisis 检测命中**：短路到安全模板，不送 LLM（场景二双重安全网：Stage 2 + Stage 2.5）
 - **Redis 不可用**：SessionContext 降级为纯内存 dict，JWT 黑名单降级为内存集合
 - **Neo4j 不可用**：实体提取仍运行但仅记日志，查询返回"不可用"提示，降级到 SQLite
-- **MySQL 不可用**：桌面端始终可用 SQLite fallback
+- **MySQL 不可用**：开发模式下可降级到 SQLite fallback
 - **LangGraph 不可用**：场景二自动降级到 legacy loop（同步 for 循环）
 - **MCP 加载失败**：仅记日志，不阻塞内置工具
 - 每个 Agent 独立超时：Supervisor 最长，Worker 较短
@@ -135,10 +131,10 @@ make smoke        # 性能冒烟检查
 
 ## 当前状态
 
-✅ Phase A–E（桌面端 MVP）+ Phase 1–3（Web 多用户架构 + 基础设施）+ Agent 架构优化（P1–P3 共 10 个任务）全部完成。
+✅ Phase 1–3（Web 多用户架构 + 基础设施）+ Agent 架构优化（P1–P3 共 10 个任务）全部完成。
 
-- 后端测试：509+ 通过
-- 双部署模式可用：桌面端（Tauri + SQLite）和 Web 端（Docker Compose）
+- 后端测试：550+ 通过
+- Web 端可用：Docker Compose 编排（MySQL + Redis + Neo4j + Nginx）
 - Agent 架构：InputPreprocessor / SlotExtractor / HybridEntityExtractor / LangGraph StateGraph / OrchestratorProtocol / Citation 系统 / MCP 集成 / 统一反馈通道
 - 架构分析文档：`.trae/documents/agent架构深度分析与优化实施计划.md`
 - 数据链路报告：`agent-data-flow/agent-data-flow.html`

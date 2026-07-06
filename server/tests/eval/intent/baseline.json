@@ -1,22 +1,22 @@
 {
-  "_placeholder": true,
-  "_note": "Placeholder. Run EVAL_UPDATE_BASELINE=1 make eval-intent to seed real values; the regression guard skips while _placeholder is true.",
+  "_placeholder": false,
+  "_note": "Seeded by EVAL_UPDATE_BASELINE=1 make eval-intent. Scalar metrics only; per_class_* and confusion_matrix are reported in stdout but not persisted here.",
   "baseline_a": {
-    "accuracy": 0.0,
-    "macro_f1": 0.0,
-    "weighted_f1": 0.0,
-    "rule_short_circuit_rate": 0.0,
-    "llm_layer_accuracy": 0.0,
-    "avg_latency_ms": 0.0,
-    "avg_tokens_per_call": 0.0
+    "accuracy": 0.87,
+    "macro_f1": 0.867,
+    "weighted_f1": 0.8677,
+    "rule_short_circuit_rate": 0.26,
+    "llm_layer_accuracy": 0.8311,
+    "avg_latency_ms": 2504.3604,
+    "avg_tokens_per_call": 321.43
   },
   "treatment_b": {
-    "accuracy": 0.0,
-    "macro_f1": 0.0,
-    "weighted_f1": 0.0,
-    "rule_short_circuit_rate": 0.0,
-    "llm_layer_accuracy": 0.0,
-    "avg_latency_ms": 0.0,
-    "avg_tokens_per_call": 0.0
+    "accuracy": 0.995,
+    "macro_f1": 0.995,
+    "weighted_f1": 0.995,
+    "rule_short_circuit_rate": 0.26,
+    "llm_layer_accuracy": 1.0,
+    "avg_latency_ms": 0.0593,
+    "avg_tokens_per_call": 112.0
   }
 }

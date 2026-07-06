@@ -77,16 +77,16 @@ EVAL_UPDATE_BASELINE=1 make eval-skill
 
 ## Baseline 指标
 
-> 记录日期：待填充 · 环境：待填充（运行 `EVAL_UPDATE_BASELINE=1 make eval-skill` 后由 `baseline.json` 承载具体数值）
+> 记录日期：2026-07-06 · 环境：deepseek-v4-flash（REAL_MODE）
 
 | 策略 | accuracy | f1 | FAR | MAR | avg_tok | avg_ms | rounds |
 |------|----------|----|-----|-----|---------|--------|--------|
-| full        | - | - | - | - | - | - | 0.0 |
-| progressive | - | - | - | - | - | - | - |
+| full        | 0.8000 | 0.8857 | 0.0122 | 0.1842 | 2763.37 | 4538.86 | 0.00 |
+| progressive | 0.6667 | 0.8308 | 0.0000 | 0.2895 |  678.90 | 3311.57 | 0.90 |
 
 | token_savings |
 |---------------|
-| - |
+| 75.43% |
 
-> stub 模式下两路径恒为满分（oracle 输入），仅验证解析管道。
-> 真实数值需在真实模式下生成；首次生成后 `baseline.json` 的 `_placeholder` 标记会被移除，回归测试随之生效。
+> 渐进式披露节省 75.43% prompt token，但准确率从 0.80 降至 0.67（summary 信息不足以判断多 Skill 场景）。
+> 全量注入的 MAR=0.18 表明 LLM 偶尔漏选 sentiment_skill（情绪场景应同时激活情感分析）。

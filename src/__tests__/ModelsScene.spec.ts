@@ -17,7 +17,7 @@ vi.mock('@/shared/api/models', () => ({
   testStoredModelConnection: vi.fn(),
 }))
 
-// mock openExternal 避免 Tauri shell 调用
+// mock openExternal
 vi.mock('@/shared/utils/openExternal', () => ({
   openExternal: vi.fn().mockResolvedValue(undefined),
 }))
