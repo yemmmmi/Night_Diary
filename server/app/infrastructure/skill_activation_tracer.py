@@ -29,6 +29,7 @@ class SqliteSkillActivationTracer:
                     input_digest=entry.input_digest[:200],
                     reason=entry.reason,
                     latency_ms=entry.latency_ms,
+                    trace_id=entry.trace_id,
                     created_at=entry.created_at.timestamp(),
                 )
             )
@@ -51,6 +52,7 @@ class SqliteSkillActivationTracer:
                     input_digest=row.input_digest,
                     reason=row.reason,
                     latency_ms=row.latency_ms,
+                    trace_id=row.trace_id or "",
                     created_at=_timestamp_to_datetime(row.created_at),
                 )
                 for row in rows

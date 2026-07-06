@@ -22,6 +22,7 @@ class SqliteLLMCallTracer:
                 LlmCallLogRow(
                     id=entry.id,
                     decision_id=entry.decision_id,
+                    trace_id=entry.trace_id,
                     agent_name=entry.agent_name,
                     call_type=entry.call_type,
                     model=entry.model,
@@ -47,6 +48,7 @@ class SqliteLLMCallTracer:
                 LLMCallRecord(
                     id=row.id,
                     decision_id=row.decision_id,
+                    trace_id=row.trace_id or "",
                     agent_name=row.agent_name,
                     call_type=row.call_type,
                     model=row.model,
