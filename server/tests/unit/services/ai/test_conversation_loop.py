@@ -61,6 +61,7 @@ def test_run_conversation_loop_no_llm_returns_fallback() -> None:
         episodic_text="（无）",
         memory_ids=[],
         tools=None,
+        use_graph=False,
     )
 
     assert result.stop_reason == "no_llm"
@@ -94,6 +95,7 @@ def test_run_conversation_loop_simple_reply() -> None:
         episodic_text="（无）",
         memory_ids=[],
         tools=None,
+        use_graph=False,
     )
 
     assert result.stop_reason == "completed"
@@ -144,6 +146,7 @@ def test_run_conversation_loop_tool_call_executes() -> None:
         episodic_text="（无）",
         memory_ids=[],
         tools=tools,
+        use_graph=False,
     )
 
     assert result.stop_reason == "completed"
@@ -174,6 +177,7 @@ def test_citations_tracked_for_context_sources(db_session) -> None:
         retrieved_diaries_text="检索日记内容：上周去了公园",
         episodic_text="情景记忆：之前聊过工作压力",
         memory_ids=[],
+        use_graph=False,
     )
 
     # Should have 3 citations: pinned diary, retrieved diary, episodic memory
@@ -213,6 +217,7 @@ def test_citations_tracked_for_tool_calls(db_session) -> None:
             episodic_text="",
             memory_ids=[],
             tools=tools,
+            use_graph=False,
             intent_result=ChatIntentResult(
                 intent_category="retrospective_query",
                 confidence=0.9,
@@ -246,6 +251,7 @@ def test_no_citations_when_no_context(db_session) -> None:
         retrieved_diaries_text="",
         episodic_text="",
         memory_ids=[],
+        use_graph=False,
     )
 
     # No citations, no "参考来源" section

@@ -40,19 +40,9 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import torch
 import yaml
-from datasets import Dataset
-from peft import LoraConfig, TaskType, get_peft_model
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    DataCollatorForSeq2Seq,
-    Trainer,
-    TrainingArguments,
-)
 
 from training.finetune_intent.prepare_data import (
     INTENT_CATEGORIES,
@@ -60,6 +50,12 @@ from training.finetune_intent.prepare_data import (
     load_jsonl,
     prepare_all,
 )
+
+if TYPE_CHECKING:
+    import torch  # noqa: F401
+    from datasets import Dataset  # noqa: F401
+    from peft import LoraConfig  # noqa: F401
+    from transformers import Trainer  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -184,9 +180,12 @@ def compute_macro_f1(
     # Per-class F1
     f1_scores: list[float] = []
     for cls in classes:
-        tp = sum(1 for p, g in zip(pred_intents, gold_intents, strict=False) if p == cls and g == cls)
-        fp = sum(1 for p, g in zip(pred_intents, gold_intents, strict=False) if p == cls and g != cls)
-        fn = sum(1 for p, g in zip(pred_intents, gold_intents, strict=False) if p != cls and g == cls)
+        tp = sum(1 for p, g in zip(pred_intents, gold_intents, strict=False)
+                 if p == cls and g == cls)
+        fp = sum(1 for p, g in zip(pred_intents, gold_intents, strict=False)
+                 if p == cls and g != cls)
+        fn = sum(1 for p, g in zip(pred_intents, gold_intents, strict=False)
+                 if p != cls and g == cls)
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
@@ -304,9 +303,23 @@ def apply_overrides(cfg: dict[str, Any], args: argparse.Namespace) -> dict[str, 
 # ── Main ────────────────────────────────────────────────────────────
 
 def main() -> None:
+    # Parse args first so --help works without heavy ML deps installed.
     args = parse_args()
     cfg = load_config(args.config)
     cfg = apply_overrides(cfg, args)
+
+    # Heavy ML imports deferred to runtime so that extract_intent /
+    # compute_macro_f1 can be imported without torch/transformers installed.
+    import torch
+    from datasets import Dataset
+    from peft import LoraConfig, TaskType, get_peft_model
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        DataCollatorForSeq2Seq,
+        Trainer,
+        TrainingArguments,
+    )
 
     # ── Print config summary ──
     print("=" * 60)

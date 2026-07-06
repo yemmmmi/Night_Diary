@@ -167,6 +167,7 @@ def generate_reply(
     user_id: str,
     auto_retrieve: bool = True,
     crisis_guard: CrisisGuard | None = None,
+    use_graph: bool = True,
 ) -> ChatReplyResult:
     """Build chat context and generate an assistant reply via the Agentic Loop.
 
@@ -361,6 +362,7 @@ def generate_reply(
         crisis_guard=guard,
         user_id=user_id,
         intent_result=intent_result,
+        use_graph=use_graph,
     )
 
     # ── Stage 5: Output + episodic write-back ──

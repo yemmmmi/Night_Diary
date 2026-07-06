@@ -39,6 +39,7 @@ def test_generate_reply_uses_pinned_and_retrieved(db_session, monkeypatch) -> No
             content="帮我看看这篇日记",
             diary_ids=[entry.id],
             auto_retrieve=False,
+            use_graph=False,
         )
 
     assert isinstance(result, ChatReplyResult)

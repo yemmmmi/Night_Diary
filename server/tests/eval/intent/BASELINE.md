@@ -86,4 +86,9 @@ EVAL_UPDATE_BASELINE=1 make eval-intent
 > stub 模式参考值（占位，非真实能力）：
 > - `baseline_a`（规则回声）：accuracy = 规则层准确率；`llm_layer_accuracy` = 非短路子集的规则准确率。
 > - `treatment_b`（oracle 占位）：`llm_layer_accuracy` = 1.0；`accuracy` = (短路正确 + 全部非短路正确) / 200。
+>
+> **短路到错误类别的上限**：规则层 confidence > 0.9 即短路，LLM 层不再被调用。若规则层短路到**错误**类别
+> （如无显式危机关键词的隐晦危机信号被闲聊信号短路为 `casual_chat`），任何 LLM 层都无法纠正，
+> 该 case 计入两方案的共同错误。`llm_layer_accuracy`（仅非短路子集）与整体 `accuracy` 的差异正是这一上限的体现：
+> stub 模式下 oracle Treatment B 的 `llm_layer_accuracy` = 1.0，但 `accuracy` < 1.0 即源于此。
 > 真实数值需在 REAL_MODE 下生成；微调模型上线后替换 `treatment_b_llm` fixture 重新刷新。
