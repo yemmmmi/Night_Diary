@@ -5,11 +5,15 @@ from __future__ import annotations
 import time
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
 from app.main import create_app
 from app.services.model_downloader import reset_model_download_service
+
+# huggingface_hub is an optional dependency for model download.
+pytest.importorskip("huggingface_hub")
 
 
 def _client(tmp_path) -> TestClient:

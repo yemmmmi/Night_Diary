@@ -111,6 +111,9 @@ ignore = ["E501"]
 "tests/eval/_http_llm.py" = ["RUF001"]
 "tests/eval/_stub_llm.py" = ["RUF001"]
 "tests/eval/tool_call/**" = ["RUF001"]
+"tests/eval/intent/**" = ["RUF001", "RUF002", "RUF003"]
+"tests/eval/skill_call/**" = ["RUF001", "RUF002", "RUF003"]
+"training/finetune_intent/**" = ["RUF001", "RUF002", "RUF003"]
 "app/shared/emotion_estimator.py" = ["RUF001"]
 "app/shared/crisis_guard.py" = ["RUF001"]
 "tests/unit/shared/test_crisis_guard.py" = ["RUF001"]
@@ -135,6 +138,18 @@ warn_return_any = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
 exclude = ["tests/", "alembic/"]
+
+# These modules depend on optional packages (chromadb, langgraph, mcp) whose
+# type stubs availability varies between local and CI environments. Disable
+# warn_unused_ignores to avoid breakage when stubs are present locally but
+# absent in CI (or vice versa).
+[[tool.mypy.overrides]]
+module = [
+    "app.shared.embeddings",
+    "app.services.ai.conversation_graph",
+    "app.infrastructure.mcp_server",
+]
+warn_unused_ignores = false
 
 # ---- Pytest ----
 [tool.pytest.ini_options]

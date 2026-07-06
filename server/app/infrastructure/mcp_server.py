@@ -93,7 +93,7 @@ class MCPServer:
 
         server = Server("night-diary")
 
-        @server.list_tools()  # type: ignore[untyped-decorator]
+        @server.list_tools()  # type: ignore[untyped-decorator, no-untyped-call]
         async def list_tools() -> list[Tool]:
             return [
                 Tool(
@@ -104,7 +104,7 @@ class MCPServer:
                 for spec in self._specs
             ]
 
-        @server.call_tool()  # type: ignore[untyped-decorator]
+        @server.call_tool()  # type: ignore[untyped-decorator, no-untyped-call]
         async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = self.call_tool(name, arguments)
             return [TextContent(type="text", text=result)]
@@ -132,7 +132,7 @@ class MCPServer:
         server = Server("night-diary-sse")
         sse = SseServerTransport("/messages/")
 
-        @server.list_tools()  # type: ignore[untyped-decorator]
+        @server.list_tools()  # type: ignore[untyped-decorator, no-untyped-call]
         async def list_tools() -> list[Any]:
             from mcp.types import Tool
 
@@ -145,7 +145,7 @@ class MCPServer:
                 for spec in self._specs
             ]
 
-        @server.call_tool()  # type: ignore[untyped-decorator]
+        @server.call_tool()  # type: ignore[untyped-decorator, no-untyped-call]
         async def call_tool(name: str, arguments: dict[str, Any]) -> list[Any]:
             from mcp.types import TextContent
 

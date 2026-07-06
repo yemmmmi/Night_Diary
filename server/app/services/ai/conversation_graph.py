@@ -24,8 +24,8 @@ try:
     LANGGRAPH_AVAILABLE = True
 except ImportError:
     LANGGRAPH_AVAILABLE = False
-    StateGraph = None
-    END = None
+    StateGraph = None  # type: ignore[assignment, misc]
+    END = None  # type: ignore[assignment]
 
 
 class ConversationState(TypedDict, total=False):
@@ -117,12 +117,12 @@ def build_conversation_graph(checkpointer: Any | None = None) -> Any:
     graph = StateGraph(ConversationState)
 
     # Add nodes
-    graph.add_node("preprocess", preprocess_node)
-    graph.add_node("understand", understand_node)
-    graph.add_node("plan", plan_node)
-    graph.add_node("execute_tools", execute_tools_node)
-    graph.add_node("generate", generate_node)
-    graph.add_node("postprocess", postprocess_node)
+    graph.add_node("preprocess", preprocess_node)  # type: ignore[type-var]
+    graph.add_node("understand", understand_node)  # type: ignore[type-var]
+    graph.add_node("plan", plan_node)  # type: ignore[type-var]
+    graph.add_node("execute_tools", execute_tools_node)  # type: ignore[type-var]
+    graph.add_node("generate", generate_node)  # type: ignore[type-var]
+    graph.add_node("postprocess", postprocess_node)  # type: ignore[type-var]
 
     # Set entry point
     graph.set_entry_point("preprocess")

@@ -15,6 +15,9 @@ from app.services.model_downloader import (
     reset_model_download_service,
 )
 
+# huggingface_hub is an optional dependency for model download.
+pytest.importorskip("huggingface_hub")
+
 
 @pytest.fixture(autouse=True)
 def _reset_service() -> None:

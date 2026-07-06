@@ -32,6 +32,18 @@ def create_conversation(db: DbDep, user: CurrentUserDep) -> ConversationResponse
     return conversation_to_response(row)
 
 
+@router.get("/{conversation_id}", response_model=ConversationResponse)
+def get_conversation(
+    conversation_id: str, db: DbDep, user: CurrentUserDep
+) -> ConversationResponse:
+    row = conversation_service.get_conversation(
+        db, user_id=str(user.id), conversation_id=conversation_id
+    )
+    if row is None:
+        raise ConversationNotFoundError(conversation_id=conversation_id)
+    return conversation_to_response(row)
+
+
 @router.delete(
     "/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response
 )

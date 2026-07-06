@@ -1,0 +1,272 @@
+[
+  {
+    "case_id": "sc_em_01",
+    "category": "emotional",
+    "user_message": "今天好开心啊，考试通过了！",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["sentiment_skill"],
+    "notes": "开心情绪表达，应激活情感分析技能"
+  },
+  {
+    "case_id": "sc_em_02",
+    "category": "emotional",
+    "user_message": "最近总是焦虑不安，睡不好觉",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["sentiment_skill"],
+    "notes": "焦虑情绪，含2个情感关键词，应激活情感分析"
+  },
+  {
+    "case_id": "sc_em_03",
+    "category": "emotional",
+    "user_message": "被领导表扬了，感觉特别幸福",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["sentiment_skill"],
+    "notes": "幸福情绪表达，应激活情感分析"
+  },
+  {
+    "case_id": "sc_em_04",
+    "category": "emotional",
+    "user_message": "好难过，心里很委屈，想哭",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["sentiment_skill"],
+    "notes": "负面情绪表达，委屈和难过，应激活情感分析"
+  },
+  {
+    "case_id": "sc_em_05",
+    "category": "emotional",
+    "user_message": "压力好大，快崩溃了，喘不过气",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["sentiment_skill"],
+    "notes": "压力和崩溃情绪，但无严重信号，仅情感分析"
+  },
+  {
+    "case_id": "sc_em_06",
+    "category": "emotional",
+    "user_message": "今天心情不错，有点小满足和感恩",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["sentiment_skill"],
+    "notes": "正面情绪，满足和感恩，应激活情感分析"
+  },
+  {
+    "case_id": "sc_cr_01",
+    "category": "crisis",
+    "user_message": "我不想活了，太痛苦了",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["crisis_detector"],
+    "notes": "严重信号不想活，应激活危机检测；痛苦非情感关键词"
+  },
+  {
+    "case_id": "sc_cr_02",
+    "category": "crisis",
+    "user_message": "有时候真的想死，觉得好绝望",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["crisis_detector", "sentiment_skill"],
+    "notes": "想死严重信号+绝望情感词，危机检测和情感分析均应激活"
+  },
+  {
+    "case_id": "sc_cr_03",
+    "category": "crisis",
+    "user_message": "活着好绝望，不想活了",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["crisis_detector", "sentiment_skill"],
+    "notes": "不想活严重信号+绝望情感词，双技能激活"
+  },
+  {
+    "case_id": "sc_cr_04",
+    "category": "crisis",
+    "user_message": "我有过自杀的念头",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["crisis_detector"],
+    "notes": "自杀严重信号，应激活危机检测"
+  },
+  {
+    "case_id": "sc_cr_05",
+    "category": "crisis",
+    "user_message": "觉得一切都没有意义，好想死，好害怕",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["crisis_detector", "sentiment_skill"],
+    "notes": "想死严重信号+害怕情感词，危机检测和情感分析均应激活"
+  },
+  {
+    "case_id": "sc_rt_01",
+    "category": "retrospective",
+    "user_message": "上次说的那个项目，后来怎么样了",
+    "intent": "retrospective_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["memory_recall"],
+    "notes": "上次回溯触发词，应激活记忆回溯"
+  },
+  {
+    "case_id": "sc_rt_02",
+    "category": "retrospective",
+    "user_message": "记得吗，我们之前聊过关于旅行的事",
+    "intent": "retrospective_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["memory_recall"],
+    "notes": "记得吗+之前+聊过多个回溯触发词，应激活记忆回溯"
+  },
+  {
+    "case_id": "sc_rt_03",
+    "category": "retrospective",
+    "user_message": "昨天提到的那本书，我找了一下",
+    "intent": "retrospective_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["memory_recall"],
+    "notes": "昨天回溯触发词，应激活记忆回溯"
+  },
+  {
+    "case_id": "sc_rt_04",
+    "category": "retrospective",
+    "user_message": "上周你说要去健身，去了吗",
+    "intent": "retrospective_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["memory_recall"],
+    "notes": "上周回溯触发词，应激活记忆回溯"
+  },
+  {
+    "case_id": "sc_rt_05",
+    "category": "retrospective",
+    "user_message": "那次聚会真的好开心，好怀念那个时候",
+    "intent": "retrospective_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["memory_recall", "sentiment_skill"],
+    "notes": "那次回溯触发词+开心情感词，记忆回溯和情感分析均应激活"
+  },
+  {
+    "case_id": "sc_rt_06",
+    "category": "retrospective",
+    "user_message": "以前总和朋友去公园，那段时间很幸福",
+    "intent": "retrospective_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["memory_recall", "sentiment_skill"],
+    "notes": "以前回溯触发词+幸福情感词，记忆回溯和情感分析均应激活"
+  },
+  {
+    "case_id": "sc_eq_01",
+    "category": "entity_query",
+    "user_message": "妈妈最近怎么样",
+    "intent": "entity_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["entity_tracker"],
+    "notes": "妈妈称谓+最近+怎么样，应激活实体追踪"
+  },
+  {
+    "case_id": "sc_eq_02",
+    "category": "entity_query",
+    "user_message": "爸爸最近身体好吗",
+    "intent": "entity_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["entity_tracker"],
+    "notes": "爸爸称谓+最近，应激活实体追踪"
+  },
+  {
+    "case_id": "sc_eq_03",
+    "category": "entity_query",
+    "user_message": "男友怎么了，最近不太联系",
+    "intent": "entity_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["entity_tracker"],
+    "notes": "男友称谓+怎么了+最近，应激活实体追踪"
+  },
+  {
+    "case_id": "sc_eq_04",
+    "category": "entity_query",
+    "user_message": "老板最近对我态度变了",
+    "intent": "entity_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["entity_tracker"],
+    "notes": "老板称谓+最近，应激活实体追踪"
+  },
+  {
+    "case_id": "sc_eq_05",
+    "category": "entity_query",
+    "user_message": "同事最近怎么样，感觉在躲我",
+    "intent": "entity_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["entity_tracker"],
+    "notes": "同事称谓+最近+怎么样，应激活实体追踪"
+  },
+  {
+    "case_id": "sc_ms_01",
+    "category": "multi_skill",
+    "user_message": "上次和妈妈吵架了，好难过，她最近怎么样",
+    "intent": "retrospective_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["memory_recall", "entity_tracker", "sentiment_skill"],
+    "notes": "上次回溯+妈妈称谓最近怎么样+难过情感词，三技能同时激活"
+  },
+  {
+    "case_id": "sc_ms_02",
+    "category": "multi_skill",
+    "user_message": "昨天老板批评了我，好委屈，不想活了",
+    "intent": "emotional_support",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["memory_recall", "sentiment_skill", "crisis_detector"],
+    "notes": "昨天回溯+老板称谓+委屈情感词+不想活严重信号，三技能激活"
+  },
+  {
+    "case_id": "sc_ms_03",
+    "category": "multi_skill",
+    "user_message": "记得吗上次说过想辞职，现在好焦虑",
+    "intent": "retrospective_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["memory_recall", "sentiment_skill"],
+    "notes": "记得吗+上次+说过回溯触发词+焦虑情感词，记忆回溯和情感分析激活"
+  },
+  {
+    "case_id": "sc_ms_04",
+    "category": "multi_skill",
+    "user_message": "朋友最近怎么样，上次聊的时候好开心",
+    "intent": "entity_query",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": ["entity_tracker", "memory_recall", "sentiment_skill"],
+    "notes": "朋友称谓+最近+怎么样+上次聊回溯+开心情感词，三技能激活"
+  },
+  {
+    "case_id": "sc_ns_01",
+    "category": "no_skill_casual",
+    "user_message": "你好呀",
+    "intent": "casual_chat",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": [],
+    "notes": "简单问候闲聊，不应激活任何技能"
+  },
+  {
+    "case_id": "sc_ns_02",
+    "category": "no_skill_casual",
+    "user_message": "今天天气不错",
+    "intent": "casual_chat",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": [],
+    "notes": "闲聊天气，无情感/危机/回溯/实体信号，不应激活技能"
+  },
+  {
+    "case_id": "sc_ns_03",
+    "category": "no_skill_casual",
+    "user_message": "谢谢你一直陪着我",
+    "intent": "casual_chat",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": [],
+    "notes": "致谢闲聊，不应激活技能"
+  },
+  {
+    "case_id": "sc_ns_04",
+    "category": "no_skill_casual",
+    "user_message": "晚安，我要睡了",
+    "intent": "casual_chat",
+    "available_skills": ["crisis_detector", "sentiment_skill", "memory_recall", "entity_tracker"],
+    "expected_skills": [],
+    "notes": "道别闲聊，不应激活技能"
+  }
+]

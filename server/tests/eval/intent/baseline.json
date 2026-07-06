@@ -1,0 +1,22 @@
+{
+  "_placeholder": true,
+  "_note": "Placeholder. Run EVAL_UPDATE_BASELINE=1 make eval-intent to seed real values; the regression guard skips while _placeholder is true.",
+  "baseline_a": {
+    "accuracy": 0.0,
+    "macro_f1": 0.0,
+    "weighted_f1": 0.0,
+    "rule_short_circuit_rate": 0.0,
+    "llm_layer_accuracy": 0.0,
+    "avg_latency_ms": 0.0,
+    "avg_tokens_per_call": 0.0
+  },
+  "treatment_b": {
+    "accuracy": 0.0,
+    "macro_f1": 0.0,
+    "weighted_f1": 0.0,
+    "rule_short_circuit_rate": 0.0,
+    "llm_layer_accuracy": 0.0,
+    "avg_latency_ms": 0.0,
+    "avg_tokens_per_call": 0.0
+  }
+}
