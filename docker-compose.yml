@@ -1,0 +1,116 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-nightdiary_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-night_diary}
+      MYSQL_USER: ${MYSQL_USER:-nightdiary}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nightdiary_pass}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      - NEO4J_AUTH=neo4j/nightdiary_neo4j
+      - NEO4J_PLUGINS=["apoc"]
+    ports:
+      - "7474:7474"  # HTTP browser
+      - "7687:7687"  # Bolt protocol
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    profiles: ["graph"]  # Optional: only start with --profile graph
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER:-nightdiary}:${MYSQL_PASSWORD:-nightdiary_pass}@mysql:3306/${MYSQL_DATABASE:-night_diary}?charset=utf8mb4
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production-min-32-chars}
+      - MODEL_KEY_SECRET=${MODEL_KEY_SECRET:-change-me-model-key-min-16c}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+      - NEO4J_URL=neo4j://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=nightdiary_neo4j
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_data:/app/data
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: python -m app.workers.worker
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER:-nightdiary}:${MYSQL_PASSWORD:-nightdiary_pass}@mysql:3306/${MYSQL_DATABASE:-night_diary}?charset=utf8mb4
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production-min-32-chars}
+      - MODEL_KEY_SECRET=${MODEL_KEY_SECRET:-change-me-model-key-min-16c}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - NEO4J_URL=neo4j://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=nightdiary_neo4j
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  redis_data:
+  neo4j_data:
+  backend_data:

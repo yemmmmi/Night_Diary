@@ -144,7 +144,7 @@ class MultiAgentGraph:
         fallback = self._fallbacks[name]
         try:
             return await asyncio.wait_for(runner(state), timeout=self._timeout)
-        except TimeoutError:
+        except asyncio.TimeoutError:
             logger.warning("worker %s timed out after %.1fs, using fallback", name, self._timeout)
             update = dict(fallback(state))
             update["errors"] = [f"worker '{name}' timeout after {self._timeout}s"]

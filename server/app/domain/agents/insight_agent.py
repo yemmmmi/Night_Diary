@@ -220,13 +220,13 @@ class InsightAgent:
         else:
             memory_lines: list[str] = []
             for entry in episodic[:_MAX_EPISODIC_ENTRIES]:
-                if not isinstance(entry, dict) or not entry.get("event"):
+                if not isinstance(entry, dict) or not entry.get("event_summary"):
                     continue
-                line = f"- {entry['event']}"
+                line = f"- {entry['event_summary']}"
                 if entry.get("emotion"):
                     line += f"（情绪: {entry['emotion']}）"
-                if entry.get("ai_suggestion"):
-                    line += f" → 建议: {entry['ai_suggestion']}"
+                if entry.get("reply_insight"):
+                    line += f" → 建议: {entry['reply_insight']}"
                 memory_lines.append(line)
             if memory_lines:
                 parts.append("【近期重要记忆】\n" + "\n".join(memory_lines))

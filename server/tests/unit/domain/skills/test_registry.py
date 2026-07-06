@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from app.domain.skills.base import ACTIVATION_THRESHOLD, BaseSkill
-from app.domain.skills.registry import SkillRegistry, create_default_registry
+from app.domain.skills.registry import (
+    SkillRegistry,
+    create_chat_registry,
+    create_default_registry,
+    create_diary_registry,
+)
 from app.domain.skills.types import SkillCategory, SkillMetadata
 
 
@@ -157,6 +162,46 @@ def test_default_registry_has_two_mvp_skills() -> None:
     assert len(registry.skills) == 2
     assert "crisis_detector" in registry.skills
     assert "sentiment_skill" in registry.skills
+
+
+def test_diary_registry_has_three_skills() -> None:
+    """Diary registry adds memory_recall to crisis_detector + sentiment."""
+    registry = create_diary_registry()
+    assert len(registry.skills) == 3
+    assert "crisis_detector" in registry.skills
+    assert "sentiment_skill" in registry.skills
+    assert "memory_recall" in registry.skills
+
+
+def test_diary_registry_memory_recall_activates_on_retrospective() -> None:
+    """Memory recall should activate for retrospective diary content."""
+    registry = create_diary_registry()
+    selected = registry.select_skills(
+        "上周和朋友去了公园，很开心",
+        {"intent": "retrospective_review"},
+        token_budget=4000,
+    )
+    selected_names = {skill.metadata.name for skill in selected}
+    assert "memory_recall" in selected_names
+
+
+def test_chat_registry_has_four_skills() -> None:
+    """Chat registry has crisis + sentiment + memory_recall + entity_tracker."""
+    registry = create_chat_registry()
+    assert len(registry.skills) == 4
+    assert "crisis_detector" in registry.skills
+    assert "sentiment_skill" in registry.skills
+    assert "memory_recall" in registry.skills
+    assert "entity_tracker" in registry.skills
+
+
+def test_diary_registry_shares_skills_with_default() -> None:
+    """Diary registry shares crisis_detector and sentiment_skill with default."""
+    default_registry = create_default_registry()
+    diary_registry = create_diary_registry()
+    shared = set(default_registry.skills.keys()) & set(diary_registry.skills.keys())
+    assert "crisis_detector" in shared
+    assert "sentiment_skill" in shared
 
 
 def test_no_stub_skills_registered() -> None:

@@ -92,3 +92,24 @@ class TracingLLMClient:
                 error=error,
             )
         )
+
+    def bind_tools(self, tools: list[Any]) -> TracingLLMClient:
+        """Delegate bind_tools to inner if supported, else raise.
+
+        Returns a *new* TracingLLMClient wrapping the bound inner, so
+        tracing continues to work on tool-calling invocations.
+        """
+        if not hasattr(self._inner, "bind_tools"):
+            raise AttributeError(
+                f"Inner LLM {type(self._inner).__name__} does not support bind_tools"
+            )
+        bound = self._inner.bind_tools(tools)
+        return TracingLLMClient(
+            bound,
+            model=self.model,
+            tier=self.tier,
+            tracer=self._tracer,
+            agent_name=self._agent_name,
+            call_type=self._call_type + "+tools",
+            decision_id=self._decision_id,
+        )

@@ -5,8 +5,8 @@
     "intent": "retrospective_review",
     "diary": "我发现自己最近一个月总是拖延，明明列好了计划，到了晚上又什么都没做，然后陷入自责，第二天继续拖。为什么我总是这样？",
     "episodic_context": [
-      {"event": "项目延期", "emotion": "焦虑", "ai_suggestion": "把大任务拆成小步骤", "importance": 0.8},
-      {"event": "周末计划落空", "emotion": "失落", "importance": 0.6}
+      {"event_summary": "项目延期", "emotion": "焦虑", "reply_insight": "把大任务拆成小步骤", "importance": 0.8},
+      {"event_summary": "周末计划落空", "emotion": "失落", "importance": 0.6}
     ]
   },
   {
@@ -15,7 +15,7 @@
     "intent": "emotional_support",
     "diary": "每次和家人吃饭都会吵架，话题总是绕到我的工作和收入上，我很想找到一个能平和沟通的方式，而不是每次都不欢而散。",
     "episodic_context": [
-      {"event": "家庭聚餐冲突", "emotion": "愤怒", "importance": 0.7}
+      {"event_summary": "家庭聚餐冲突", "emotion": "愤怒", "importance": 0.7}
     ]
   },
   {
@@ -31,8 +31,8 @@
     "intent": "retrospective_review",
     "diary": "帮我生成这周的周报吧。这一周整体压力很大，周一到周三都在赶项目，周四终于上线，周五和朋友聚餐放松了一下，周末补了很多觉。",
     "episodic_context": [
-      {"event": "项目上线", "emotion": "如释重负", "importance": 0.9},
-      {"event": "朋友聚餐", "emotion": "开心", "importance": 0.5}
+      {"event_summary": "项目上线", "emotion": "如释重负", "importance": 0.9},
+      {"event_summary": "朋友聚餐", "emotion": "开心", "importance": 0.5}
     ]
   },
   {

@@ -40,9 +40,10 @@ def memory_ctx(tmp_path):
 
 def _card_entry(event: str, emotion: str, ts: float, *, entry_id: str) -> EpisodicEntry:
     return EpisodicEntry(
-        event=event,
+        event_summary=event,
         emotion=emotion,
-        ai_suggestion="",
+        reply_insight="",
+        source="card",
         timestamp=ts,
         importance=0.7,
         diary_ids=[],
@@ -52,9 +53,10 @@ def _card_entry(event: str, emotion: str, ts: float, *, entry_id: str) -> Episod
 
 def _diary_entry(event: str, ts: float, *, entry_id: str) -> EpisodicEntry:
     return EpisodicEntry(
-        event=event,
+        event_summary=event,
         emotion="焦虑",
-        ai_suggestion="试着深呼吸放松一下。",
+        reply_insight="试着深呼吸放松一下。",
+        source="diary",
         timestamp=ts,
         importance=0.8,
         diary_ids=["12"],
@@ -110,7 +112,7 @@ def test_get_overview_counts(memory_ctx) -> None:
     store.upsert_entry("default", _diary_entry("失眠", now, entry_id="b"))
 
     with memory_ctx.session_factory() as session:
-        card_service.create_card(session, emotion="开心", emotions=["开心"])
+        card_service.create_card(session, user_id="default", emotion="开心", emotions=["开心"])
 
     overview = memory_service.get_overview(memory_ctx)
 
@@ -131,12 +133,12 @@ def test_update_episodic(memory_ctx) -> None:
     updated = memory_service.update_episodic(
         memory_ctx,
         "a",
-        event="晨间散步",
+        event_summary="晨间散步",
         emotion="开心",
         importance=0.9,
     )
 
-    assert updated["event"] == "晨间散步"
+    assert updated["event_summary"] == "晨间散步"
     assert updated["emotion"] == "开心"
     assert updated["importance"] == 0.9
 
@@ -157,4 +159,4 @@ def test_update_episodic_not_found(memory_ctx) -> None:
     from app.shared.errors import NotFoundError
 
     with pytest.raises(NotFoundError):
-        memory_service.update_episodic(memory_ctx, "missing", event="x")
+        memory_service.update_episodic(memory_ctx, "missing", event_summary="x")

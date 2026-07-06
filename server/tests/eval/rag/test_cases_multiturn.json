@@ -10,7 +10,7 @@
         "content": "连续加班一周，今晚又失眠了。脑子里全是没做完的项目，翻来覆去到凌晨两点还没睡着。",
         "tags": ["失眠", "工作", "焦虑"],
         "memory_seed": {
-          "event": "失眠",
+          "event_summary": "失眠",
           "emotion": "焦虑",
           "importance": 0.85
         }
@@ -22,7 +22,7 @@
         "content": "今天开始晨跑，沿着河边跑了三公里。跑完出了一身汗，整个人神清气爽。",
         "tags": ["运动", "健康"],
         "memory_seed": {
-          "event": "晨跑",
+          "event_summary": "晨跑",
           "emotion": "振奋",
           "importance": 0.75
         }
@@ -51,7 +51,7 @@
         "content": "又因为催婚的事和妈妈吵架了。她不停地念叨，我越听越烦，最后摔门而出。",
         "tags": ["家人", "冲突"],
         "memory_seed": {
-          "event": "和妈妈吵架",
+          "event_summary": "和妈妈吵架",
           "emotion": "愤怒",
           "importance": 0.82
         }
@@ -63,7 +63,7 @@
         "content": "今天主动给妈妈发了消息，气氛缓和了一些，但还是有点尴尬。",
         "tags": ["家人", "和解"],
         "memory_seed": {
-          "event": "与妈妈缓和",
+          "event_summary": "与妈妈缓和",
           "emotion": "复杂",
           "importance": 0.7
         }
@@ -92,7 +92,7 @@
         "content": "凌晨三点又醒了，盯着天花板怎么都睡不安稳。最近睡眠质量越来越差。",
         "tags": ["睡眠", "情绪"],
         "memory_seed": {
-          "event": "睡眠差",
+          "event_summary": "睡眠差",
           "emotion": "疲惫",
           "importance": 0.8
         }
@@ -104,7 +104,7 @@
         "content": "第一次去健身房撸铁，教练带我做了卧推和深蹲。虽然累，但感觉很有成就感。",
         "tags": ["运动", "健康"],
         "memory_seed": {
-          "event": "健身房训练",
+          "event_summary": "健身房训练",
           "emotion": "充实",
           "importance": 0.78
         }

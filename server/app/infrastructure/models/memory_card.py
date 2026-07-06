@@ -22,6 +22,7 @@ class MemoryCardRow(Base):
     __tablename__ = "memory_cards"
 
     card_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     emotion: Mapped[str] = mapped_column(String(32), nullable=False, default="neutral")
     emotions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     event_summary: Mapped[str | None] = mapped_column(Text, nullable=True)

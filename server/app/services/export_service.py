@@ -30,14 +30,44 @@ logger = logging.getLogger(__name__)
 EXPORT_VERSION = 1
 
 
-def export_all(db: Session) -> dict[str, Any]:
+def export_all(db: Session, *, user_id: str) -> dict[str, Any]:
     """Export all user data as a JSON-serialisable dict."""
-    diaries = db.query(DiaryEntryRow).order_by(DiaryEntryRow.id).all()
-    tags = db.query(TagRow).order_by(TagRow.id).all()
-    analyses = db.query(AnalysisRow).order_by(AnalysisRow.id).all()
-    cards = db.query(MemoryCardRow).order_by(MemoryCardRow.created_at).all()
-    episodic = db.query(EpisodicMemoryRow).order_by(EpisodicMemoryRow.timestamp).all()
-    profiles = db.query(LongTermProfileRow).all()
+    user_diary_ids = db.query(DiaryEntryRow.id).filter(DiaryEntryRow.user_id == user_id)
+    diaries = (
+        db.query(DiaryEntryRow)
+        .filter(DiaryEntryRow.user_id == user_id)
+        .order_by(DiaryEntryRow.id)
+        .all()
+    )
+    tags = (
+        db.query(TagRow)
+        .filter(TagRow.user_id == user_id)
+        .order_by(TagRow.id)
+        .all()
+    )
+    analyses = (
+        db.query(AnalysisRow)
+        .filter(AnalysisRow.diary_id.in_(user_diary_ids))
+        .order_by(AnalysisRow.id)
+        .all()
+    )
+    cards = (
+        db.query(MemoryCardRow)
+        .filter(MemoryCardRow.user_id == user_id)
+        .order_by(MemoryCardRow.created_at)
+        .all()
+    )
+    episodic = (
+        db.query(EpisodicMemoryRow)
+        .filter(EpisodicMemoryRow.user_id == user_id)
+        .order_by(EpisodicMemoryRow.timestamp)
+        .all()
+    )
+    profiles = (
+        db.query(LongTermProfileRow)
+        .filter(LongTermProfileRow.user_id == user_id)
+        .all()
+    )
 
     return {
         "version": EXPORT_VERSION,
@@ -48,7 +78,7 @@ def export_all(db: Session) -> dict[str, Any]:
                 "content": d.content,
                 "date": d.date.isoformat() if d.date else None,
                 "weather": d.weather,
-                "ai_ans": d.ai_ans,
+                "reply": d.reply,
                 "created_at": d.created_at.isoformat() if d.created_at else None,
                 "tag_ids": [t.id for t in d.tags],
             }
@@ -120,6 +150,8 @@ def import_all(
     db: Session,
     data: dict[str, Any],
     collection_manager: DiaryCollectionManager | None = None,
+    *,
+    user_id: str,
 ) -> dict[str, int]:
     """Import user data from a JSON dict, replacing all existing data.
 
@@ -129,14 +161,34 @@ def import_all(
     if version != EXPORT_VERSION:
         raise ValueError(f"Unsupported export version: {version}, expected {EXPORT_VERSION}")
 
-    # --- Clear existing data ---
-    db.query(AnalysisRow).delete()
-    db.query(MemoryCardRow).delete()
-    db.query(EpisodicMemoryRow).delete()
-    db.query(LongTermProfileRow).delete()
-    db.execute(diary_tag_association.delete())
-    db.query(DiaryEntryRow).delete()
-    db.query(TagRow).delete()
+    # --- Clear existing data (scoped to current user) ---
+    db.query(AnalysisRow).filter(
+        AnalysisRow.diary_id.in_(
+            db.query(DiaryEntryRow.id).filter(DiaryEntryRow.user_id == user_id)
+        )
+    ).delete(synchronize_session=False)
+    db.query(MemoryCardRow).filter(
+        MemoryCardRow.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(EpisodicMemoryRow).filter(
+        EpisodicMemoryRow.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(LongTermProfileRow).filter(
+        LongTermProfileRow.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.execute(
+        diary_tag_association.delete().where(
+            diary_tag_association.c.diary_id.in_(
+                db.query(DiaryEntryRow.id).filter(DiaryEntryRow.user_id == user_id)
+            )
+        )
+    )
+    db.query(DiaryEntryRow).filter(
+        DiaryEntryRow.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(TagRow).filter(
+        TagRow.user_id == user_id
+    ).delete(synchronize_session=False)
     db.commit()
 
     # --- Import tags (track old_id -> new_id) ---
@@ -147,6 +199,7 @@ def import_all(
             name=tag_data["name"],
             color=tag_data.get("color", "#6B7280"),
             usage_count=tag_data.get("usage_count", 0),
+            user_id=user_id,
         )
         db.add(tag)
         db.flush()  # get new ID
@@ -162,16 +215,19 @@ def import_all(
 
         entry = diary_service.create_entry(
             db,
+            user_id=user_id,
             content=diary_data["content"] or "",
             entry_date=_parse_date(diary_data.get("date")),
             weather=diary_data.get("weather"),
             collection_manager=collection_manager,
         )
         if new_tag_ids:
-            tags = db.query(TagRow).filter(TagRow.id.in_(new_tag_ids)).all()
+            tags = db.query(TagRow).filter(
+                TagRow.id.in_(new_tag_ids), TagRow.user_id == user_id
+            ).all()
             entry.tags = tags
         # Overwrite auto-generated fields with original values
-        entry.ai_ans = diary_data.get("ai_ans")
+        entry.reply = diary_data.get("reply")
         if created_at := _parse_datetime(diary_data.get("created_at")):
             entry.created_at = created_at
         db.commit()
@@ -215,6 +271,7 @@ def import_all(
             importance=card_data.get("importance", 0.5),
             card_type=card_data.get("card_type", "standard"),
             diary_id=new_diary_id,
+            user_id=user_id,
         )
         if created_at := _parse_datetime(card_data.get("created_at")):
             card.created_at = created_at
@@ -225,7 +282,7 @@ def import_all(
     for ep_data in data.get("episodic_memories", []):
         ep = EpisodicMemoryRow(
             entry_id=ep_data["entry_id"],
-            user_id=ep_data.get("user_id", "default"),
+            user_id=user_id,
             timestamp=ep_data.get("timestamp", 0.0),
             importance=ep_data.get("importance", 0.5),
             payload_json=ep_data.get("payload_json", "{}"),
@@ -237,7 +294,7 @@ def import_all(
     profile_data = data.get("long_term_profile")
     if profile_data:
         profile = LongTermProfileRow(
-            user_id=profile_data.get("user_id", "default"),
+            user_id=user_id,
             profile_json=profile_data.get("profile_json", "{}"),
             updated_at=profile_data.get("updated_at", 0.0),
         )

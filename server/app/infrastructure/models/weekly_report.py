@@ -22,7 +22,8 @@ class WeeklyReportRow(Base):
     __tablename__ = "weekly_reports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    period_start: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
+    user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     diary_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

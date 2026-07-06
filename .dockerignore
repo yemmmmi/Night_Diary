@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.env
+*.md
+.trae
+server/__pycache__
+server/.pytest_cache
+server/tests

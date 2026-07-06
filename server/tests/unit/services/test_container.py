@@ -35,8 +35,8 @@ def test_trigger_analysis_end_to_end(container: ServiceContainer) -> None:
 
     db = container.session()
     try:
-        entry = diary_service.create_entry(db, content="容器端到端测试日记。")
-        analysis, _ = analysis_service.trigger_analysis(db, entry.id, container)
+        entry = diary_service.create_entry(db, user_id="default", content="容器端到端测试日记。")
+        analysis, _ = analysis_service.trigger_analysis(db, entry.id, container, user_id="default")
         assert analysis.diary_id == entry.id
         assert analysis.execution_tier
     finally:

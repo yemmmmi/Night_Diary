@@ -1,4 +1,10 @@
-"""ORM model for explicit user feedback on AI responses (``feedback``)."""
+"""ORM model for explicit user feedback on AI responses (``feedback``).
+
+Supports both scene-1 (diary analysis) and scene-2 (conversation) feedback.
+For diary feedback, ``analysis_id`` and ``diary_id`` are set.
+For conversation feedback, ``conversation_id`` is set.
+At least one of ``analysis_id`` or ``conversation_id`` must be non-null.
+"""
 
 from __future__ import annotations
 
@@ -14,16 +20,21 @@ class FeedbackRow(Base):
     __tablename__ = "feedback"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    analysis_id: Mapped[int] = mapped_column(
+    analysis_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("analyses.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    diary_id: Mapped[int] = mapped_column(
+    diary_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("diary_entries.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    conversation_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
         index=True,
     )
     response_style: Mapped[str] = mapped_column(String(32), nullable=False, default="empathetic")

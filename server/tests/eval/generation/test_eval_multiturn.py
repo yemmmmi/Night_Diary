@@ -67,7 +67,7 @@ def _episodic_from_turns(prior_turns: list[dict[str, Any]]) -> list[dict[str, An
         seed = turn.get("memory_seed", {})
         entries.append(
             {
-                "event": seed.get("event", ""),
+                "event_summary": seed.get("event_summary", ""),
                 "emotion": seed.get("emotion", ""),
                 "content": turn.get("content", ""),
                 "date": turn.get("date", ""),

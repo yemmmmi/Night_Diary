@@ -54,7 +54,7 @@ def test_diary_analysis_feedback_flow(e2e_client: TestClient) -> None:
     analysis = e2e_client.post(f"/api/v1/analysis/{diary_id}")
     assert analysis.status_code == 201
     analysis_id = analysis.json()["id"]
-    assert analysis.json()["ai_ans"]
+    assert analysis.json()["reply"]
 
     feedback = e2e_client.post(
         f"/api/v1/feedback/{analysis_id}",

@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     analysis,
+    auth,
     card,
     conversation,
     diary,
@@ -19,6 +20,7 @@ from app.api.v1 import (
 )
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(auth.router)
 api_router.include_router(diary.router)
 api_router.include_router(card.router)
 api_router.include_router(conversation.router)

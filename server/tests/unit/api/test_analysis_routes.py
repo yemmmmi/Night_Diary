@@ -16,57 +16,57 @@ def _create_diary(client: TestClient, content: str = "分析 API 测试") -> int
     return response.json()["id"]
 
 
-def test_trigger_and_get_analysis(api_client: TestClient) -> None:
-    diary_id = _create_diary(api_client)
+def test_trigger_and_get_analysis(authed_client: TestClient) -> None:
+    diary_id = _create_diary(authed_client)
 
-    triggered = api_client.post(f"/api/v1/analysis/{diary_id}")
+    triggered = authed_client.post(f"/api/v1/analysis/{diary_id}")
     assert triggered.status_code == 201
     body = triggered.json()
     assert body["diary_id"] == diary_id
     assert body["execution_tier"]
-    assert body["ai_ans"]
+    assert body["reply"]
 
-    fetched = api_client.get(f"/api/v1/analysis/{diary_id}")
+    fetched = authed_client.get(f"/api/v1/analysis/{diary_id}")
     assert fetched.status_code == 200
     assert fetched.json()["id"] == body["id"]
 
 
-def test_duplicate_analysis_returns_409(api_client: TestClient) -> None:
-    diary_id = _create_diary(api_client)
-    assert api_client.post(f"/api/v1/analysis/{diary_id}").status_code == 201
-    duplicate = api_client.post(f"/api/v1/analysis/{diary_id}")
+def test_duplicate_analysis_returns_409(authed_client: TestClient) -> None:
+    diary_id = _create_diary(authed_client)
+    assert authed_client.post(f"/api/v1/analysis/{diary_id}").status_code == 201
+    duplicate = authed_client.post(f"/api/v1/analysis/{diary_id}")
     assert duplicate.status_code == 409
 
 
-def test_regenerate_analysis_replaces_existing(api_client: TestClient) -> None:
-    diary_id = _create_diary(api_client)
-    first = api_client.post(f"/api/v1/analysis/{diary_id}")
+def test_regenerate_analysis_replaces_existing(authed_client: TestClient) -> None:
+    diary_id = _create_diary(authed_client)
+    first = authed_client.post(f"/api/v1/analysis/{diary_id}")
     assert first.status_code == 201
 
-    regen = api_client.post(f"/api/v1/analysis/{diary_id}/regenerate")
+    regen = authed_client.post(f"/api/v1/analysis/{diary_id}/regenerate")
     assert regen.status_code == 200
-    assert regen.json()["ai_ans"]
+    assert regen.json()["reply"]
     assert regen.json()["diary_id"] == diary_id
-    assert regen.json()["ai_ans"]
-    assert api_client.get(f"/api/v1/analysis/{diary_id}").status_code == 200
+    assert regen.json()["reply"]
+    assert authed_client.get(f"/api/v1/analysis/{diary_id}").status_code == 200
 
 
-def test_delete_analysis_clears_reply(api_client: TestClient) -> None:
-    diary_id = _create_diary(api_client)
-    assert api_client.post(f"/api/v1/analysis/{diary_id}").status_code == 201
+def test_delete_analysis_clears_reply(authed_client: TestClient) -> None:
+    diary_id = _create_diary(authed_client)
+    assert authed_client.post(f"/api/v1/analysis/{diary_id}").status_code == 201
 
-    deleted = api_client.delete(f"/api/v1/analysis/{diary_id}")
+    deleted = authed_client.delete(f"/api/v1/analysis/{diary_id}")
     assert deleted.status_code == 204
-    assert api_client.get(f"/api/v1/analysis/{diary_id}").status_code == 404
+    assert authed_client.get(f"/api/v1/analysis/{diary_id}").status_code == 404
 
-    entry = api_client.get(f"/api/v1/diary/entries/{diary_id}")
+    entry = authed_client.get(f"/api/v1/diary/entries/{diary_id}")
     assert entry.status_code == 200
-    assert entry.json()["ai_ans"] in (None, "")
+    assert entry.json()["reply"] in (None, "")
 
 
-def test_get_analysis_before_trigger_returns_404(api_client: TestClient) -> None:
-    diary_id = _create_diary(api_client)
-    response = api_client.get(f"/api/v1/analysis/{diary_id}")
+def test_get_analysis_before_trigger_returns_404(authed_client: TestClient) -> None:
+    diary_id = _create_diary(authed_client)
+    response = authed_client.get(f"/api/v1/analysis/{diary_id}")
     assert response.status_code == 404
 
 
@@ -84,22 +84,22 @@ def _patch_analysis_route(monkeypatch: pytest.MonkeyPatch, diary_id: int) -> dic
 
     captured: dict[str, object] = {}
 
-    def fake_trigger(db, did, container, *, style_fragment=None):  # type: ignore[no-untyped-def]
+    def fake_trigger(db, did, container, *, style_fragment=None, user_id=None):  # type: ignore[no-untyped-def]
         captured["style_fragment"] = style_fragment
         return (object(), 0)
 
-    def fake_regenerate(db, did, container, *, style_fragment=None):  # type: ignore[no-untyped-def]
+    def fake_regenerate(db, did, container, *, style_fragment=None, user_id=None):  # type: ignore[no-untyped-def]
         captured["style_fragment"] = style_fragment
         return (object(), 0)
 
     class _FakeEntry:
-        ai_ans = "fake reply"
+        reply = "fake reply"
 
-    def fake_get_entry(db, did):  # type: ignore[no-untyped-def]
+    def fake_get_entry(db, did, *, user_id=None):  # type: ignore[no-untyped-def]
         return _FakeEntry()
 
     def fake_to_response(  # type: ignore[no-untyped-def]
-        row, *, ai_ans=None, db=None, referenced_memory_count=0
+        row, *, reply=None, db=None, referenced_memory_count=0, user_id=None
     ):
         return AnalysisResponse(
             id=1,
@@ -112,7 +112,7 @@ def _patch_analysis_route(monkeypatch: pytest.MonkeyPatch, diary_id: int) -> dic
             agent_mode="multi_agent",
             execution_tier="medium",
             activated_agents="",
-            ai_ans=ai_ans,
+            reply=reply,
             referenced_memory_count=referenced_memory_count,
         )
 
@@ -124,12 +124,12 @@ def _patch_analysis_route(monkeypatch: pytest.MonkeyPatch, diary_id: int) -> dic
 
 
 def test_trigger_passes_preset_style_fragment_to_service(
-    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    authed_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    diary_id = _create_diary(api_client)
+    diary_id = _create_diary(authed_client)
     captured = _patch_analysis_route(monkeypatch, diary_id)
 
-    response = api_client.post(
+    response = authed_client.post(
         f"/api/v1/analysis/{diary_id}", json={"replier_preset": "pragmatic"}
     )
     assert response.status_code == 201
@@ -142,12 +142,12 @@ def test_trigger_passes_preset_style_fragment_to_service(
 
 
 def test_trigger_persona_overrides_preset(
-    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    authed_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    diary_id = _create_diary(api_client)
+    diary_id = _create_diary(authed_client)
     captured = _patch_analysis_route(monkeypatch, diary_id)
 
-    response = api_client.post(
+    response = authed_client.post(
         f"/api/v1/analysis/{diary_id}",
         json={"replier_preset": "warm", "replier_persona": "你是一个诗人，用短句回信"},
     )
@@ -160,24 +160,24 @@ def test_trigger_persona_overrides_preset(
 
 
 def test_trigger_without_body_passes_none_style_fragment(
-    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    authed_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """不带 body 的旧请求应走默认风格: style_fragment 为 None (向后兼容)。"""
-    diary_id = _create_diary(api_client)
+    diary_id = _create_diary(authed_client)
     captured = _patch_analysis_route(monkeypatch, diary_id)
 
-    response = api_client.post(f"/api/v1/analysis/{diary_id}")
+    response = authed_client.post(f"/api/v1/analysis/{diary_id}")
     assert response.status_code == 201
     assert captured["style_fragment"] is None
 
 
 def test_regenerate_passes_preset_style_fragment_to_service(
-    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    authed_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    diary_id = _create_diary(api_client)
+    diary_id = _create_diary(authed_client)
     captured = _patch_analysis_route(monkeypatch, diary_id)
 
-    response = api_client.post(
+    response = authed_client.post(
         f"/api/v1/analysis/{diary_id}/regenerate", json={"replier_preset": "calm"}
     )
     assert response.status_code == 200

@@ -1,0 +1,30 @@
+# Development override: use SQLite + no Redis (in-memory fallback)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+services:
+  backend:
+    environment:
+      - APP_ENV=development
+      - DATABASE_URL=
+      - REDIS_URL=
+    volumes:
+      - ./server:/app
+      - backend_data_dev:/app/data
+  worker:
+    profiles: ["full"]  # Only start worker with --profile full
+    volumes:
+      - ./server:/app
+      - backend_data_dev:/app/data
+  mysql:
+    profiles: ["full"]  # Skip MySQL in dev
+  redis:
+    profiles: ["full"]  # Skip Redis in dev
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/app/src
+      - ./index.html:/app/index.html
+
+volumes:
+  backend_data_dev:

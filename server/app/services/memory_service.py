@@ -26,34 +26,33 @@ DEFAULT_USER_ID = "default"
 
 
 def _entry_source(entry: EpisodicEntry) -> str:
-    """Classify an episodic entry as coming from a diary analysis or a card.
-
-    Cards sink into episodic memory with an empty ``ai_suggestion`` and no
-    linked diary; diary analysis turns carry a suggestion and/or diary ids.
-    """
-    if entry.ai_suggestion.strip() or entry.diary_ids:
-        return "diary"
-    return "card"
+    """Classify an episodic entry by its source field."""
+    return entry.source
 
 
 def _entry_to_dict(entry: EpisodicEntry) -> dict[str, Any]:
     return {
         "entry_id": entry.entry_id,
-        "event": entry.event,
+        "event_summary": entry.event_summary,
         "emotion": entry.emotion,
-        "ai_suggestion": entry.ai_suggestion,
-        "user_feedback": entry.user_feedback,
+        "reply_insight": entry.reply_insight,
         "importance": entry.importance,
         "timestamp": entry.timestamp,
         "diary_ids": list(entry.diary_ids),
         "source": _entry_source(entry),
+        "tags": list(entry.tags),
+        "mood_score": entry.mood_score,
+        "emotions": list(entry.emotions),
+        "event_date": entry.event_date,
     }
 
 
-def list_episodic(container: ServiceContainer) -> list[dict[str, Any]]:
+def list_episodic(
+    container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID
+) -> list[dict[str, Any]]:
     """Return every persisted episodic entry, newest first."""
     store = SqliteEpisodicMemoryStore(container.session_factory)
-    entries = store.load_entries(DEFAULT_USER_ID)
+    entries = store.load_entries(user_id)
     entries.sort(key=lambda e: e.timestamp, reverse=True)
     return [_entry_to_dict(entry) for entry in entries]
 
@@ -67,26 +66,27 @@ def update_episodic(
     container: ServiceContainer,
     entry_id: str,
     *,
-    event: str | None = None,
+    event_summary: str | None = None,
     emotion: str | None = None,
-    ai_suggestion: str | None = None,
+    reply_insight: str | None = None,
     importance: float | None = None,
+    user_id: str = DEFAULT_USER_ID,
 ) -> dict[str, Any]:
     """Update a persisted episodic entry."""
     from app.shared.errors import NotFoundError
 
     store = SqliteEpisodicMemoryStore(container.session_factory)
-    entry = store.get_entry(DEFAULT_USER_ID, entry_id)
+    entry = store.get_entry(user_id, entry_id)
     if entry is None:
         raise NotFoundError(resource="情节记忆", resource_id=entry_id)
 
     updates: dict[str, Any] = {}
-    if event is not None:
-        updates["event"] = event
+    if event_summary is not None:
+        updates["event_summary"] = event_summary
     if emotion is not None:
         updates["emotion"] = emotion
-    if ai_suggestion is not None:
-        updates["ai_suggestion"] = ai_suggestion
+    if reply_insight is not None:
+        updates["reply_insight"] = reply_insight
     if importance is not None:
         updates["importance"] = importance
 
@@ -94,19 +94,24 @@ def update_episodic(
         return _entry_to_dict(entry)
 
     updated = entry.model_copy(update=updates)
-    store.upsert_entry(DEFAULT_USER_ID, updated)
+    store.upsert_entry(user_id, updated)
     _sync_live_episodic(container)
     return _entry_to_dict(updated)
 
 
-def delete_episodic(container: ServiceContainer, entry_id: str) -> None:
+def delete_episodic(
+    container: ServiceContainer,
+    entry_id: str,
+    *,
+    user_id: str = DEFAULT_USER_ID,
+) -> None:
     """Delete a persisted episodic entry."""
     from app.shared.errors import NotFoundError
 
     store = SqliteEpisodicMemoryStore(container.session_factory)
-    if store.get_entry(DEFAULT_USER_ID, entry_id) is None:
+    if store.get_entry(user_id, entry_id) is None:
         raise NotFoundError(resource="情节记忆", resource_id=entry_id)
-    store.delete_entries(DEFAULT_USER_ID, [entry_id])
+    store.delete_entries(user_id, [entry_id])
     _sync_live_episodic(container)
 
 
@@ -131,27 +136,35 @@ def _profile_to_dict(profile: UserProfile) -> dict[str, Any]:
     }
 
 
-def get_profile(container: ServiceContainer) -> dict[str, Any] | None:
+def get_profile(
+    container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID
+) -> dict[str, Any] | None:
     """Return the long-term user profile, or ``None`` if not built yet."""
     store = SqliteLongTermProfileStore(container.session_factory)
-    profile = store.get_profile(DEFAULT_USER_ID)
+    profile = store.get_profile(user_id)
     if profile is None:
         return None
     return _profile_to_dict(profile)
 
 
-def get_overview(container: ServiceContainer) -> dict[str, Any]:
+def get_overview(
+    container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID
+) -> dict[str, Any]:
     """Return counts summarising the durable memory layers."""
     store = SqliteEpisodicMemoryStore(container.session_factory)
-    entries = store.load_entries(DEFAULT_USER_ID)
+    entries = store.load_entries(user_id)
     episodic_total = len(entries)
     from_cards = sum(1 for e in entries if _entry_source(e) == "card")
     from_diaries = episodic_total - from_cards
 
     with container.session_factory() as session:
-        card_total = session.query(MemoryCardRow).count()
+        card_total = (
+            session.query(MemoryCardRow)
+            .filter(MemoryCardRow.user_id == user_id)
+            .count()
+        )
 
-    profile = get_profile(container)
+    profile = get_profile(container, user_id=user_id)
 
     return {
         "episodic_total": episodic_total,

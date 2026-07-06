@@ -38,7 +38,7 @@ class RoutingDecision:
 
 @dataclass(frozen=True, slots=True)
 class AnalysisResult:
-    ai_ans: str
+    reply: str
     token_cost: int
     cache_hit_tokens: int
     cache_miss_tokens: int
@@ -161,7 +161,7 @@ class ExecutionPlanner:
 
         if decision.mode == ExecutionMode.FALLBACK:
             return AnalysisResult(
-                ai_ans=FALLBACK_FEEDBACK,
+                reply=FALLBACK_FEEDBACK,
                 token_cost=0,
                 cache_hit_tokens=0,
                 cache_miss_tokens=0,
@@ -201,7 +201,7 @@ class ExecutionPlanner:
                     decision_type="tier_routing",
                 )
                 return AnalysisResult(
-                    ai_ans=run.text,
+                    reply=run.text,
                     token_cost=run.tokens["total_tokens_used"],
                     cache_hit_tokens=run.tokens["cache_hit_tokens"],
                     cache_miss_tokens=run.tokens["cache_miss_tokens"],
@@ -218,7 +218,7 @@ class ExecutionPlanner:
                 text, tokens, log = agent_executor.run_agent(llm, context, tools)
                 activated_agents = "react_tools"
                 return AnalysisResult(
-                    ai_ans=text,
+                    reply=text,
                     token_cost=tokens["total_tokens_used"],
                     cache_hit_tokens=tokens["cache_hit_tokens"],
                     cache_miss_tokens=tokens["cache_miss_tokens"],
@@ -231,7 +231,7 @@ class ExecutionPlanner:
 
             text, tokens, log = chain_executor.run_chain(llm, context)
             return AnalysisResult(
-                ai_ans=text,
+                reply=text,
                 token_cost=tokens["total_tokens_used"],
                 cache_hit_tokens=tokens["cache_hit_tokens"],
                 cache_miss_tokens=tokens["cache_miss_tokens"],
@@ -246,7 +246,7 @@ class ExecutionPlanner:
         except Exception as exc:
             logger.error("Execution failed, degrading to fallback: %s", exc, exc_info=True)
             return AnalysisResult(
-                ai_ans=FALLBACK_FEEDBACK,
+                reply=FALLBACK_FEEDBACK,
                 token_cost=0,
                 cache_hit_tokens=0,
                 cache_miss_tokens=0,
@@ -272,6 +272,9 @@ def resolve_llm_clients_by_tier(
     llm_factory: LLMFactory,
     tracer: Any | None = None,
     prefer_active: bool = True,
+    user_id: str | None = None,
 ) -> dict[str, LLMClient]:
     """Build per-tier LLM clients from ``model_providers`` table."""
-    return llm_factory.resolve_by_tier(db, tracer=tracer, prefer_active=prefer_active)
+    return llm_factory.resolve_by_tier(
+        db, tracer=tracer, prefer_active=prefer_active, user_id=user_id
+    )

@@ -29,14 +29,14 @@ class _FakeContainer:
     def __init__(self, planner: ExecutionPlanner) -> None:
         self._planner = planner
 
-    def build_execution_planner(self, _db) -> ExecutionPlanner:
+    def build_execution_planner(self, _db, *, user_id: str = "default") -> ExecutionPlanner:
         return self._planner
 
 
 def _seed_week(db_session) -> None:
     monday, _ = weekly_service.week_bounds()
-    diary_service.create_entry(db_session, content="今天过得还不错。", entry_date=monday)
-    card_service.create_card(db_session, emotion="平静", event_summary="散步", mood_score=0.6)
+    diary_service.create_entry(db_session, user_id="default", content="今天过得还不错。", entry_date=monday)
+    card_service.create_card(db_session, user_id="default", emotion="平静", event_summary="散步", mood_score=0.6)
 
 
 def test_week_bounds_returns_monday_to_sunday() -> None:
@@ -55,7 +55,7 @@ def test_build_weekly_content_contains_weekly_keyword() -> None:
 
 def test_create_weekly_report_persists(db_session) -> None:
     _seed_week(db_session)
-    report = weekly_service.create_weekly_report(db_session, planner=_planner())
+    report = weekly_service.create_weekly_report(db_session, user_id="default", planner=_planner())
 
     assert report.id is not None
     assert report.content
@@ -67,21 +67,22 @@ def test_create_weekly_report_persists(db_session) -> None:
 
 def test_create_weekly_report_rejects_duplicate(db_session) -> None:
     _seed_week(db_session)
-    weekly_service.create_weekly_report(db_session, planner=_planner())
+    weekly_service.create_weekly_report(db_session, user_id="default", planner=_planner())
     with pytest.raises(WeeklyReportExistsError):
-        weekly_service.create_weekly_report(db_session, planner=_planner())
+        weekly_service.create_weekly_report(db_session, user_id="default", planner=_planner())
 
 
 def test_create_weekly_report_empty_raises(db_session) -> None:
     with pytest.raises(WeeklyReportEmptyError):
-        weekly_service.create_weekly_report(db_session, planner=_planner())
+        weekly_service.create_weekly_report(db_session, user_id="default", planner=_planner())
 
 
 def test_regenerate_weekly_replaces_existing(db_session) -> None:
     _seed_week(db_session)
-    first = weekly_service.create_weekly_report(db_session, planner=_planner())
+    first = weekly_service.create_weekly_report(db_session, user_id="default", planner=_planner())
     second = weekly_service.regenerate_weekly_report(
         db_session,
+        user_id="default",
         container=_FakeContainer(_planner()),  # type: ignore[arg-type]
     )
     assert second.period_start == first.period_start
@@ -93,9 +94,9 @@ def test_regenerate_weekly_replaces_existing(db_session) -> None:
 
 def test_latest_and_delete(db_session) -> None:
     _seed_week(db_session)
-    report = weekly_service.create_weekly_report(db_session, planner=_planner())
+    report = weekly_service.create_weekly_report(db_session, user_id="default", planner=_planner())
 
-    assert weekly_service.get_latest_report(db_session).id == report.id
-    assert weekly_service.delete_report(db_session, report.id) is True
+    assert weekly_service.get_latest_report(db_session, user_id="default").id == report.id
+    assert weekly_service.delete_report(db_session, report_id=report.id, user_id="default") is True
     with pytest.raises(WeeklyReportNotFoundError):
-        weekly_service.get_latest_report(db_session)
+        weekly_service.get_latest_report(db_session, user_id="default")

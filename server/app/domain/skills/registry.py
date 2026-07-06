@@ -193,3 +193,50 @@ def create_default_registry(
     ):
         registry.register(skill)
     return registry
+
+
+def create_diary_registry(
+    tracer: SkillActivationTracer | None = None,
+) -> SkillRegistry:
+    """Factory: register skills for scene 1 (diary analysis).
+
+    Shares crisis_detector and sentiment_skill with the default registry, plus
+    memory_recall for retrospective diary entries (e.g. "上周和朋友去了公园"
+    triggers memory retrieval of related past events).
+    """
+    from app.domain.skills.crisis_detector import CrisisDetectorSkill
+    from app.domain.skills.memory_recall_skill import MemoryRecallSkill
+    from app.domain.skills.sentiment_skill import SentimentSkill
+
+    registry = SkillRegistry(tracer=tracer)
+    for skill in (
+        CrisisDetectorSkill(),
+        SentimentSkill(),
+        MemoryRecallSkill(),
+    ):
+        registry.register(skill)
+    return registry
+
+
+def create_chat_registry(
+    tracer: SkillActivationTracer | None = None,
+) -> SkillRegistry:
+    """Factory: register skills for scene 2 (multi-turn conversation).
+
+    Shares crisis_detector and sentiment_skill with scene 1, plus
+    scene-2-specific skills (memory_recall, entity_tracker).
+    """
+    from app.domain.skills.crisis_detector import CrisisDetectorSkill
+    from app.domain.skills.entity_tracker_skill import EntityTrackerSkill
+    from app.domain.skills.memory_recall_skill import MemoryRecallSkill
+    from app.domain.skills.sentiment_skill import SentimentSkill
+
+    registry = SkillRegistry(tracer=tracer)
+    for skill in (
+        CrisisDetectorSkill(),
+        SentimentSkill(),
+        MemoryRecallSkill(),
+        EntityTrackerSkill(),
+    ):
+        registry.register(skill)
+    return registry

@@ -16,12 +16,24 @@ from app.shared.errors import ModelProviderNotFoundError, ValidationError
 logger = logging.getLogger(__name__)
 
 
-def list_models(db: Session) -> list[ModelProviderRow]:
-    return db.query(ModelProviderRow).order_by(ModelProviderRow.id.asc()).all()
+def list_models(db: Session, *, user_id: str) -> list[ModelProviderRow]:
+    return (
+        db.query(ModelProviderRow)
+        .filter(ModelProviderRow.user_id == user_id)
+        .order_by(ModelProviderRow.id.asc())
+        .all()
+    )
 
 
-def get_model(db: Session, model_id: int) -> ModelProviderRow:
-    row = db.query(ModelProviderRow).filter(ModelProviderRow.id == model_id).first()
+def get_model(db: Session, model_id: int, *, user_id: str) -> ModelProviderRow:
+    row = (
+        db.query(ModelProviderRow)
+        .filter(
+            ModelProviderRow.id == model_id,
+            ModelProviderRow.user_id == user_id,
+        )
+        .first()
+    )
     if row is None:
         raise ModelProviderNotFoundError(model_id=model_id)
     return row
@@ -143,9 +155,10 @@ def test_stored_model_connection(
     db: Session,
     model_id: int,
     *,
+    user_id: str,
     settings: Settings | None = None,
 ) -> str | None:
-    row = get_model(db, model_id)
+    row = get_model(db, model_id, user_id=user_id)
     if not row.api_key_encrypted:
         return "未配置 API Key"
     if not row.base_url:
@@ -158,6 +171,7 @@ def test_stored_model_connection(
 def create_model(
     db: Session,
     *,
+    user_id: str,
     model_name: str,
     api_key: str,
     base_url: str,
@@ -171,6 +185,7 @@ def create_model(
         raise ValidationError(error)
 
     row = ModelProviderRow(
+        user_id=user_id,
         model_name=model_name,
         api_key_encrypted=encrypt_api_key(api_key, settings),
         base_url=base_url,
@@ -178,8 +193,8 @@ def create_model(
         is_active=is_active,
     )
     if is_active:
-        _deactivate_others(db, tier=tier, exclude_id=None)
-    elif not get_active_provider_for_tier(db, tier):
+        _deactivate_others(db, user_id=user_id, tier=tier, exclude_id=None)
+    elif not get_active_provider_for_tier(db, tier, user_id=user_id):
         row.is_active = True
         logger.info("Auto-activated first model for tier=%s (id pending commit)", tier)
     db.add(row)
@@ -192,6 +207,7 @@ def update_model(
     db: Session,
     model_id: int,
     *,
+    user_id: str,
     model_name: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
@@ -199,7 +215,7 @@ def update_model(
     is_active: bool | None = None,
     settings: Settings | None = None,
 ) -> ModelProviderRow:
-    row = get_model(db, model_id)
+    row = get_model(db, model_id, user_id=user_id)
     resolved_settings = settings or get_settings()
 
     if model_name is not None:
@@ -220,15 +236,15 @@ def update_model(
     if is_active is not None:
         row.is_active = is_active
         if is_active:
-            _deactivate_others(db, tier=row.tier, exclude_id=row.id)
+            _deactivate_others(db, user_id=user_id, tier=row.tier, exclude_id=row.id)
 
     db.commit()
     db.refresh(row)
     return row
 
 
-def delete_model(db: Session, model_id: int) -> None:
-    row = get_model(db, model_id)
+def delete_model(db: Session, model_id: int, *, user_id: str) -> None:
+    row = get_model(db, model_id, user_id=user_id)
     db.delete(row)
     db.commit()
 
@@ -246,24 +262,34 @@ def model_to_public_dict(row: ModelProviderRow) -> dict[str, Any]:
     }
 
 
-def get_active_provider_for_tier(db: Session, tier: str) -> ModelProviderRow | None:
-    return (
-        db.query(ModelProviderRow)
-        .filter(
-            ModelProviderRow.tier == tier,
-            ModelProviderRow.is_active.is_(True),
-            ModelProviderRow.api_key_encrypted.isnot(None),
-        )
-        .first()
+def get_active_provider_for_tier(
+    db: Session, tier: str, *, user_id: str | None = None
+) -> ModelProviderRow | None:
+    """Return the active provider for ``tier``.
+
+    When ``user_id`` is provided the query is scoped to that user (multi-tenant
+    isolation). Legacy callers (e.g. LLMFactory, mappers) may omit ``user_id``,
+    in which case providers are resolved across all users — to be tightened in
+    a follow-up migration.
+    """
+    query = db.query(ModelProviderRow).filter(
+        ModelProviderRow.tier == tier,
+        ModelProviderRow.is_active.is_(True),
+        ModelProviderRow.api_key_encrypted.isnot(None),
     )
+    if user_id is not None:
+        query = query.filter(ModelProviderRow.user_id == user_id)
+    return query.first()
 
 
-def get_models_status(db: Session, settings: Settings | None = None) -> dict[str, object]:
+def get_models_status(
+    db: Session, *, user_id: str, settings: Settings | None = None
+) -> dict[str, object]:
     """Summarize which tiers have an active provider (for settings / diagnostics UI)."""
     resolved = settings or get_settings()
     tiers: list[dict[str, object]] = []
     for tier in ("light", "medium", "heavy", "default"):
-        provider = get_active_provider_for_tier(db, tier)
+        provider = get_active_provider_for_tier(db, tier, user_id=user_id)
         tiers.append(
             {
                 "tier": tier,
@@ -281,8 +307,13 @@ def get_models_status(db: Session, settings: Settings | None = None) -> dict[str
     }
 
 
-def _deactivate_others(db: Session, *, tier: str, exclude_id: int | None) -> None:
-    query = db.query(ModelProviderRow).filter(ModelProviderRow.tier == tier)
+def _deactivate_others(db: Session, *, user_id: str, tier: str, exclude_id: int | None) -> None:
+    """Deactivate same-tier providers belonging to ``user_id`` (is_active/is_default
+    toggling is scoped to the current user only)."""
+    query = db.query(ModelProviderRow).filter(
+        ModelProviderRow.tier == tier,
+        ModelProviderRow.user_id == user_id,
+    )
     if exclude_id is not None:
         query = query.filter(ModelProviderRow.id != exclude_id)
     for row in query.all():

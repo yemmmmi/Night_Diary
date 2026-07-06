@@ -42,6 +42,22 @@ class LLMClient(Protocol):
         ...
 
 
+@runtime_checkable
+class ToolCapableLLMClient(Protocol):
+    """LLM client that additionally supports native function calling.
+
+    Implementations (e.g. ChatOpenAI) expose ``bind_tools`` returning a
+    runnable that accepts tool specs and produces responses with
+    ``tool_calls``. TracingLLMClient transparently delegates this.
+    """
+
+    def invoke(self, prompt: str) -> Any: ...
+
+    async def ainvoke(self, prompt: str) -> Any: ...
+
+    def bind_tools(self, tools: list[Any]) -> Any: ...
+
+
 def message_text(response: Any) -> str:
     """Extract the text body from a message-like LLM response.
 
@@ -52,4 +68,4 @@ def message_text(response: Any) -> str:
     return str(content)
 
 
-__all__ = ["LLMClient", "message_text"]
+__all__ = ["LLMClient", "ToolCapableLLMClient", "message_text"]

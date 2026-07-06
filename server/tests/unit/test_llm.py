@@ -33,6 +33,7 @@ def test_create_from_provider_builds_client(db_session) -> None:
     with patch.object(model_service, "validate_model_connection", return_value=None):
         row = model_service.create_model(
             db_session,
+            user_id="default",
             model_name="deepseek-chat",
             api_key="sk-provider",
             base_url="https://api.deepseek.com/v1",
@@ -48,6 +49,7 @@ def test_create_from_provider_uses_stub_when_langchain_missing(db_session) -> No
     with patch.object(model_service, "validate_model_connection", return_value=None):
         row = model_service.create_model(
             db_session,
+            user_id="default",
             model_name="deepseek-chat",
             api_key="sk-provider",
             base_url="https://api.deepseek.com/v1",
@@ -67,6 +69,7 @@ def test_create_for_tier_returns_active_provider_client(db_session) -> None:
     with patch.object(model_service, "validate_model_connection", return_value=None):
         model_service.create_model(
             db_session,
+            user_id="default",
             model_name="heavy-model",
             api_key="sk-heavy",
             base_url="https://api.example.com/v1",
@@ -82,6 +85,7 @@ def test_create_for_tier_falls_back_to_default_tier(db_session) -> None:
     with patch.object(model_service, "validate_model_connection", return_value=None):
         model_service.create_model(
             db_session,
+            user_id="default",
             model_name="default-model",
             api_key="sk-default",
             base_url="https://api.example.com/v1",
@@ -98,6 +102,7 @@ def test_resolve_by_tier_maps_active_providers(db_session) -> None:
     with patch.object(model_service, "validate_model_connection", return_value=None):
         model_service.create_model(
             db_session,
+            user_id="default",
             model_name="light-model",
             api_key="sk-light",
             base_url="https://api.example.com/v1",
@@ -106,6 +111,7 @@ def test_resolve_by_tier_maps_active_providers(db_session) -> None:
         )
         model_service.create_model(
             db_session,
+            user_id="default",
             model_name="heavy-model",
             api_key="sk-heavy",
             base_url="https://api.example.com/v1",
@@ -123,6 +129,7 @@ def test_stored_api_key_is_encrypted_not_plaintext(db_session) -> None:
     with patch.object(model_service, "validate_model_connection", return_value=None):
         row = model_service.create_model(
             db_session,
+            user_id="default",
             model_name="secure",
             api_key=plain,
             base_url="https://api.example.com/v1",

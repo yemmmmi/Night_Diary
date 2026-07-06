@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Response, status
 
-from app.api.deps import ContainerDep
+from app.api.deps import ContainerDep, CurrentUserDep
 from app.api.schemas import (
     EpisodicEntryResponse,
     EpisodicEntryUpdateRequest,
@@ -22,11 +22,11 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 
 
 @router.get("/episodic", response_model=list[EpisodicEntryResponse])
-def list_episodic(container: ContainerDep) -> list[EpisodicEntryResponse]:
-    container.ensure_memory()
+def list_episodic(container: ContainerDep, user: CurrentUserDep) -> list[EpisodicEntryResponse]:
+    container.ensure_memory(user_id=str(user.id))
     return [
         EpisodicEntryResponse.model_validate(entry)
-        for entry in memory_service.list_episodic(container)
+        for entry in memory_service.list_episodic(container, user_id=str(user.id))
     ]
 
 
@@ -35,15 +35,17 @@ def update_episodic_entry(
     entry_id: str,
     body: EpisodicEntryUpdateRequest,
     container: ContainerDep,
+    user: CurrentUserDep,
 ) -> EpisodicEntryResponse:
-    container.ensure_memory()
+    container.ensure_memory(user_id=str(user.id))
     updated = memory_service.update_episodic(
         container,
         entry_id,
-        event=body.event,
+        event_summary=body.event_summary,
         emotion=body.emotion,
-        ai_suggestion=body.ai_suggestion,
+        reply_insight=body.reply_insight,
         importance=body.importance,
+        user_id=str(user.id),
     )
     return EpisodicEntryResponse.model_validate(updated)
 
@@ -53,22 +55,26 @@ def update_episodic_entry(
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
 )
-def delete_episodic_entry(entry_id: str, container: ContainerDep) -> Response:
-    container.ensure_memory()
-    memory_service.delete_episodic(container, entry_id)
+def delete_episodic_entry(
+    entry_id: str, container: ContainerDep, user: CurrentUserDep
+) -> Response:
+    container.ensure_memory(user_id=str(user.id))
+    memory_service.delete_episodic(container, entry_id, user_id=str(user.id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/profile", response_model=UserProfileResponse | None)
-def get_profile(container: ContainerDep) -> UserProfileResponse | None:
-    container.ensure_memory()
-    profile = memory_service.get_profile(container)
+def get_profile(container: ContainerDep, user: CurrentUserDep) -> UserProfileResponse | None:
+    container.ensure_memory(user_id=str(user.id))
+    profile = memory_service.get_profile(container, user_id=str(user.id))
     if profile is None:
         return None
     return UserProfileResponse.model_validate(profile)
 
 
 @router.get("/overview", response_model=MemoryOverviewResponse)
-def get_overview(container: ContainerDep) -> MemoryOverviewResponse:
-    container.ensure_memory()
-    return MemoryOverviewResponse.model_validate(memory_service.get_overview(container))
+def get_overview(container: ContainerDep, user: CurrentUserDep) -> MemoryOverviewResponse:
+    container.ensure_memory(user_id=str(user.id))
+    return MemoryOverviewResponse.model_validate(
+        memory_service.get_overview(container, user_id=str(user.id))
+    )

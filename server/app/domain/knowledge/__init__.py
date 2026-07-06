@@ -1,6 +1,5 @@
 """Domain knowledge package — ChromaDB store and entity extraction."""
 
-from app.domain.knowledge.extractor import KnowledgeExtractor
 from app.domain.knowledge.types import (
     EntityRecord,
     EntityType,
@@ -15,7 +14,6 @@ __all__ = [
     "EntityType",
     "ExtractionResult",
     "KnowledgeCategory",
-    "KnowledgeExtractor",
     "KnowledgeHit",
     "get_domain_store",
 ]

@@ -26,7 +26,8 @@ class TagRow(Base):
     __tablename__ = "tags"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(32), nullable=False)
     color: Mapped[str] = mapped_column(String(20), default="#6B7280")
     usage_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

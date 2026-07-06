@@ -39,9 +39,9 @@ def _load_episodic_context(
         entries = episodic.retrieve_relevant(query=query, top_k=5)
         return [
             {
-                "event": entry.event,
+                "event_summary": entry.event_summary,
                 "emotion": entry.emotion,
-                "ai_suggestion": entry.ai_suggestion,
+                "reply_insight": entry.reply_insight,
                 "timestamp": entry.timestamp,
             }
             for entry in entries

@@ -17,10 +17,9 @@ def _entry(
     emotion: str = "happy",
 ) -> EpisodicEntry:
     return EpisodicEntry(
-        event=event,
+        event_summary=event,
         emotion=emotion,
-        ai_suggestion="建议",
-        user_feedback="none",
+        reply_insight="建议",
         timestamp=timestamp if timestamp is not None else time.time(),
         diary_ids=["d01"],
         importance=importance,
@@ -73,7 +72,7 @@ def test_retrieve_respects_decay(episodic_store: SqliteEpisodicMemoryStore) -> N
     )
 
     results = memory.retrieve_relevant(now=now)
-    assert results[0].event == "新事件"
+    assert results[0].event_summary == "新事件"
 
 
 def test_persistence_survives_restart(episodic_store: SqliteEpisodicMemoryStore) -> None:
@@ -85,7 +84,7 @@ def test_persistence_survives_restart(episodic_store: SqliteEpisodicMemoryStore)
     reloaded.load()
     hits = reloaded.retrieve_relevant(top_k=1)
     assert len(hits) == 1
-    assert hits[0].event == "失眠"
+    assert hits[0].event_summary == "失眠"
 
 
 def test_decay_purges_entries_below_threshold(episodic_store: SqliteEpisodicMemoryStore) -> None:
@@ -140,7 +139,7 @@ def test_multiturn_insomnia_context_retained(episodic_store: SqliteEpisodicMemor
     )
 
     hits = memory.retrieve_relevant(query="睡眠", now=day3, top_k=2)
-    assert any(hit.event == "失眠" for hit in hits)
+    assert any(hit.event_summary == "失眠" for hit in hits)
 
 
 def test_query_relevance_ranks_related_entry_higher(episodic_store: SqliteEpisodicMemoryStore) -> None:
@@ -154,7 +153,7 @@ def test_query_relevance_ranks_related_entry_higher(episodic_store: SqliteEpisod
     memory.store(_entry(importance=0.6, timestamp=now, event="失眠", emotion="焦虑"))
 
     hits = memory.retrieve_relevant(query="睡眠", now=now, top_k=2)
-    assert hits[0].event == "失眠"
+    assert hits[0].event_summary == "失眠"
 
 
 def test_empty_query_keeps_importance_order(episodic_store: SqliteEpisodicMemoryStore) -> None:
@@ -166,4 +165,4 @@ def test_empty_query_keeps_importance_order(episodic_store: SqliteEpisodicMemory
     memory.store(_entry(importance=0.9, timestamp=now, event="加班"))
 
     hits = memory.retrieve_relevant(query="", now=now, top_k=2)
-    assert hits[0].event == "加班"
+    assert hits[0].event_summary == "加班"

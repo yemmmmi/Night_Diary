@@ -18,6 +18,7 @@ def test_resolve_llm_clients_by_tier_maps_active_providers(db_session) -> None:
     with patch.object(model_service, "validate_model_connection", return_value=None):
         model_service.create_model(
             db_session,
+            user_id="default",
             model_name="light-model",
             api_key="sk-light",
             base_url="https://api.example.com/v1",
@@ -26,6 +27,7 @@ def test_resolve_llm_clients_by_tier_maps_active_providers(db_session) -> None:
         )
         model_service.create_model(
             db_session,
+            user_id="default",
             model_name="heavy-model",
             api_key="sk-heavy",
             base_url="https://api.example.com/v1",
