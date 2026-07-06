@@ -11,7 +11,6 @@ no GPU). Two variants:
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from tests.eval._http_llm import Message, usage_block
@@ -81,7 +80,7 @@ class ProgrammableStubLLM:
     async def ainvoke(self, prompt: str) -> Message:
         return Message(content=self._match(prompt), response_metadata=usage_block(100, 40))
 
-    def bind_tools(self, tool_specs: list[Any]) -> "BoundProgrammableStub":
+    def bind_tools(self, tool_specs: list[Any]) -> BoundProgrammableStub:
         """Return a wrapper that simulates native tool calling."""
         return BoundProgrammableStub(self, tool_specs)
 

@@ -211,7 +211,7 @@ class HttpLLM:
         return await self._post_async(prompt, tools=tools)
 
     # Support bind_tools protocol for native function calling detection
-    def bind_tools(self, tool_specs: list[Any]) -> "BoundToolLLM":
+    def bind_tools(self, tool_specs: list[Any]) -> BoundToolLLM:
         """Return a wrapper that injects tool schemas into every invoke call."""
         return BoundToolLLM(self, tool_specs)
 
