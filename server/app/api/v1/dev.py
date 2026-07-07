@@ -32,7 +32,7 @@ router = APIRouter(prefix="/dev", tags=["dev"])
 _SSE_HEARTBEAT_INTERVAL = 30.0
 
 
-def _format_sse(event: dict) -> str:
+def _format_sse(event: dict[str, Any]) -> str:
     """Format a dict as an SSE message string.
 
     Uses ``default=str`` so non-JSON-serialisable values (datetime, etc.)
@@ -155,7 +155,8 @@ def get_trace_detail(trace_id: str, db: DbDep) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")
     if row.trace_json:
         try:
-            return json.loads(row.trace_json)
+            data: dict[str, Any] = json.loads(row.trace_json)
+            return data
         except (json.JSONDecodeError, TypeError):
             # Fall back to summary if the JSON is corrupt.
             return _row_to_summary(row)

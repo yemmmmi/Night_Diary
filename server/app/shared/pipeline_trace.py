@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -225,12 +225,12 @@ def get_trace() -> PipelineTrace | None:
     return _current_trace.get()
 
 
-def set_trace(trace: PipelineTrace | None) -> ContextVar[PipelineTrace | None]:
+def set_trace(trace: PipelineTrace | None) -> Token[PipelineTrace | None]:
     """Set the current pipeline trace for this context."""
     return _current_trace.set(trace)
 
 
-def reset_trace(token: ContextVar[PipelineTrace | None]) -> None:
+def reset_trace(token: Token[PipelineTrace | None]) -> None:
     """Reset the context trace to its previous value using a token from ``set_trace``."""
     _current_trace.reset(token)
 
