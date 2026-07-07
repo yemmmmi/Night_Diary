@@ -65,7 +65,7 @@ def understand_node(state: dict[str, Any]) -> dict[str, Any]:
     already ran ChatIntentClassifier), so this node mainly handles slot
     extraction and query understanding.
     """
-    with trace_span("S8.2_understand", "理解节点") as span:
+    with trace_span("S8.2_understand", "理解节点") as _span:
         content = state.get("content", "")
         intent_result = state.get("intent_result")
         intent_category = intent_result.intent_category if intent_result else ""

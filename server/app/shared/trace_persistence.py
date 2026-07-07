@@ -1,7 +1,8 @@
-"""Trace 持久化和事件推送辅助函数（best-effort，失败仅记日志）。"""
+"""Trace 持久化和事件推送辅助函数 (best-effort, 失败仅记日志)."""
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def persist_trace(db, trace: PipelineTrace, ref_id: str | None = None) -> None:
-    """持久化 trace 到 pipeline_traces 表。best-effort，失败仅记日志不中断。"""
+    """持久化 trace 到 pipeline_traces 表. best-effort, 失败仅记日志不中断."""
     try:
         from app.infrastructure.models.pipeline_trace import PipelineTraceRow
 
@@ -32,10 +33,8 @@ def persist_trace(db, trace: PipelineTrace, ref_id: str | None = None) -> None:
         db.commit()
     except Exception as e:
         logger.warning("Failed to persist trace %s: %s", trace.trace_id, e)
-        try:
+        with contextlib.suppress(Exception):
             db.rollback()
-        except Exception:
-            pass
 
 
 async def publish_trace_complete(trace: PipelineTrace) -> None:

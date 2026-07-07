@@ -299,7 +299,7 @@ async def _trace_event_generator(
                     queue.get(),
                     timeout=_SSE_HEARTBEAT_INTERVAL,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Send heartbeat to keep the connection alive.
                 yield _format_sse(
                     {"type": "heartbeat", "trace_id": trace_id}

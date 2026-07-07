@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -520,10 +521,8 @@ def generate_reply(
     finally:
         if trace is not None:
             persist_trace(db, trace, ref_id=conversation_id)
-            try:
+            with contextlib.suppress(Exception):
                 asyncio.run(publish_trace_complete(trace))
-            except Exception:
-                pass
             if token is not None:
                 reset_trace(token)
 

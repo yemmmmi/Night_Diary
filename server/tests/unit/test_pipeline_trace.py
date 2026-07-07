@@ -21,7 +21,6 @@ from app.shared.pipeline_trace import (
     truncate_snapshot,
 )
 
-
 # ── truncate_snapshot ────────────────────────────────────────────────────
 
 
@@ -352,10 +351,9 @@ class TestContextAndTraceSpan:
         trace = PipelineTrace(scenario="error_test")
         token = set_trace(trace)
         try:
-            with pytest.raises(ValueError, match="boom"):
-                with trace_span("failing_stage") as span:
-                    assert span is not None
-                    raise ValueError("boom")
+            with pytest.raises(ValueError, match="boom"), trace_span("failing_stage") as span:
+                assert span is not None
+                raise ValueError("boom")
             # Span should be recorded with error status
             assert len(trace.spans) == 1
             span = trace.spans[0]
@@ -402,11 +400,10 @@ class TestContextAndTraceSpan:
         trace = PipelineTrace(scenario="nested_error")
         token = set_trace(trace)
         try:
-            with pytest.raises(RuntimeError, match="child failed"):
-                with trace_span("parent") as parent_span:
-                    assert parent_span is not None
-                    with trace_span("child"):
-                        raise RuntimeError("child failed")
+            with pytest.raises(RuntimeError, match="child failed"), trace_span("parent") as parent_span:
+                assert parent_span is not None
+                with trace_span("child"):
+                    raise RuntimeError("child failed")
             parent = trace.spans[0]
             assert parent.stage_name == "parent"
             # Parent also gets error status because the exception propagated
