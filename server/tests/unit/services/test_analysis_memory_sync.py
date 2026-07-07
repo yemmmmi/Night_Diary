@@ -21,6 +21,7 @@ class _FakeDiaryEntry:
     def __init__(self, entry_id: int = 1, content: str = "今天心情不错，很开心") -> None:
         self.id = entry_id
         self.content = content
+        self.image_assets_json = None
 
 
 class _FakeEpisodic:
