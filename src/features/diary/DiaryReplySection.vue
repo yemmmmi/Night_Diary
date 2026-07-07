@@ -53,11 +53,14 @@ async function onTrigger() {
   try {
     await analysisStore.triggerForDiary(props.diaryId)
     emit('refreshed')
-  } finally {
+  } catch (e) {
     if (settings.developerMode) {
       devStore.setActiveTrace(null)
     }
+    throw e
   }
+  // Do NOT clear activeTraceId on success — useTraceStream self-closes on
+  // trace_complete; clearing here would kill the SSE stream prematurely.
 }
 
 async function onRegenerate() {
@@ -67,11 +70,14 @@ async function onRegenerate() {
   try {
     await analysisStore.regenerateForDiary(props.diaryId)
     emit('refreshed')
-  } finally {
+  } catch (e) {
     if (settings.developerMode) {
       devStore.setActiveTrace(null)
     }
+    throw e
   }
+  // Do NOT clear activeTraceId on success — useTraceStream self-closes on
+  // trace_complete; clearing here would kill the SSE stream prematurely.
 }
 
 async function onDeleteConfirm() {

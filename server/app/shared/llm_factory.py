@@ -11,7 +11,7 @@ from app.config import Settings, get_settings
 from app.infrastructure.models.model_provider import ModelProviderRow
 from app.infrastructure.security import decrypt_api_key
 from app.shared.errors import AIServiceUnavailableError
-from app.shared.llm import LLMClient
+from app.shared.llm import LLMClient, LLMPrompt, VisionCapableLLMClient
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -20,12 +20,13 @@ logger = logging.getLogger(__name__)
 
 
 class StubLLMClient:
-    """Test/dev stub implementing :class:`LLMClient`."""
+    """Test/dev stub implementing :class:`LLMClient` and vision methods."""
 
     def __init__(self, *, model: str = "stub", reply: str = "测试回应") -> None:
         self.model = model
         self._reply = reply
         self.prompts: list[str] = []
+        self.image_prompts: list[LLMPrompt] = []
 
     def invoke(self, prompt: str) -> Any:
         self.prompts.append(prompt)
@@ -38,6 +39,13 @@ class StubLLMClient:
 
     async def ainvoke(self, prompt: str) -> Any:
         return self.invoke(prompt)
+
+    def invoke_with_images(self, prompt: LLMPrompt) -> Any:
+        self.image_prompts.append(prompt)
+        return self.invoke(prompt if isinstance(prompt, str) else "[image prompt]")
+
+    async def ainvoke_with_images(self, prompt: LLMPrompt) -> Any:
+        return self.invoke_with_images(prompt)
 
 
 class LLMFactory:
@@ -137,7 +145,14 @@ class LLMFactory:
                 logger.warning("Skip provider id=%s tier=%s: %s", provider.id, tier, exc)
         return clients
 
-    def _build_client(self, *, api_key: str, base_url: str, model_name: str) -> LLMClient:
+    def _build_client(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        model_name: str,
+        max_completion_tokens: int = 300,
+    ) -> LLMClient:
         try:
             from langchain_openai import ChatOpenAI
         except ImportError:
@@ -151,6 +166,41 @@ class LLMFactory:
                 base_url=base_url,
                 model=model_name,
                 temperature=0.7,
-                max_completion_tokens=300,
+                max_completion_tokens=max_completion_tokens,
             ),
         )
+
+    def create_vision_client(
+        self, *, max_completion_tokens: int = 1024
+    ) -> VisionCapableLLMClient:
+        """Build a vision-capable client from environment defaults.
+
+        Higher token budget than the default text client: VLM responses
+        (description + transcribed text) are longer than 300 tokens.
+        """
+        if not self._settings.llm_api_key:
+            raise AIServiceUnavailableError(
+                "AI 服务未配置：请在设置中添加模型，或设置环境变量 LLM_API_KEY"
+            )
+        client = self._build_client(
+            api_key=self._settings.llm_api_key,
+            base_url=self._settings.llm_base_url,
+            model_name=self._settings.llm_model,
+            max_completion_tokens=max_completion_tokens,
+        )
+        return cast(VisionCapableLLMClient, client)
+
+    def create_vision_from_provider(
+        self, provider: ModelProviderRow, *, max_completion_tokens: int = 1024
+    ) -> VisionCapableLLMClient:
+        """Build a vision-capable client from a stored model provider row."""
+        if not provider.api_key_encrypted:
+            raise AIServiceUnavailableError("模型未配置 API Key")
+        api_key = decrypt_api_key(provider.api_key_encrypted, self._settings)
+        client = self._build_client(
+            api_key=api_key,
+            base_url=provider.base_url or self._settings.llm_base_url,
+            model_name=provider.model_name,
+            max_completion_tokens=max_completion_tokens,
+        )
+        return cast(VisionCapableLLMClient, client)

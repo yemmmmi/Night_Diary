@@ -26,7 +26,29 @@ thin HTTP adapter.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+import base64
+from typing import Any, Literal, Protocol, TypedDict, TypeAlias, runtime_checkable
+
+
+class ImageContentBlock(TypedDict):
+    """A single image part of a multimodal prompt.
+
+    Mirrors LangChain's content-block shape so a ``ChatOpenAI`` instance can
+    consume it directly when wrapped in a ``LLMPrompt`` list. ``detail``
+    controls the vision-token budget (``low``/``high``/``auto``).
+    """
+
+    type: Literal["image"]
+    source_type: Literal["url", "base64"]
+    data: str
+    mime_type: str
+    detail: Literal["low", "high", "auto"]
+
+
+#: A prompt that is either a plain string (existing call sites) or a list of
+#: text/image parts for multimodal calls. Existing ``invoke(prompt: str)``
+#: call sites keep working because ``str`` satisfies this alias.
+LLMPrompt: TypeAlias = "str | list[str | ImageContentBlock]"
 
 
 @runtime_checkable
@@ -58,6 +80,46 @@ class ToolCapableLLMClient(Protocol):
     def bind_tools(self, tools: list[Any]) -> Any: ...
 
 
+@runtime_checkable
+class VisionCapableLLMClient(Protocol):
+    """LLM client that additionally supports multimodal (image) prompts.
+
+    Mirrors the :class:`ToolCapableLLMClient` extension pattern: existing
+    ``invoke``/``ainvoke`` string call sites keep working, while image-aware
+    services use ``invoke_with_images``/``ainvoke_with_images`` with a
+    :data:`LLMPrompt` list. ``TracingLLMClient`` transparently delegates this.
+    """
+
+    def invoke(self, prompt: str) -> Any: ...
+
+    async def ainvoke(self, prompt: str) -> Any: ...
+
+    def invoke_with_images(self, prompt: LLMPrompt) -> Any: ...
+
+    async def ainvoke_with_images(self, prompt: LLMPrompt) -> Any: ...
+
+
+def build_image_block(
+    image_bytes: bytes,
+    mime_type: str,
+    *,
+    detail: Literal["low", "high", "auto"] = "auto",
+) -> ImageContentBlock:
+    """Build a base64 :class:`ImageContentBlock` from raw image bytes.
+
+    ``detail="auto"`` lets the provider choose resolution; lower to ``"low"``
+    for quick classification, raise to ``"high"`` for dense text/screenshots.
+    """
+    encoded = base64.b64encode(image_bytes).decode("utf-8")
+    return ImageContentBlock(
+        type="image",
+        source_type="base64",
+        data=encoded,
+        mime_type=mime_type,
+        detail=detail,
+    )
+
+
 def message_text(response: Any) -> str:
     """Extract the text body from a message-like LLM response.
 
@@ -68,4 +130,12 @@ def message_text(response: Any) -> str:
     return str(content)
 
 
-__all__ = ["LLMClient", "ToolCapableLLMClient", "message_text"]
+__all__ = [
+    "ImageContentBlock",
+    "LLMClient",
+    "LLMPrompt",
+    "ToolCapableLLMClient",
+    "VisionCapableLLMClient",
+    "build_image_block",
+    "message_text",
+]

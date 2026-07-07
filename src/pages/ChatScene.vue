@@ -145,11 +145,18 @@ async function onSend(text: string) {
       pendingUserText.value = null
     }
     scrollToBottom()
-  } finally {
+  } catch (e) {
+    // On failure, clear the trace so the panel doesn't hang in "connecting".
     if (settings.developerMode) {
       devStore.setActiveTrace(null)
     }
+    throw e
   }
+  // NOTE: Do NOT clear activeTraceId here.  The SSE stream (useTraceStream)
+  // is still draining span_complete events from the EventBus.  Clearing the
+  // id now would close the EventSource before any events arrive, leaving the
+  // panel stuck on "等待操作...".  The stream self-closes on trace_complete;
+  // the next onSend() call replaces the id with a fresh one.
 }
 
 async function onGenerateCard() {

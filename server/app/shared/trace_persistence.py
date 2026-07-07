@@ -76,3 +76,49 @@ async def publish_span_complete(trace: PipelineTrace, span) -> None:
         )
     except Exception as e:
         logger.warning("Failed to publish span_complete: %s", e)
+
+
+def publish_span_complete_sync(trace: PipelineTrace, span) -> None:
+    """Sync wrapper for ``publish_span_complete`` — call from worker threads.
+
+    Uses ``TraceEventBus.publish_from_thread`` so the fan-out is scheduled on
+    the main event loop via ``call_soon_threadsafe``, avoiding the cross-loop
+    race where ``asyncio.run`` creates a temporary loop that can't wake up
+    the SSE subscriber's ``await queue.get()``.
+    """
+    try:
+        from app.shared.trace_event_bus import get_event_bus
+
+        event_bus = get_event_bus()
+        event_bus.publish_from_thread(
+            trace.trace_id,
+            {
+                "type": "span_complete",
+                "trace_id": trace.trace_id,
+                "span": span.to_dict(),
+            },
+        )
+    except Exception as e:
+        logger.warning("Failed to publish span_complete: %s", e)
+
+
+def publish_trace_complete_sync(trace: PipelineTrace) -> None:
+    """Sync wrapper for ``publish_trace_complete`` — call from worker threads."""
+    try:
+        from app.shared.trace_event_bus import get_event_bus
+
+        event_bus = get_event_bus()
+        event_bus.publish_from_thread(
+            trace.trace_id,
+            {
+                "type": "trace_complete",
+                "trace_id": trace.trace_id,
+                "trace": {
+                    "status": trace.status,
+                    "duration_ms": trace.duration_ms,
+                    "span_count": len(trace.spans),
+                },
+            },
+        )
+    except Exception as e:
+        logger.warning("Failed to publish trace_complete: %s", e)

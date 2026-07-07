@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -19,7 +18,7 @@ from app.shared.pipeline_trace import (
     set_trace,
     trace_span,
 )
-from app.shared.trace_persistence import persist_trace, publish_trace_complete
+from app.shared.trace_persistence import persist_trace, publish_trace_complete_sync
 
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
@@ -412,7 +411,7 @@ def trigger_analysis(
         if trace is not None:
             persist_trace(db, trace, ref_id=str(diary_id))
             try:
-                asyncio.run(publish_trace_complete(trace))
+                publish_trace_complete_sync(trace)
             except Exception:
                 pass
             if token is not None:

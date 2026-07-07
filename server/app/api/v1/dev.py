@@ -207,7 +207,7 @@ async def stream_trace(
         for span in active_trace.spans:
             initial_events.append(
                 {
-                    "type": "span",
+                    "type": "span_complete",
                     "trace_id": trace_id,
                     "span": span.to_dict(),
                 }
@@ -242,7 +242,7 @@ async def stream_trace(
                     for span in persisted.get("spans", []):
                         initial_events.append(
                             {
-                                "type": "span",
+                                "type": "span_complete",
                                 "trace_id": trace_id,
                                 "span": span,
                             }
