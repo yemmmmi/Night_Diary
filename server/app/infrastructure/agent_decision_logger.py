@@ -28,6 +28,7 @@ class SqliteAgentDecisionLogger:
                     tier=entry.tier,
                     skill_ids=list(entry.skill_ids),
                     reasoning=entry.reasoning,
+                    trace_id=entry.trace_id,
                     created_at=entry.created_at.timestamp(),
                 )
             )
@@ -49,6 +50,7 @@ class SqliteAgentDecisionLogger:
                     tier=row.tier,
                     skill_ids=tuple(row.skill_ids or ()),
                     reasoning=row.reasoning,
+                    trace_id=row.trace_id or "",
                     created_at=_timestamp_to_datetime(row.created_at),
                 )
                 for row in rows

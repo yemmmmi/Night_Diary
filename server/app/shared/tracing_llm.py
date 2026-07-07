@@ -10,6 +10,7 @@ from typing import Any
 
 from app.domain.agents.state import extract_token_usage
 from app.shared.llm import LLMClient, message_text
+from app.shared.pipeline_trace import get_trace
 from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
 logger = logging.getLogger(__name__)
@@ -74,10 +75,13 @@ class TracingLLMClient:
     def _record(self, prompt: str, response: Any, started: float, error: str | None) -> None:
         usage = extract_token_usage(response) if response is not None else {}
         text = message_text(response) if response is not None else ""
+        trace = get_trace()
+        trace_id = trace.trace_id if trace else ""
         self._tracer.record(
             LLMCallRecord(
                 id=uuid.uuid4().hex,
                 decision_id=self._decision_id,
+                trace_id=trace_id,
                 agent_name=self._agent_name,
                 call_type=self._call_type,
                 model=self.model,

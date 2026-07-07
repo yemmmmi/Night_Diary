@@ -65,12 +65,32 @@ export async function getHttpClient(): Promise<AxiosInstance> {
     headers: { Accept: 'application/json' },
   })
 
-  // JWT 请求拦截器：自动附加 Authorization 头
+  // JWT 请求拦截器：自动附加 Authorization 头 + 开发者模式头
   client.interceptors.request.use((config) => {
     const token = localStorage.getItem('night_diary_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+
+    // 开发者模式：附加 X-Developer-Mode 和 X-Trace-Id 头
+    const settingsRaw = localStorage.getItem('night-diary-app-settings')
+    if (settingsRaw) {
+      try {
+        const settings = JSON.parse(settingsRaw)
+        if (settings.developerMode) {
+          config.headers['X-Developer-Mode'] = 'true'
+          if (!config.headers['X-Trace-Id']) {
+            const activeId = localStorage.getItem('night-diary-active-trace-id')
+            if (activeId) {
+              config.headers['X-Trace-Id'] = activeId
+            }
+          }
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+
     return config
   })
 
@@ -116,7 +136,7 @@ export async function getHttpClient(): Promise<AxiosInstance> {
   return httpClient
 }
 
-/** Run an API call; retries while the sidecar core bootstrap returns 503. */
+/** Run an API call; retries while the backend bootstrap returns 503. */
 export async function apiRequest<T>(request: () => Promise<T>): Promise<T> {
   const baseURL = await resolveBackendBaseUrl()
   return requestWithBootstrapRetry(baseURL, request)

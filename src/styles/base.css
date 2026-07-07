@@ -58,6 +58,7 @@
     --radius-button: 0.875rem;
     --font-ui: 'PingFang SC', 'Microsoft YaHei', sans-serif;
     --font-diary: 'KaiTi', 'STKaiti', serif;
+    --font-mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
     --motion-duration: 220ms;
     --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
     --color-success: #5a8f6a;

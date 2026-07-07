@@ -84,7 +84,7 @@ def _patch_analysis_route(monkeypatch: pytest.MonkeyPatch, diary_id: int) -> dic
 
     captured: dict[str, object] = {}
 
-    def fake_trigger(db, did, container, *, style_fragment=None, user_id=None):  # type: ignore[no-untyped-def]
+    def fake_trigger(db, did, container, *, style_fragment=None, user_id=None, trace_id=None):  # type: ignore[no-untyped-def]
         captured["style_fragment"] = style_fragment
         return (object(), 0)
 

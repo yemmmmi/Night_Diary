@@ -76,19 +76,13 @@ EVAL_UPDATE_BASELINE=1 make eval-intent
 
 ## Baseline 指标
 
-> 记录日期：待填充 · 环境：待填充（运行 `EVAL_UPDATE_BASELINE=1 make eval-intent` 后由 `baseline.json` 承载具体数值）
+> 记录日期：2026-07-06 · 环境：deepseek-v4-flash（REAL_MODE, Baseline A）/ oracle 占位（Treatment B）
 
 | 方案 | accuracy | macro_f1 | weighted_f1 | sc_rate | llm_acc | lat_ms | tok/call |
 |------|----------|----------|-------------|---------|---------|--------|----------|
-| baseline_a  | - | - | - | - | - | - | - |
-| treatment_b | - | - | - | - | - | - | - |
+| baseline_a  | 0.8700 | 0.8670 | 0.8677 | 0.2600 | 0.8311 | 2504.36 | 321.43 |
+| treatment_b | 0.9950 | 0.9950 | 0.9950 | 0.2600 | 1.0000 |    0.06 |  112.00 |
 
-> stub 模式参考值（占位，非真实能力）：
-> - `baseline_a`（规则回声）：accuracy = 规则层准确率；`llm_layer_accuracy` = 非短路子集的规则准确率。
-> - `treatment_b`（oracle 占位）：`llm_layer_accuracy` = 1.0；`accuracy` = (短路正确 + 全部非短路正确) / 200。
->
-> **短路到错误类别的上限**：规则层 confidence > 0.9 即短路，LLM 层不再被调用。若规则层短路到**错误**类别
-> （如无显式危机关键词的隐晦危机信号被闲聊信号短路为 `casual_chat`），任何 LLM 层都无法纠正，
-> 该 case 计入两方案的共同错误。`llm_layer_accuracy`（仅非短路子集）与整体 `accuracy` 的差异正是这一上限的体现：
-> stub 模式下 oracle Treatment B 的 `llm_layer_accuracy` = 1.0，但 `accuracy` < 1.0 即源于此。
-> 真实数值需在 REAL_MODE 下生成；微调模型上线后替换 `treatment_b_llm` fixture 重新刷新。
+> Baseline A（规则层+通用LLM）accuracy=0.87，LLM 层准确率 0.83（非短路子集）。
+> Treatment B 为 oracle 占位（微调完成后替换），llm_layer_accuracy=1.0 为上界参考。
+> 主要误分类：entity_query 易被误判为 casual_chat（LLM 将人物近况询问理解为闲聊）。

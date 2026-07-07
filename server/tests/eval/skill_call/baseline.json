@@ -1,23 +1,21 @@
 {
-  "_placeholder": true,
-  "_note": "Placeholder. Run EVAL_UPDATE_BASELINE=1 make eval-skill to seed real values; the regression guard skips while _placeholder is true.",
   "full": {
-    "skill_selection_accuracy": 0.0,
-    "skill_selection_f1": 0.0,
-    "false_activation_rate": 0.0,
-    "missed_activation_rate": 0.0,
-    "avg_prompt_tokens": 0.0,
-    "avg_latency_ms": 0.0,
+    "skill_selection_accuracy": 0.8,
+    "skill_selection_f1": 0.8857,
+    "false_activation_rate": 0.0122,
+    "missed_activation_rate": 0.1842,
+    "avg_prompt_tokens": 2763.37,
+    "avg_latency_ms": 4538.86,
     "avg_disclosure_rounds": 0.0
   },
   "progressive": {
-    "skill_selection_accuracy": 0.0,
-    "skill_selection_f1": 0.0,
+    "skill_selection_accuracy": 0.6667,
+    "skill_selection_f1": 0.8308,
     "false_activation_rate": 0.0,
-    "missed_activation_rate": 0.0,
-    "avg_prompt_tokens": 0.0,
-    "avg_latency_ms": 0.0,
-    "avg_disclosure_rounds": 0.0
+    "missed_activation_rate": 0.2895,
+    "avg_prompt_tokens": 678.9,
+    "avg_latency_ms": 3311.57,
+    "avg_disclosure_rounds": 0.9
   },
-  "token_savings": 0.0
+  "token_savings": 0.7543
 }

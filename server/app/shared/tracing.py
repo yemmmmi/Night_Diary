@@ -32,6 +32,7 @@ class SkillActivationRecord:
     decision_id: str = ""
     input_digest: str = ""
     latency_ms: float = 0.0
+    trace_id: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -79,6 +80,7 @@ class LLMCallRecord:
     error: str | None = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     decision_id: str = ""
+    trace_id: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -124,6 +126,7 @@ class AgentDecisionRecord:
     skill_ids: tuple[str, ...] = ()
     reasoning: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    trace_id: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 

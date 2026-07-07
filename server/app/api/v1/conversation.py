@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Request, Response, status
 
 from app.api.deps import ContainerDep, CurrentUserDep, DbDep
 from app.api.mappers import conversation_to_response, message_to_response
@@ -83,6 +83,7 @@ def send_message(
     db: DbDep,
     user: CurrentUserDep,
     container: ContainerDep,
+    http_request: Request,
 ) -> SendMessageResponse:
     conv = conversation_service.get_conversation(
         db, user_id=str(user.id), conversation_id=conversation_id
@@ -90,6 +91,7 @@ def send_message(
     if conv is None:
         raise ConversationNotFoundError(conversation_id=conversation_id)
 
+    trace_id = http_request.headers.get("X-Trace-Id")
     result = conversation_ai_service.generate_reply(
         db,
         container,
@@ -98,6 +100,7 @@ def send_message(
         diary_ids=body.diary_ids,
         user_id=str(user.id),
         auto_retrieve=body.auto_retrieve,
+        trace_id=trace_id,
     )
 
     user_msg, reply_msg = conversation_service.add_user_message_and_reply(

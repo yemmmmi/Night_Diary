@@ -9,6 +9,7 @@ import type { DiaryEntry } from '@/shared/api/diary'
 import { diarySceneCopy as copy } from '@/shared/copy/diaryScene'
 import { useAnalysisStore } from '@/stores/analysis'
 import { useSettingsStore } from '@/stores/settings'
+import { useDevStore } from '@/stores/dev'
 import { diaryStatus } from '@/shared/utils/diaryFormat'
 
 const props = defineProps<{
@@ -25,6 +26,7 @@ const emit = defineEmits<{
 
 const analysisStore = useAnalysisStore()
 const settings = useSettingsStore()
+const devStore = useDevStore()
 
 const showDeleteConfirm = ref(false)
 
@@ -45,13 +47,31 @@ const showManageActions = computed(
 )
 
 async function onTrigger() {
-  await analysisStore.triggerForDiary(props.diaryId)
-  emit('refreshed')
+  if (settings.developerMode) {
+    devStore.setActiveTrace(crypto.randomUUID())
+  }
+  try {
+    await analysisStore.triggerForDiary(props.diaryId)
+    emit('refreshed')
+  } finally {
+    if (settings.developerMode) {
+      devStore.setActiveTrace(null)
+    }
+  }
 }
 
 async function onRegenerate() {
-  await analysisStore.regenerateForDiary(props.diaryId)
-  emit('refreshed')
+  if (settings.developerMode) {
+    devStore.setActiveTrace(crypto.randomUUID())
+  }
+  try {
+    await analysisStore.regenerateForDiary(props.diaryId)
+    emit('refreshed')
+  } finally {
+    if (settings.developerMode) {
+      devStore.setActiveTrace(null)
+    }
+  }
 }
 
 async function onDeleteConfirm() {

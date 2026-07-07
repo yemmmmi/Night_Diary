@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -12,6 +14,13 @@ from app.infrastructure.models.analysis import AnalysisRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.services import diary_service
 from app.services.ai.router import ExecutionPlanner
+from app.shared.pipeline_trace import (
+    PipelineTrace,
+    reset_trace,
+    set_trace,
+    trace_span,
+)
+from app.shared.trace_persistence import persist_trace, publish_trace_complete
 
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
@@ -174,13 +183,29 @@ def create_analysis(
 
     recent_entries = diary_service.get_recent_entries(db, user_id=user_id)
     context = _build_context(db, entry, recent_entries, user_id=user_id)
-    result = planner.execute(
-        diary_id=diary_id,
-        context=context,
-        content=entry.content or "",
-        style_fragment=style_fragment,
-    )
-    analysis = _persist_analysis(db, entry=entry, result=result)
+    with trace_span(
+        "S2_routing",
+        "路由决策",
+        input_snapshot={"diary_id": diary_id, "content_len": len(entry.content or "")},
+    ) as span:
+        result = planner.execute(
+            diary_id=diary_id,
+            context=context,
+            content=entry.content or "",
+            style_fragment=style_fragment,
+        )
+        if span:
+            span.set_output(
+                {"tier": result.execution_tier, "agent_mode": result.agent_mode}
+            )
+    with trace_span(
+        "S6_persist",
+        "持久化分析结果",
+        input_snapshot={"diary_id": diary_id},
+    ) as span:
+        analysis = _persist_analysis(db, entry=entry, result=result)
+        if span:
+            span.set_output({"analysis_id": analysis.id})
     logger.info(
         "分析创建成功: diary_id=%d analysis_id=%d tokens=%d tier=%s",
         diary_id,
@@ -190,7 +215,14 @@ def create_analysis(
     )
     # Best-effort: sync diary event into episodic memory + trigger profile promotion.
     if container is not None:
-        _sync_diary_to_memory(entry, result.reply, container)
+        with trace_span(
+            "S7_memory",
+            "记忆同步",
+            input_snapshot={"diary_id": diary_id},
+        ) as span:
+            _sync_diary_to_memory(entry, result.reply, container)
+            if span:
+                span.set_output({"synced": True})
     return analysis, result.referenced_memory_count
 
 
@@ -344,17 +376,46 @@ def trigger_analysis(
     *,
     user_id: str,
     style_fragment: str | None = None,
+    trace_id: str | None = None,
 ) -> tuple[AnalysisRow, int]:
-    """End-to-end entry: build planner from container and create analysis."""
-    planner = container.build_execution_planner(db, user_id=user_id)
-    return create_analysis(
-        db,
-        diary_id,
-        user_id=user_id,
-        planner=planner,
-        container=container,
-        style_fragment=style_fragment,
-    )
+    """End-to-end entry: build planner from container and create analysis.
+
+    When *trace_id* is provided (developer mode), a :class:`PipelineTrace` is
+    created and set in the context so that nested ``trace_span`` calls record
+    their stages.  The trace is finalized, persisted, and published in the
+    ``finally`` block — all best-effort.
+    """
+    trace: PipelineTrace | None = None
+    token = None
+    if trace_id:
+        trace = PipelineTrace(
+            trace_id=trace_id, scenario="diary_reply", user_id=user_id
+        )
+        token = set_trace(trace)
+    try:
+        planner = container.build_execution_planner(db, user_id=user_id)
+        result = create_analysis(
+            db,
+            diary_id,
+            user_id=user_id,
+            planner=planner,
+            container=container,
+            style_fragment=style_fragment,
+        )
+        if trace is not None:
+            trace.end()
+        return result
+    except Exception:
+        if trace is not None:
+            trace.end(status="error")
+        raise
+    finally:
+        if trace is not None:
+            persist_trace(db, trace, ref_id=str(diary_id))
+            with contextlib.suppress(Exception):
+                asyncio.run(publish_trace_complete(trace))
+            if token is not None:
+                reset_trace(token)
 
 
 def rerun_analysis(

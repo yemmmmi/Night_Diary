@@ -25,3 +25,4 @@ class LlmCallLogRow(Base):
     tokens_out: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[float] = mapped_column(Float)
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)

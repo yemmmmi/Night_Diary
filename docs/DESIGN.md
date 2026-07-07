@@ -4,7 +4,7 @@
 
 ## 1. 产品定位
 
-- **受众**：简体中文用户，单用户本地桌面日记
+- **受众**：简体中文用户，Web 端多用户心理陪伴日记
 - **气质**：陪伴型、非社交、非 SaaS 仪表盘
 - **文案**：UI 仅使用简体中文（无英文 tagline、无英文占位符）
 
@@ -91,10 +91,10 @@
 - UI 使用 emoji（统一 `@phosphor-icons/vue`；情绪由 AI 从正文推断，不提供用户自选 emoji 控件）
 - 夜间主题的装饰性 bokeh / 品红光斑 / 摩天轮式氛围图
 
-## 8. Tauri 性能护栏
+## 8. 前端性能护栏
 
 - 粒子：`ParticleBackground` 使用 Canvas + `requestAnimationFrame`
-- `backdrop-blur`：仅用于 `CustomTitlebar`、`GlassPanel` 外壳等 fixed 层
+- `backdrop-blur`：仅用于 `GlassPanel` 外壳等 fixed 层
 - 路由切换：优先 CSS + Vue `<Transition>`；GSAP 仅用于 `PageTransition` 编排
 
 ## 9. 场景 → 布局映射

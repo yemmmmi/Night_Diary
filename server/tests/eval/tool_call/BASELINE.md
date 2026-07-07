@@ -59,12 +59,12 @@ EVAL_UPDATE_BASELINE=1 make eval-tool
 
 ## Baseline 指标
 
-> 记录日期：待填充 · 环境：待填充（运行 `EVAL_UPDATE_BASELINE=1 make eval-tool` 后由 `baseline.json` 承载具体数值）
+> 记录日期：2026-07-06 · 环境：deepseek-v4-flash（REAL_MODE）
 
 | 路径 | decision | name_acc | arg_acc | exact | FPR | FNR | parse | avg_cnt |
 |------|----------|----------|---------|-------|-----|-----|-------|---------|
-| native   | - | - | - | - | - | - | - | - |
-| fallback | 1.0 | 1.0 | 1.0 | 1.0 | 0.0 | 0.0 | 1.0 | - |
+| native   | 0.7500 | 0.9000 | 0.8800 | 0.6750 | 0.6000 | 0.0400 | 1.0000 | 1.2500 |
+| fallback | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.0000 | 0.0000 | 1.0000 | 0.7750 |
 
 > fallback 在 stub 模式下恒为满分（oracle 输入），仅验证解析管道。
-> native 数值需在真实模式下生成；首次生成后 `baseline.json` 的 `_placeholder` 标记会被移除，回归测试随之生效。
+> native 真实模式下 exact_match=0.675，主要失败在 no_tool_emotional 类（LLM 倾向过度调用工具，FPR=0.6）。

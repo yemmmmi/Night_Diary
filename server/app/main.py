@@ -1,7 +1,7 @@
-"""FastAPI application entry point — local desktop sidecar.
+"""FastAPI application entry point.
 
-Binds to ``127.0.0.1`` only (never exposed to the network).  Accepts ``--port``
-and ``--data-dir`` CLI arguments so the Tauri shell can control them.
+Binds to ``127.0.0.1`` by default (use ``--host 0.0.0.0`` for Docker).  Accepts
+``--port`` and ``--data-dir`` CLI arguments.
 """
 
 from __future__ import annotations
@@ -143,12 +143,12 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     @app.get("/meta/version", tags=["meta"])
     def meta_version() -> dict[str, str]:
-        """Dev helper — lets the frontend detect a stale sidecar process."""
+        """Dev helper — lets the frontend detect a stale backend process."""
         return {"version": _app_build_version()}
 
     @app.post("/shutdown", tags=["meta"])
     async def shutdown() -> dict[str, str]:
-        """Graceful shutdown — Tauri calls this before sending SIGTERM."""
+        """Graceful shutdown — called before SIGTERM."""
         loop = asyncio.get_running_loop()
         loop.call_later(0.3, lambda: os._exit(0))
         return {"status": "shutting_down"}
@@ -157,7 +157,7 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Entry point for uvicorn and PyInstaller ``nightdiary-backend`` builds."""
+    """Entry point for uvicorn."""
     import uvicorn
 
     from app.config import get_settings

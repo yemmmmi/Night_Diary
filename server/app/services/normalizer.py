@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 
 from app.domain.memory.atom import UnifiedMemoryAtom
 from app.shared.emotion_estimator import get_emotion_estimator
+from app.shared.pipeline_trace import trace_span
 
 if TYPE_CHECKING:
     from app.infrastructure.models.diary_entry import DiaryEntryRow
@@ -64,36 +65,46 @@ class ContentNormalizer:
         estimated via EmotionEstimator. Tags come from the diary's tag
         associations if available.
         """
-        content = entry.content or ""
-        estimate = get_emotion_estimator().estimate(content)
-        score = get_emotion_estimator().score(content)
+        with trace_span(
+            "S1_normalize",
+            "内容标准化",
+            input_snapshot={"source": "diary", "diary_id": entry.id},
+        ) as span:
+            content = entry.content or ""
+            estimate = get_emotion_estimator().estimate(content)
+            score = get_emotion_estimator().score(content)
 
-        event_summary = content.strip().replace("\n", " ")[:120]
-        if len(content.strip()) > 120:
-            event_summary += "…"
+            event_summary = content.strip().replace("\n", " ")[:120]
+            if len(content.strip()) > 120:
+                event_summary += "…"
 
-        tags: list[str] = []
-        if hasattr(entry, "tags") and entry.tags:
-            tags = [t.name for t in entry.tags if t.name]
+            tags: list[str] = []
+            if hasattr(entry, "tags") and entry.tags:
+                tags = [t.name for t in entry.tags if t.name]
 
-        event_date = None
-        if hasattr(entry, "created_at") and entry.created_at:
-            event_date = entry.created_at.date() if hasattr(entry.created_at, "date") else None
-        elif hasattr(entry, "date") and entry.date:
-            event_date = entry.date
+            event_date = None
+            if hasattr(entry, "created_at") and entry.created_at:
+                event_date = entry.created_at.date() if hasattr(entry.created_at, "date") else None
+            elif hasattr(entry, "date") and entry.date:
+                event_date = entry.date
 
-        return UnifiedMemoryAtom(
-            source="diary",
-            event_summary=event_summary,
-            emotion=estimate.label,
-            mood_score=max(0.0, min(1.0, 0.5 + score * 0.5)),
-            tags=tags,
-            importance=_DIARY_EPISODIC_IMPORTANCE,
-            reply_insight=(reply or "")[:200],
-            event_date=event_date,
-            diary_id=entry.id,
-            user_id=user_id,
-        )
+            atom = UnifiedMemoryAtom(
+                source="diary",
+                event_summary=event_summary,
+                emotion=estimate.label,
+                mood_score=max(0.0, min(1.0, 0.5 + score * 0.5)),
+                tags=tags,
+                importance=_DIARY_EPISODIC_IMPORTANCE,
+                reply_insight=(reply or "")[:200],
+                event_date=event_date,
+                diary_id=entry.id,
+                user_id=user_id,
+            )
+            if span:
+                span.set_output(
+                    {"emotion": atom.emotion, "mood_score": atom.mood_score}
+                )
+            return atom
 
     @staticmethod
     def from_card(
@@ -126,27 +137,37 @@ class ContentNormalizer:
         Conversation messages are unstructured text, so emotion is estimated
         via EmotionEstimator unless explicitly provided.
         """
-        if emotion_label is None or emotion_score is None:
-            estimator = get_emotion_estimator()
-            estimate = estimator.estimate(content)
-            emotion_label = estimate.label
-            emotion_score = estimator.score(content)
+        with trace_span(
+            "S1_normalize",
+            "内容标准化",
+            input_snapshot={"source": "chat", "conversation_id": conversation_id},
+        ) as span:
+            if emotion_label is None or emotion_score is None:
+                estimator = get_emotion_estimator()
+                estimate = estimator.estimate(content)
+                emotion_label = estimate.label
+                emotion_score = estimator.score(content)
 
-        event_summary = content.strip().replace("\n", " ")[:120]
-        if len(content.strip()) > 120:
-            event_summary += "…"
+            event_summary = content.strip().replace("\n", " ")[:120]
+            if len(content.strip()) > 120:
+                event_summary += "…"
 
-        return UnifiedMemoryAtom(
-            source="chat",
-            event_summary=event_summary,
-            emotion=emotion_label,
-            mood_score=max(0.0, min(1.0, 0.5 + emotion_score * 0.5)),
-            tags=["夜话"],
-            importance=min(abs(emotion_score) + 0.3, 1.0),
-            reply_insight=(reply_text or "")[:200],
-            conversation_id=conversation_id or None,
-            user_id=user_id,
-        )
+            atom = UnifiedMemoryAtom(
+                source="chat",
+                event_summary=event_summary,
+                emotion=emotion_label,
+                mood_score=max(0.0, min(1.0, 0.5 + emotion_score * 0.5)),
+                tags=["夜话"],
+                importance=min(abs(emotion_score) + 0.3, 1.0),
+                reply_insight=(reply_text or "")[:200],
+                conversation_id=conversation_id or None,
+                user_id=user_id,
+            )
+            if span:
+                span.set_output(
+                    {"emotion": atom.emotion, "mood_score": atom.mood_score}
+                )
+            return atom
 
     @staticmethod
     def from_reply(
