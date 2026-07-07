@@ -271,6 +271,25 @@ def trace_span(
         yield span
     except Exception as exc:
         trace.end_span(status=STATUS_ERROR, error=str(exc))
+        _try_publish_span(trace, span)
         raise
     else:
         trace.end_span(status=STATUS_COMPLETED)
+        _try_publish_span(trace, span)
+
+
+def _try_publish_span(trace: PipelineTrace, span: TraceSpan) -> None:
+    """Best-effort push of a ``span_complete`` event to the SSE event bus.
+
+    Called from ``trace_span.__exit__`` which runs in sync worker threads.
+    Uses ``publish_span_complete_sync`` (thread-safe via
+    ``call_soon_threadsafe``) so the event reaches SSE subscribers on the
+    main event loop.  Failures are logged inside the helper and never
+    propagate — tracing must not break the pipeline.
+    """
+    try:
+        from app.shared.trace_persistence import publish_span_complete_sync
+
+        publish_span_complete_sync(trace, span)
+    except Exception:
+        pass
