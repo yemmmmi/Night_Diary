@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass
@@ -27,7 +26,7 @@ from app.shared.pipeline_trace import (
     set_trace,
     trace_span,
 )
-from app.shared.trace_persistence import persist_trace, publish_trace_complete
+from app.shared.trace_persistence import persist_trace, publish_trace_complete_sync
 
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
@@ -522,7 +521,7 @@ def generate_reply(
         if trace is not None:
             persist_trace(db, trace, ref_id=conversation_id)
             with contextlib.suppress(Exception):
-                asyncio.run(publish_trace_complete(trace))
+                publish_trace_complete_sync(trace)
             if token is not None:
                 reset_trace(token)
 

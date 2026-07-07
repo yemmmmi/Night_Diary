@@ -22,6 +22,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections import defaultdict
 from typing import Any
@@ -41,6 +42,12 @@ class TraceEventBus:
 
     When a subscriber's queue is full (slow client), ``publish`` drops the
     event and logs a warning instead of blocking the producer.
+
+    Sync worker threads (where ``trace_span.__exit__`` and request ``finally``
+    blocks run) must use ``publish_from_thread`` instead of ``publish`` — it
+    captures the main event loop on first ``subscribe`` and uses
+    ``call_soon_threadsafe`` to schedule the fan-out there, avoiding the
+    cross-loop ``put_nowait`` race that silently drops wake-ups.
     """
 
     def __init__(self, max_queue_size: int = 100) -> None:
@@ -49,13 +56,18 @@ class TraceEventBus:
         )
         self._lock = asyncio.Lock()
         self._max_queue_size = max_queue_size
+        self._main_loop: asyncio.AbstractEventLoop | None = None
 
     async def subscribe(self, trace_id: str) -> asyncio.Queue[dict[str, Any]]:
         """Register a new subscriber queue for ``trace_id`` and return it.
 
         The returned queue is bounded by ``max_queue_size`` so a slow consumer
-        cannot accumulate unbounded events in memory.
+        cannot accumulate unbounded events in memory.  Also captures the
+        running event loop so that ``publish_from_thread`` can safely schedule
+        fan-out callbacks from sync worker threads.
         """
+        if self._main_loop is None:
+            self._main_loop = asyncio.get_running_loop()
         async with self._lock:
             queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
                 maxsize=self._max_queue_size
@@ -82,9 +94,35 @@ class TraceEventBus:
 
         Uses ``put_nowait`` so a full queue drops the event with a warning
         instead of blocking the producer. No-op when there are no subscribers.
+
+        Must be called from the main event loop.  Sync worker threads should
+        use ``publish_from_thread`` instead.
         """
         # Read without the lock — iteration is atomic within a single event
         # loop tick (``put_nowait`` is synchronous, no awaits are interleaved).
+        self._fanout(trace_id, event)
+
+    def publish_from_thread(self, trace_id: str, event: dict[str, Any]) -> None:
+        """Thread-safe publish for sync worker threads.
+
+        Schedules the fan-out on the main event loop via
+        ``call_soon_threadsafe`` so that ``queue.put_nowait`` runs in the same
+        loop as the SSE subscriber's ``await queue.get()``.  This avoids the
+        cross-loop wake-up race where ``put_nowait`` from a different thread
+        silently fails to schedule the getter's callback.
+
+        Best-effort: if the main loop hasn't been captured yet (no SSE
+        subscriber has connected) or is closed, the event is silently dropped.
+        """
+        loop = self._main_loop
+        if loop is None or loop.is_closed():
+            return
+        with contextlib.suppress(RuntimeError):
+            # Loop closed between the check above and the call — drop silently.
+            loop.call_soon_threadsafe(self._fanout, trace_id, event)
+
+    def _fanout(self, trace_id: str, event: dict[str, Any]) -> None:
+        """Put ``event`` into every subscriber queue (main-loop only)."""
         queues = self._subscribers.get(trace_id, [])
         for queue in queues:
             try:
