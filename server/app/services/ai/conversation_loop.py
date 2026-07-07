@@ -22,6 +22,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from app.domain.agents.types import ChatIntentResult
@@ -53,6 +54,22 @@ logger = logging.getLogger(__name__)
 
 #: Maximum loop iterations (1 initial + up to 2 tool rounds).
 MAX_LOOP_ITERATIONS = 3
+
+#: Beijing timezone (UTC+8) — the diary corpus and users are China-based.
+_BEIJING_TZ = timezone(timedelta(hours=8))
+
+
+def _current_date_context() -> str:
+    """Return a date context string for the system prompt (Beijing time).
+
+    Computed **per call** (not cached) so that long-lived sessions always see
+    the correct "today".  Without this, the LLM has no date in the prompt and
+    infers "today" from the latest diary date in context — which may be days
+    old, causing "昨天" to resolve to the wrong day.
+    """
+    now = datetime.now(_BEIJING_TZ)
+    weekday_cn = "星期" + "一二三四五六日"[now.weekday()]
+    return f'\n\n## 当前日期\n今天是 {now.strftime("%Y-%m-%d")} {weekday_cn}。用户说「昨天」「明天」等相对日期时，请以此日期为基准计算。'
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,7 +194,7 @@ def _run_via_graph(
     # Build system prompt (simplified for graph)
     from app.services.ai.prompts import CHAT_SYSTEM_PROMPT
 
-    system_prompt = CHAT_SYSTEM_PROMPT
+    system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
     chat_history = session.get_history()
     if chat_history:
         system_prompt += f"\n\n## 对话历史\n{chat_history}"
@@ -302,7 +319,7 @@ def run_conversation_loop(
             max_iterations = MAX_LOOP_ITERATIONS
 
         # Build the base prompt
-        system_prompt = CHAT_SYSTEM_PROMPT
+        system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
 
         chat_history = session.get_history()
         topics_text = "、".join(session.profile_topics) if session.profile_topics else "（暂无）"
