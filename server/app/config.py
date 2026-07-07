@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     def logs_dir(self) -> str:
         return str(Path(self.data_dir) / "logs")
 
+    @property
+    def uploads_dir(self) -> str:
+        return str(Path(self.data_dir) / "uploads")
+
     # ---- Redis (optional, for production caching) ----
     redis_url: str = Field(
         default="",

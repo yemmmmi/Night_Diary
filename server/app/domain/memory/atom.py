@@ -18,7 +18,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Source = Literal["diary", "card", "chat"]
+Source = Literal["diary", "card", "chat", "image"]
 
 
 class EntityRef(BaseModel):

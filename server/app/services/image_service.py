@@ -25,12 +25,15 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING, cast
 
 from sqlalchemy import select
 
 from app.infrastructure.models.image_asset import ImageAssetRow
 from app.shared.llm import LLMPrompt, VisionCapableLLMClient, build_image_block, message_text
+
+if TYPE_CHECKING:
+    from app.shared.llm_factory import LLMFactory
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +113,7 @@ class ImageProcessingService:
     per-request or reuse.
     """
 
-    def __init__(self, llm_factory: Any) -> None:
+    def __init__(self, llm_factory: LLMFactory) -> None:
         self._llm_factory = llm_factory
 
     async def process(
@@ -142,10 +145,7 @@ class ImageProcessingService:
         client = self._create_vision_client(max_completion_tokens)
         prompt_text = _VLM_PROMPTS.get(content_type, _VLM_PROMPTS["unknown"])
         block = build_image_block(image_bytes, mime_type, detail="high")
-        prompt: LLMPrompt = [
-            {"type": "text", "text": prompt_text},
-            block,  # type: ignore[list-item]
-        ]
+        prompt: LLMPrompt = [prompt_text, block]
         response = await client.ainvoke_with_images(prompt)
         text = message_text(response)
         return _parse_vlm_json(text, content_type, model_used=self._model_name())
@@ -175,7 +175,7 @@ class ImageProcessingService:
     ) -> ProcessedImage:
         """OCR fallback — lazy PaddleOCR import, mirrors Neo4j/Redis pattern."""
         try:  # pragma: no cover — exercised only when paddleocr is installed
-            from paddleocr import PaddleOCR  # type: ignore[import-not-found]
+            from paddleocr import PaddleOCR
         except ImportError:
             logger.info("PaddleOCR not installed; image skipped")
             return ProcessedImage(
@@ -189,7 +189,7 @@ class ImageProcessingService:
         try:  # pragma: no cover
             import io
 
-            from PIL import Image  # type: ignore[import-not-found]
+            from PIL import Image
 
             ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
             result = ocr.ocr(io.BytesIO(image_bytes), cls=True)
@@ -310,7 +310,7 @@ def _parse_vlm_json(
 
 def _coerce_type(value: Any, fallback: ContentType) -> ContentType:
     if value in ("photo", "screenshot", "document", "unknown"):
-        return value  # type: ignore[return-value]
+        return cast(ContentType, value)
     return fallback
 
 

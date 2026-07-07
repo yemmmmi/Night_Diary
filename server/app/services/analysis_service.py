@@ -107,7 +107,7 @@ def _sync_image_atoms(
     if not asset_ids:
         return
     user_id = _episodic_user_id(container)
-    db = Session.object_session(entry)  # type: ignore[arg-type]
+    db = Session.object_session(entry)
     if db is None:
         return
     rows = (

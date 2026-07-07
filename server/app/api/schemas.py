@@ -16,15 +16,40 @@ class TagBrief(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ImageAttachment(BaseModel):
+    """A reference to an uploaded image asset attached to a diary/chat message."""
+
+    asset_id: int
+    content_type_hint: str | None = None
+
+
+class ImageAssetResponse(BaseModel):
+    """Response model for an uploaded image asset and its processing result."""
+
+    id: int
+    original_filename: str
+    mime_type: str
+    size_bytes: int
+    content_type: str
+    processing_path: str
+    semantic_description: str | None = None
+    extracted_text: str | None = None
+    processed_at: datetime.datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class DiaryCreateRequest(BaseModel):
     content: str = Field(min_length=1)
     date: datetime.date | None = None
     weather: str | None = None
+    attachments: list[ImageAttachment] = Field(default_factory=list, max_length=4)
 
 
 class DiaryUpdateRequest(BaseModel):
     content: str | None = Field(default=None, min_length=1)
     weather: str | None = None
+    attachments: list[ImageAttachment] = Field(default_factory=list, max_length=4)
 
 
 class DiaryResponse(BaseModel):
@@ -333,6 +358,7 @@ class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
     diary_ids: list[int] = Field(default_factory=list)
     auto_retrieve: bool = True
+    attachments: list[ImageAttachment] = Field(default_factory=list, max_length=4)
 
     @field_validator("diary_ids")
     @classmethod

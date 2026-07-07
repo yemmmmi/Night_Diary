@@ -26,6 +26,9 @@ class DiaryEntryRow(Base):
     date: Mapped[date | None] = mapped_column(Date, nullable=True)
     weather: Mapped[str | None] = mapped_column(String(50), nullable=True)
     reply: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON list of attached image asset IDs, e.g. "[12, 15]". Stored separately
+    # from ``content`` so the diary text stays clean for display/Chroma sync.
+    image_assets_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

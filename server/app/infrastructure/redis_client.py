@@ -16,7 +16,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _REDIS_URL = os.getenv("REDIS_URL", "")
-_redis_client = None
+_redis_client: Any = None
 _redis_available = False
 _fallback_cache: dict[str, tuple[Any, float]] = {}  # key -> (value, expire_at)
 

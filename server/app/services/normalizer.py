@@ -31,6 +31,7 @@ from app.shared.pipeline_trace import trace_span
 
 if TYPE_CHECKING:
     from app.infrastructure.models.diary_entry import DiaryEntryRow
+    from app.infrastructure.models.image_asset import ImageAssetRow
     from app.infrastructure.models.memory_card import MemoryCardRow
 
 logger = logging.getLogger(__name__)
