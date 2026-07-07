@@ -22,6 +22,7 @@ export interface SendMessagePayload {
   content: string
   diary_ids?: number[]
   auto_retrieve?: boolean
+  attachment_ids?: number[]
 }
 
 export interface SendMessageResponse {

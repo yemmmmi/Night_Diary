@@ -170,6 +170,58 @@ class ContentNormalizer:
             return atom
 
     @staticmethod
+    def from_image(
+        asset: ImageAssetRow,
+        *,
+        user_id: str = "default",
+        diary_id: int | None = None,
+    ) -> UnifiedMemoryAtom:
+        """Convert an ImageAssetRow to a UnifiedMemoryAtom.
+
+        Image atoms carry the VLM-produced ``semantic_description`` as their
+        ``event_summary`` (truncated) and ``source="image"`` for origin
+        tracking. Emotion is estimated from the description so image-derived
+        memories can participate in recurring-topic detection. Images attached
+        to a diary inherit diary-level importance.
+        """
+        with trace_span(
+            "S1_normalize",
+            "内容标准化",
+            input_snapshot={"source": "image", "asset_id": getattr(asset, "id", None)},
+        ) as span:
+            description = (asset.semantic_description or "").strip()
+            estimate = get_emotion_estimator().estimate(description)
+            score = get_emotion_estimator().score(description)
+
+            event_summary = description.replace("\n", " ")[:120]
+            if len(description) > 120:
+                event_summary += "…"
+
+            event_date = None
+            if hasattr(asset, "created_at") and asset.created_at:
+                event_date = (
+                    asset.created_at.date() if hasattr(asset.created_at, "date") else None
+                )
+
+            atom = UnifiedMemoryAtom(
+                source="image",
+                event_summary=event_summary or "（图像记忆）",
+                emotion=estimate.label,
+                mood_score=max(0.0, min(1.0, 0.5 + score * 0.5)),
+                tags=["图像"],
+                importance=_DIARY_EPISODIC_IMPORTANCE,
+                reply_insight="",
+                event_date=event_date,
+                diary_id=diary_id,
+                user_id=user_id,
+            )
+            if span:
+                span.set_output(
+                    {"emotion": atom.emotion, "mood_score": atom.mood_score}
+                )
+            return atom
+
+    @staticmethod
     def from_reply(
         reply_text: str,
         *,

@@ -54,6 +54,14 @@ eval = [
     "sentence-transformers>=3.0",
     "torch>=2.0",
 ]
+# OCR fallback for image text extraction. ONLY needed when the configured LLM
+# does not support vision (VLM path) — the image service gracefully degrades to
+# "skipped" when both VLM and PaddleOCR are unavailable. Kept out of core
+# runtime to avoid the ~1GB+ model weight in dev/CI and PyInstaller packaging.
+ocr = [
+    "paddleocr>=2.7",
+    "paddlepaddle>=2.6",
+]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

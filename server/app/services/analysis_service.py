@@ -49,8 +49,14 @@ _DIARY_EPISODIC_IMPORTANCE = 0.6
 def _build_context(
     db: Session, entry: DiaryEntryRow, recent_entries: list[DiaryEntryRow], *, user_id: str
 ) -> dict[str, str]:
+    current = entry.content or ""
+    # Append image context (as text) so the analysis agents can "see" attached
+    # images without themselves needing multimodal calls.
+    image_ctx = _resolve_image_context(db, entry, user_id=user_id)
+    if image_ctx:
+        current = f"{image_ctx}\n{current}".strip()
     return {
-        "current_content": entry.content or "",
+        "current_content": current,
         "tags_context": diary_service.format_emotion_context(db, entry, user_id=user_id),
         "history_summary": diary_service.format_history_summary(
             recent_entries,
@@ -58,6 +64,69 @@ def _build_context(
         ),
         "weather_info": entry.weather or "未获取天气信息",
     }
+
+
+def _resolve_image_context(db: Session, entry: DiaryEntryRow, *, user_id: str) -> str:
+    """Resolve attached image assets into a text context string for analysis."""
+    import json as _json
+
+    raw = entry.image_assets_json
+    if not raw:
+        return ""
+    try:
+        asset_ids: list[int] = [int(x) for x in _json.loads(raw)]
+    except (ValueError, TypeError):
+        return ""
+    if not asset_ids:
+        return ""
+    from app.services.image_service import build_image_context
+
+    return build_image_context(db, asset_ids, user_id=user_id)
+
+
+def _sync_image_atoms(
+    entry: DiaryEntryRow,
+    gw: Any,
+    container: ServiceContainer,
+) -> None:
+    """Persist image-derived episodic atoms (source="image"), best-effort."""
+    import json as _json
+
+    from sqlalchemy import select
+
+    from app.infrastructure.models.image_asset import ImageAssetRow
+    from app.services.normalizer import ContentNormalizer
+
+    raw = entry.image_assets_json
+    if not raw:
+        return
+    try:
+        asset_ids: list[int] = [int(x) for x in _json.loads(raw)]
+    except (ValueError, TypeError):
+        return
+    if not asset_ids:
+        return
+    user_id = _episodic_user_id(container)
+    db = Session.object_session(entry)  # type: ignore[arg-type]
+    if db is None:
+        return
+    rows = (
+        db.execute(
+            select(ImageAssetRow).where(
+                ImageAssetRow.id.in_(asset_ids), ImageAssetRow.user_id == user_id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in rows:
+        try:
+            atom = ContentNormalizer.from_image(row, user_id=user_id, diary_id=entry.id)
+            gw.persist_atom(atom)
+        except Exception as exc:
+            logger.warning(
+                "Failed to store image episodic atom asset_id=%s: %s", row.id, exc
+            )
 
 
 def _persist_analysis(
@@ -132,6 +201,11 @@ def _sync_diary_to_memory(
             )
     except Exception as exc:
         logger.warning("Failed to store episodic entry for diary_id=%s: %s", entry.id, exc)
+
+    # ── Image atom sync (best-effort) ──
+    # Each attached image produces its own episodic atom (source="image") so
+    # image-derived memories participate in recurring-topic detection.
+    _sync_image_atoms(entry, gw, container)
 
     # ── Entity extraction sidecar (best-effort, fire-and-forget) ──
     # Diary content is the richest source of entities (persons, places, topics).

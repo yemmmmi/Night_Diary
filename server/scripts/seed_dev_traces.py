@@ -39,6 +39,8 @@ import httpx
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_PASSWORD = "123456"
 REQUEST_TIMEOUT = 300.0  # LLM 调用可能较慢，给 5 分钟
+MAX_RETRIES = 3  # 连接失败时的最大重试次数
+RETRY_WAIT = 5.0  # 重试前等待秒数
 
 # 日期映射
 DATE_A = {
@@ -480,7 +482,11 @@ class DevTraceSeeder:
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.dry_run = dry_run
-        self.user_filter = user_filter
+        # 支持逗号分隔的多用户过滤: "c,d,e"
+        if user_filter:
+            self.user_filters = {u.strip() for u in user_filter.split(",") if u.strip()}
+        else:
+            self.user_filters = None
         self.skip_memory_check = skip_memory_check
         self.client = httpx.Client(base_url=self.base_url, timeout=REQUEST_TIMEOUT)
         self.results: dict[str, list[CaseResult]] = defaultdict(list)
@@ -505,6 +511,43 @@ class DevTraceSeeder:
         """数据生成 POST 请求头 = 认证 + trace。"""
         return {**self._auth_headers(token), **self._trace_headers()}
 
+    def _post_with_retry(
+        self, url: str, *, json: dict | None = None, data: dict | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        """带重试的 POST 请求。连接失败时等待 RETRY_WAIT 秒后重试，最多 MAX_RETRIES 次。"""
+        last_exc: Exception | None = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                if data is not None:
+                    return self.client.post(url, data=data, headers=headers)
+                return self.client.post(url, json=json, headers=headers)
+            except (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError) as exc:
+                last_exc = exc
+                if attempt < MAX_RETRIES - 1:
+                    print(f"  [retry] 连接失败 ({exc.__class__.__name__})，{RETRY_WAIT}秒后重试 ({attempt+1}/{MAX_RETRIES})...")
+                    time.sleep(RETRY_WAIT)
+                else:
+                    raise
+        raise last_exc  # type: ignore
+
+    def _get_with_retry(
+        self, url: str, *, headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        """带重试的 GET 请求。"""
+        last_exc: Exception | None = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                return self.client.get(url, headers=headers)
+            except (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError) as exc:
+                last_exc = exc
+                if attempt < MAX_RETRIES - 1:
+                    print(f"  [retry] 连接失败 ({exc.__class__.__name__})，{RETRY_WAIT}秒后重试 ({attempt+1}/{MAX_RETRIES})...")
+                    time.sleep(RETRY_WAIT)
+                else:
+                    raise
+        raise last_exc  # type: ignore
+
     # ── 认证 ──
 
     def ensure_user(self, email: str, password: str, nickname: str) -> str:
@@ -515,7 +558,7 @@ class DevTraceSeeder:
         """
         # 1. 尝试注册
         try:
-            resp = self.client.post(
+            resp = self._post_with_retry(
                 "/api/v1/auth/register",
                 json={"email": email, "password": password, "nickname": nickname},
             )
@@ -531,7 +574,7 @@ class DevTraceSeeder:
             print(f"  [register] {email} 请求异常: {exc}")
 
         # 2. 登录获取 token（form-urlencoded）
-        resp = self.client.post(
+        resp = self._post_with_retry(
             "/api/v1/auth/login",
             data={"username": email, "password": password},
         )
@@ -559,7 +602,7 @@ class DevTraceSeeder:
             "X-Developer-Mode": "true",
         }
         try:
-            resp = self.client.post(
+            resp = self._post_with_retry(
                 "/api/v1/diary/entries",
                 json={"content": case["content"], "date": case["date"]},
                 headers=diary_headers,
@@ -586,7 +629,7 @@ class DevTraceSeeder:
         preset = case.get("preset")
         body: dict[str, Any] = {} if preset is None else {"replier_preset": preset}
         try:
-            resp = self.client.post(
+            resp = self._post_with_retry(
                 f"/api/v1/analysis/{diary_id}",
                 json=body,
                 headers=analysis_headers,
@@ -623,7 +666,7 @@ class DevTraceSeeder:
             "X-Developer-Mode": "true",
         }
         try:
-            resp = self.client.post("/api/v1/conversations", headers=conv_headers)
+            resp = self._post_with_retry("/api/v1/conversations", headers=conv_headers)
         except httpx.RequestError as exc:
             return CaseResult(case["id"], case["name"], conv_trace_id, "error", f"会话请求异常: {exc}")
 
@@ -652,7 +695,7 @@ class DevTraceSeeder:
             "auto_retrieve": case.get("auto_retrieve", True),
         }
         try:
-            resp = self.client.post(
+            resp = self._post_with_retry(
                 f"/api/v1/conversations/{conversation_id}/messages",
                 json=payload,
                 headers=msg_headers,
@@ -692,7 +735,7 @@ class DevTraceSeeder:
             "X-Developer-Mode": "true",
         }
         try:
-            resp = self.client.post("/api/v1/conversations", headers=conv_headers)
+            resp = self._post_with_retry("/api/v1/conversations", headers=conv_headers)
         except httpx.RequestError as exc:
             results.append(CaseResult(
                 case["id"], case["name"], conv_trace_id, "error", f"会话请求异常: {exc}",
@@ -718,7 +761,7 @@ class DevTraceSeeder:
             }
             sub_id = f"{case['id']}#{i}"
             try:
-                resp = self.client.post(
+                resp = self._post_with_retry(
                     f"/api/v1/conversations/{conversation_id}/messages",
                     json={"content": content, "diary_ids": [], "auto_retrieve": True},
                     headers=msg_headers,
@@ -756,7 +799,7 @@ class DevTraceSeeder:
         summary = MemorySummary()
 
         # ── overview ──
-        resp = self.client.get("/api/v1/memory/overview", headers=headers)
+        resp = self._get_with_retry("/api/v1/memory/overview", headers=headers)
         if resp.status_code != 200:
             raise RuntimeError(f"memory/overview 失败 [{resp.status_code}]: {resp.text[:200]}")
         overview = resp.json()
@@ -764,7 +807,7 @@ class DevTraceSeeder:
         summary.profile_built = overview.get("profile_built", False)
 
         # ── episodic 列表 ──
-        resp = self.client.get("/api/v1/memory/episodic", headers=headers)
+        resp = self._get_with_retry("/api/v1/memory/episodic", headers=headers)
         if resp.status_code != 200:
             raise RuntimeError(f"memory/episodic 失败 [{resp.status_code}]: {resp.text[:200]}")
         entries = resp.json()
@@ -773,7 +816,7 @@ class DevTraceSeeder:
             summary.sources[source] = summary.sources.get(source, 0) + 1
 
         # ── profile ──
-        resp = self.client.get("/api/v1/memory/profile", headers=headers)
+        resp = self._get_with_retry("/api/v1/memory/profile", headers=headers)
         if resp.status_code == 200:
             profile = resp.json()
             if profile is not None:
@@ -811,10 +854,10 @@ class DevTraceSeeder:
 
         accounts = [
             a for a in ACCOUNTS
-            if self.user_filter is None or a["key"] == self.user_filter
+            if self.user_filters is None or a["key"] in self.user_filters
         ]
         if not accounts:
-            print(f"未找到匹配的用户: {self.user_filter}")
+            print(f"未找到匹配的用户: {self.user_filters}")
             return
 
         total_start = time.time()
@@ -901,7 +944,7 @@ class DevTraceSeeder:
         total_err = 0
         for account in ACCOUNTS:
             key = account["key"]
-            if self.user_filter is not None and key != self.user_filter:
+            if self.user_filters is not None and key not in self.user_filters:
                 continue
             results = self.results.get(key, [])
             ok = sum(1 for r in results if r.status == "ok")
@@ -930,7 +973,7 @@ class DevTraceSeeder:
 
         accounts = [
             a for a in ACCOUNTS
-            if self.user_filter is None or a["key"] == self.user_filter
+            if self.user_filters is None or a["key"] in self.user_filters
         ]
 
         for account in accounts:
@@ -1011,7 +1054,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--user",
         default=None,
-        help="只生成指定用户 (如 --user a)",
+        help="只生成指定用户，支持逗号分隔多用户 (如 --user a 或 --user c,d,e)",
     )
     parser.add_argument(
         "--skip-memory-check",
