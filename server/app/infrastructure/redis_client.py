@@ -16,7 +16,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _REDIS_URL = os.getenv("REDIS_URL", "")
-_redis_client = None
+_redis_client: Any = None
 _redis_available = False
 _fallback_cache: dict[str, tuple[Any, float]] = {}  # key -> (value, expire_at)
 
@@ -50,7 +50,7 @@ def cache_get(key: str) -> Any:
     """Get a value from cache. Returns None if not found or expired."""
     if _redis_available and _redis_client is not None:
         try:
-            raw = _redis_client.get(key)
+            raw: Any = _redis_client.get(key)
             if raw is None:
                 return None
             return json.loads(raw)
@@ -95,7 +95,7 @@ def cache_delete_pattern(pattern: str) -> None:
     """Delete all keys matching a pattern (e.g. 'session:*')."""
     if _redis_available and _redis_client is not None:
         try:
-            keys = _redis_client.keys(pattern)
+            keys: list[str] = list(_redis_client.keys(pattern))
             if keys:
                 _redis_client.delete(*keys)
             return
