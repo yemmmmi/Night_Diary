@@ -5,13 +5,19 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from app.shared.pipeline_trace import PipelineTrace
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from app.shared.pipeline_trace import TraceSpan
 
 logger = logging.getLogger(__name__)
 
 
-def persist_trace(db, trace: PipelineTrace, ref_id: str | None = None) -> None:
+def persist_trace(db: Session, trace: PipelineTrace, ref_id: str | None = None) -> None:
     """持久化 trace 到 pipeline_traces 表. best-effort, 失败仅记日志不中断."""
     try:
         from app.infrastructure.models.pipeline_trace import PipelineTraceRow
@@ -59,7 +65,7 @@ async def publish_trace_complete(trace: PipelineTrace) -> None:
         logger.warning("Failed to publish trace_complete: %s", e)
 
 
-async def publish_span_complete(trace: PipelineTrace, span) -> None:
+async def publish_span_complete(trace: PipelineTrace, span: TraceSpan) -> None:
     """通过 EventBus 推送 span_complete 事件。best-effort。"""
     try:
         from app.shared.trace_event_bus import get_event_bus
