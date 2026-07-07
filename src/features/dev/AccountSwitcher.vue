@@ -11,13 +11,13 @@ const expanded = ref(false)
 const switching = ref(false)
 const error = ref<string | null>(null)
 
-// 测试账号列表（密码统一 123）
+// 测试账号列表（密码统一 123456）
 const TEST_ACCOUNTS = [
-  { email: 'a', nickname: 'Alice', label: '日记重度' },
-  { email: 'b', nickname: 'Bob', label: '对话重度' },
-  { email: 'c', nickname: 'Carol', label: '混合用户' },
-  { email: 'd', nickname: 'Dave', label: '边界/危机' },
-  { email: 'e', nickname: 'Eve', label: '轻度用户' },
+  { email: 'a@dev.test', nickname: 'Alice', label: '日记重度' },
+  { email: 'b@dev.test', nickname: 'Bob', label: '对话重度' },
+  { email: 'c@dev.test', nickname: 'Carol', label: '混合用户' },
+  { email: 'd@dev.test', nickname: 'Dave', label: '边界/危机' },
+  { email: 'e@dev.test', nickname: 'Eve', label: '轻度用户' },
 ]
 
 async function switchTo(email: string) {
@@ -26,7 +26,7 @@ async function switchTo(email: string) {
   expanded.value = false
   error.value = null
   try {
-    await authStore.login(email, '123')
+    await authStore.login(email, '123456')
     devStore.clearTraces()
     emit('switched')
   } catch (e) {
