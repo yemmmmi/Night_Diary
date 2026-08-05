@@ -1,4 +1,4 @@
-"""ORM model for agent decision tracing (``agent_decisions``)."""
+"""智能体决策追踪的 ORM 模型（``agent_decisions``）。"""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ class AgentDecisionRow(Base):
     diary_id: Mapped[str] = mapped_column(String(64), index=True, default="")
     intent: Mapped[str] = mapped_column(String(32), default="")
     tier: Mapped[str] = mapped_column(String(16), default="")
-    # JSON array of activated skill names linked to SkillActivationRow.decision_id.
+    # 已激活技能名称的 JSON 数组，关联到 SkillActivationRow.decision_id。
     skill_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     reasoning: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[float] = mapped_column(Float)

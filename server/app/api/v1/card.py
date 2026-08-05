@@ -1,8 +1,8 @@
-"""Memory card API routes.
+"""记忆卡片 API 路由。
 
-Cards are lightweight structured memory atoms. They bridge the gap
-between "nothing" and a full diary entry. See :mod:`card_service` for
-the business logic, including Card->Episodic and Card->Diary flows.
+卡片是轻量级的结构化记忆原子。它们架起了"无"与完整日记条目
+之间的桥梁。关于业务逻辑（包括 Card->Episodic 和 Card->Diary 流程），
+参见 :mod:`card_service`。
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from app.services import card_prompt_service, card_service
 router = APIRouter(prefix="/cards", tags=["cards"])
 
 
-# -- helpers ----------------------------------------------------------------
+# -- 辅助函数 ----------------------------------------------------------------
 
 
 def _sync_card_to_chroma(
@@ -85,11 +85,11 @@ def create_card(
         importance=body.importance,
         card_type=body.card_type,
     )
-    # Ensure memory layers + card collection are ready (lazy on cold start)
+    # 确保记忆层 + 卡片集合已就绪（冷启动时懒加载）
     container.ensure_memory(user_id=str(user.id))
-    # Sync to episodic memory pipeline (best-effort)
+    # 同步到情景记忆管道（尽力而为）
     card_service.sync_card_to_episodic(row, container.episodic_memory)
-    # Sync to Chroma for semantic search (best-effort)
+    # 同步到 Chroma 以支持语义搜索（尽力而为）
     _sync_card_to_chroma(row, container)
     return card_to_response(row)
 
@@ -143,7 +143,7 @@ def delete_card(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# -- Expand -----------------------------------------------------------------
+# -- 展开 -----------------------------------------------------------------
 
 
 @router.post("/{card_id}/expand", response_model=dict[str, Any])
@@ -178,7 +178,7 @@ def expand_card_to_diary(
     return result
 
 
-# -- Stats ------------------------------------------------------------------
+# -- 统计 ------------------------------------------------------------------
 
 
 @router.get("/stats/summary", response_model=dict[str, Any])
@@ -195,7 +195,7 @@ def mood_trends(
     return card_service.get_mood_trends(db, user_id=str(user.id), days=days)
 
 
-# -- Guided prompt ----------------------------------------------------------
+# -- 引导式提示 ----------------------------------------------------------
 
 
 @router.post("/prompt", response_model=dict[str, Any])
@@ -204,9 +204,9 @@ def generate_prompt(
     user: CurrentUserDep,
     container: ContainerDep,
 ) -> dict[str, Any]:
-    """Generate 3 personalised guided questions for the card guided mode."""
+    """为卡片引导模式生成 3 个个性化引导问题。"""
     user_id = str(user.id)
-    # Build context from recent data
+    # 从最近的数据中构建上下文
     recent_cards = card_service.list_cards(db, user_id=user_id, skip=0, limit=10)
     cards_summary = "; ".join(
         f"{c.emotion}: {c.event_summary}" for c in recent_cards if c.event_summary
@@ -217,7 +217,7 @@ def generate_prompt(
     recent_diaries = diary_service.get_recent_entries(db, user_id=user_id, days=7, limit=5)
     diary_summary = "; ".join((d.content or "")[:80] for d in recent_diaries)[:500]
 
-    # Resolve LLM
+    # 解析 LLM
     from app.services.ai.router import resolve_llm_clients_by_tier
 
     llm_map = resolve_llm_clients_by_tier(
@@ -241,7 +241,7 @@ def generate_prompt(
     return {"questions": questions}
 
 
-# -- Semantic search --------------------------------------------------------
+# -- 语义搜索 --------------------------------------------------------
 
 
 @router.get("/search", response_model=dict[str, Any])
@@ -252,7 +252,7 @@ def search_cards(
     q: str = Query(..., min_length=1, max_length=200),
     limit: int = Query(10, ge=1, le=50),
 ) -> dict[str, Any]:
-    """Semantic search across memory cards using ChromaDB vector index."""
+    """使用 ChromaDB 向量索引对记忆卡片进行语义搜索。"""
     container.ensure_memory(user_id=str(user.id))
     if container.card_collection is None:
         return {"results": [], "query": q}

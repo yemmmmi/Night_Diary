@@ -1,4 +1,4 @@
-"""Tag API routes."""
+"""标签 API 路由。"""
 
 from __future__ import annotations
 

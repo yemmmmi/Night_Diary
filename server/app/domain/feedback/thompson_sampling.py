@@ -1,4 +1,4 @@
-"""Thompson Sampling for adaptive response style selection."""
+"""用于自适应回应风格选择的汤普森采样。"""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class ThompsonSampling:
-    """Beta-bandit selector for empathetic/practical/philosophical/humorous styles."""
+    """用于 empathetic/practical/philosophical/humorous 风格的 Beta 赌臂选择器。"""
 
     STYLES: ClassVar[tuple[str, ...]] = STYLES
     DEFAULT_STYLE: ClassVar[str] = DEFAULT_STYLE
@@ -26,7 +26,7 @@ class ThompsonSampling:
         self._store = store
 
     def sample_style(self, user_id: str = "default") -> str:
-        """Sample the highest Beta draw across all supported styles."""
+        """在所有支持的风格中采样取得最高 Beta 抽样的风格。"""
         if self._store is None:
             return self.DEFAULT_STYLE
 
@@ -44,7 +44,7 @@ class ThompsonSampling:
             return self.DEFAULT_STYLE
 
     def update_reward(self, user_id: str, style: str, *, is_positive: bool) -> None:
-        """Increment alpha on positive feedback and beta on negative feedback."""
+        """正向反馈时递增 alpha，负向反馈时递增 beta。"""
         if self._store is None:
             return
 
@@ -75,7 +75,7 @@ class ThompsonSampling:
             )
 
     def get_style_params(self, user_id: str = "default") -> dict[str, dict[str, float]]:
-        """Return alpha/beta parameters for every supported style."""
+        """返回每个支持风格的 alpha/beta 参数。"""
         if self._store is None:
             return {style: {"alpha": 1.0, "beta": 1.0} for style in self.STYLES}
 
@@ -93,7 +93,7 @@ class ThompsonSampling:
         *,
         rng: random.Random | None = None,
     ) -> str:
-        """Sample a style from explicit Beta parameters (used in tests/stat checks)."""
+        """从显式 Beta 参数中采样风格（用于测试/统计检查）。"""
         random_source = rng or random
         samples = {
             style: random_source.betavariate(alpha, beta) for style, (alpha, beta) in params.items()

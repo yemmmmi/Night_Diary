@@ -1,4 +1,4 @@
-"""Domain knowledge and entity extraction types."""
+"""领域知识与实体提取类型。"""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from typing import Any, TypedDict
 
 
 class EntityType(StrEnum):
-    """Structured entity types extracted from diary content.
+    """从日记内容中提取的结构化实体类型。
 
-    V1 DB migration comments listed only person/event/place/topic; the
-    implementation also persisted ``mood``. All five are first-class here.
+    V1 数据库迁移注释中仅列出了 person/event/place/topic；
+    实现中还持久化了 ``mood``。此处五者均为一等公民。
     """
 
     PERSON = "person"
@@ -23,7 +23,7 @@ class EntityType(StrEnum):
 
 
 class KnowledgeCategory(StrEnum):
-    """Psychology domain knowledge categories."""
+    """心理学领域知识分类。"""
 
     CBT = "cbt"
     MINDFULNESS = "mindfulness"
@@ -54,7 +54,7 @@ class ExtractionResult(TypedDict):
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeHit:
-    """A single psychology domain knowledge retrieval result."""
+    """单条心理学领域知识检索结果。"""
 
     content: str
     category: str
@@ -67,7 +67,7 @@ class KnowledgeHit:
 
 @dataclass(frozen=True, slots=True)
 class EntityRecord:
-    """A structured entity extracted from a diary entry."""
+    """从日记条目中提取的结构化实体。"""
 
     entity_type: EntityType
     entity_data: str

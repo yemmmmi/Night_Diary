@@ -1,4 +1,4 @@
-"""Weekly report ("周记") API routes."""
+"""周报（"周记"）API 路由。"""
 
 from __future__ import annotations
 

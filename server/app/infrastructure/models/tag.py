@@ -1,4 +1,4 @@
-"""ORM models for tags and diary-tag associations."""
+"""标签与日记-标签关联的 ORM 模型。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Diary API routes."""
+"""日记 API 路由。"""
 
 from __future__ import annotations
 

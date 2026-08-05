@@ -1,14 +1,12 @@
-"""UnifiedMemoryAtom — the common intermediate representation for memory writes.
+"""UnifiedMemoryAtom —— 记忆写入的通用中间表示。
 
-All three content sources (diary analysis, memory cards, night talk / chat)
-produce a ``UnifiedMemoryAtom`` before persisting to episodic memory.  This
-ensures structured fields (tags, mood_score, emotions, entities) survive the
-journey into episodic storage, where the long-term promoter can use them for
-recurring-topic detection and profile enrichment.
+三种内容来源（日记分析、记忆卡片、夜间谈话 / 聊天）在持久化到情景记忆之前，
+都会产生一个 ``UnifiedMemoryAtom``。这确保了结构化字段
+（tags、mood_score、emotions、entities）在进入情景存储的过程中得以保留，
+长期记忆提升器（long-term promoter）可据此进行重复主题检测和画像丰富。
 
-The atom is **not** persisted directly; it is converted to an
-:class:`EpisodicEntry` (which has been extended with the same structured
-fields) by :class:`MemoryGateway`.
+该 atom 并**不会**被直接持久化；它会被 :class:`MemoryGateway` 转换为
+:class:`EpisodicEntry`（后者已扩展出相同的结构化字段）。
 """
 
 from __future__ import annotations
@@ -22,7 +20,7 @@ Source = Literal["diary", "card", "chat"]
 
 
 class EntityRef(BaseModel):
-    """A person, place, or topic mentioned in the memory atom."""
+    """记忆原子中提到的人物、地点或主题。"""
 
     name: str
     entity_type: str = "person"  # person / place / topic / event
@@ -31,11 +29,10 @@ class EntityRef(BaseModel):
 
 
 class UnifiedMemoryAtom(BaseModel):
-    """Unified memory representation from all three content sources.
+    """来自三种内容来源的统一记忆表示。
 
-    Fields are designed to be loss-free: anything available on the source
-    (card, diary, chat) is preserved here so the long-term promoter and
-    downstream agents can use structured data instead of raw text.
+    字段设计为无损：来源（card、diary、chat）上可用的任何信息都会在此保留，
+    以便长期记忆提升器和下游 agent 能使用结构化数据而非原始文本。
     """
 
     source: Source = "diary"
@@ -53,10 +50,10 @@ class UnifiedMemoryAtom(BaseModel):
     user_id: str = "default"
 
     def to_episodic_entry(self, timestamp: float) -> EpisodicEntryShim:
-        """Convert to EpisodicEntry-compatible dict for MemoryGateway.
+        """转换为与 EpisodicEntry 兼容的 dict，供 MemoryGateway 使用。
 
-        Returns a dict that can be unpacked into ``EpisodicEntry(**dict)``
-        with the extended fields (tags, mood_score, event_date).
+        返回的 dict 可被展开为 ``EpisodicEntry(**dict)``，
+        其中包含扩展字段（tags、mood_score、event_date）。
         """
         return EpisodicEntryShim(
             event_summary=self.event_summary[:120],
@@ -75,10 +72,10 @@ class UnifiedMemoryAtom(BaseModel):
 
 
 class EpisodicEntryShim(BaseModel):
-    """Intermediate model matching the extended EpisodicEntry fields.
+    """与扩展后的 EpisodicEntry 字段匹配的中间模型。
 
-    This exists to avoid circular imports between ``atom.py`` and
-    ``types.py``.  The MemoryGateway reads these fields directly.
+    它的存在是为了避免 ``atom.py`` 与 ``types.py`` 之间出现循环导入。
+    MemoryGateway 会直接读取这些字段。
     """
 
     event_summary: str

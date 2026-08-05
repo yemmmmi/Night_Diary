@@ -1,4 +1,4 @@
-"""ORM model for LLM call tracing (``llm_call_logs``)."""
+"""LLM 调用追踪的 ORM 模型（``llm_call_logs``）。"""
 
 from __future__ import annotations
 

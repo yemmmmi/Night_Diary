@@ -1,4 +1,4 @@
-"""ORM models for style preference feedback."""
+"""风格偏好反馈的 ORM 模型。"""
 
 from __future__ import annotations
 

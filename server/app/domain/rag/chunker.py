@@ -1,4 +1,4 @@
-"""Chinese diary text chunking for RAG indexing."""
+"""用于 RAG 索引的中文日记文本分块。"""
 
 from __future__ import annotations
 
@@ -27,12 +27,12 @@ _PARENT_CHILD_SEPARATORS = ["\n\n", "\n", "。", "！", "？", "；", "，", "."
 
 
 class ChunkSplitter:
-    """Split diary text into retrieval-sized chunks.
+    """将日记文本切分为检索大小的 chunk。
 
-    Standard mode uses LangChain ``RecursiveCharacterTextSplitter`` (V1
-    ``ChunkSplitter``). Optional parent-child mode merges V1
-    ``ParentChildChunker``: small child chunks for retrieval plus a parent
-    chunk holding the full diary for context expansion in B-3.
+    标准模式使用 LangChain 的 ``RecursiveCharacterTextSplitter``（V1 的
+    ``ChunkSplitter``）。可选的父子模式合并了 V1 的
+    ``ParentChildChunker``：用小的子 chunk 做检索，再用一个持有完整日记
+    的父 chunk 用于 B-3 中的上下文扩展。
     """
 
     def __init__(
@@ -70,7 +70,7 @@ class ChunkSplitter:
         )
 
     def split(self, content: str) -> list[str]:
-        """Return chunk texts; short content stays a single segment."""
+        """返回 chunk 文本；过短的内容保持为单个片段。"""
         if len(content) < self.min_chunk_size:
             return [content]
         return self._splitter.split_text(content)
@@ -83,7 +83,7 @@ class ChunkSplitter:
         date: str = "",
         tags: str = "",
     ) -> list[Chunk]:
-        """Split content and attach diary metadata."""
+        """切分内容并附上日记元数据。"""
         if self.parent_child:
             parent, children = self.split_parent_child(
                 content,
@@ -117,7 +117,7 @@ class ChunkSplitter:
         date: str = "",
         tags: str = "",
     ) -> tuple[Chunk, list[Chunk]]:
-        """Return one parent chunk (full diary) and child chunks for retrieval."""
+        """返回一个父 chunk（完整日记）以及用于检索的子 chunk。"""
         parent_id = f"parent_{diary_id}"
         parent = Chunk(
             content=content,
@@ -164,7 +164,7 @@ class ChunkSplitter:
 
     @staticmethod
     def extract_parent_id(child_doc_id: str) -> str | None:
-        """Parse ``parent_{diary_id}`` from a child document id."""
+        """从子文档 id 中解析出 ``parent_{diary_id}``。"""
         if not child_doc_id.startswith("child_"):
             return None
         remainder = child_doc_id.removeprefix("child_")

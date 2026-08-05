@@ -1,14 +1,14 @@
-"""Insight Worker Agent — pattern discovery, trend analysis, weekly/monthly reports.
+"""Insight Worker 智能体——模式发现、趋势分析、周报/月报。
 
-Migrated from V1 ``agents/insight_agent.py``. V2 changes:
+从 V1 ``agents/insight_agent.py`` 迁移。V2 变更：
 
-* DI for the LLM (:class:`~app.shared.llm.LLMClient`), the shared
-  :class:`~app.domain.knowledge.store.DomainKnowledgeStore` and an
-  :class:`~app.shared.tracing.LLMCallTracer`. No ``SessionLocal()`` /
-  ``ChatOpenAI()`` inside the agent.
-* ``run`` is async (awaits ``ainvoke``); ``fallback`` is synchronous.
-* PromptTuner stays in B-9; ``run`` accepts an optional ``style_fragment``.
-* Emotion-baseline comparison reuses :class:`~app.domain.memory.types.EmotionBaseline`.
+* LLM（:class:`~app.shared.llm.LLMClient`）、共享的
+  :class:`~app.domain.knowledge.store.DomainKnowledgeStore` 和
+  :class:`~app.shared.tracing.LLMCallTracer` 采用依赖注入。智能体内部没有
+  ``SessionLocal()`` / ``ChatOpenAI()``。
+* ``run`` 是异步的（等待 ``ainvoke``）；``fallback`` 是同步的。
+* PromptTuner 留在 B-9；``run`` 接受一个可选的 ``style_fragment``。
+* 情绪基线比较复用 :class:`~app.domain.memory.types.EmotionBaseline`。
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ _POSITIVE_EMOTIONS = ("开心", "满足", "兴奋", "感恩", "平静", "希望"
 
 
 class InsightAgent:
-    """Analyse emotional patterns/trends and produce actionable insight or reports."""
+    """分析情绪模式/趋势并产生可操作的洞察或报告。"""
 
     def __init__(
         self,
@@ -64,7 +64,7 @@ class InsightAgent:
         *,
         style_fragment: str | None = None,
     ) -> dict[str, Any]:
-        """Produce ``insight_response`` (+ token usage) for the current diary."""
+        """为当前日记生成 ``insight_response``（+ token 使用量）。"""
         diary_content = state.get("diary_content", "")
         retrieval_context = state.get("retrieval_context", "")
         episodic = state.get("episodic_context", []) or []
@@ -115,7 +115,7 @@ class InsightAgent:
         return {"insight_response": reply, **usage}
 
     def fallback(self) -> dict[str, Any]:
-        """Safe, LLM-free reply used when the model is unreachable."""
+        """模型不可达时使用的安全、无 LLM 回复。"""
         return {"insight_response": INSIGHT_FALLBACK}
 
     @staticmethod

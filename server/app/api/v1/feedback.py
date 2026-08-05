@@ -1,4 +1,4 @@
-"""Feedback API routes."""
+"""反馈 API 路由。"""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ def submit_conversation_feedback(
     container: ContainerDep,
     user: CurrentUserDep,
 ) -> FeedbackResponse:
-    """Submit feedback for a conversation reply (scene 2)."""
+    """提交对会话回复的反馈（场景 2）。"""
     thompson = feedback_service.build_thompson_sampler(container.style_preference_store)
     row = feedback_service.submit_conversation_feedback(
         db,

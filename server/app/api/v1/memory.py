@@ -1,8 +1,7 @@
-"""Memory Library API — views and management of the durable memory layers.
+"""记忆库 API —— 持久记忆层的视图与管理。
 
-Exposes episodic memory (the event trail, where cards sink) and the
-long-term user profile so the desktop app can visualise everything the
-agent remembers. Working (session) memory is intentionally not exposed.
+暴露情景记忆（事件轨迹，卡片沉淀之处）和长期用户画像，
+以便桌面应用能够可视化智能体记住的一切。工作（会话）记忆有意不予暴露。
 """
 
 from __future__ import annotations

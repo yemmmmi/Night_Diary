@@ -1,9 +1,8 @@
-"""ORM model for memory cards (``memory_cards``).
+"""记忆卡片的 ORM 模型（``memory_cards``）。
 
-Memory cards are lightweight, structured memory atoms that lower the
-barrier to journaling. Each card captures a moment's emotion, event
-summary, and tags in under 30 seconds, and can optionally be expanded
-into a full diary entry.
+记忆卡片是轻量级、结构化的记忆原子，可降低写日记的门槛。
+每张卡片在 30 秒内捕捉一个时刻的情绪、事件摘要和标签，
+并可选择性地扩展为完整的日记条目。
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ from app.infrastructure.database import Base
 
 
 class MemoryCardRow(Base):
-    """A single memory card — structured fragment of a day's experience."""
+    """单张记忆卡片 — 一天体验的结构化片段。"""
 
     __tablename__ = "memory_cards"
 

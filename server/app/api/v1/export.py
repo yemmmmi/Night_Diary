@@ -1,11 +1,10 @@
-"""Export/Import API routes for full user data migration.
+"""用于完整用户数据迁移的导出/导入 API 路由。
 
-This module handles two distinct resources (``/export`` and ``/import``),
-so it deliberately omits a router-level ``prefix`` — the full sub-path is
-declared in each route decorator. All other v1 modules manage a single
-resource and use ``prefix="/resource"``; export/import is the lone
-exception because splitting into two routers for two routes would be
-over-engineering.
+本模块处理两种不同的资源（``/export`` 和 ``/import``），
+因此有意省略了路由器级别的 ``prefix`` —— 完整子路径在每个
+路由装饰器中声明。其余所有 v1 模块都只管理单一资源并使用
+``prefix="/resource"``；导出/导入是唯一的例外，因为为两个路由
+拆分出两个路由器属于过度设计。
 """
 
 from __future__ import annotations
@@ -23,16 +22,15 @@ router = APIRouter(tags=["export"])
 
 @router.get("/export/all")
 def export_all(db: DbDep, user: CurrentUserDep) -> dict[str, Any]:
-    """Export all user data as a JSON dict.
+    """将所有用户数据导出为 JSON dict。
 
-    Returns diary entries (with tags + analyses), memory cards,
-    episodic memories, and long-term profile.
+    返回日记条目（含标签 + 分析）、记忆卡片、情景记忆以及长期画像。
     """
     return export_service.export_all(db, user_id=str(user.id))
 
 
 class ImportRequest(BaseModel):
-    """Request body for JSON import. Accepts the same format as export_all output."""
+    """JSON 导入的请求体。接受与 export_all 输出相同的格式。"""
 
     data: dict[str, Any]
 
@@ -41,11 +39,11 @@ class ImportRequest(BaseModel):
 def import_json(
     body: ImportRequest, db: DbDep, container: ContainerDep, user: CurrentUserDep
 ) -> dict[str, Any]:
-    """Import user data from JSON, replacing all existing data.
+    """从 JSON 导入用户数据，替换所有现有数据。
 
-    Clears existing diaries, tags, analyses, memory cards, and memories,
-    then rebuilds from the provided JSON. ChromaDB vector index is
-    rebuilt for each imported diary entry.
+    清除现有的日记、标签、分析、记忆卡片和记忆，
+    然后根据提供的 JSON 重建。ChromaDB 向量索引会为每个导入的
+    日记条目重新构建。
     """
     summary = export_service.import_all(
         db,

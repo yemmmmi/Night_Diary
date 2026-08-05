@@ -1,23 +1,23 @@
-"""QueryUnderstander — rewrites raw user input into a declarative retrieval query.
+"""QueryUnderstander — 将原始用户输入改写为声明式检索查询。
 
-Sits between the IntentClassifier (which decides *whether* to retrieve) and
-the RetrievalAgent (which executes the retrieval). Its job is:
+位于 IntentClassifier（决定*是否*检索）和
+RetrievalAgent（执行检索）之间。其职责是：
 
-1. **Coreference resolution**: replace pronouns ("那个", "上次说的") with
-   explicit references from conversation context ("上周失眠", "项目延期").
-2. **Declarative rewrite**: transform questions into declarative search
-   queries ("我为什么总是失眠" → "失眠 反复 原因").
-3. **Key term extraction**: identify the most discriminative terms for
-   vector/BM25 retrieval.
+1. **共指消解**：将代词（"那个"、"上次说的"）替换为
+   对话上下文中的明确引用（"上周失眠"、"项目延期"）。
+2. **声明式改写**：将疑问句转换为声明式搜索
+   查询（"我为什么总是失眠" → "失眠 反复 原因"）。
+3. **关键词提取**：识别最具区分度的词项用于
+   向量/BM25 检索。
 
-Two layers (mirroring IntentClassifier):
-- **Rule layer**: fast regex + keyword patterns for common coreference cases.
-  Zero tokens, handles the 80% case.
-- **LLM layer**: for ambiguous inputs where the rule layer has low confidence.
-  Uses a light-tier LLM call with a compact prompt.
+两层架构（镜像 IntentClassifier）：
+- **规则层**：快速正则 + 关键词模式，处理常见的共指情况。
+  零 token，处理 80% 的情况。
+- **LLM 层**：用于规则层置信度较低的模糊输入。
+  使用 light 层级 LLM 调用，配以紧凑的提示词。
 
-The LLM layer is optional — if no LLM is injected, only the rule layer runs
-and the original query is returned unmodified when rules don't match.
+LLM 层是可选的——如果没有注入 LLM，则只运行规则层，
+当规则不匹配时返回原始查询不做修改。
 """
 
 from __future__ import annotations
@@ -33,9 +33,9 @@ from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
 logger = logging.getLogger(__name__)
 
-# ── Rule layer patterns ──────────────────────────────────────────────
+# ── 规则层模式 ──────────────────────────────────────────────
 
-# Pronouns / deixis that need coreference resolution
+# 需要共指消解的代词/指示词
 _DEIXIS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"那个(事情|事|时候|时间)"), "上次提到的事情"),
     (re.compile(r"上次(说的|提到的|写的)"), "之前记录的"),
@@ -44,7 +44,7 @@ _DEIXIS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"这个问题"), "这个问题"),
 ]
 
-# Question → declarative rewrite patterns
+# 疑问句 → 声明式改写模式
 _QUESTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"为什么(.+)"), r"\1 原因"),
     (re.compile(r"怎么(.+)"), r"\1 方法"),
@@ -53,7 +53,7 @@ _QUESTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(.+)怎么样了"), r"\1 现状"),
 ]
 
-# Stop words for key term extraction
+# 关键词提取的停用词
 _STOP_WORDS = frozenset(
     {
         "的",
@@ -101,7 +101,7 @@ _STOP_WORDS = frozenset(
 
 @dataclass
 class QueryUnderstanding:
-    """Result of query understanding."""
+    """查询理解的结果。"""
 
     original: str
     rewritten: str
@@ -133,11 +133,11 @@ QUERY_REWRITE_PROMPT = """你是一个查询理解助手。请将用户的输入
 
 
 class QueryUnderstander:
-    """Rewrite raw user input into a declarative retrieval query.
+    """将原始用户输入改写为声明式检索查询。
 
-    Two-layer architecture:
-    - Rule layer: fast regex patterns for common coreference/question cases.
-    - LLM layer: optional, for ambiguous inputs.
+    两层架构：
+    - 规则层：快速正则模式，处理常见的共指/疑问情况。
+    - LLM 层：可选，用于模糊输入。
     """
 
     RULE_CONFIDENCE_THRESHOLD = 0.7
@@ -160,14 +160,14 @@ class QueryUnderstander:
         *,
         context: str = "",
     ) -> QueryUnderstanding:
-        """Understand and rewrite a user query.
+        """理解并改写用户查询。
 
         Args:
-            content: Raw user input.
-            context: Recent conversation history (for coreference resolution).
+            content: 原始用户输入。
+            context: 最近的对话历史（用于共指消解）。
 
         Returns:
-            QueryUnderstanding with rewritten query and key terms.
+            QueryUnderstanding，包含改写后的查询和关键词。
         """
         if not content or not content.strip():
             return QueryUnderstanding(
@@ -177,7 +177,7 @@ class QueryUnderstander:
                 confidence=1.0,
             )
 
-        # ── Rule layer ──
+        # ── 规则层 ──
         rewritten, rule_confidence = self._rule_rewrite(content, context)
         key_terms = self._extract_key_terms(rewritten)
 
@@ -195,13 +195,13 @@ class QueryUnderstander:
                 confidence=rule_confidence,
             )
 
-        # ── LLM layer (optional) ──
+        # ── LLM 层（可选）──
         if self._llm is not None:
             try:
                 result = self._llm_rewrite(content, context)
                 if result.confidence >= self.LLM_CONFIDENCE_THRESHOLD:
                     return result
-                # LLM result below threshold — merge with rule result
+                # LLM 结果低于阈值——与规则结果合并
                 merged = QueryUnderstanding(
                     original=content,
                     rewritten=result.rewritten
@@ -223,20 +223,20 @@ class QueryUnderstander:
         )
 
     def _rule_rewrite(self, content: str, context: str) -> tuple[str, float]:
-        """Apply rule-based coreference resolution and question rewrite.
+        """应用基于规则的共指消解和疑问改写。
 
-        Returns (rewritten_query, confidence).
+        返回 (rewritten_query, confidence)。
         """
         rewritten = content.strip()
-        confidence = 0.5  # Base confidence — no rewrite applied
+        confidence = 0.5  # 基础置信度——未应用改写
 
-        # Coreference resolution via pattern matching
+        # 通过模式匹配进行共指消解
         for pattern, replacement in _DEIXIS_PATTERNS:
             if pattern.search(rewritten):
                 rewritten = pattern.sub(replacement, rewritten)
                 confidence = max(confidence, 0.75)
 
-        # Question → declarative rewrite
+        # 疑问句 → 声明式改写
         for pattern, replacement in _QUESTION_PATTERNS:
             match = pattern.search(rewritten)
             if match:
@@ -244,10 +244,10 @@ class QueryUnderstander:
                 confidence = max(confidence, 0.80)
                 break
 
-        # If context is available and content starts with a deixis marker,
-        # try to append context keywords
+        # 如果上下文可用且内容以指示词开头，
+        # 尝试附加上下文关键词
         if context and any(d in content for d in ("那个", "上次", "那件", "之前")):
-            # Extract first sentence of context as disambiguation
+            # 提取上下文的第一句作为消歧信息
             context_first = context.split("\n")[0][:30] if context else ""
             if context_first:
                 rewritten = f"{rewritten} {context_first}"
@@ -256,15 +256,15 @@ class QueryUnderstander:
         return rewritten, confidence
 
     def _extract_key_terms(self, text: str) -> list[str]:
-        """Extract discriminative key terms from text.
+        """从文本中提取有区分度的关键词。
 
-        Simple approach: split on punctuation, filter stop words, return
-        top 5 by length (longer terms tend to be more discriminative in Chinese).
+        简单方法：按标点分割，过滤停用词，按长度返回
+        前 5 个（在中文中，较长的词项往往更有区分度）。
         """
-        # Split on punctuation and whitespace
+        # 按标点和空白分割
         parts = re.split(r"[，。！？；,\.!?\s\n]+", text.strip())
         terms = [p for p in parts if p and p not in _STOP_WORDS and len(p) >= 2]
-        # Deduplicate preserving order, take top 5
+        # 去重并保留顺序，取前 5 个
         seen: set[str] = set()
         unique: list[str] = []
         for t in terms:
@@ -274,7 +274,7 @@ class QueryUnderstander:
         return unique[:5]
 
     def _llm_rewrite(self, content: str, context: str) -> QueryUnderstanding:
-        """Use LLM to rewrite the query with coreference resolution."""
+        """使用 LLM 改写查询并进行共指消解。"""
         import asyncio
 
         prompt = QUERY_REWRITE_PROMPT.format(
@@ -295,7 +295,7 @@ class QueryUnderstander:
                     confidence=0.0,
                     used_llm=False,
                 )
-            # Use async invoke if available, otherwise sync
+            # 如果可用则使用异步调用，否则同步调用
             if hasattr(llm, "ainvoke"):
                 try:
                     loop = asyncio.get_running_loop()
@@ -303,8 +303,8 @@ class QueryUnderstander:
                     loop = None
 
                 if loop is not None and loop.is_running():
-                    # We're in an async context — but understand() is sync.
-                    # Fall back to sync invoke.
+                    # 我们在异步上下文中——但 understand() 是同步的。
+                    # 回退到同步调用。
                     response = llm.invoke(prompt)
                 else:
                     response = asyncio.run(llm.ainvoke(prompt))
@@ -328,7 +328,7 @@ class QueryUnderstander:
                 )
             )
 
-        # Parse JSON response
+        # 解析 JSON 响应
         cleaned = text.strip()
         if cleaned.startswith("```"):
             cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)

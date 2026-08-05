@@ -1,4 +1,4 @@
-"""Diary chunk collection lifecycle in ChromaDB."""
+"""ChromaDB 中的日记 chunk 集合生命周期管理。"""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ COLLECTION_NAME = "diary_chunks"
 
 
 class DiaryCollectionManager(BaseCollectionManager):
-    """Manage the ``diary_chunks`` Chroma collection for diary CRUD sync.
+    """管理用于日记 CRUD 同步的 ``diary_chunks`` Chroma 集合。
 
-    Single-user desktop app: one shared collection, no per-user prefix.
-    Write failures are logged and do not raise (SQLite remains source of truth).
+    单用户桌面应用：一个共享集合，无按用户前缀。
+    写入失败仅记录日志，不会抛出异常（SQLite 仍是数据真源）。
     """
 
     _collection_name = COLLECTION_NAME
@@ -49,7 +49,7 @@ class DiaryCollectionManager(BaseCollectionManager):
         date: str = "",
         tags: str = "",
     ) -> int:
-        """Chunk and upsert a diary entry. Returns the number of chunks written."""
+        """对日记条目进行分块并 upsert。返回写入的 chunk 数量。"""
         if not content.strip():
             return 0
 
@@ -90,12 +90,12 @@ class DiaryCollectionManager(BaseCollectionManager):
         date: str = "",
         tags: str = "",
     ) -> int:
-        """Replace all chunks for a diary (delete then upsert)."""
+        """替换一条日记的全部 chunk（先删除再 upsert）。"""
         self.delete_diary(diary_id)
         return self.upsert_diary(diary_id, content, date=date, tags=tags)
 
     def delete_diary(self, diary_id: str) -> bool:
-        """Remove all chunks belonging to ``diary_id``."""
+        """移除属于 ``diary_id`` 的全部 chunk。"""
         try:
             collection = self.get_collection(create=False)
             if collection is None:

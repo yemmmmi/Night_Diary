@@ -1,17 +1,17 @@
-"""ContextCompressor — relevance-ranked history compression for the agent pipeline.
+"""ContextCompressor — 面向智能体管道的相关性排序历史压缩器。
 
-Migrated from V1 ``agents/context_compressor.py`` with V2 adaptations:
+从 V1 ``agents/context_compressor.py`` 迁移，并做了 V2 适配：
 
-* Token estimation uses :func:`~app.shared.token_utils.estimate_tokens` (single
-  source of truth — no duplicate estimator).
-* Semantic similarity is **injectable**; the default is
-  :func:`~app.domain.agents.retrieval_agent.lexical_similarity` (jieba Jaccard)
-  so the sidecar needs no embedding model at runtime. B-10+ callers may inject a
-  semantic scorer when one is available.
-* Optional :class:`~app.shared.llm.LLMClient` for long-entry summarisation; when
-  absent or unreachable, entries are truncated at sentence boundaries.
-* Default output budget is ~1500 tokens — fits inside WorkingMemory's 4000-token
-  window alongside worker outputs.
+* Token 估算使用 :func:`~app.shared.token_utils.estimate_tokens`（单一
+  事实来源——没有重复的估算器）。
+* 语义相似度是**可注入的**；默认为
+  :func:`~app.domain.agents.retrieval_agent.lexical_similarity`（jieba Jaccard），
+  使得 sidecar 在运行时不需要嵌入模型。B-10+ 调用方可以在可用时注入一个
+  语义评分器。
+* 可选的 :class:`~app.shared.llm.LLMClient` 用于长条目摘要；当
+  不可用或无法访问时，条目在句子边界处截断。
+* 默认输出预算约为 1500 token——可放入工作记忆的 4000-token
+  窗口中，与 Worker 输出并存。
 """
 
 from __future__ import annotations
@@ -41,14 +41,14 @@ SimilarityFn = Callable[[str, str], float]
 
 
 def is_low_density(content: str) -> bool:
-    """Return True when an entry is too short or greeting-only to keep."""
+    """当条目过短或仅为问候语时应返回 True（表示不值得保留）。"""
     if not content or len(content.strip()) < MIN_CONTENT_LENGTH:
         return True
     return bool(_GREETING_PATTERNS.match(content.strip()))
 
 
 def _generate_summary(content: str, llm: LLMClient | None) -> str:
-    """Summarise a long entry via LLM, or truncate at a sentence boundary."""
+    """通过 LLM 摘要长条目，或在句子边界处截断。"""
     if llm is not None:
         try:
             prompt = f"请用一句话（不超过50字）概括以下日记内容的核心要点：\n\n{content[:500]}"
@@ -78,7 +78,7 @@ def _similarity_scores(
 
 
 def _entry_content(entry: dict[str, Any]) -> str:
-    """Merge episodic ``event_summary`` + ``content`` so short labels still carry signal."""
+    """合并情景记忆的 ``event_summary`` + ``content``，使短标签也能携带信号。"""
     event = str(entry.get("event_summary") or "").strip()
     body = str(entry.get("content") or "").strip()
     if event and body and event != body:
@@ -87,7 +87,7 @@ def _entry_content(entry: dict[str, Any]) -> str:
 
 
 class ContextCompressor:
-    """Rank, filter, summarise, and greedily pack history into a token budget."""
+    """对历史进行排序、过滤、摘要，并贪婪地打包到 token 预算内。"""
 
     MAX_CONTEXT_TOKENS = DEFAULT_MAX_CONTEXT_TOKENS
 
@@ -111,7 +111,7 @@ class ContextCompressor:
         candidates: list[dict[str, Any]] | None = None,
         episodic: list[dict[str, Any]] | None = None,
     ) -> str:
-        """Return a ``\\n---\\n``-joined context string within ``max_tokens``."""
+        """返回一个在 ``max_tokens`` 范围内、以 ``\\n---\\n`` 连接的上下文字符串。"""
         if not current_content.strip():
             return ""
 
@@ -186,7 +186,7 @@ def prepare_compressed_history(
     state: Mapping[str, Any],
     compressor: ContextCompressor | None = None,
 ) -> dict[str, str]:
-    """Graph prep-step: compress ``episodic_context`` into ``compressed_history``."""
+    """图准备步骤：将 ``episodic_context`` 压缩为 ``compressed_history``。"""
     episodic = state.get("episodic_context") or []
     if not episodic:
         return {}
@@ -202,7 +202,7 @@ def prepare_compressed_history(
 
 
 def memory_context_from_state(state: Mapping[str, Any]) -> str:
-    """Prefer ``compressed_history``; fall back to formatting raw episodic entries."""
+    """优先使用 ``compressed_history``；回退到格式化原始情景记忆条目。"""
     compressed = state.get("compressed_history", "")
     if isinstance(compressed, str) and compressed.strip():
         return compressed.strip()

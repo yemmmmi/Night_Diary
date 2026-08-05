@@ -1,17 +1,15 @@
-"""Orchestrator protocol — unified interface for both AI scenes.
+"""编排器协议 — 两个 AI 场景的统一接口。
 
-This module defines a ``runtime_checkable`` Protocol that both scene 1
-(diary analysis) and scene 2 (conversation) implement. The protocol enables:
+本模块定义了一个 ``runtime_checkable`` Protocol，由场景 1
+（日记分析）和场景 2（对话）共同实现。该协议支持：
 
-1. **Cross-scene consistency**: both scenes share the same input/output contract.
-2. **Shared sub-components**: crisis detection, memory gateway, entity extraction
-   are invoked through the same interface.
-3. **Future extensibility**: new scenes (e.g., card generation) can implement
-   the same protocol.
+1. **跨场景一致性**：两个场景共享相同的输入/输出契约。
+2. **共享子组件**：危机检测、记忆网关、实体提取通过同一接口调用。
+3. **未来可扩展性**：新场景（例如卡片生成）可实现同一协议。
 
-Design decision: "shared sub-components + independent orchestration".
-Each orchestrator wraps its scene-specific execution logic (ExecutionPlanner
-for scene 1, ConversationLoop for scene 2) but exposes the same interface.
+设计决策："共享子组件 + 独立编排"。
+每个编排器封装各自场景的执行逻辑（场景 1 为 ExecutionPlanner，
+场景 2 为 ConversationLoop），但对外暴露相同的接口。
 """
 
 from __future__ import annotations
@@ -27,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class SessionType(StrEnum):
-    """AI scene type — determines which orchestrator to use."""
+    """AI 场景类型 — 决定使用哪个编排器。"""
 
     DIARY = "diary"
     CHAT = "chat"
@@ -35,17 +33,17 @@ class SessionType(StrEnum):
 
 @dataclass
 class OrchestratorInput:
-    """Unified input for both scenes.
+    """两个场景的统一输入。
 
-    Scene-specific fields are passed via ``context`` to avoid bloating the
-    common interface. Required fields are scene-agnostic.
+    场景特有字段通过 ``context`` 传递，避免公共接口过于臃肿。
+    必填字段为场景无关字段。
 
     Attributes:
-        content: User input (diary text or chat message).
-        user_id: User identifier for multi-tenant isolation.
-        session_type: Which scene this input belongs to.
-        context: Scene-specific parameters (diary_id, conversation_id,
-                 pinned_diaries, style_fragment, etc.).
+        content: 用户输入（日记文本或聊天消息）。
+        user_id: 用户标识符，用于多租户隔离。
+        session_type: 该输入所属的场景。
+        context: 场景特有参数（diary_id、conversation_id、
+                 pinned_diaries、style_fragment 等）。
     """
 
     content: str
@@ -53,7 +51,7 @@ class OrchestratorInput:
     session_type: SessionType
     context: dict[str, Any] = field(default_factory=dict)
 
-    # Convenience accessors for common context fields
+    # 常用 context 字段的便捷访问器
     @property
     def diary_id(self) -> int | None:
         return self.context.get("diary_id")

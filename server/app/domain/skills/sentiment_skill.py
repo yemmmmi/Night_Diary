@@ -1,4 +1,4 @@
-"""SentimentSkill — detect emotional polarity and intensity in diary text."""
+"""SentimentSkill — 检测日记文本中的情感极性与强度。"""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ class LLMClient(Protocol):
 
 
 class SentimentSkill(BaseSkill):
-    """Analyze sentiment polarity and intensity when emotion cues are present."""
+    """当存在情感线索时分析情感极性与强度。"""
 
     metadata = SkillMetadata(
         name="sentiment_skill",

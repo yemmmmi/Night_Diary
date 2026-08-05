@@ -1,4 +1,4 @@
-"""ORM model for AI analysis records (``analyses``)."""
+"""AI 分析记录的 ORM 模型（``analyses``）。"""
 
 from __future__ import annotations
 

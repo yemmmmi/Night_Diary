@@ -1,4 +1,4 @@
-"""Feedback domain — Thompson Sampling and prompt tuning."""
+"""反馈领域 — 汤普森采样与提示词调优。"""
 
 from app.domain.feedback.prompt_tuner import (
     AgentType,

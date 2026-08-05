@@ -1,8 +1,8 @@
-"""Skill system — registry, MVP skills, and extensible framework.
+"""技能系统 — 注册表、MVP 技能与可扩展框架。
 
-To add a new skill:
-1. Subclass ``BaseSkill`` (implement ``activation_score``, ``can_activate``, ``execute``)
-2. Register it in ``create_default_registry()``
+添加新技能的方式：
+1. 继承 ``BaseSkill``（实现 ``activation_score``、``can_activate``、``execute``）
+2. 在 ``create_default_registry()`` 中注册
 """
 
 from app.domain.skills.base import ACTIVATION_THRESHOLD, BaseSkill

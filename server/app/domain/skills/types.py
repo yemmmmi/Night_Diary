@@ -1,4 +1,4 @@
-"""Domain types for the Skill system."""
+"""技能系统的领域类型。"""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ class SkillCategory(StrEnum):
 
 
 class SkillMetadata(BaseModel):
-    """Metadata used by SkillRegistry for selection and budgeting."""
+    """SkillRegistry 用于选择和预算评估的元数据。"""
 
     name: str
     description: str
@@ -30,7 +30,7 @@ class SkillMetadata(BaseModel):
 
 
 class SkillProfileContext(TypedDict, total=False):
-    """Optional profile/intent context passed into skill activation."""
+    """传入技能激活的可选画像/意图上下文。"""
 
     intent: str
     user_id: str
@@ -38,7 +38,7 @@ class SkillProfileContext(TypedDict, total=False):
 
 
 class SkillExecutionContext(TypedDict, total=False):
-    """Runtime context for skill execution."""
+    """技能执行的运行时上下文。"""
 
     diary_content: str
     user_id: str

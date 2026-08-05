@@ -1,17 +1,15 @@
-"""Two-tier intent classifier: rule layer + optional LLM layer.
+"""两层意图分类器：规则层 + 可选的 LLM 层。
 
-Migrated from V1 ``agents/intent_classifier.py``. V2 changes:
+从 V1 ``agents/intent_classifier.py`` 迁移。V2 变更：
 
-* The LLM is injected as an :class:`~app.shared.llm.LLMClient` (no module-level
-  ``ChatOpenAI``); the LLM tier is awaited (``ainvoke``) so the classifier fits
-  the async pipeline.
-* Each LLM call is recorded through an injected
-  :class:`~app.shared.tracing.LLMCallTracer` (call_type ``classify``, tier
-  ``light``) — classification is the cheapest LLM hop and must still be
-  observable.
-* The rule layer runs first and short-circuits when confident (> 0.9),
-  spending zero tokens; the LLM layer only runs on ambiguous input, and any LLM
-  failure degrades to the rule-layer result.
+* LLM 作为 :class:`~app.shared.llm.LLMClient` 注入（没有模块级
+  ``ChatOpenAI``）；LLM 层级通过 ``ainvoke`` 等待，使分类器适配
+  异步管道。
+* 每次 LLM 调用通过注入的
+  :class:`~app.shared.tracing.LLMCallTracer` 记录（call_type ``classify``，tier
+  ``light``）——分类是最便宜的 LLM 跳转，仍必须可观测。
+* 规则层先运行，在置信度足够时（> 0.9）直接短路，不消耗任何 token；
+  LLM 层仅在输入模糊时运行，任何 LLM 失败都降级到规则层结果。
 """
 
 from __future__ import annotations
@@ -124,7 +122,7 @@ _PURE_RECORD_SIGNALS = (
 
 
 class IntentClassifier:
-    """Classify diary intent via a fast rule layer then an optional LLM layer."""
+    """通过快速规则层然后可选 LLM 层对日记意图进行分类。"""
 
     CONFIDENCE_THRESHOLD = 0.9
 
@@ -140,7 +138,7 @@ class IntentClassifier:
         self._model = model
 
     async def classify(self, content: str) -> IntentResult:
-        """Return the intent for ``content`` (rule layer first, LLM on ambiguity)."""
+        """返回 ``content`` 的意图（规则层优先，模糊时用 LLM）。"""
         if not content or not content.strip():
             return IntentResult(
                 intent_category=IntentCategory.PURE_RECORD.value,

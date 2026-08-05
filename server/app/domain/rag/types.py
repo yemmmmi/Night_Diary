@@ -1,4 +1,4 @@
-"""RAG domain types for diary chunking and keyword retrieval."""
+"""用于日记分块与关键词检索的 RAG 领域类型。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Chunk:
-    """A text segment derived from a diary entry, ready for vector/BM25 indexing."""
+    """从一条日记条目派生出的文本片段，可用于向量 / BM25 索引。"""
 
     content: str
     diary_id: str
@@ -22,7 +22,7 @@ class Chunk:
 
 @dataclass(frozen=True, slots=True)
 class BM25Doc:
-    """Document payload stored in a :class:`BM25Index`."""
+    """存储在 :class:`BM25Index` 中的文档载荷。"""
 
     doc_id: str
     content: str
@@ -35,7 +35,7 @@ class BM25Doc:
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
-    """A single BM25 keyword retrieval hit."""
+    """单次 BM25 关键词检索命中。"""
 
     doc_id: str
     content: str
@@ -49,10 +49,10 @@ class SearchResult:
 
 @dataclass(frozen=True, slots=True)
 class RetrievalResult:
-    """A fused/reranked retrieval hit produced by :class:`HybridRetriever`.
+    """由 :class:`HybridRetriever` 产出的融合 / 重排序后的检索命中。
 
-    ``score`` carries the most recent stage score (RRF or rerank). Stages are
-    annotated separately so callers can inspect the pipeline.
+    ``score`` 携带最近一个阶段的得分（RRF 或 rerank）。各阶段得分会单独标注，
+    以便调用方检查整个流水线。
     """
 
     doc_id: str

@@ -1,4 +1,4 @@
-"""CrisisDetectorSkill — detect extreme negative emotion and escalate safely."""
+"""CrisisDetectorSkill — 检测极端负面情绪并安全升级处理。"""
 
 from __future__ import annotations
 
@@ -22,11 +22,10 @@ CRISIS_RESOURCES = (
 
 
 class CrisisDetectorSkill(BaseSkill):
-    """Detect crisis-level negative emotion and return supportive resources.
+    """检测危机级别的负面情绪并返回支持性资源。
 
-    Emotion scoring is delegated to the shared :class:`EmotionEstimator` (the
-    single source of truth for the keyword heuristic) instead of a skill-local
-    copy of the lexicon.
+    情绪评分委托给共享的 :class:`EmotionEstimator`（关键词启发式判断的唯一
+    数据源），而非在技能内部保留词库副本。
     """
 
     metadata = SkillMetadata(

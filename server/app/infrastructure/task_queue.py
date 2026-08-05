@@ -1,11 +1,11 @@
-"""Task queue — async sidecar execution with Redis Queue or threading fallback.
+"""任务队列 — 使用 Redis Queue 或线程回退的异步边车执行。
 
-When REDIS_URL is set and Redis is available, tasks are enqueued to RQ
-(Redis Queue) workers for proper background processing. When Redis is
-unavailable, tasks fall back to daemon threads (same as before, but
-centralized here for easier migration).
+当设置了 REDIS_URL 且 Redis 可用时，任务入队到 RQ
+（Redis Queue）工作进程进行正式的后台处理。当 Redis
+不可用时，任务回退到守护线程（与之前相同，但在此集中
+管理以便于迁移）。
 
-Usage:
+用法：
     from app.infrastructure.task_queue import enqueue_task
 
     enqueue_task(
@@ -32,7 +32,7 @@ _redis_queue = None
 
 
 def _init_rq() -> None:
-    """Initialize RQ queue if Redis is available."""
+    """如果 Redis 可用则初始化 RQ 队列。"""
     global _redis_queue
     if not is_redis_available():
         return
@@ -54,16 +54,16 @@ def enqueue_task(
     *args: Any,
     **kwargs: Any,
 ) -> str | None:
-    """Enqueue a background task.
+    """将后台任务入队。
 
     Args:
-        func: Either a callable (threading mode) or a dotted path string
-              like "app.module.function" (RQ mode). When using RQ, a string
-              path is required so the worker can import it.
-        *args, **kwargs: Arguments to pass to the function.
+        func: 可调用对象（线程模式）或点分路径字符串
+              如 "app.module.function"（RQ 模式）。使用 RQ 时需要字符串
+              路径，以便工作进程可以导入它。
+        *args, **kwargs: 传递给函数的参数。
 
     Returns:
-        Job ID (RQ mode) or thread name (threading mode), or None on failure.
+        作业 ID（RQ 模式）或线程名（线程模式），失败时返回 None。
     """
     if _redis_queue is not None and isinstance(func, str):
         try:
@@ -73,13 +73,13 @@ def enqueue_task(
         except Exception as exc:
             logger.warning("RQ enqueue failed, falling back to thread: %s", exc)
 
-    # Threading fallback
+    # 线程回退
     if callable(func):
         thread = threading.Thread(target=_run_safe, args=(func, args, kwargs), daemon=True)
         thread.start()
         return thread.name
     elif isinstance(func, str):
-        # Import the function by dotted path
+        # 通过点分路径导入函数
         try:
             parts = func.rsplit(".", 1)
             if len(parts) == 2:
@@ -94,12 +94,12 @@ def enqueue_task(
 
 
 def _run_safe(func: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
-    """Run a function safely, catching all exceptions."""
+    """安全地运行函数，捕获所有异常。"""
     try:
         func(*args, **kwargs)
     except Exception as exc:
         logger.warning("Background task failed: %s", exc, exc_info=True)
 
 
-# Initialize on import
+# 导入时初始化
 _init_rq()

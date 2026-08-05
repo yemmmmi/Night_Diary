@@ -1,8 +1,8 @@
-"""Redis client with graceful fallback to in-memory caching.
+"""Redis 客户端，优雅降级到内存缓存。
 
-When REDIS_URL is not set or Redis is unreachable, all operations silently
-fall back to an in-process dict. This allows the app to run without Redis
-in development while gaining caching benefits in production.
+当未设置 REDIS_URL 或 Redis 不可达时，所有操作静默回退到
+进程内字典。这使应用在开发环境中无需 Redis 即可运行，
+同时在生产环境中获得缓存收益。
 """
 
 from __future__ import annotations
@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 _REDIS_URL = os.getenv("REDIS_URL", "")
 _redis_client: Any = None
 _redis_available = False
-_fallback_cache: dict[str, tuple[Any, float]] = {}  # key -> (value, expire_at)
+_fallback_cache: dict[str, tuple[Any, float]] = {}  # 键 -> (值, 过期时间)
 
 
 def _init_redis() -> None:
-    """Initialize Redis client if REDIS_URL is set."""
+    """如果设置了 REDIS_URL 则初始化 Redis 客户端。"""
     global _redis_client, _redis_available
     if not _REDIS_URL:
         return
@@ -47,7 +47,7 @@ def is_redis_available() -> bool:
 
 
 def cache_get(key: str) -> Any:
-    """Get a value from cache. Returns None if not found or expired."""
+    """从缓存获取值。未找到或已过期时返回 None。"""
     if _redis_available and _redis_client is not None:
         try:
             raw: Any = _redis_client.get(key)
@@ -57,7 +57,7 @@ def cache_get(key: str) -> Any:
         except Exception as exc:
             logger.debug("Redis get failed for key=%s: %s", key, exc)
             return None
-    # In-memory fallback
+    # 内存回退
     entry = _fallback_cache.get(key)
     if entry is None:
         return None
@@ -69,19 +69,19 @@ def cache_get(key: str) -> Any:
 
 
 def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
-    """Set a value in cache with TTL."""
+    """设置缓存值并指定 TTL。"""
     if _redis_available and _redis_client is not None:
         try:
             _redis_client.setex(key, ttl_seconds, json.dumps(value, default=str))
             return
         except Exception as exc:
             logger.debug("Redis set failed for key=%s: %s", key, exc)
-    # In-memory fallback
+    # 内存回退
     _fallback_cache[key] = (value, time.time() + ttl_seconds)
 
 
 def cache_delete(key: str) -> None:
-    """Delete a key from cache."""
+    """从缓存中删除键。"""
     if _redis_available and _redis_client is not None:
         try:
             _redis_client.delete(key)
@@ -92,7 +92,7 @@ def cache_delete(key: str) -> None:
 
 
 def cache_delete_pattern(pattern: str) -> None:
-    """Delete all keys matching a pattern (e.g. 'session:*')."""
+    """删除所有匹配模式的键（如 'session:*'）。"""
     if _redis_available and _redis_client is not None:
         try:
             keys: list[str] = list(_redis_client.keys(pattern))
@@ -101,12 +101,12 @@ def cache_delete_pattern(pattern: str) -> None:
             return
         except Exception:
             pass
-    # In-memory: simple prefix match
+    # 内存模式：简单前缀匹配
     prefix = pattern.replace("*", "")
     to_delete = [k for k in _fallback_cache if k.startswith(prefix)]
     for k in to_delete:
         _fallback_cache.pop(k, None)
 
 
-# Initialize on import
+# 导入时初始化
 _init_redis()

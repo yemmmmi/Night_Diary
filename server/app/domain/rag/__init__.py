@@ -1,4 +1,4 @@
-"""RAG: chunking, BM25 indexing, diary collections, hybrid retrieval, rerank."""
+"""RAG：分块、BM25 索引、日记集合、混合检索、重排序。"""
 
 from app.domain.rag.bm25 import BM25Index, tokenize
 from app.domain.rag.chunker import ChunkSplitter

@@ -1,4 +1,4 @@
-"""ORM model for skill activation tracing."""
+"""技能激活追踪的 ORM 模型。"""
 
 from __future__ import annotations
 

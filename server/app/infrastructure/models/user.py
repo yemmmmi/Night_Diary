@@ -1,8 +1,8 @@
-"""ORM model for registered users (``users``).
+"""注册用户的 ORM 模型（``users``）。
 
-Supports multi-tenant data isolation: every user-scoped table carries a
-``user_id`` column (VARCHAR(64)) that stores ``str(users.id)`` or the
-legacy sentinel ``'default'`` for pre-migration data.
+支持多租户数据隔离：每个用户限定的表都携带 ``user_id``
+列（VARCHAR(64)），存储 ``str(users.id)`` 或迁移前数据的
+遗留哨兵值 ``'default'``。
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from app.infrastructure.database import Base
 
 
 class UserRow(Base):
-    """A registered application user."""
+    """已注册的应用用户。"""
 
     __tablename__ = "users"
 

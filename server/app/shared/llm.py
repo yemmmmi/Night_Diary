@@ -1,27 +1,26 @@
-"""Minimal LLM client port for dependency injection across the AI pipeline.
+"""用于 AI 管道依赖注入的最小 LLM 客户端端口。
 
-This is the single LLM *port* the domain layer depends on. Agents (B-8) receive
-an object satisfying :class:`LLMClient` through their constructor and never
-construct an LLM themselves (no ``ChatOpenAI()`` / ``os.getenv`` inside agents).
+这是领域层依赖的唯一 LLM *端口*。智能体（B-8）通过构造函数接收满足
+:class:`LLMClient` 的对象，并且永远不会自行构造 LLM（智能体内部不出现
+``ChatOpenAI()`` / ``os.getenv``）。
 
-Two methods are declared on purpose:
+有意声明了两个方法：
 
-* ``invoke`` — synchronous; used by the eval :class:`~tests.eval.judge.LLMJudge`
-  and by sync callers (e.g. ``SentimentSkill``).
-* ``ainvoke`` — asynchronous; used by the Worker Agents, which run concurrently
-  under the B-9 ``asyncio.gather`` fan-out.
+* ``invoke``——同步；由评估 :class:`~tests.eval.judge.LLMJudge` 和同步调用方
+  （例如 ``SentimentSkill``）使用。
+* ``ainvoke``——异步；由 Worker 智能体使用，它们在 B-9 的 ``asyncio.gather``
+  扇出下并发运行。
 
-Both return ``Any`` because the response is *message-like*: callers read the
-text via ``getattr(response, "content", response)`` and pull token usage with
-:func:`app.domain.agents.state.extract_token_usage` (which reads
-``response.response_metadata``). A bare ``str`` therefore also satisfies the
-content extraction path (usage degrades to zeros).
+两者都返回 ``Any``，因为响应是*类消息*对象：调用方通过
+``getattr(response, "content", response)`` 读取文本，并通过
+:func:`app.domain.agents.state.extract_token_usage` 提取 token 使用量（它读取
+``response.response_metadata``）。因此，单纯的 ``str`` 也满足内容提取路径
+（使用量降级为零）。
 
-The concrete implementation — a LangChain ``BaseChatModel`` wired from a
-per-tier :class:`~app.shared.llm_factory.LLMFactory` config — lives in
-``llm_factory.py``. This Protocol keeps domain code decoupled from
-``langchain-openai``: unit tests inject stubs and the offline eval injects a
-thin HTTP adapter.
+具体实现——一个根据按层级的 :class:`~app.shared.llm_factory.LLMFactory` 配置
+组装的 LangChain ``BaseChatModel``——位于 ``llm_factory.py`` 中。此 Protocol
+使领域代码与 ``langchain-openai`` 解耦：单元测试注入桩，离线评估注入一个
+轻量的 HTTP 适配器。
 """
 
 from __future__ import annotations
@@ -31,24 +30,23 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class LLMClient(Protocol):
-    """Structural port for an LLM chat model used via dependency injection."""
+    """用于通过依赖注入使用的 LLM 聊天模型结构化端口。"""
 
     def invoke(self, prompt: str) -> Any:
-        """Synchronously complete ``prompt`` and return a message-like result."""
+        """同步完成 ``prompt`` 并返回类消息结果。"""
         ...
 
     async def ainvoke(self, prompt: str) -> Any:
-        """Asynchronously complete ``prompt`` and return a message-like result."""
+        """异步完成 ``prompt`` 并返回类消息结果。"""
         ...
 
 
 @runtime_checkable
 class ToolCapableLLMClient(Protocol):
-    """LLM client that additionally supports native function calling.
+    """额外支持原生函数调用的 LLM 客户端。
 
-    Implementations (e.g. ChatOpenAI) expose ``bind_tools`` returning a
-    runnable that accepts tool specs and produces responses with
-    ``tool_calls``. TracingLLMClient transparently delegates this.
+    实现（例如 ChatOpenAI）暴露 ``bind_tools``，返回一个接受工具规范并产生
+    带 ``tool_calls`` 响应的可运行对象。TracingLLMClient 透明地委托此调用。
     """
 
     def invoke(self, prompt: str) -> Any: ...
@@ -59,10 +57,10 @@ class ToolCapableLLMClient(Protocol):
 
 
 def message_text(response: Any) -> str:
-    """Extract the text body from a message-like LLM response.
+    """从类消息的 LLM 响应中提取文本正文。
 
-    Accepts a LangChain ``AIMessage`` (``.content``) or a plain ``str`` so the
-    same call site works for the production model and a stubbed reply.
+    接受 LangChain ``AIMessage``（``.content``）或纯 ``str``，因此同一个调用点
+    既适用于生产模型，也适用于桩回复。
     """
     content = getattr(response, "content", response)
     return str(content)

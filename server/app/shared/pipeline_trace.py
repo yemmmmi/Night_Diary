@@ -1,11 +1,10 @@
-"""Pipeline tracing for developer-mode observability.
+"""用于开发者模式可观测性的管道追踪。
 
-Provides ``PipelineTrace`` / ``TraceSpan`` data structures and a ``trace_span``
-context manager that capture stage-level input/output snapshots, timing, and
-errors for inspection in the developer-mode UI.
+提供 ``PipelineTrace`` / ``TraceSpan`` 数据结构以及 ``trace_span`` 上下文
+管理器，用于捕获阶段级的输入/输出快照、计时和错误，供开发者模式 UI 检查。
 
-When developer mode is off (no trace set in the context), ``trace_span`` yields
-``None`` with zero overhead -- production code paths are unaffected.
+当开发者模式关闭时（上下文中未设置 trace），``trace_span`` 产出 ``None`` 且
+零开销——生产代码路径不受影响。
 """
 
 from __future__ import annotations
@@ -18,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-# Span status constants
+# Span 状态常量
 STATUS_RUNNING = "running"
 STATUS_COMPLETED = "completed"
 STATUS_ERROR = "error"
@@ -31,15 +30,15 @@ def truncate_snapshot(
     max_dict_keys: int = 20,
     max_list_items: int = 3,
 ) -> Any:
-    """Recursively truncate a snapshot value for safe inspection.
+    """递归地截断快照值，以便安全检查。
 
-    - Strings longer than ``max_str`` are truncated with an ellipsis suffix.
-    - Dicts with more than ``max_dict_keys`` keys keep only the first N and
-      append a ``__truncated__`` marker indicating the overflow count.
-    - Lists/tuples with more than ``max_list_items`` items keep only the first
-      N and append a marker indicating the overflow count.
-    - Nested dicts/lists are processed recursively.
-    - All other types (int, float, bool, None, ...) are returned unchanged.
+    - 长度超过 ``max_str`` 的字符串被截断并附加省略号后缀。
+    - 键数量超过 ``max_dict_keys`` 的字典仅保留前 N 个，并附加一个
+      ``__truncated__`` 标记以指示溢出数量。
+    - 元素数量超过 ``max_list_items`` 的列表/元组仅保留前 N 个，并附加一个
+      标记以指示溢出数量。
+    - 嵌套的字典/列表会被递归处理。
+    - 所有其他类型（int、float、bool、None……）原样返回。
     """
     if isinstance(value, str):
         if len(value) > max_str:
@@ -69,10 +68,10 @@ def truncate_snapshot(
 
 @dataclass
 class TraceSpan:
-    """One stage in a pipeline trace.
+    """管道追踪中的一个阶段。
 
-    Spans form a tree via ``child_spans``. Each span records its input/output
-    snapshots (truncated for safety), timing, and an optional error.
+    Span 通过 ``child_spans`` 形成树结构。每个 span 记录其输入/输出快照
+    （为安全起见已截断）、计时以及可选的错误。
     """
 
     span_id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -94,13 +93,13 @@ class TraceSpan:
         *,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Set the output snapshot (truncated) and optionally merge metadata."""
+        """设置输出快照（已截断），并可选地合并元数据。"""
         self.output_snapshot = truncate_snapshot(output)
         if metadata:
             self.metadata.update(metadata)
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to a plain dict suitable for JSON transport."""
+        """序列化为适合 JSON 传输的纯字典。"""
         return {
             "span_id": self.span_id,
             "stage_name": self.stage_name,
@@ -119,11 +118,10 @@ class TraceSpan:
 
 @dataclass
 class PipelineTrace:
-    """Top-level pipeline trace with nested span support.
+    """支持嵌套 span 的顶层管道追踪。
 
-    Spans are organised as a tree: ``start_span`` nests under the current
-    top-of-stack span (if any), otherwise appends to the root ``spans`` list.
-    The internal ``_span_stack`` tracks the currently-open span chain.
+    Span 组织为树结构：``start_span`` 嵌套在当前栈顶 span 之下（如果有的话），
+    否则追加到根 ``spans`` 列表。内部的 ``_span_stack`` 跟踪当前打开的 span 链。
     """
 
     trace_id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -144,11 +142,10 @@ class PipelineTrace:
         input_snapshot: Any = None,
         metadata: dict[str, Any] | None = None,
     ) -> TraceSpan:
-        """Start a new span.
+        """开始一个新的 span。
 
-        If there is an active span on the stack, the new span is appended to
-        that span's ``child_spans``; otherwise it is appended to the trace's
-        top-level ``spans`` list.
+        如果栈上有活跃的 span，新 span 将被追加到该 span 的 ``child_spans``；
+        否则追加到追踪的顶层 ``spans`` 列表。
         """
         span = TraceSpan(
             stage_name=stage_name,
@@ -172,13 +169,13 @@ class PipelineTrace:
         error: str | None = None,
         output: Any = None,
     ) -> TraceSpan | None:
-        """End the current span, popping it from the stack.
+        """结束当前 span，将其从栈中弹出。
 
-        Sets ``ended_at``, ``duration_ms``, and ``status``. If ``output`` is
-        provided, it is truncated and stored as ``output_snapshot``. If
-        ``error`` is provided, it is recorded on the span.
+        设置 ``ended_at``、``duration_ms`` 和 ``status``。如果提供了 ``output``，
+        将被截断并存储为 ``output_snapshot``。如果提供了 ``error``，将记录在
+        span 上。
 
-        Returns the ended span, or ``None`` if the stack was empty.
+        返回结束的 span，若栈为空则返回 ``None``。
         """
         if not self._span_stack:
             return None
@@ -193,13 +190,13 @@ class PipelineTrace:
         return span
 
     def end(self, status: str = STATUS_COMPLETED) -> None:
-        """Finalize the entire trace."""
+        """完成整个追踪。"""
         self.ended_at = datetime.now(UTC)
         self.duration_ms = (self.ended_at - self.started_at).total_seconds() * 1000
         self.status = status
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to a plain dict suitable for JSON transport."""
+        """序列化为适合 JSON 传输的纯字典。"""
         return {
             "trace_id": self.trace_id,
             "scenario": self.scenario,
@@ -212,7 +209,7 @@ class PipelineTrace:
         }
 
 
-# ── Context propagation ──────────────────────────────────────────────────
+# ── 上下文传播 ──────────────────────────────────────────────────
 
 _current_trace: ContextVar[PipelineTrace | None] = ContextVar(
     "night_diary_pipeline_trace",
@@ -221,21 +218,21 @@ _current_trace: ContextVar[PipelineTrace | None] = ContextVar(
 
 
 def get_trace() -> PipelineTrace | None:
-    """Return the current pipeline trace for this context, or ``None``."""
+    """返回当前上下文的管道追踪，若没有则返回 ``None``。"""
     return _current_trace.get()
 
 
 def set_trace(trace: PipelineTrace | None) -> Token[PipelineTrace | None]:
-    """Set the current pipeline trace for this context."""
+    """设置当前上下文的管道追踪。"""
     return _current_trace.set(trace)
 
 
 def reset_trace(token: Token[PipelineTrace | None]) -> None:
-    """Reset the context trace to its previous value using a token from ``set_trace``."""
+    """使用 ``set_trace`` 返回的 token 将上下文追踪重置为先前的值。"""
     _current_trace.reset(token)
 
 
-# ── Context manager ──────────────────────────────────────────────────────
+# ── 上下文管理器 ──────────────────────────────────────────────────
 
 
 @contextmanager
@@ -246,15 +243,14 @@ def trace_span(
     input_snapshot: Any = None,
     metadata: dict[str, Any] | None = None,
 ) -> Generator[TraceSpan | None, None, None]:
-    """Context manager for tracing a pipeline stage.
+    """用于追踪管道阶段的上下文管理器。
 
-    When developer mode is off (no trace set in the context), yields ``None``
-    with zero overhead -- no span is created, no timing is recorded.
+    当开发者模式关闭时（上下文中未设置 trace），产出 ``None`` 且零开销——
+    不创建 span，不记录计时。
 
-    When a trace is active, a ``TraceSpan`` is created and yielded. On normal
-    exit the span is marked ``completed``. If an exception occurs inside the
-    ``with`` block, the span is marked ``error`` with the exception message and
-    the exception is re-raised.
+    当有活跃的追踪时，创建并产出 ``TraceSpan``。正常退出时，span 被标记为
+    ``completed``。如果 ``with`` 块内发生异常，span 被标记为 ``error`` 并记录
+    异常消息，然后重新抛出异常。
     """
     trace = get_trace()
     if trace is None:

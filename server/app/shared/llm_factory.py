@@ -1,4 +1,4 @@
-"""LLMFactory — creates tier-aware LLM clients from ModelProvider rows."""
+"""LLMFactory——根据 ModelProvider 行创建按层级的 LLM 客户端。"""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class StubLLMClient:
-    """Test/dev stub implementing :class:`LLMClient`."""
+    """实现 :class:`LLMClient` 的测试/开发桩。"""
 
     def __init__(self, *, model: str = "stub", reply: str = "测试回应") -> None:
         self.model = model
@@ -41,7 +41,7 @@ class StubLLMClient:
 
 
 class LLMFactory:
-    """Resolve LLM clients per tier from DB providers or environment defaults."""
+    """从数据库提供商或环境默认值按层级解析 LLM 客户端。"""
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
@@ -69,9 +69,9 @@ class LLMFactory:
         )
 
     def create_for_tier(self, db: Session, tier: str, *, user_id: str | None = None) -> LLMClient:
-        """Return an LLM client for ``tier``, falling back to ``default`` then env.
+        """返回 ``tier`` 对应的 LLM 客户端，依次回退到 ``default`` 和环境变量。
 
-        When ``user_id`` is provided, providers are scoped to that user.
+        当提供 ``user_id`` 时，提供商范围限定为该用户。
         """
         from app.services import model_service
 
@@ -90,9 +90,9 @@ class LLMFactory:
         prefer_active: bool = True,
         user_id: str | None = None,
     ) -> dict[str, LLMClient]:
-        """Build one client per tier from active ``model_providers`` rows.
+        """根据活跃的 ``model_providers`` 行，为每个层级构建一个客户端。
 
-        When ``user_id`` is provided, only that user's providers are resolved.
+        当提供 ``user_id`` 时，仅解析该用户的提供商。
         """
         from app.shared.tracing_llm import TracingLLMClient
 
