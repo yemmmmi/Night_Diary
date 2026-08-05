@@ -65,37 +65,6 @@ async def publish_trace_complete(trace: PipelineTrace) -> None:
         logger.warning("Failed to publish trace_complete: %s", e)
 
 
-def publish_trace_complete_sync(trace: PipelineTrace) -> None:
-    """Synchronous trace_complete push.
-
-    Calling asyncio.run() on a sync endpoint (thread-pool thread) crashes the
-    process on Windows (ProactorEventLoop conflict). TraceEventBus.publish only
-    uses put_nowait internally (a synchronous op), so no event loop is needed —
-    inline that logic here.
-    """
-    try:
-        from contextlib import suppress
-
-        from app.shared.trace_event_bus import get_event_bus
-
-        event_bus = get_event_bus()
-        event = {
-            "type": "trace_complete",
-            "trace_id": trace.trace_id,
-            "trace": {
-                "status": trace.status,
-                "duration_ms": trace.duration_ms,
-                "span_count": len(trace.spans),
-            },
-        }
-        queues = event_bus._subscribers.get(trace.trace_id, [])
-        for queue in queues:
-            with suppress(Exception):
-                queue.put_nowait(event)
-    except Exception as e:
-        logger.warning("Failed to publish trace_complete (sync): %s", e)
-
-
 async def publish_span_complete(trace: PipelineTrace, span: TraceSpan) -> None:
     """Push a span_complete event through the EventBus. Best-effort."""
     try:
