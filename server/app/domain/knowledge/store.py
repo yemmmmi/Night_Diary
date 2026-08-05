@@ -1,4 +1,4 @@
-"""Psychology domain knowledge store backed by ChromaDB."""
+"""基于 ChromaDB 的心理学领域知识存储。"""
 
 from __future__ import annotations
 
@@ -20,17 +20,26 @@ _chroma_client: Any | None = None
 
 
 def get_chroma_client(persist_dir: str) -> Any:
-    """Return a process-wide Chroma ``PersistentClient`` singleton."""
+    """返回进程级别的 Chroma ``PersistentClient`` 单例。
+
+    ``anonymized_telemetry=False`` 禁用 chromadb 的匿名使用情况上报
+    （posthog）。这是一个个人日记应用 — 无需遥测，同时也可避免
+    chromadb 0.5.x × posthog 7.x 的 API 不兼容问题。
+    """
     global _chroma_client
     if _chroma_client is None:
         import chromadb
+        from chromadb.config import Settings as ChromaSettings
 
-        _chroma_client = chromadb.PersistentClient(path=persist_dir)
+        settings = ChromaSettings(anonymized_telemetry=False)
+        _chroma_client = chromadb.PersistentClient(
+            path=persist_dir, settings=settings
+        )
     return _chroma_client
 
 
 def reset_chroma_client() -> None:
-    """Clear the cached client — for tests only."""
+    """清除缓存的客户端 — 仅用于测试。"""
     global _chroma_client
     _chroma_client = None
 
@@ -40,10 +49,10 @@ class EmbeddingFunction(Protocol):
 
 
 class DomainKnowledgeStore:
-    """Read/write interface for the shared psychology domain knowledge collection.
+    """共享心理学领域知识集合的读/写接口。
 
-    All agents must query domain knowledge through this class (single entry point).
-    Query failures degrade to an empty result list without raising.
+    所有智能体必须通过此类查询领域知识（单一入口点）。
+    查询失败会降级为返回空结果列表，不会抛出异常。
     """
 
     def __init__(
@@ -98,7 +107,7 @@ class DomainKnowledgeStore:
         max_results: int = DEFAULT_MAX_RESULTS,
         category_filter: str | None = None,
     ) -> list[KnowledgeHit]:
-        """Retrieve domain knowledge entries relevant to ``query_text``."""
+        """检索与 ``query_text`` 相关的领域知识条目。"""
         if not query_text.strip():
             return []
 
@@ -138,7 +147,7 @@ class DomainKnowledgeStore:
         source: str,
         doc_id: str | None = None,
     ) -> str | None:
-        """Insert a domain knowledge document. Returns the document id."""
+        """插入一条领域知识文档。返回文档 id。"""
         if not content.strip():
             return None
 
@@ -155,7 +164,7 @@ class DomainKnowledgeStore:
         return resolved_id
 
     def delete(self, doc_id: str) -> bool:
-        """Delete a domain knowledge document by id."""
+        """按 id 删除领域知识文档。"""
         if not doc_id.strip():
             return False
 
@@ -171,7 +180,7 @@ class DomainKnowledgeStore:
             return False
 
     def is_initialized(self) -> bool:
-        """Return True when the collection exists and contains documents."""
+        """当集合存在且包含文档时返回 True。"""
         try:
             collection = self._get_collection(create=False)
             if collection is None:
@@ -182,7 +191,7 @@ class DomainKnowledgeStore:
             return False
 
     def get_stats(self) -> dict[str, Any]:
-        """Return basic collection statistics."""
+        """返回基本的集合统计信息。"""
         try:
             collection = self._get_collection(create=False)
             if collection is None:
@@ -247,7 +256,7 @@ _store: DomainKnowledgeStore | None = None
 
 
 def get_domain_store(settings: Settings | None = None) -> DomainKnowledgeStore:
-    """Return a process-wide ``DomainKnowledgeStore`` singleton."""
+    """返回进程级别的 ``DomainKnowledgeStore`` 单例。"""
     global _store
     if _store is None:
         _store = DomainKnowledgeStore(settings=settings)
@@ -255,6 +264,6 @@ def get_domain_store(settings: Settings | None = None) -> DomainKnowledgeStore:
 
 
 def reset_domain_store() -> None:
-    """Clear cached store — for tests only."""
+    """清除缓存的存储 — 仅用于测试。"""
     global _store
     _store = None

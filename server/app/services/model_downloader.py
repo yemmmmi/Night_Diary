@@ -45,12 +45,24 @@ class ModelDownloadSnapshot:
 
 
 def configure_hf_environment(settings: Settings) -> None:
-    """Point HuggingFace caches at the app data directory (idempotent)."""
+    """Point HuggingFace caches at the app data directory (idempotent).
+
+    Sets ``HF_HUB_OFFLINE=1`` when models are already cached locally, so
+    SentenceTransformer / huggingface_hub skip network HEAD requests that
+    each take 10s+ to time out (5 retries × 2 files = ~2 min of pure
+    network-wait on a machine without VPN access to huggingface.co).
+    """
     models_dir = str(Path(settings.models_dir).resolve())
     os.environ.setdefault("HF_HOME", models_dir)
     os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", models_dir)
     if settings.hf_endpoint:
         os.environ.setdefault("HF_ENDPOINT", settings.hf_endpoint)
+    # If all required models are cached locally, force offline mode to
+    # avoid slow network HEAD checks at startup.
+    if all(_is_ready(repo, settings) for _, repo in REQUIRED_MODELS):
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        logger.info("All models cached locally — enabling HF_HUB_OFFLINE mode")
 
 
 def _ready_marker_path(settings: Settings, repo_id: str) -> Path:

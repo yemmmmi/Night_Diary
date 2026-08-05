@@ -1,27 +1,37 @@
-"""FastAPI application entry point.
+"""FastAPI 应用入口。
 
-Binds to ``127.0.0.1`` by default (use ``--host 0.0.0.0`` for Docker).  Accepts
-``--port`` and ``--data-dir`` CLI arguments.
+默认绑定到 ``127.0.0.1``（Docker 环境请使用 ``--host 0.0.0.0``）。接受
+``--port`` 和 ``--data-dir`` 命令行参数。
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import faulthandler
 import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+# 启用 faulthandler 以捕获原生崩溃的 traceback
+faulthandler.enable()
+
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
+
+# 在任何 chromadb 导入之前应用 chromadb × posthog 兼容性补丁。
+# 必须尽早执行——chromadb 在导入时会触发遥测调用。
+from app.shared.chromadb_telemetry_compat import apply_telemetry_compat_patch
+
+apply_telemetry_compat_patch()
 
 logger = logging.getLogger(__name__)
 
 
 def _app_build_version() -> str:
-    """Best-effort git short hash for dev stale-backend detection."""
+    """尽力获取 git 短哈希，用于开发环境检测过期的后端进程。"""
     import subprocess
 
     try:
@@ -58,7 +68,7 @@ def _ensure_dirs(settings) -> None:  # type: ignore[no-untyped-def]
 
 
 def _bootstrap_core_sync(app: FastAPI) -> None:
-    """SQLite + session factory — fast enough for ``/ready`` and diary CRUD."""
+    """SQLite + 会话工厂——速度足够快，足以支撑 ``/ready`` 和日记 CRUD。"""
     import time as _time
 
     from app.services.container import ServiceContainer
@@ -71,7 +81,7 @@ def _bootstrap_core_sync(app: FastAPI) -> None:
 
 
 def _bootstrap_ai_sync(app: FastAPI) -> None:
-    """RAG / agents — runs after core; first AI call may trigger if still pending."""
+    """RAG / 智能体——在核心启动之后运行；若仍在挂起，首次 AI 调用可能会触发。"""
     container = app.state.container
     if container is not None:
         container.ensure_ai_stack()
@@ -102,7 +112,7 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     app = FastAPI(title=cfg.app_name, version="0.0.1", lifespan=lifespan)
 
-    # CORS: loopback is always allowed; additional origins via config.
+    # CORS：始终允许回环地址；额外的源通过配置指定。
     import re as _re
 
     from fastapi.middleware.cors import CORSMiddleware
@@ -128,12 +138,12 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
-        """Uvicorn is listening."""
+        """Uvicorn 正在监听。"""
         return {"status": "ok"}
 
     @app.get("/ready", tags=["meta"])
     def ready() -> JSONResponse:
-        """Core bootstrap complete — diary CRUD safe."""
+        """核心启动完成——日记 CRUD 可安全使用。"""
         if getattr(app.state, "bootstrap_done", False) and app.state.container is not None:
             return JSONResponse({"status": "ok"})
         return JSONResponse(
@@ -143,12 +153,12 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     @app.get("/meta/version", tags=["meta"])
     def meta_version() -> dict[str, str]:
-        """Dev helper — lets the frontend detect a stale backend process."""
+        """开发辅助工具——让前端检测过期的后端进程。"""
         return {"version": _app_build_version()}
 
     @app.post("/shutdown", tags=["meta"])
     async def shutdown() -> dict[str, str]:
-        """Graceful shutdown — called before SIGTERM."""
+        """优雅关闭——在 SIGTERM 之前调用。"""
         loop = asyncio.get_running_loop()
         loop.call_later(0.3, lambda: os._exit(0))
         return {"status": "shutting_down"}
@@ -157,7 +167,7 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Entry point for uvicorn."""
+    """uvicorn 的入口点。"""
     import uvicorn
 
     from app.config import get_settings
@@ -178,7 +188,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
 
-def __getattr__(name: str) -> FastAPI:  # PEP 562 lazy export for tests
+def __getattr__(name: str) -> FastAPI:  # PEP 562 惰性导出，供测试使用
     if name == "app":
         return create_app()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

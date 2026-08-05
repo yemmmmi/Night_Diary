@@ -1,27 +1,7 @@
-"""Three-layer memory system for diary analysis."""
+"""用于日记分析的三层记忆系统。
 
-from app.domain.memory.episodic import EpisodicMemory
-from app.domain.memory.long_term import LongTermMemory
-from app.domain.memory.types import (
-    EmotionBaseline,
-    EpisodicEntry,
-    EpisodicMemoryStore,
-    ImportantPerson,
-    LongTermProfileStore,
-    UserProfile,
-    WorkingContext,
-)
-from app.domain.memory.working import WorkingMemory
-
-__all__ = [
-    "EmotionBaseline",
-    "EpisodicEntry",
-    "EpisodicMemory",
-    "EpisodicMemoryStore",
-    "ImportantPerson",
-    "LongTermMemory",
-    "LongTermProfileStore",
-    "UserProfile",
-    "WorkingContext",
-    "WorkingMemory",
-]
+模块在首次使用时才延迟导入。请勿在此处添加即时导入 ——
+``working.py`` 会传递性导入 ``context_compressor``，后者会引入
+langchain / chromadb，使启动时间增加约 15 秒。每个调用方应导入
+自己所需的特定子模块。
+"""

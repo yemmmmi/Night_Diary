@@ -1,26 +1,17 @@
-"""Multi-agent pipeline: shared state, intent classification, Workers, orchestration.
+"""多智能体管道：共享状态、意图分类、Worker、编排。
 
-B-8 delivered the three Worker Agents (Empathy / Retrieval / Insight) and the
-IntentClassifier. B-9 adds the :class:`SupervisorAgent` (intent + Skill
-integration + tier routing + synthesis) and the pure-asyncio
-:class:`MultiAgentGraph` that orchestrates them (no LangGraph).
+B-8 交付了三个 Worker 智能体（Empathy / Retrieval / Insight）和
+IntentClassifier。B-9 新增 :class:`SupervisorAgent`（意图 + 技能
+集成 + 层级路由 + 合成）以及编排它们的纯 asyncio
+:class:`MultiAgentGraph`（不使用 LangGraph）。
+
+模块通过 ``__getattr__`` 懒加载，避免在启动时拉入沉重的
+langchain / chromadb / sentence_transformers 依赖链。直接子模块导入（如
+``from app.domain.agents.graph import MultiAgentGraph``）会绕过此
+``__init__``，只加载实际需要的部分。
 """
 
 from __future__ import annotations
-
-from app.domain.agents.context_compressor import ContextCompressor
-from app.domain.agents.empathy_agent import EmpathyAgent
-from app.domain.agents.graph import (
-    MultiAgentGraph,
-    MultiAgentGraphBuilder,
-    create_multi_agent_graph,
-)
-from app.domain.agents.insight_agent import InsightAgent
-from app.domain.agents.intent_classifier import IntentClassifier
-from app.domain.agents.retrieval_agent import RetrievalAgent
-from app.domain.agents.state import MultiAgentState, extract_token_usage, merge_unique
-from app.domain.agents.supervisor import SupervisorAgent, allocate_token_budget
-from app.domain.agents.types import IntentCategory, IntentResult
 
 __all__ = [
     "ContextCompressor",
@@ -39,3 +30,31 @@ __all__ = [
     "extract_token_usage",
     "merge_unique",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name in __all__:
+        import importlib
+
+        # 将公开名称映射到其源模块。
+        _module_map = {
+            "ContextCompressor": "app.domain.agents.context_compressor",
+            "EmpathyAgent": "app.domain.agents.empathy_agent",
+            "InsightAgent": "app.domain.agents.insight_agent",
+            "IntentCategory": "app.domain.agents.types",
+            "IntentClassifier": "app.domain.agents.intent_classifier",
+            "IntentResult": "app.domain.agents.types",
+            "MultiAgentGraph": "app.domain.agents.graph",
+            "MultiAgentGraphBuilder": "app.domain.agents.graph",
+            "MultiAgentState": "app.domain.agents.state",
+            "RetrievalAgent": "app.domain.agents.retrieval_agent",
+            "SupervisorAgent": "app.domain.agents.supervisor",
+            "allocate_token_budget": "app.domain.agents.supervisor",
+            "create_multi_agent_graph": "app.domain.agents.graph",
+            "extract_token_usage": "app.domain.agents.state",
+            "merge_unique": "app.domain.agents.state",
+        }
+        mod_name = _module_map[name]
+        mod = importlib.import_module(mod_name)
+        return getattr(mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

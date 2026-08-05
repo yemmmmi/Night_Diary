@@ -1,7 +1,7 @@
-"""Working memory — session context with token-budget enforcement.
+"""工作记忆 —— 会话上下文，附带 token 预算强制执行。
 
-This PR delivers the domain-level integration contract only. Supervisor /
-Multi-Agent wiring lands in Phase B-9 / C-1.
+本 PR 仅交付领域层的集成契约。Supervisor / Multi-Agent 的接线工作
+将在 Phase B-9 / C-1 中落地。
 
 Example::
 
@@ -26,11 +26,13 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from app.domain.agents.context_compressor import ContextCompressor
 from app.domain.memory.types import UserProfile, WorkingContext
 from app.shared.token_utils import estimate_tokens
+
+if TYPE_CHECKING:
+    from app.domain.agents.context_compressor import ContextCompressor
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +46,20 @@ _CONTEXT_FIELDS = (
 
 
 class WorkingMemory:
-    """Session-level working memory for one diary analysis turn."""
+    """单次日记分析轮次的会话级工作记忆。"""
 
     MAX_CONTEXT_TOKENS = MAX_CONTEXT_TOKENS
 
     def __init__(self, *, context_compressor: ContextCompressor | None = None) -> None:
         self._context: WorkingContext | None = None
-        self._compressor = context_compressor or ContextCompressor()
+        if context_compressor is not None:
+            self._compressor = context_compressor
+        else:
+            # 延迟导入，以避免在模块加载时触发 langchain/chromadb 导入链
+            # （节省约 15 秒启动时间）。
+            from app.domain.agents.context_compressor import ContextCompressor as _CC
+
+            self._compressor = _CC()
 
     @property
     def context(self) -> WorkingContext | None:
@@ -63,7 +72,7 @@ class WorkingMemory:
         return self._context is not None
 
     def load_context(self, diary_id: str, user_profile: UserProfile) -> WorkingContext:
-        """Initialize working memory for a diary analysis session."""
+        """为一次日记分析会话初始化工作记忆。"""
         profile_dict = user_profile.model_dump()
         self._context = WorkingContext(
             diary_id=diary_id,
@@ -83,7 +92,7 @@ class WorkingMemory:
         return deepcopy(self._context)
 
     def update_context(self, ctx: WorkingContext, turn_result: dict[str, Any]) -> None:
-        """Merge turn output into working memory and enforce token limits."""
+        """将轮次输出合并到工作记忆中，并强制执行 token 上限。"""
         merged = deepcopy(ctx)
         for key, value in turn_result.items():
             if key in _CONTEXT_FIELDS and isinstance(value, str):

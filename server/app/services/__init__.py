@@ -1,25 +1,9 @@
-"""Service layer — business orchestration between API routes and domain."""
+"""Service layer — business orchestration between API routes and domain.
 
-from app.services import (
-    analysis_service,
-    card_prompt_service,
-    card_service,
-    conversation_service,
-    diary_service,
-    feedback_service,
-    model_service,
-    tag_service,
-)
-from app.services.container import ServiceContainer
-
-__all__ = [
-    "ServiceContainer",
-    "analysis_service",
-    "card_prompt_service",
-    "card_service",
-    "conversation_service",
-    "diary_service",
-    "feedback_service",
-    "model_service",
-    "tag_service",
-]
+Modules are imported lazily on first use.  Do NOT add eager imports here —
+the previous ``from app.services import (analysis_service, ...)`` pattern
+pulled in the entire AI stack (langchain, torch) at startup, adding ~15s
+before ``/ready`` was available.  Each consumer should import only the
+specific submodule it needs (``from app.services import diary_service``)
+so that heavy transitive deps load on demand.
+"""
