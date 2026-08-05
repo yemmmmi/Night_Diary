@@ -1,13 +1,14 @@
-"""轻量级实体提取器——对话轮次的异步 sidecar。
+"""Lightweight entity extractor — async sidecar for conversation turns.
 
-用更简单、更聚焦的实现替换已删除的 KnowledgeExtractor，在每个
-对话轮次后从用户消息中提取实体（人物、地点、话题）。作为即发即忘的
-后台任务运行，因此从不阻塞回复。
+Replaces the deleted KnowledgeExtractor with a simpler, focused implementation
+that extracts entities (persons, places, topics) from user messages after each
+conversation turn. Runs as a fire-and-forget background task so it never blocks
+the reply.
 
-与旧的 KnowledgeExtractor 不同：
-- 没有单独的 LLM 调用（使用正则 + 简单 NER 模式，零 token）
-- 只提取实体，不提取 mood_score（已由 EmotionEstimator 处理）
-- 写入 Neo4j 实体图（如果可用）以支持多跳关系查询
+Unlike the old KnowledgeExtractor:
+- No separate LLM call (uses regex + simple NER patterns, zero tokens)
+- Extracts only entities, not mood_score (already handled by EmotionEstimator)
+- Writes to Neo4j entity graph (if available) for multi-hop relationship queries
 """
 
 from __future__ import annotations
@@ -22,22 +23,22 @@ from app.infrastructure.task_queue import enqueue_task
 
 logger = logging.getLogger(__name__)
 
-# ── 实体模式 ──────────────────────────────────────────────────
+# ── Entity patterns ──────────────────────────────────────────────────
 
-# 人物模式（中文名、称谓）
+# Person patterns (Chinese names, role references)
 _PERSON_PATTERNS = [
     re.compile(r"([老小阿])([明华强伟红丽娟])"),  # 老王, 小李, 阿明
     re.compile(r"(妈妈|爸爸|老公|老婆|男友|女友|儿子|女儿|老板|同事|老师|朋友)"),
     re.compile(r"([\u4e00-\u9fa5]{2,3})(说|告诉|给|和|跟|与)"),  # X说/X告诉
 ]
 
-# 地点模式
+# Place patterns
 _PLACE_PATTERNS = [
     re.compile(r"(公司|学校|家里|医院|公园|超市|地铁|公交|车站|机场|酒店|餐厅|咖啡馆)"),
     re.compile(r"(北京|上海|广州|深圳|杭州|成都|武汉|西安|南京)"),
 ]
 
-# 话题模式（活动关键词）
+# Topic patterns (activity keywords)
 _TOPIC_PATTERNS = [
     re.compile(r"(工作|加班|项目|会议|报告|考试|学习|健身|跑步|做饭|看书|看电影|旅行|购物)"),
     re.compile(r"(失眠|焦虑|压力|开心|难过|生气|紧张|放松|疲劳|兴奋)"),
@@ -46,19 +47,19 @@ _TOPIC_PATTERNS = [
 
 @dataclass
 class ExtractedEntity:
-    """从文本中提取的单个实体。"""
+    """A single entity extracted from text."""
 
     name: str
-    entity_type: str  # person / place / topic（人物 / 地点 / 话题）
+    entity_type: str  # person / place / topic
     relation: str = ""
     sentiment: float = 0.0
 
 
 def extract_entities(text: str) -> list[ExtractedEntity]:
-    """使用正则模式从文本中提取实体。
+    """Extract entities from text using regex patterns.
 
-    零 token、基于规则的提取。对于常见的中文
-    对话实体，无需 LLM 调用即可满足。
+    Zero-token, rule-based extraction. Good enough for common Chinese
+    conversational entities without an LLM call.
     """
     if not text or not text.strip():
         return []
@@ -66,7 +67,7 @@ def extract_entities(text: str) -> list[ExtractedEntity]:
     entities: list[ExtractedEntity] = []
     seen: set[tuple[str, str]] = set()
 
-    # 提取人物
+    # Extract persons
     for pattern in _PERSON_PATTERNS:
         for match in pattern.finditer(text):
             name = match.group(0)
@@ -75,7 +76,7 @@ def extract_entities(text: str) -> list[ExtractedEntity]:
                 seen.add(key)
                 entities.append(ExtractedEntity(name=name, entity_type="person"))
 
-    # 提取地点
+    # Extract places
     for pattern in _PLACE_PATTERNS:
         for match in pattern.finditer(text):
             name = match.group(0)
@@ -84,7 +85,7 @@ def extract_entities(text: str) -> list[ExtractedEntity]:
                 seen.add(key)
                 entities.append(ExtractedEntity(name=name, entity_type="place"))
 
-    # 提取话题
+    # Extract topics
     for pattern in _TOPIC_PATTERNS:
         for match in pattern.finditer(text):
             name = match.group(0)
@@ -96,7 +97,7 @@ def extract_entities(text: str) -> list[ExtractedEntity]:
     return entities
 
 
-# ── LLM 精炼层 ──────────────────────────────────────────────
+# ── LLM refinement layer ──────────────────────────────────────────────
 
 _ENTITY_REFINE_PROMPT = """请从以下文本中提取实体，返回JSON格式。
 
@@ -119,27 +120,27 @@ _ENTITY_REFINE_PROMPT = """请从以下文本中提取实体，返回JSON格式�
 
 
 class HybridEntityExtractor:
-    """两层实体提取：正则召回 + LLM 精炼。
+    """Two-layer entity extraction: regex recall + LLM refine.
 
-    第 1 层（正则）：快速、零 token，对常见模式有高召回率。
-    第 2 层（LLM）：精确分类、关系标注、情感倾向。
-    仅在正则找到候选时才运行 LLM 层（对空输入节省 token）。
+    Layer 1 (regex): fast, zero-token, high recall for common patterns.
+    Layer 2 (LLM):   precise classification, relation labeling, sentiment.
+    Only runs LLM layer when regex finds candidates (saves tokens on empty input).
     """
 
     def __init__(self, llm: Any = None) -> None:
         self._llm = llm
 
     def extract(self, text: str) -> list[ExtractedEntity]:
-        """通过正则提取实体，然后可选地用 LLM 精炼。"""
+        """Extract entities via regex then optionally refine with LLM."""
         if not text or not text.strip():
             return []
 
-        # 第 1 层：正则召回
+        # Layer 1: regex recall
         regex_entities = extract_entities(text)
         if not regex_entities:
             return []
 
-        # 第 2 层：LLM 精炼（可选）
+        # Layer 2: LLM refine (optional)
         if self._llm is None:
             return regex_entities
 
@@ -155,14 +156,14 @@ class HybridEntityExtractor:
     def _llm_refine(
         self, text: str, regex_entities: list[ExtractedEntity]
     ) -> list[ExtractedEntity] | None:
-        """使用 LLM 精炼/分类实体。解析失败时返回 None。"""
+        """Use LLM to refine/classify entities. Returns None on parse failure."""
         from app.shared.llm import message_text
 
         prompt = _ENTITY_REFINE_PROMPT.format(content=text[:800])
         response = self._llm.invoke(prompt)
         raw = message_text(response).strip()
 
-        # 去除 markdown 代码围栏
+        # Strip markdown fences
         if raw.startswith("```"):
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
@@ -187,7 +188,7 @@ class HybridEntityExtractor:
                 )
             )
 
-        # 合并：包含 LLM 未覆盖的正则实体
+        # Merge: include regex entities not covered by LLM
         llm_names = {(e.name, e.entity_type) for e in refined}
         for re_e in regex_entities:
             if (re_e.name, re_e.entity_type) not in llm_names:
@@ -203,18 +204,18 @@ def _run_extraction_sync(
     text: str,
     source_label: str = "conversation",
 ) -> None:
-    """提取实体并写入 Neo4j 实体图（同步主体）。
+    """Extract entities and write to Neo4j entity graph (synchronous body).
 
-    设计为通过 :func:`enqueue_task` 调用——要么在 RQ worker 上
-    （当 Redis 可用且传入了点分路径时），要么在守护线程上
-    （回退）。尽力而为：从不抛出异常。
+    Designed to be invoked via :func:`enqueue_task` — either on an RQ worker
+    (when Redis is available and a dotted path is passed) or a daemon thread
+    (fallback). Best-effort: never raises.
 
     Args:
-        source_id: 来源标识符（conversation_id 或 diary_id）。
-        source_label: "conversation" 或 "diary"——用于 source 字段。
+        source_id: Identifier for the source (conversation_id or diary_id).
+        source_label: "conversation" or "diary" — used in the source field.
     """
     try:
-        # 尝试获取一个 light 层级 LLM 用于混合提取
+        # Try to get a light-tier LLM for hybrid extraction
         llm = None
         try:
             from app.config import get_settings
@@ -224,20 +225,20 @@ def _run_extraction_sync(
             with session_factory() as db:
                 llm = factory.create_for_tier(db, "light", user_id=user_id)
         except Exception:
-            pass  # LLM 可选——回退到纯正则
+            pass  # LLM optional — fall back to pure regex
 
         extractor = HybridEntityExtractor(llm=llm)
         entities = extractor.extract(text)
         if not entities:
             return
 
-        # 写入 Neo4j 实体图（如果可用，用于多跳查询）
+        # Write to Neo4j entity graph (if available, for multi-hop queries)
         from app.infrastructure.entity_graph import is_neo4j_available, write_entity
 
         if is_neo4j_available():
             entity_names = [(e.name, e.entity_type) for e in entities]
             for name, etype in entity_names:
-                # 查找共现实体作为关联
+                # Find co-occurring entities as related
                 related = [(n, t, "co-occurs") for n, t in entity_names if n != name]
                 write_entity(
                     user_id=user_id,
@@ -245,7 +246,7 @@ def _run_extraction_sync(
                     entity_type=etype,
                     source=f"{source_label}:{source_id}",
                     context=text[:100],
-                    related_entities=related[:5],  # 限制数量以避免爆炸
+                    related_entities=related[:5],  # Limit to avoid explosion
                 )
         else:
             logger.info(
@@ -276,13 +277,13 @@ def schedule_entity_extraction(
     text: str,
     source_label: str = "conversation",
 ) -> None:
-    """为对话轮次或日记条目调度异步实体提取。
+    """Schedule async entity extraction for a conversation turn or diary entry.
 
-    即发即忘：从不阻塞回复，从不抛出异常。
+    Fire-and-forget: never blocks the reply, never raises.
 
     Args:
-        conversation_id: 对话 ID（用于聊天）或日记 ID 字符串（用于日记）。
-        source_label: "conversation"（默认）或 "diary"——控制 source 字段。
+        conversation_id: Conversation ID (for chat) or diary ID string (for diary).
+        source_label: "conversation" (default) or "diary" — controls source field.
     """
     if not text or not text.strip():
         return

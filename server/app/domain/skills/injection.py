@@ -1,16 +1,17 @@
-"""技能提示词注入策略。
+"""Skill prompt injection strategies.
 
-两种将 :class:`SkillDoc` 内容注入 LLM 提示词的策略：
+Two strategies for injecting :class:`SkillDoc` content into LLM prompts:
 
-- :class:`FullInjectionStrategy` — 一次性注入所有技能的 ``full_text``。
-  简单但 token 开销大；适合技能集合较小的场景。
+- :class:`FullInjectionStrategy` — inject every skill's ``full_text`` in one
+  shot.  Simple but token-expensive; best when the skill set is small.
 
-- :class:`ProgressiveDisclosureStrategy` — 仅注入每个技能的精简 ``summary``，
-  然后让 LLM 通过 ``<use_skill>name</use_skill>`` 声明按需请求技能的完整
-  ``body``。当实际只需部分技能时，可节省 token。
+- :class:`ProgressiveDisclosureStrategy` — inject only the compact ``summary``
+  of each skill, then let the LLM request a skill's full ``body`` on demand via
+  ``<use_skill>name</use_skill>`` declarations.  Saves tokens when only a subset
+  of skills is actually needed.
 
-两种策略均提供 :meth:`estimate_tokens`，调用方可在将提示词发送给 LLM 之前
-进行 token 预算评估。
+Both strategies expose :meth:`estimate_tokens` so the caller can budget before
+sending the prompt to the LLM.
 """
 
 from __future__ import annotations
@@ -33,19 +34,19 @@ __all__ = [
 
 
 class SkillInjector(ABC):
-    """提示词注入策略的抽象基类。"""
+    """Abstract base for prompt-injection strategies."""
 
     @abstractmethod
     def inject_prompt(self, skills: Sequence[SkillDoc], base_prompt: str) -> str:
-        """返回附加了技能文档的 ``base_prompt``。"""
+        """Return ``base_prompt`` augmented with skill documentation."""
 
     @staticmethod
     def estimate_tokens(text: str) -> int:
-        """估算 *text* 的 token 开销（委托给共享的 token_utils）。"""
+        """Estimate the token cost of *text* (delegates to shared token_utils)."""
         return estimate_tokens(text)
 
     def estimate_injection_cost(self, skills: Sequence[SkillDoc]) -> int:
-        """估算注入 *skills* 的 token 开销（不含基础提示词）。"""
+        """Estimate the token cost of injecting *skills* (excludes base prompt)."""
         prompt = self.inject_prompt(skills, base_prompt="")
         return self.estimate_tokens(prompt)
 
@@ -55,9 +56,10 @@ class SkillInjector(ABC):
 # ---------------------------------------------------------------------------
 
 class FullInjectionStrategy(SkillInjector):
-    """在单个提示词块中注入所有技能的 ``full_text``。
+    """Inject all skills' ``full_text`` in a single prompt block.
 
-    适用于小型技能集合，此时渐进式披露的开销超过了其节省的 token。
+    Suitable for small skill sets where the overhead of progressive disclosure
+    outweighs the token savings.
     """
 
     HEADER = "--- 可用技能文档（完整版） ---"
@@ -83,14 +85,14 @@ class FullInjectionStrategy(SkillInjector):
 # ---------------------------------------------------------------------------
 
 class ProgressiveDisclosureStrategy(SkillInjector):
-    """仅注入精简摘要；LLM 按需加载完整 body。
+    """Inject only compact summaries; LLM loads full body on demand.
 
-    指示 LLM 通过以下方式声明要使用的技能::
+    The LLM is instructed to declare which skill it wants to use via::
 
         <use_skill>skill_name</use_skill>
 
-    宿主系统随后解析该声明，并在后续轮次中追加完整的 ``body``。
-    这样可以保持初始提示词精简。
+    The host system then resolves the declaration and appends the full ``body``
+    in a subsequent turn.  This keeps the initial prompt lean.
     """
 
     HEADER = "--- 可用技能摘要（按需加载） ---"

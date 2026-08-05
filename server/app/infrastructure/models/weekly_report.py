@@ -1,8 +1,9 @@
-"""AI 周报的 ORM 模型（``weekly_reports``）。
+"""ORM model for AI weekly reports (``weekly_reports``).
 
-周报（"周记"）是 AI 生成的信件，将一周的日记条目和记忆卡片
-聚合为一封反思性回复。它复用现有的多智能体管道
-（InsightAgent 周报模式），但独立于任何单条日记条目存储。
+A weekly report ("周记") is an AI-generated letter that aggregates a week's
+diary entries and memory cards into one reflective reply. It reuses the
+existing multi-agent pipeline (InsightAgent weekly-report mode) but is stored
+independently of any single diary entry.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from app.infrastructure.database import Base
 
 
 class WeeklyReportRow(Base):
-    """针对某个 ISO 周（周一至周日）生成的单封 AI 周记信件。"""
+    """A single AI-generated weekly letter for an ISO week (Mon-Sun)."""
 
     __tablename__ = "weekly_reports"
 

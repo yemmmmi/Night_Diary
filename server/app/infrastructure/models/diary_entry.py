@@ -1,4 +1,4 @@
-"""日记条目的 ORM 模型（``diary_entries``）。"""
+"""ORM model for diary entries (``diary_entries``)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class DiaryEntryRow(Base):
-    """一条日记条目，通过 ``user_id`` 限定到特定用户。"""
+    """A diary entry, scoped to a user via ``user_id``."""
 
     __tablename__ = "diary_entries"
 

@@ -1,6 +1,6 @@
-"""服务层统一的应用错误。
+"""Unified application errors for the service layer.
 
-路由处理器（Phase C-2）通过 ``http_status`` 将这些错误映射为 HTTP 响应。
+Route handlers (Phase C-2) map these to HTTP responses via ``http_status``.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 @dataclass(eq=False)
 class AppError(Exception):
-    """带有 HTTP 状态提示的基础错误，供 API 层使用。"""
+    """Base error with an HTTP status hint for the API layer."""
 
     message: str
     http_status: int = 400
@@ -105,7 +105,7 @@ class ConversationNotFoundError(AppError):
 
 
 class NotFoundError(AppError):
-    """由 (resource_type, resource_id) 标识的资源的通用 404 错误。"""
+    """Generic 404 for resources identified by (resource_type, resource_id)."""
 
     def __init__(self, *, resource: str, resource_id: str | int) -> None:
         super().__init__(message=f"{resource} {resource_id} 不存在", http_status=404)
@@ -114,21 +114,21 @@ class NotFoundError(AppError):
 
 
 class UnauthorizedError(AppError):
-    """认证缺失或无效时抛出（HTTP 401）。"""
+    """Raised when authentication is missing or invalid (HTTP 401)."""
 
     def __init__(self, message: str = "未授权，请登录") -> None:
         super().__init__(message=message, http_status=401)
 
 
 class ForbiddenError(AppError):
-    """用户对资源缺少权限时抛出（HTTP 403）。"""
+    """Raised when a user lacks permission for a resource (HTTP 403)."""
 
     def __init__(self, message: str = "无权访问此资源") -> None:
         super().__init__(message=message, http_status=403)
 
 
 class EmailAlreadyExistsError(AppError):
-    """注册已被占用的邮箱时抛出（HTTP 409）。"""
+    """Raised when registering an email that is already taken (HTTP 409)."""
 
     def __init__(self, email: str = "") -> None:
         msg = f"邮箱 {email} 已注册" if email else "邮箱已注册"

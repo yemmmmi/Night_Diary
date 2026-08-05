@@ -1,8 +1,9 @@
-"""用于管道追踪检查的开发者模式 API 路由。
+"""Developer-mode API routes for pipeline trace inspection.
 
-提供列出、查看、删除和实时流式传输管道追踪的端点，
-以及聚合统计和中间件健康检查。这些路由面向开发者/调试用途，
-不需要认证。
+Provides endpoints to list, inspect, delete, and live-stream pipeline
+traces, plus aggregate statistics and middleware health checks. These
+routes are intended for developer/debugging use and do not require
+authentication.
 """
 
 from __future__ import annotations
@@ -26,27 +27,27 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 
-# SSE 心跳间隔（秒）。若在该时间窗口内没有事件到达，
-# 则发送一个心跳注释以保持连接存活。
+# SSE heartbeat interval (seconds). If no events arrive within this
+# window, a heartbeat comment is sent to keep the connection alive.
 _SSE_HEARTBEAT_INTERVAL = 30.0
 
 
 def _format_sse(event: dict[str, Any]) -> str:
-    """将 dict 格式化为 SSE 消息字符串。
+    """Format a dict as an SSE message string.
 
-    使用 ``default=str``，使不可 JSON 序列化的值（datetime 等）
-    被转为字符串，而不是抛出异常。
+    Uses ``default=str`` so non-JSON-serialisable values (datetime, etc.)
+    are stringified instead of raising.
     """
     event_type = event.get("type", "message")
     data = json.dumps(event, ensure_ascii=False, default=str)
     return f"event: {event_type}\ndata: {data}\n\n"
 
 
-# ── 中间件可用性辅助函数 ──────────────────────────────────────
+# ── Middleware availability helpers ──────────────────────────────────────
 
 
 def _check_redis() -> bool:
-    """若 Redis 客户端已连接则返回 ``True``。"""
+    """Return ``True`` if the Redis client is connected."""
     try:
         from app.infrastructure.redis_client import is_redis_available
 
@@ -56,7 +57,7 @@ def _check_redis() -> bool:
 
 
 def _check_neo4j() -> bool:
-    """若 Neo4j 驱动已连接则返回 ``True``。"""
+    """Return ``True`` if the Neo4j driver is connected."""
     try:
         from app.infrastructure.entity_graph import is_neo4j_available
 
@@ -66,7 +67,7 @@ def _check_neo4j() -> bool:
 
 
 def _check_langgraph() -> bool:
-    """若 LangGraph 可导入则返回 ``True``。"""
+    """Return ``True`` if LangGraph is importable."""
     try:
         from app.services.ai.conversation_graph import LANGGRAPH_AVAILABLE
 
@@ -76,11 +77,12 @@ def _check_langgraph() -> bool:
 
 
 def _check_rq() -> bool:
-    """若 RQ 任务队列已初始化则返回 ``True``。
+    """Return ``True`` if the RQ task queue is initialised.
 
-    RQ 的可用性由 ``app.infrastructure.task_queue`` 中的
-    ``_redis_queue`` 单例推断 —— 当 Redis 不可用或未安装
-    ``rq`` 包时，该单例保持 ``None``，任务回退到守护线程执行。
+    RQ availability is inferred from the ``_redis_queue`` singleton in
+    ``app.infrastructure.task_queue`` — when Redis is unavailable or the
+    ``rq`` package is not installed, this stays ``None`` and tasks fall
+    back to daemon threads.
     """
     try:
         from app.infrastructure.task_queue import _redis_queue
@@ -90,11 +92,11 @@ def _check_rq() -> bool:
         return False
 
 
-# ── 追踪列表 ───────────────────────────────────────────────────────────
+# ── Trace list ───────────────────────────────────────────────────────────
 
 
 def _row_to_summary(row: PipelineTraceRow) -> dict[str, Any]:
-    """将 ``PipelineTraceRow`` 转换为摘要 dict（不含 ``trace_json``）。"""
+    """Convert a ``PipelineTraceRow`` to a summary dict (without ``trace_json``)."""
     return {
         "trace_id": row.trace_id,
         "scenario": row.scenario,
@@ -119,7 +121,7 @@ def list_traces(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
 ) -> dict[str, Any]:
-    """列出管道追踪，支持可选过滤与分页。"""
+    """List pipeline traces with optional filters and pagination."""
     query = db.query(PipelineTraceRow)
 
     if scenario:
@@ -142,12 +144,12 @@ def list_traces(
     return {"items": items, "total": total}
 
 
-# ── 追踪详情 ─────────────────────────────────────────────────────────
+# ── Trace detail ─────────────────────────────────────────────────────────
 
 
 @router.get("/traces/{trace_id}")
 def get_trace_detail(trace_id: str, db: DbDep) -> dict[str, Any]:
-    """返回单条追踪的完整 JSON 负载。"""
+    """Return a single trace's full JSON payload."""
     row = db.get(PipelineTraceRow, trace_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")
@@ -156,12 +158,12 @@ def get_trace_detail(trace_id: str, db: DbDep) -> dict[str, Any]:
             data: dict[str, Any] = json.loads(row.trace_json)
             return data
         except (json.JSONDecodeError, TypeError):
-            # 若 JSON 损坏则回退到摘要。
+            # Fall back to summary if the JSON is corrupt.
             return _row_to_summary(row)
     return _row_to_summary(row)
 
 
-# ── 追踪删除 ─────────────────────────────────────────────────────────
+# ── Trace delete ─────────────────────────────────────────────────────────
 
 
 @router.delete(
@@ -170,7 +172,7 @@ def get_trace_detail(trace_id: str, db: DbDep) -> dict[str, Any]:
     response_class=Response,
 )
 def delete_trace(trace_id: str, db: DbDep) -> Response:
-    """按 ID 删除管道追踪。"""
+    """Delete a pipeline trace by ID."""
     row = db.get(PipelineTraceRow, trace_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")
@@ -179,26 +181,28 @@ def delete_trace(trace_id: str, db: DbDep) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# ── SSE 流 ───────────────────────────────────────────────────────────
+# ── SSE stream ───────────────────────────────────────────────────────────
 
 
 @router.get("/traces/{trace_id}/stream")
 async def stream_trace(
     trace_id: str, request: Request, db: DbDep
 ) -> StreamingResponse:
-    """实时追踪的 Server-Sent Events 流。
+    """Server-Sent Events stream for a live trace.
 
-    首先推送所有已完成的 span（来自内存中的活跃追踪或持久化的数据库行），
-    然后订阅 ``TraceEventBus`` 获取实时事件，直到追踪完成或客户端断开连接。
+    First pushes any already-completed spans (from the in-memory active
+    trace or the persisted DB row), then subscribes to the ``TraceEventBus``
+    for live events until the trace completes or the client disconnects.
 
-    每隔 30 秒空闲发送一次心跳，以防止代理超时。
+    A heartbeat is sent every 30 seconds of inactivity to prevent proxy
+    timeouts.
     """
-    # 在会话有效时从数据库收集初始状态。
+    # Gather initial state from the DB while the session is valid.
     initial_events: list[dict[str, Any]] = []
     trace_already_complete = False
 
-    # 1. 内存中的活跃追踪（同一上下文 —— 涵盖 SSE 消费者与生产者
-    #    共享 contextvar 的罕见情况）。
+    # 1. Active in-memory trace (same context — covers the rare case where
+    #    the SSE consumer shares the contextvar with the producer).
     active_trace = get_trace()
     if active_trace is not None and active_trace.trace_id == trace_id:
         for span in active_trace.spans:
@@ -219,8 +223,8 @@ async def stream_trace(
             )
             trace_already_complete = True
 
-    # 2. 持久化的数据库行 —— 为进行中的追踪推送已完成的 span，
-    #    若追踪已结束则推送完整负载。
+    # 2. Persisted DB row — push completed spans for traces in progress,
+    #    or the full payload if the trace already finished.
     if not trace_already_complete:
         row = db.get(PipelineTraceRow, trace_id)
         if row is not None and row.trace_json:
@@ -266,27 +270,28 @@ async def _trace_event_generator(
     initial_events: list[dict[str, Any]],
     trace_already_complete: bool,
 ) -> AsyncGenerator[str, None]:
-    """生成 SSE 格式追踪事件的异步生成器。
+    """Async generator yielding SSE-formatted trace events.
 
-    1. 产出所有 ``initial_events``（已完成的 span）。
-    2. 若追踪尚未完成，则订阅 ``TraceEventBus`` 并流式传输实时事件。
-    3. 空闲 30 秒后发送心跳。
-    4. 在 ``trace_complete`` 事件或客户端断开后关闭。
+    1. Yields all ``initial_events`` (already-completed spans).
+    2. If the trace is not yet complete, subscribes to the
+       ``TraceEventBus`` and streams live events.
+    3. Sends a heartbeat on 30s of inactivity.
+    4. Closes after a ``trace_complete`` event or client disconnect.
     """
-    # 1. 推送已完成的 span。
+    # 1. Push already-completed spans.
     for event in initial_events:
         yield _format_sse(event)
 
-    # 若追踪已结束，立即关闭流。
+    # If the trace already finished, close the stream immediately.
     if trace_already_complete:
         return
 
-    # 2. 订阅 EventBus 以获取实时事件。
+    # 2. Subscribe to the EventBus for live events.
     bus = get_event_bus()
     queue = await bus.subscribe(trace_id)
     try:
         while True:
-            # 等待前检查客户端是否已断开。
+            # Check for client disconnect before waiting.
             if await request.is_disconnected():
                 break
 
@@ -296,7 +301,7 @@ async def _trace_event_generator(
                     timeout=_SSE_HEARTBEAT_INTERVAL,
                 )
             except TimeoutError:
-                # 发送心跳以保持连接存活。
+                # Send heartbeat to keep the connection alive.
                 yield _format_sse(
                     {"type": "heartbeat", "trace_id": trace_id}
                 )
@@ -304,22 +309,22 @@ async def _trace_event_generator(
 
             yield _format_sse(event)
 
-            # 追踪结束后关闭流。
+            # Close the stream once the trace is finalised.
             if event.get("type") == "trace_complete":
                 break
     finally:
         await bus.unsubscribe(trace_id, queue)
 
 
-# ── 统计 ────────────────────────────────────────────────────────────────
+# ── Stats ────────────────────────────────────────────────────────────────
 
 
 @router.get("/stats")
 def get_dev_stats(db: DbDep) -> dict[str, Any]:
-    """跨所有管道追踪的聚合统计。"""
+    """Aggregate statistics across all pipeline traces."""
     total_traces = db.query(PipelineTraceRow).count()
 
-    # 按场景分组。
+    # Group by scenario.
     scenario_rows = (
         db.query(PipelineTraceRow.scenario, func.count(PipelineTraceRow.trace_id))
         .group_by(PipelineTraceRow.scenario)
@@ -327,11 +332,11 @@ def get_dev_stats(db: DbDep) -> dict[str, Any]:
     )
     by_scenario = {scenario: count for scenario, count in scenario_rows}
 
-    # 平均时长（不含 duration_ms 的行会被 AVG 忽略）。
+    # Average duration (rows without duration_ms are ignored by AVG).
     avg_duration = db.query(func.avg(PipelineTraceRow.duration_ms)).scalar()
     avg_duration_ms = float(avg_duration) if avg_duration is not None else 0.0
 
-    # 错误数。
+    # Error count.
     error_count = (
         db.query(PipelineTraceRow)
         .filter(PipelineTraceRow.status == "error")
@@ -346,12 +351,12 @@ def get_dev_stats(db: DbDep) -> dict[str, Any]:
     }
 
 
-# ── 中间件状态 ────────────────────────────────────────────────────────────
+# ── Middleware status ────────────────────────────────────────────────────
 
 
 @router.get("/middleware-status")
 def get_middleware_status() -> dict[str, Any]:
-    """基础设施中间件的健康检查。"""
+    """Health-check for infrastructure middleware."""
     return {
         "redis": _check_redis(),
         "neo4j": _check_neo4j(),

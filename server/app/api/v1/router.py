@@ -1,4 +1,4 @@
-"""聚合 API v1 路由器。"""
+"""Aggregate API v1 router."""
 
 from __future__ import annotations
 

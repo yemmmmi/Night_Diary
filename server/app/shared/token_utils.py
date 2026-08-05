@@ -1,13 +1,13 @@
-"""在领域模块间共享的 token 估算辅助函数。"""
+"""Token estimation helpers shared across domain modules."""
 
 from __future__ import annotations
 
 
 def estimate_tokens(text: str) -> int:
-    """估算中英混合日记文本的 token 数量。
+    """Estimate token count for mixed Chinese/English diary text.
 
-    中文字符约使用 1.5 个 token，ASCII 字母每个约 0.25 个 token，
-    其他字符约 0.5 个 token。
+    Chinese characters use ~1.5 tokens, ASCII letters ~0.25 tokens each,
+    and other characters ~0.5 tokens.
     """
     if not text:
         return 0

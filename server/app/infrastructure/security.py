@@ -1,4 +1,4 @@
-"""用于 LLM API 密钥静态加密的 Fernet 加密。"""
+"""Fernet encryption for LLM API keys at rest."""
 
 from __future__ import annotations
 
@@ -17,26 +17,26 @@ logger = logging.getLogger(__name__)
 
 
 class SecurityError(AppError):
-    """当安全相关操作失败时（如解密）抛出。"""
+    """Raised when a security-related operation fails (e.g. decryption)."""
 
     def __init__(self, message: str) -> None:
         super().__init__(message=message, http_status=500)
 
 
 def _derive_fernet_key(secret: str) -> bytes:
-    """从口令派生稳定的 Fernet 密钥。"""
+    """Derive a stable Fernet key from a passphrase."""
     digest = hashlib.sha256(secret.encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest)
 
 
 def _resolve_secret(settings: Settings) -> str:
-    """解析加密密钥，具有环境感知的回退机制。
+    """Resolve the encryption secret with environment-aware fallback.
 
-    优先级：
-    1. ``model_key_secret`` 设置项（环境变量或配置）
-    2. data_dir 下的 ``secrets.key`` 文件
-    3. 开发环境：自动生成随机密钥并持久化到 ``secrets.key``
-    4. 生产环境：**快速失败** — 不会静默使用弱密钥回退
+    Priority:
+    1. ``model_key_secret`` setting (env var or config)
+    2. ``secrets.key`` file in data_dir
+    3. In development: auto-generate a random key and persist to ``secrets.key``
+    4. In production: **fail-fast** — no silent weak-key fallback
     """
     if settings.model_key_secret:
         return settings.model_key_secret
@@ -51,7 +51,7 @@ def _resolve_secret(settings: Settings) -> str:
             "Set MODEL_KEY_SECRET env var or create secrets.key file."
         )
 
-    # 开发/测试：自动生成强随机密钥
+    # Development/test: auto-generate a strong random key
     generated = _secrets.token_urlsafe(32)
     key_file.parent.mkdir(parents=True, exist_ok=True)
     key_file.write_text(generated, encoding="utf-8")

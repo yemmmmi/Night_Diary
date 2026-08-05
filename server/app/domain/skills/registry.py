@@ -1,4 +1,4 @@
-"""SkillRegistry — 注册并为单次日记分析贪心选择技能。"""
+"""SkillRegistry — register and greedily select skills for one diary analysis."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class SkillRegistry:
-    """管理技能并在 token 预算内选择已激活的技能。"""
+    """Manage skills and select activated ones under a token budget."""
 
     def __init__(self, tracer: SkillActivationTracer | None = None) -> None:
         self._skills: dict[str, BaseSkill] = {}
@@ -58,11 +58,11 @@ class SkillRegistry:
         token_budget: int = 4000,
         decision_id: str = "",
     ) -> list[BaseSkill]:
-        """在 token 预算内按 activation_score * priority 贪心选择。
+        """Greedy selection by activation_score * priority within token budget.
 
-        ``decision_id``（若提供）会标记到每条
-        :class:`SkillActivationRecord` 上，使这些记录可关联回所属的
-        ``agent_decisions`` 条目（Supervisor 在 B-9 中传入其决策 id）。
+        ``decision_id`` (when given) is stamped onto every
+        :class:`SkillActivationRecord` so the rows link back to the owning
+        ``agent_decisions`` entry (the Supervisor passes its decision id in B-9).
         """
         if not self._skills or token_budget <= 0:
             return []
@@ -177,11 +177,11 @@ class SkillRegistry:
 def create_default_registry(
     tracer: SkillActivationTracer | None = None,
 ) -> SkillRegistry:
-    """工厂：注册所有 MVP 技能，用于独立测试。
+    """Factory: register all MVP skills for standalone testing.
 
-    技能框架（BaseSkill、SkillRegistry、此工厂）是可扩展的 —
-    新技能继承 BaseSkill 并在此注册。已移除占位存根；
-    仅保留已激活的 MVP 技能。
+    The skill framework (BaseSkill, SkillRegistry, this factory) is extensible —
+    new skills subclass BaseSkill and are registered here. Stub placeholders
+    were removed; only activated MVP skills remain.
     """
     from app.domain.skills.crisis_detector import CrisisDetectorSkill
     from app.domain.skills.sentiment_skill import SentimentSkill
@@ -198,11 +198,11 @@ def create_default_registry(
 def create_diary_registry(
     tracer: SkillActivationTracer | None = None,
 ) -> SkillRegistry:
-    """工厂：注册场景 1（日记分析）的技能。
+    """Factory: register skills for scene 1 (diary analysis).
 
-    与默认注册表共享 crisis_detector 和 sentiment_skill，另外加入
-    memory_recall 用于回溯性日记条目（例如"上周和朋友去了公园"
-    会触发对相关过往事件的记忆检索）。
+    Shares crisis_detector and sentiment_skill with the default registry, plus
+    memory_recall for retrospective diary entries (e.g. "上周和朋友去了公园"
+    triggers memory retrieval of related past events).
     """
     from app.domain.skills.crisis_detector import CrisisDetectorSkill
     from app.domain.skills.memory_recall_skill import MemoryRecallSkill
@@ -221,10 +221,10 @@ def create_diary_registry(
 def create_chat_registry(
     tracer: SkillActivationTracer | None = None,
 ) -> SkillRegistry:
-    """工厂：注册场景 2（多轮对话）的技能。
+    """Factory: register skills for scene 2 (multi-turn conversation).
 
-    与场景 1 共享 crisis_detector 和 sentiment_skill，另外加入
-    场景 2 专用技能（memory_recall、entity_tracker）。
+    Shares crisis_detector and sentiment_skill with scene 1, plus
+    scene-2-specific skills (memory_recall, entity_tracker).
     """
     from app.domain.skills.crisis_detector import CrisisDetectorSkill
     from app.domain.skills.entity_tracker_skill import EntityTrackerSkill

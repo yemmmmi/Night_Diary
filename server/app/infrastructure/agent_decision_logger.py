@@ -1,4 +1,4 @@
-"""基于 SQLite 的 AgentDecisionLogger 实现。"""
+"""SQLite-backed AgentDecisionLogger implementation."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from app.shared.tracing import AgentDecisionRecord
 
 
 class SqliteAgentDecisionLogger:
-    """将 Supervisor/智能体决策持久化到 ``agent_decisions`` 表。"""
+    """Persist Supervisor/agent decisions to ``agent_decisions``."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory

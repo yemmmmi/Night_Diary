@@ -1,4 +1,4 @@
-"""混合检索：稠密向量 + BM25 关键词融合，可选重排序。"""
+"""Hybrid retrieval: dense vector + BM25 keyword fusion with optional rerank."""
 
 from __future__ import annotations
 
@@ -25,9 +25,9 @@ def reciprocal_rank_fusion(
     *,
     k: int = DEFAULT_RRF_K,
 ) -> list[RetrievalResult]:
-    """通过 Reciprocal Rank Fusion 融合多个排序列表。
+    """Fuse multiple ranked lists via Reciprocal Rank Fusion.
 
-    ``score(d) = Σ 1 / (k + rank_i(d))``，按 ``doc_id`` 去重。
+    ``score(d) = Σ 1 / (k + rank_i(d))``, deduplicated by ``doc_id``.
     """
     rrf_scores: dict[str, float] = {}
     doc_map: dict[str, RetrievalResult] = {}
@@ -49,11 +49,11 @@ def reciprocal_rank_fusion(
 
 
 class HybridRetriever:
-    """在日记 chunk 集合上编排稠密 + 稀疏检索。
+    """Orchestrate dense + sparse retrieval over the diary chunk collection.
 
-    依赖通过注入方式提供（B-2 :class:`DiaryCollectionManager` +
-    :class:`BM25Index`，可选的 B-3 :class:`Reranker`）。每次 ``retrieve`` 调用
-    都会输出一条 trace 日志，包含各阶段结果数量与延迟。
+    Dependencies are injected (B-2 :class:`DiaryCollectionManager` +
+    :class:`BM25Index`, optional B-3 :class:`Reranker`). Each ``retrieve`` call
+    emits a trace log with per-stage result counts and latency.
     """
 
     def __init__(
@@ -76,7 +76,7 @@ class HybridRetriever:
         self.rrf_k = rrf_k
 
     def retrieve(self, query: str, *, top_k: int | None = None) -> list[RetrievalResult]:
-        """返回与 ``query`` 最相关的日记（按 ``diary_id`` 去重）。"""
+        """Return the most relevant diaries for ``query`` (deduped by ``diary_id``)."""
         if not query.strip():
             return []
 
@@ -126,16 +126,17 @@ class HybridRetriever:
         return self._format_vector_hits(results)
 
     def _filter_orphan_vectors(self, hits: list[RetrievalResult]) -> list[RetrievalResult]:
-        """移除 doc_id 已不在 BM25 索引中的向量命中。
+        """Remove vector hits whose doc_id no longer exists in the BM25 index.
 
-        ChromaDB 的删除可能静默失败，留下指向已删除日记的孤儿向量。
-        BM25 索引基于 SQLite 构建，始终一致，因此我们以它作为真源。
+        ChromaDB deletion can fail silently, leaving orphan vectors that
+        reference deleted diaries. The BM25 index is built from SQLite and
+        is always consistent, so we use it as the source of truth.
         """
         if not hits:
             return hits
         known_ids = self._bm25.known_doc_ids()
         if not known_ids:
-            # BM25 索引为空 —— 无法校验，原样返回
+            # BM25 index is empty — can't validate, return as-is
             return hits
         filtered = [h for h in hits if h.doc_id in known_ids]
         if len(filtered) < len(hits):

@@ -1,4 +1,4 @@
-"""LLMClient 包装器，将每次调用记录到 :class:`LLMCallTracer`。"""
+"""LLMClient wrapper that records each call to an :class:`LLMCallTracer`."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class TracingLLMClient:
-    """结构化包装器：委托给 ``inner`` 并持久化 ``LLMCallRecord`` 行。"""
+    """Structural wrapper: delegates to ``inner`` and persists ``LLMCallRecord`` rows."""
 
     def __init__(
         self,
@@ -64,8 +64,9 @@ class TracingLLMClient:
             raise
         finally:
             if response is not None or error is not None:
-                # 在线程中运行追踪，以避免同步 SQLite 写入阻塞事件循环。
-                # 吞掉追踪错误，使其永远不会掩盖原始的 LLM 结果/异常。
+                # Run tracing in a thread to avoid blocking the event loop
+                # with synchronous SQLite writes. Swallow tracing errors so
+                # they never mask the original LLM result/exception.
                 try:
                     await asyncio.to_thread(self._record, prompt, response, started, error)
                 except Exception as trace_exc:
@@ -95,10 +96,10 @@ class TracingLLMClient:
         )
 
     def bind_tools(self, tools: list[Any]) -> TracingLLMClient:
-        """将 bind_tools 委托给内部客户端（如果支持），否则抛出异常。
+        """Delegate bind_tools to inner if supported, else raise.
 
-        返回一个包装了已绑定内部客户端的*新* TracingLLMClient，因此
-        追踪在工具调用时仍然有效。
+        Returns a *new* TracingLLMClient wrapping the bound inner, so
+        tracing continues to work on tool-calling invocations.
         """
         if not hasattr(self._inner, "bind_tools"):
             raise AttributeError(

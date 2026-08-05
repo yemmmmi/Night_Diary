@@ -1,4 +1,4 @@
-"""认证 API 路由：register、login、me。"""
+"""Authentication API routes: register, login, me."""
 
 from __future__ import annotations
 
@@ -16,11 +16,11 @@ from app.shared.errors import EmailAlreadyExistsError, UnauthorizedError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# 简单的邮箱正则 — 避免 ``email-validator`` 额外依赖。
+# Simple email regex — avoids the ``email-validator`` extra dependency.
 _EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 
-# ---- 数据模型 ----
+# ---- Schemas ----
 
 
 class RegisterRequest(BaseModel):
@@ -45,7 +45,7 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
-# ---- 路由 ----
+# ---- Routes ----
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -91,11 +91,11 @@ def get_me(user: CurrentUserDep) -> UserResponse:
 
 @router.post("/logout")
 def logout(user: CurrentUserDep, request: Request) -> dict[str, str]:
-    """通过将当前 JWT 加入黑名单来实现登出。
+    """Logout by blacklisting the current JWT.
 
-    该令牌的 ``jti`` 会被加入黑名单，TTL 等于令牌的剩余有效时长，
-    因此携带该令牌的后续请求会通过认证依赖
-    （``app.api.deps.get_current_user``）被拒绝。
+    The token's ``jti`` is added to the blacklist with a TTL equal to the
+    remaining token lifetime, so subsequent requests carrying it are rejected
+    via the auth dependency (``app.api.deps.get_current_user``).
     """
     import time
 

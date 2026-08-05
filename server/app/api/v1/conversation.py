@@ -1,4 +1,4 @@
-"""会话 API 路由。"""
+"""Conversation API routes."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def delete_conversation(conversation_id: str, db: DbDep, user: CurrentUserDep) -
         db, user_id=str(user.id), conversation_id=conversation_id
     ):
         raise ConversationNotFoundError(conversation_id=conversation_id)
-    # 清除内存中的会话上下文以避免陈旧状态
+    # Clear the in-memory session context to avoid stale state
     from app.services.ai.session_context import clear_session
 
     clear_session(conversation_id)
@@ -123,7 +123,7 @@ def send_message(
 def generate_night_talk(
     conversation_id: str, db: DbDep, user: CurrentUserDep, container: ContainerDep
 ) -> dict[str, Any]:
-    """从会话历史生成 night talk（关系记忆）。"""
+    """Generate a night talk (关系记忆) from conversation history."""
     conv = conversation_service.get_conversation(
         db, user_id=str(user.id), conversation_id=conversation_id
     )

@@ -1,6 +1,6 @@
-"""EntityTrackerSkill — 场景 2 技能，查询实体图。
+"""EntityTrackerSkill — scene 2 skill that queries the entity graph.
 
-当用户询问特定人物或实体的状态时激活。
+Activates when the user asks about a specific person or entity's status.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ _PERSON_REFERENCES = (
 
 
 class EntityTrackerSkill(BaseSkill):
-    """当用户提及特定人物/实体时查询实体图。"""
+    """Query the entity graph when the user mentions specific people/entities."""
 
     metadata = SkillMetadata(
         name="entity_tracker",

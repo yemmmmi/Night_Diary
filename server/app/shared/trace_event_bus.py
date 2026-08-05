@@ -1,12 +1,13 @@
-"""用于开发者模式 SSE 追踪推送的内存事件总线。
+"""In-memory event bus for developer-mode SSE trace push.
 
-提供 ``TraceEventBus``——一个基于 asyncio.Queue 的轻量级发布/订阅，将追踪
-事件扇出（一个 ``trace_id`` → 多个 SSE 订阅者队列）。总线是进程本地的：每个
-订阅者持有一个 ``asyncio.Queue``，并在 SSE 处理器内通过 ``get_nowait`` /
-``await get`` 排空它。当队列填满时（客户端慢或已断开），事件会被丢弃并记录
-警告，因此生产者永远不会阻塞。
+Provides ``TraceEventBus`` — a lightweight asyncio.Queue-based pub/sub that
+fans out trace events (one ``trace_id`` → many SSE subscriber queues). The bus
+is process-local: each subscriber holds an ``asyncio.Queue`` and drains it via
+``get_nowait`` / ``await get`` inside an SSE handler. When the queue fills up
+(the client is slow or disconnected), events are dropped with a warning so the
+producer never blocks.
 
-用法::
+Usage::
 
     from app.shared.trace_event_bus import get_event_bus
 
@@ -27,19 +28,19 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# 模块级单例（由 ``get_event_bus`` 惰性初始化）。
+# Module-level singleton (lazily initialised by ``get_event_bus``).
 _event_bus: TraceEventBus | None = None
 
 
 class TraceEventBus:
-    """基于 asyncio.Queue 的发布/订阅，将追踪事件扇出到 SSE 订阅者。
+    """Asyncio.Queue-backed pub/sub for fanning trace events to SSE subscribers.
 
-    每个 ``trace_id`` 映射到一个 ``asyncio.Queue`` 实例列表——每个活跃的
-    SSE 连接一个。生产者调用 ``publish`` 将事件扇出到每个订阅者；消费者在
-    SSE 处理器内排空自己的队列。
+    Each ``trace_id`` maps to a list of ``asyncio.Queue`` instances — one per
+    active SSE connection. Producers call ``publish`` to fan-out an event to
+    every subscriber; consumers drain their queue inside the SSE handler.
 
-    当订阅者的队列已满时（客户端慢），``publish`` 会丢弃事件并记录警告，
-    而不是阻塞生产者。
+    When a subscriber's queue is full (slow client), ``publish`` drops the
+    event and logs a warning instead of blocking the producer.
     """
 
     def __init__(self, max_queue_size: int = 100) -> None:
@@ -50,10 +51,10 @@ class TraceEventBus:
         self._max_queue_size = max_queue_size
 
     async def subscribe(self, trace_id: str) -> asyncio.Queue[dict[str, Any]]:
-        """为 ``trace_id`` 注册一个新的订阅者队列并返回它。
+        """Register a new subscriber queue for ``trace_id`` and return it.
 
-        返回的队列受 ``max_queue_size`` 限制，因此慢消费者不会在内存中
-        积累无界的事件。
+        The returned queue is bounded by ``max_queue_size`` so a slow consumer
+        cannot accumulate unbounded events in memory.
         """
         async with self._lock:
             queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
@@ -63,10 +64,11 @@ class TraceEventBus:
             return queue
 
     async def unsubscribe(self, trace_id: str, queue: asyncio.Queue[dict[str, Any]]) -> None:
-        """移除 ``trace_id`` 对应的特定订阅者队列。
+        """Remove a specific subscriber queue for ``trace_id``.
 
-        如果移除后订阅者列表变为空，则完全删除 ``trace_id`` 键，使
-        ``_subscribers`` 不会积累过期的空列表。
+        If the subscriber list becomes empty after removal, the ``trace_id``
+        key is deleted entirely so ``_subscribers`` does not accumulate stale
+        empty lists.
         """
         async with self._lock:
             queues = self._subscribers.get(trace_id)
@@ -76,13 +78,13 @@ class TraceEventBus:
                     del self._subscribers[trace_id]
 
     async def publish(self, trace_id: str, event: dict[str, Any]) -> None:
-        """将 ``event`` 扇出到 ``trace_id`` 的每个订阅者。
+        """Fan-out ``event`` to every subscriber of ``trace_id``.
 
-        使用 ``put_nowait``，因此队列已满时会丢弃事件并记录警告，而不是
-        阻塞生产者。没有订阅者时为空操作。
+        Uses ``put_nowait`` so a full queue drops the event with a warning
+        instead of blocking the producer. No-op when there are no subscribers.
         """
-        # 无需加锁读取——在单个事件循环 tick 内迭代是原子的
-        # （``put_nowait`` 是同步的，不会有 await 交错）。
+        # Read without the lock — iteration is atomic within a single event
+        # loop tick (``put_nowait`` is synchronous, no awaits are interleaved).
         queues = self._subscribers.get(trace_id, [])
         for queue in queues:
             try:
@@ -94,19 +96,20 @@ class TraceEventBus:
                 )
 
     async def cleanup(self, trace_id: str) -> None:
-        """删除 ``trace_id`` 的整个订阅者列表。
+        """Delete the entire subscriber list for ``trace_id``.
 
-        当追踪结束（例如请求完成）时调用，一次性释放所有订阅者队列。
+        Called when a trace ends (e.g. request finished) to release all
+        subscriber queues at once.
         """
         async with self._lock:
             self._subscribers.pop(trace_id, None)
 
 
 def get_event_bus() -> TraceEventBus:
-    """返回进程全局的 ``TraceEventBus`` 单例。
+    """Return the process-global ``TraceEventBus`` singleton.
 
-    在首次调用时惰性初始化，因此事件循环仅在真正需要总线时才会被触及
-    （导入本模块不会创建一个）。
+    Lazily initialised on first call so the event loop is only touched when
+    the bus is actually needed (importing this module does not create one).
     """
     global _event_bus
     if _event_bus is None:

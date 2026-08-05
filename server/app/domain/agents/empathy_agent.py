@@ -1,17 +1,17 @@
-"""Empathy Worker 智能体——情感陪伴与危机安全响应。
+"""Empathy Worker Agent — emotional companionship and crisis-safe responses.
 
-从 V1 ``agents/empathy_agent.py`` 迁移。V2 变更：
+Migrated from V1 ``agents/empathy_agent.py``. V2 changes:
 
-* 所有依赖都是注入的：LLM（:class:`~app.shared.llm.LLMClient`）、
-  共享的 :class:`~app.shared.emotion_estimator.EmotionEstimator`（不再
-  重新实现关键词词表——那种重复是 V1 的坏味 3）、共享的
-  :class:`~app.domain.knowledge.store.DomainKnowledgeStore`，以及
-  :class:`~app.shared.tracing.LLMCallTracer`。
-* 智能体内部没有 ``SessionLocal()`` / ``ChatOpenAI()`` / ``os.getenv``。
-* ``run`` 是异步的（等待 ``ainvoke``），因此它加入 B-9 的并行扇出；
-  ``fallback`` 是同步的，从不接触 LLM。
-* PromptTuner *不* 在这里接入（B-9 关注点）；取而代之的是 ``run`` 接受一个
-  可选的 ``style_fragment``，由 Supervisor 按请求传入。
+* All dependencies are injected: the LLM (:class:`~app.shared.llm.LLMClient`),
+  the shared :class:`~app.shared.emotion_estimator.EmotionEstimator` (no
+  re-implemented keyword lexicon — that duplication was 坏味 3 in V1), the
+  shared :class:`~app.domain.knowledge.store.DomainKnowledgeStore`, and an
+  :class:`~app.shared.tracing.LLMCallTracer`.
+* No ``SessionLocal()`` / ``ChatOpenAI()`` / ``os.getenv`` inside the agent.
+* ``run`` is async (awaits ``ainvoke``) so it joins the B-9 parallel fan-out;
+  ``fallback`` is synchronous and never touches the LLM.
+* PromptTuner is *not* wired here (B-9 concern); instead ``run`` accepts an
+  optional ``style_fragment`` the Supervisor can pass per request.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ _DOMAIN_KNOWLEDGE_TOP_K = 2
 
 
 class EmpathyAgent:
-    """生成温暖、有情感感知的回复，并在危机信号时安全升级。"""
+    """Generate a warm, emotion-aware reply, escalating safely on crisis signals."""
 
     def __init__(
         self,
@@ -68,7 +68,7 @@ class EmpathyAgent:
         *,
         style_fragment: str | None = None,
     ) -> dict[str, Any]:
-        """为当前日记生成 ``empathy_response``（+ token 使用量）。"""
+        """Produce ``empathy_response`` (+ token usage) for the current diary."""
         diary_content = state.get("diary_content", "")
         intent = state.get("intent", "pure_record")
         profile = state.get("long_term_profile", {}) or {}
@@ -119,7 +119,7 @@ class EmpathyAgent:
         return {"empathy_response": reply, **usage}
 
     def fallback(self, intent: str, *, is_crisis: bool = False) -> dict[str, Any]:
-        """模型不可达时使用的安全、无 LLM 回复。"""
+        """Safe, LLM-free reply used when the model is unreachable."""
         if is_crisis:
             reply = f"{EMPATHY_CRISIS_FALLBACK}\n\n{CRISIS_RESOURCES}"
         else:

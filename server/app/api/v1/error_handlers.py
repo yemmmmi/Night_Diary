@@ -1,4 +1,4 @@
-"""将 :class:`AppError` 子类映射为 HTTP 响应。"""
+"""Map :class:`AppError` subclasses to HTTP responses."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def register_error_handlers(app: FastAPI) -> None:
     async def validation_error_handler(
         _request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        """将 FastAPI 的 422 校验错误统一为我们的 ErrorResponse 格式。"""
+        """Unify FastAPI's 422 validation errors to our ErrorResponse format."""
         errors = exc.errors()
         if errors:
             first = errors[0]
@@ -45,7 +45,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
-        """兜底处理非 AppError 异常 —— 返回 500 且不泄露堆栈跟踪。"""
+        """Catch-all for non-AppError exceptions — return 500 without leaking stack traces."""
         logger.exception("Unhandled exception: %s", exc)
         return JSONResponse(
             status_code=500,

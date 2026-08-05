@@ -1,32 +1,34 @@
-"""MultiAgentGraph — Supervisor + Worker 的纯 asyncio 编排。
+"""MultiAgentGraph — pure-asyncio orchestration of the Supervisor + Workers.
 
-V1 使用 LangGraph 来连接多智能体管道。V2 刻意放弃了该
-依赖（它不在 ``pyproject.toml`` 中）：这里的图是一个小型、
-显式的 ``asyncio`` 编排器。这使运行时透明，减少了后端的
-沉重依赖，并使超时/降级行为易于测试。
+V1 used LangGraph to wire the multi-agent pipeline. V2 deliberately drops that
+dependency (it is not in ``pyproject.toml``): the graph here is a small,
+explicit ``asyncio`` orchestrator. This keeps the runtime transparent, removes a
+heavy dependency from the packaged sidecar, and makes timeout/degradation
+behaviour easy to test.
 
-执行模型
+Execution model
 ---------------
-1. **classify** — ``supervisor.classify`` 决定意图、层级、预算，以及
-   ``activated_agents`` / ``activated_skills`` 集合。
-2. **分阶段扇出** — Worker 分阶段运行以保证数据依赖：
-   *provider* Worker（``retrieval``）先运行，然后 *consumer* Worker
-   （``empathy`` / ``insight``）在检索上下文已合并到状态后并发运行。
-   V1 一次性扇出所有 Worker，导致 insight 从未看到检索输出；
-   分阶段模型修复了这一点，同时仍使用 ``asyncio.gather`` 进行并发阶段。
-3. **synthesize** — ``supervisor.synthesize`` 合并 Worker 输出，容忍
-   部分失败。
+1. **classify** — ``supervisor.classify`` decides intent, tier, budget, and the
+   ``activated_agents`` / ``activated_skills`` sets.
+2. **phased fan-out** — workers run in phases so data dependencies hold:
+   *provider* workers (``retrieval``) run first, then *consumer* workers
+   (``empathy`` / ``insight``) run concurrently with the retrieval context
+   already merged into the state. V1 fanned all workers out at once, so insight
+   never saw retrieval output; the phased model fixes that while still using
+   ``asyncio.gather`` for the concurrent phase.
+3. **synthesize** — ``supervisor.synthesize`` merges worker outputs, tolerating
+   partial failures.
 
-弹性
+Resilience
 ----------
-每个 Worker 都被包装：它获得独立的 ``asyncio.wait_for`` 超时，
-任何超时/异常都回退到该 Worker 的 ``fallback()``（安全模板）
-并在 ``errors`` 通道中添加一条记录。一个 Worker 失败永远不会中止运行。
+Each worker is wrapped: it gets an independent ``asyncio.wait_for`` timeout, and
+any timeout/exception falls back to that worker's ``fallback()`` (a safe template)
+plus an entry in the ``errors`` channel. One worker failing never aborts the run.
 
-来自并发 Worker 的部分更新通过 :class:`MultiAgentState` 上声明的 reducer
-合并（计数器/errors 用 ``operator.add``，activated-* 列表用
-``merge_unique``），因此 B-7 状态契约得到遵守，而无需
-LangGraph 应用通道。
+Partial updates from concurrent workers are merged with the reducers declared on
+:class:`MultiAgentState` (``operator.add`` for counters/errors, ``merge_unique``
+for the activated-* lists), so the B-7 state contract is honoured without
+LangGraph applying the channels.
 """
 
 from __future__ import annotations
@@ -47,15 +49,15 @@ WorkerRunner = Callable[[MultiAgentState], Awaitable[dict[str, Any]]]
 WorkerFallback = Callable[[MultiAgentState], dict[str, Any]]
 
 DEFAULT_WORKER_TIMEOUT_S = 30.0
-PROVIDER_PHASE = 0  # retrieval——产生供后续阶段消费的上下文
-CONSUMER_PHASE = 1  # empathy / insight——读取检索上下文
+PROVIDER_PHASE = 0  # retrieval — produces context consumed by later phases
+CONSUMER_PHASE = 1  # empathy / insight — read retrieval context
 
 
 def _reducer_table() -> dict[str, tuple[Callable[[Any, Any], Any], Any]]:
-    """从 MultiAgentState 的注解构建 {field: (reducer, identity)}。
+    """Build {field: (reducer, identity)} from MultiAgentState's annotations.
 
-    只返回声明为 ``Annotated[..., reducer]`` 的字段；其余所有
-    字段在合并时采用后写覆盖策略。
+    Only fields declared ``Annotated[..., reducer]`` are returned; everything
+    else is last-write-wins during merge.
     """
     table: dict[str, tuple[Callable[[Any, Any], Any], Any]] = {}
     hints = get_type_hints(MultiAgentState, include_extras=True)
@@ -74,7 +76,7 @@ _REDUCERS = _reducer_table()
 
 
 def _merge(state: dict[str, Any], update: dict[str, Any]) -> None:
-    """将节点的部分更新折叠到 ``state`` 中，遵守通道 reducer。"""
+    """Fold a node's partial update into ``state`` honouring channel reducers."""
     for key, value in update.items():
         if key in _REDUCERS:
             reducer, identity = _REDUCERS[key]
@@ -85,7 +87,7 @@ def _merge(state: dict[str, Any], update: dict[str, Any]) -> None:
 
 
 class MultiAgentGraph:
-    """为单个日记轮次运行 Supervisor + Worker 管道。"""
+    """Runs the Supervisor + Worker pipeline for a single diary turn."""
 
     def __init__(
         self,
@@ -154,7 +156,7 @@ class MultiAgentGraph:
                     )
             for name, result in zip(phase_workers, results, strict=True):
                 if isinstance(result, BaseException):
-                    # _run_safe 不应抛出异常；这用于防范其中的 bug。
+                    # _run_safe should never raise; this guards against bugs in it.
                     logger.error("worker %s raised past safety wrapper: %s", name, result)
                     update = dict(self._fallbacks[name](cast(MultiAgentState, merged)))
                     update["errors"] = [f"worker '{name}' crashed: {result!r}"]
@@ -193,7 +195,7 @@ class MultiAgentGraph:
 
 
 class MultiAgentGraphBuilder:
-    """:class:`MultiAgentGraph` 的流式构建器。"""
+    """Fluent builder for :class:`MultiAgentGraph`."""
 
     def __init__(
         self,
@@ -248,14 +250,14 @@ def create_multi_agent_graph(
     context_compressor: ContextCompressor | None = None,
     prompt_tuner: Any = None,
 ) -> MultiAgentGraph:
-    """将三个 Worker 智能体连接成具有正确阶段/回退的图。
+    """Wire the three Worker agents into a graph with correct phases/fallbacks.
 
-    ``retrieval`` 是 provider（阶段 0）；``empathy``/``insight`` 是 consumer
-    （阶段 1），因此它们能观察到检索上下文。每个 Worker 的 ``fallback``
-    被适配为图所期望的统一 ``(state) -> dict`` 签名。
+    ``retrieval`` is a provider (phase 0); ``empathy``/``insight`` are consumers
+    (phase 1) so they observe the retrieval context. Each worker's ``fallback``
+    is adapted to the uniform ``(state) -> dict`` signature the graph expects.
 
-    ``prompt_tuner``（可选）在 empathy/insight 智能体运行前从用户反馈
-    历史生成 ``style_fragment``，闭合反馈循环。
+    ``prompt_tuner`` (optional) generates a ``style_fragment`` from user feedback
+    history before empathy/insight agents run, closing the feedback loop.
     """
 
     def _build_style_fragment(state: MultiAgentState) -> str | None:

@@ -1,4 +1,4 @@
-"""API v1 的 Pydantic 请求/响应模型。"""
+"""Pydantic request/response models for API v1."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ class AnalysisResponse(BaseModel):
 
 
 class AnalysisTriggerRequest(BaseModel):
-    """触发/重新生成分析（带回复者风格）的请求体。
+    """Request body for triggering/regenerating an analysis with a replier style.
 
     ``replier_preset`` 对应前端预设风格 (warm/pragmatic/calm);
     ``replier_persona`` 为用户自定义人设文本 (非空时优先级高于 preset).
@@ -170,7 +170,7 @@ class StatsResponse(BaseModel):
     total_tokens_out: int
 
 
-# ── 记忆卡片 ────────────────────────────────────────────────────────
+# ── Memory Card ────────────────────────────────────────────────────────
 
 
 class CardCreateRequest(BaseModel):
@@ -209,12 +209,12 @@ class CardResponse(BaseModel):
 
 
 class CardExpandRequest(BaseModel):
-    """将记忆卡片展开为完整日记条目。"""
+    """Expand a memory card into a full diary entry."""
 
     pass
 
 
-# ── 周报 ──────────────────────────────────────────────────────────────
+# ── Weekly Report ──────────────────────────────────────────────────────
 
 
 class WeeklyReportResponse(BaseModel):
@@ -232,7 +232,7 @@ class WeeklyReportResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── 记忆库 ─────────────────────────────────────────────────────────────
+# ── Memory Library ─────────────────────────────────────────────────────
 
 
 class EpisodicEntryResponse(BaseModel):
@@ -304,7 +304,7 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
-# ── 会话（聊天） ──────────────────────────────────────────────────────
+# ── Conversation (Chat) ──────────────────────────────────────────────
 
 
 class ConversationResponse(BaseModel):

@@ -1,4 +1,4 @@
-"""三层记忆系统的领域类型。"""
+"""Domain types for the three-layer memory system."""
 
 from __future__ import annotations
 
@@ -8,14 +8,15 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class EpisodicEntry(BaseModel):
-    """从一次日记分析轮次中派生出的单条情景记忆项。
+    """A single episodic memory item derived from a diary analysis turn.
 
-    扩展了结构化字段（tags、mood_score、emotions、event_date），
-    以便长期记忆提升器能用它们进行重复主题检测，而非使用原始文本匹配。
+    Extended with structured fields (tags, mood_score, emotions, event_date)
+    so the long-term promoter can use them for recurring-topic detection
+    instead of raw text matching.
 
-    向后兼容：旧载荷存储的是 ``event`` 而非 ``event_summary``，且省略了
-    ``reply_insight``。一个 ``model_validator`` 会映射遗留键名，
-    以便对旧数据的反序列化永不失败。
+    Backward compatibility: old payloads stored ``event`` instead of
+    ``event_summary`` and omitted ``reply_insight``. A ``model_validator``
+    maps legacy keys so deserialization never fails on old data.
     """
 
     event_summary: str
@@ -26,26 +27,26 @@ class EpisodicEntry(BaseModel):
     diary_ids: list[str] = Field(default_factory=list)
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
     entry_id: str = ""
-    # ── 结构化字段（P2-2 UnifiedMemoryAtom） ──
+    # ── Structured fields (P2-2 UnifiedMemoryAtom) ──
     tags: list[str] = Field(default_factory=list)
     mood_score: float = Field(default=0.5, ge=0.0, le=1.0)
     emotions: list[str] = Field(default_factory=list)
-    event_date: str | None = None  # ISO 日期字符串（YYYY-MM-DD）
+    event_date: str | None = None  # ISO date string (YYYY-MM-DD)
 
     @model_validator(mode="before")
     @classmethod
     def _compat_legacy_fields(cls, data: Any) -> Any:
-        """映射遗留字段名，以便旧 JSON 载荷仍能反序列化。
+        """Map legacy field names so old JSON payloads still deserialize.
 
-        - ``event`` → ``event_summary``（在 P2-2 中重命名）
-        - ``reply_insight`` 缺失时默认为 ``""``（在 Phase 2 中新增）
-        - ``insight`` → ``reply_insight``（非常旧的名字）
+        - ``event`` → ``event_summary`` (renamed in P2-2)
+        - ``reply_insight`` defaults to ``""`` if missing (added in Phase 2)
+        - ``insight`` → ``reply_insight`` (very old name)
         """
         if isinstance(data, dict):
             # event → event_summary
             if "event_summary" not in data and "event" in data:
                 data["event_summary"] = data.pop("event")
-            # reply_insight 默认值
+            # reply_insight default
             if "reply_insight" not in data:
                 data["reply_insight"] = data.get("insight", "")
         return data
@@ -64,7 +65,7 @@ class ImportantPerson(BaseModel):
 
 
 class UserProfile(BaseModel):
-    """以 JSON 持久化的长期用户画像。"""
+    """Long-term user profile persisted as JSON."""
 
     personality_tags: list[str] = Field(default_factory=list)
     emotion_baseline: EmotionBaseline = Field(default_factory=EmotionBaseline)
@@ -74,7 +75,7 @@ class UserProfile(BaseModel):
 
 
 class WorkingContext(TypedDict, total=False):
-    """单次日记分析的会话级工作记忆状态。"""
+    """Session-level working memory state for a single diary analysis."""
 
     diary_id: str
     diary_content: str
@@ -91,7 +92,7 @@ class WorkingContext(TypedDict, total=False):
 
 
 class EpisodicMemoryStore(Protocol):
-    """情景记忆条目的持久化端口。"""
+    """Persistence port for episodic memory entries."""
 
     def load_entries(self, user_id: str) -> list[EpisodicEntry]: ...
 
@@ -101,7 +102,7 @@ class EpisodicMemoryStore(Protocol):
 
 
 class LongTermProfileStore(Protocol):
-    """长期用户画像的持久化端口。"""
+    """Persistence port for long-term user profiles."""
 
     def get_profile(self, user_id: str) -> UserProfile | None: ...
 

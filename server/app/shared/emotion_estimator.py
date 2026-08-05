@@ -1,24 +1,27 @@
-"""基于关键词的情绪估计，在整个 AI 管道中共享。
+"""Keyword-based emotion estimation shared across the AI pipeline.
 
-这是轻量级、无 LLM 情绪启发式的唯一真相来源。在 V1 中，相同的关键词评分被
-复制粘贴到 ``empathy_agent`` 和 ``crisis_detector`` 两处（坏味 3：重复实现）；
-现在它只存在于此处，并按需注入。
+This is the single source of truth for the lightweight, LLM-free emotion
+heuristic. In V1 the same keyword scoring was copy-pasted into both
+``empathy_agent`` and ``crisis_detector`` (坏味 3: duplicated implementation);
+here it lives once and is injected where needed.
 
-评估器是一个可配置的*实例*（没有模块级可变状态）。默认词表和权重复现了 V1
-的行为，因此现有的危机检测阈值保持有效。需要不同灵敏度的调用方可以通过构造
-函数传入自己的词表/权重。
+The estimator is a configurable *instance* (no module-level mutable state). The
+default lexicon and weights reproduce V1's behaviour so existing crisis-detection
+thresholds stay valid. Callers that want different sensitivity pass their own
+lexicon/weights through the constructor.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-# 否定字符，会翻转其后正向关键词的极性。
-# 例如 "不开心" → 负向，"没快乐" → 负向，"不是不开心" → 正向（双重否定）
+# Negation characters that flip the polarity of a following positive keyword.
+# e.g. "不开心" → negative, "没快乐" → negative, "不是不开心" → positive (double negation)
 _NEGATION_CHARS: str = "不没未别无非"
 
-# 默认词表——V1 empathy_agent / crisis_detector 词表的并集，已去重。
-# "崩溃"/"绝望" 被视为严重（不仅仅是负向），因此不会在两个层级间重复计数。
+# Default lexicon — the union of the V1 empathy_agent / crisis_detector word
+# lists, de-duplicated. "崩溃"/"绝望" are treated as severe (not merely negative)
+# so they are never double-counted across the two tiers.
 _DEFAULT_SEVERE_NEGATIVE: tuple[str, ...] = (
     "想死",
     "不想活",
@@ -74,13 +77,13 @@ _DEFAULT_POSITIVE: tuple[str, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class EmotionEstimate:
-    """基于关键词的情绪估计结果。"""
+    """Result of a keyword-based emotion estimation pass."""
 
     score: float
-    """``[-1.0, 1.0]`` 范围内的极性；负向表示痛苦，正向表示良好状态。"""
+    """Polarity in ``[-1.0, 1.0]``; negative is distress, positive is wellbeing."""
 
     label: str
-    """``crisis`` / ``negative`` / ``neutral`` / ``positive`` 之一。"""
+    """One of ``crisis`` / ``negative`` / ``neutral`` / ``positive``."""
 
     matched_severe: tuple[str, ...] = field(default_factory=tuple)
     matched_negative: tuple[str, ...] = field(default_factory=tuple)
@@ -88,12 +91,13 @@ class EmotionEstimate:
 
 
 class EmotionEstimator:
-    """使用关键词词表估计文本的情绪极性。
+    """Estimate emotional polarity from text using a keyword lexicon.
 
-    该启发式刻意保持轻量：它在任何 LLM 调用之前运行，使管道可以短路到
-    危机安全路径而无需消耗 token。它*不是*
-    :class:`~app.domain.skills.sentiment_skill.SentimentSkill` 中 LLM 情感分析的
-    替代品；它是为路由和危机检测提供输入的快速预筛。
+    The heuristic is deliberately cheap: it runs before any LLM call so the
+    pipeline can short-circuit to a crisis-safe path without spending tokens.
+    It is *not* a replacement for the LLM sentiment analysis in
+    :class:`~app.domain.skills.sentiment_skill.SentimentSkill`; it is the fast
+    pre-screen that feeds routing and crisis detection.
     """
 
     def __init__(
@@ -124,7 +128,7 @@ class EmotionEstimator:
         return self._crisis_threshold
 
     def estimate(self, text: str) -> EmotionEstimate:
-        """返回完整的估计结果（分数 + 标签 + 匹配的关键词）。"""
+        """Return the full estimate (score + label + matched keywords)."""
         if not text:
             return EmotionEstimate(score=0.0, label="neutral")
 
@@ -133,9 +137,9 @@ class EmotionEstimator:
         matched_positive: list[str] = []
         negated_positive: list[str] = []
 
-        # 检测正向关键词之前的否定前缀。
-        # 奇数个否定字符 → 极性翻转（正向 → 负向）。
-        # 偶数个 → 双重否定恢复正向（例如 "不是不开心"）。
+        # Detect negation prefixes before positive keywords.
+        # Odd number of negation chars → polarity flipped (positive → negative).
+        # Even number → double negation restores positive (e.g. "不是不开心").
         for w in self._positive:
             start = 0
             while True:
@@ -157,7 +161,7 @@ class EmotionEstimator:
             len(matched_severe) * self._severe_weight
             + len(matched_negative) * self._negative_weight
             + len(matched_positive_t) * self._positive_weight
-            # 被否定的正向词计为负向（权重与一般负向相同）。
+            # Negated positives count as negative (same weight as general negative).
             + len(negated_positive_t) * self._negative_weight
         )
         score = max(-1.0, min(1.0, raw))
@@ -171,11 +175,11 @@ class EmotionEstimator:
         )
 
     def score(self, text: str) -> float:
-        """仅返回 ``[-1.0, 1.0]`` 范围内的极性分数。"""
+        """Return only the polarity score in ``[-1.0, 1.0]``."""
         return self.estimate(text).score
 
     def label_for(self, score: float) -> str:
-        """将极性分数映射为离散的情绪标签。"""
+        """Map a polarity score to a discrete emotion label."""
         if score <= self._crisis_threshold:
             return "crisis"
         if score <= self._negative_threshold:
@@ -185,27 +189,30 @@ class EmotionEstimator:
         return "neutral"
 
     def has_severe_signal(self, text: str) -> bool:
-        """文本是否包含任何严重（危机级别）关键词。"""
+        """Whether the text contains any severe (crisis-level) keyword."""
         return any(word in text for word in self._severe)
 
     def count_negative_signals(self, text: str) -> int:
-        """统计文本中出现的不同一般负向关键词数量。"""
+        """Count distinct general-negative keywords present in the text."""
         return sum(1 for word in self._negative if word in text)
 
 
-# 惰性创建的进程级默认评估器单例。评估器是无状态且轻量的，但共享一个
-# 默认实例可以保持内存使用可预测，并提供单一注入点。``_INSTANCE`` 仅是
-# 默认配置实例的缓存——它不持有词表/可变评分状态，需要自定义词表/权重的
-# 调用方仍然直接构造（或注入）自己的 ``EmotionEstimator``。
+# Lazily-created process-wide singleton of the default estimator. The estimator
+# is stateless and cheap, but sharing one default instance keeps memory usage
+# predictable and gives a single injection point. ``_INSTANCE`` is a cache of
+# the default-configured instance only — it does NOT hold lexicon/mutable
+# scoring state, and callers needing custom lexicon/weights still construct (or
+# inject) their own ``EmotionEstimator`` directly.
 _INSTANCE: EmotionEstimator | None = None
 
 
 def get_emotion_estimator() -> EmotionEstimator:
-    """返回共享的默认 :class:`EmotionEstimator` 单例。
+    """Return the shared default :class:`EmotionEstimator` singleton.
 
-    在首次调用时惰性构造默认配置的实例，此后复用。注入此访问器（或其结果），
-    而不是在调用点直接调用 ``EmotionEstimator()``，这样替换默认实例就只有
-    一个地方——例如用于测试或全局重新配置。
+    Lazily constructs the default-configured instance on first call and reuses
+    it thereafter. Inject this accessor (or its result) rather than calling
+    ``EmotionEstimator()`` directly at call sites so there is a single place to
+    swap the default instance — e.g. for tests or global reconfiguration.
     """
     global _INSTANCE
     if _INSTANCE is None:

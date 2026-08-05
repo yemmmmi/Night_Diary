@@ -1,4 +1,4 @@
-"""统计 API 路由。"""
+"""Statistics API routes."""
 
 from __future__ import annotations
 

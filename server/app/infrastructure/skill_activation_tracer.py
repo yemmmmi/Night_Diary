@@ -1,4 +1,4 @@
-"""基于 SQLite 的 SkillActivationTracer 实现。"""
+"""SQLite-backed SkillActivationTracer implementation."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from app.shared.tracing import SkillActivationRecord
 
 
 class SqliteSkillActivationTracer:
-    """持久化技能激活评估结果，供后续在 B-9 中审查。"""
+    """Persist skill activation evaluations for later inspection in B-9."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory

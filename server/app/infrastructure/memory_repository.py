@@ -1,4 +1,4 @@
-"""基于 SQLite 的领域记忆仓库。"""
+"""SQLite-backed repositories for domain memory stores."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from app.infrastructure.models.memory import EpisodicMemoryRow, LongTermProfileR
 
 
 class SqliteEpisodicMemoryStore:
-    """在 SQLite 中持久化情景记忆条目。"""
+    """Persist episodic entries in SQLite."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
@@ -70,7 +70,7 @@ class SqliteEpisodicMemoryStore:
 
 
 class SqliteLongTermProfileStore:
-    """以 JSON blob 形式持久化长期画像。"""
+    """Persist long-term profiles as JSON blobs."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory

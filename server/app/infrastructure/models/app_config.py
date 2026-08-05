@@ -1,4 +1,4 @@
-"""键值对应用配置（``app_config``）。"""
+"""Key-value application configuration (``app_config``)."""
 
 from __future__ import annotations
 

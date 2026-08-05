@@ -1,4 +1,4 @@
-"""交叉编码器重排序器，支持延迟加载与优雅降级。"""
+"""Cross-encoder reranker with lazy loading and graceful degradation."""
 
 from __future__ import annotations
 
@@ -18,11 +18,12 @@ ModelLoader = Callable[[], Any]
 
 
 class Reranker:
-    """使用 CrossEncoder 模型对融合后的检索候选进行重排序。
+    """Rerank fused retrieval candidates with a CrossEncoder model.
 
-    与 V1 不同，配置是**实例级**的：不会向进程中泄漏任何 ``os.environ`` 写入
-    （``HF_HUB_OFFLINE`` 等）。模型在首次调用 ``rerank`` 时延迟加载。
-    任何加载 / 预测失败都会降级到 :meth:`fallback`，按原始融合顺序返回，不抛异常。
+    Unlike V1, configuration is **instance-level**: no ``os.environ`` writes
+    (``HF_HUB_OFFLINE`` etc.) leak into the process. The model is lazy-loaded on
+    first ``rerank`` call. Any load/predict failure degrades to
+    :meth:`fallback`, returning the original fused order without raising.
     """
 
     def __init__(
@@ -69,9 +70,10 @@ class Reranker:
         return CrossEncoder(self.model_name, **kwargs)
 
     def rerank(self, query: str, candidates: list[RetrievalResult]) -> list[RetrievalResult]:
-        """返回由交叉编码器相关性重新排序后的 top-k 候选。
+        """Return the top-k candidates reordered by cross-encoder relevance.
 
-        当模型不可用或打分抛出异常时，降级为原始融合顺序（截断到 ``top_k``）。
+        Falls back to the original fused order (truncated to ``top_k``) when the
+        model is unavailable or scoring raises.
         """
         if not candidates:
             return []
@@ -107,5 +109,5 @@ class Reranker:
             return self.fallback(candidates)
 
     def fallback(self, candidates: list[RetrievalResult]) -> list[RetrievalResult]:
-        """返回截断到 ``top_k`` 的原始融合候选，不带 rerank 得分。"""
+        """Return original fused candidates truncated to ``top_k``, no rerank score."""
         return candidates[: self.top_k]

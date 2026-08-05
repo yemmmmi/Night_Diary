@@ -1,9 +1,9 @@
-"""ChromaDB 集合管理器的基类。
+"""Base class for ChromaDB collection managers.
 
-持有每个单集合管理器共用的生命周期脚手架（客户端解析、
-collection kwargs、get/create、count）。子类只需提供
-``_collection_name`` 与 ``_collection_description``，
-以及各自的领域特定 CRUD 方法。
+Holds the shared lifecycle scaffolding (client resolution, collection
+kwargs, get/create, count) common to every single-collection manager.
+Subclasses only need to provide ``_collection_name`` and
+``_collection_description`` plus their domain-specific CRUD methods.
 """
 
 from __future__ import annotations
@@ -23,13 +23,13 @@ class EmbeddingFunction(Protocol):
 
 
 class BaseCollectionManager(ABC):
-    """单个 Chroma 集合共享的生命周期逻辑。
+    """Shared lifecycle logic for a single Chroma collection.
 
-    单用户桌面应用：一个共享集合，无按用户前缀。
-    写入失败仅记录日志，不会抛出异常（SQLite 仍是数据真源）。
+    Single-user desktop app: one shared collection, no per-user prefix.
+    Write failures are logged and do not raise (SQLite remains source of truth).
 
-    子类必须设置 ``_collection_name`` 与 ``_collection_description``
-    （作为类属性，或在 ``__init__`` 中作为实例属性）。
+    Subclasses must set ``_collection_name`` and ``_collection_description``
+    (as class attributes or instance attributes in ``__init__``).
     """
 
     @property
@@ -62,7 +62,7 @@ class BaseCollectionManager(ABC):
         return {}
 
     def get_collection(self, *, create: bool = False) -> Any | None:
-        """返回被管理的集合，可选地创建它。"""
+        """Return the managed collection, optionally creating it."""
         if self._collection is not None:
             return self._collection
 
@@ -85,7 +85,7 @@ class BaseCollectionManager(ABC):
         return self._collection
 
     def count(self) -> int:
-        """返回集合中的 chunk 总数。"""
+        """Return total chunk count in the collection."""
         collection = self.get_collection(create=False)
         if collection is None:
             return 0

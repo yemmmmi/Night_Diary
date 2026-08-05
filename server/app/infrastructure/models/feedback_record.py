@@ -1,9 +1,9 @@
-"""用户对 AI 回复显式反馈的 ORM 模型（``feedback``）。
+"""ORM model for explicit user feedback on AI responses (``feedback``).
 
-同时支持场景一（日记分析）和场景二（对话）的反馈。
-对于日记反馈，设置 ``analysis_id`` 和 ``diary_id``。
-对于对话反馈，设置 ``conversation_id``。
-``analysis_id`` 或 ``conversation_id`` 至少有一个必须非空。
+Supports both scene-1 (diary analysis) and scene-2 (conversation) feedback.
+For diary feedback, ``analysis_id`` and ``diary_id`` are set.
+For conversation feedback, ``conversation_id`` is set.
+At least one of ``analysis_id`` or ``conversation_id`` must be non-null.
 """
 
 from __future__ import annotations

@@ -1,14 +1,14 @@
-"""实体图谱存储 — Neo4j 集成，带 SQLite 回退。
+"""Entity graph store — Neo4j integration with SQLite fallback.
 
-将实体（人物、地点、主题）及其关系存储为图，
-用于多跳查询（例如"用户压力大时最常提到谁？"）。
+Stores entities (persons, places, topics) and their relationships as a graph
+for multi-hop queries (e.g. "who does the user mention most when stressed?").
 
-当 Neo4j 可用（设置了 NEO4J_URL）时，实体写入图数据库
-以支持 GraphRAG 和复杂关系查询。当不可用时，实体通过
-现有的 DomainKnowledgeStore 存储在 SQLite 中 —
-简单查询仍可使用，但不支持多跳图遍历。
+When Neo4j is available (NEO4J_URL set), entities are written to the graph
+database for GraphRAG and complex relationship queries. When unavailable,
+entities are stored in SQLite via the existing DomainKnowledgeStore —
+simpler queries still work, but multi-hop graph traversals are not supported.
 
-图模式：
+The graph schema:
     (:User {user_id}) -[:MENTIONS]-> (:Entity {name, type})
     (:Entity) -[:RELATED_TO {context}]-> (:Entity)
     (:Entity) -[:APPEARS_IN {source, emotion}]-> (:DiaryEntry|:Conversation)
@@ -28,7 +28,7 @@ _neo4j_available = False
 
 
 def _init_neo4j() -> None:
-    """如果设置了 NEO4J_URL 则初始化 Neo4j 驱动。"""
+    """Initialize Neo4j driver if NEO4J_URL is set."""
     global _neo4j_driver, _neo4j_available, _NEO4J_URL
     if not _NEO4J_URL:
         return
@@ -67,17 +67,17 @@ def write_entity(
     context: str = "",
     related_entities: list[tuple[str, str, str]] | None = None,
 ) -> None:
-    """将实体及其关系写入图。
+    """Write an entity and its relationships to the graph.
 
     Args:
-        user_id: 提及该实体的用户。
-        entity_name: 实体名称（如 "妈妈"、"公司"）。
-        entity_type: 类型（person / place / topic）。
-        source: 来源标识符（如 "diary:42"、"conversation:abc"）。
-        emotion: 与此次提及关联的情绪。
-        context: 提及的简要上下文。
-        related_entities: 同时提及的实体的
-            (name, type, relation_type) 元组列表。
+        user_id: The user who mentioned this entity.
+        entity_name: Name of the entity (e.g. "妈妈", "公司").
+        entity_type: Type (person / place / topic).
+        source: Source identifier (e.g. "diary:42", "conversation:abc").
+        emotion: Emotion associated with this mention.
+        context: Brief context of the mention.
+        related_entities: List of (name, type, relation_type) tuples for
+            entities mentioned alongside this one.
     """
     if _neo4j_available:
         _write_to_neo4j(
@@ -89,7 +89,7 @@ def write_entity(
             context=context,
             related_entities=related_entities or [],
         )
-    # SQLite 回退由 entity_extractor.py 中的 DomainKnowledgeStore 处理
+    # SQLite fallback is handled by DomainKnowledgeStore in entity_extractor.py
 
 
 def _write_to_neo4j(
@@ -102,18 +102,18 @@ def _write_to_neo4j(
     context: str,
     related_entities: list[tuple[str, str, str]],
 ) -> None:
-    """将实体和关系写入 Neo4j。"""
+    """Write entity and relationships to Neo4j."""
     if _neo4j_driver is None:
         return
     try:
         with _neo4j_driver.session() as session:
-            # 创建或合并 User 节点
+            # Create or merge User node
             session.run(
                 "MERGE (u:User {user_id: $user_id})",
                 user_id=user_id,
             )
 
-            # 创建或合并 Entity 节点
+            # Create or merge Entity node
             session.run(
                 """
                 MERGE (e:Entity {name: $name, user_id: $user_id})
@@ -124,7 +124,7 @@ def _write_to_neo4j(
                 entity_type=entity_type,
             )
 
-            # 创建 MENTIONS 关系
+            # Create MENTIONS relationship
             session.run(
                 """
                 MATCH (u:User {user_id: $user_id}), (e:Entity {name: $name, user_id: $user_id})
@@ -139,7 +139,7 @@ def _write_to_neo4j(
                 context=context,
             )
 
-            # 创建与相关实体的关系
+            # Create relationships to related entities
             for rel_name, rel_type, relation_type in related_entities:
                 session.run(
                     """
@@ -167,10 +167,10 @@ def query_related_entities(
     max_depth: int = 2,
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    """查询与给定实体相关的实体（多跳）。
+    """Query entities related to a given entity (multi-hop).
 
-    返回包含 name、type、relation_type 和 depth 的字典列表。
-    仅在 Neo4j 下可用；SQLite 回退时返回空列表。
+    Returns a list of dicts with name, type, relation_type, and depth.
+    Only works with Neo4j; returns empty list on SQLite fallback.
     """
     if not _neo4j_available or _neo4j_driver is None:
         return []
@@ -213,9 +213,9 @@ def query_entities_by_emotion(
     *,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
-    """查找在给定情绪下最常被提及的实体。
+    """Find entities most frequently mentioned with a given emotion.
 
-    示例："用户情绪低落时最常提到谁？"
+    Example: "who does the user mention most when feeling low?"
     """
     if not _neo4j_available or _neo4j_driver is None:
         return []
@@ -247,7 +247,7 @@ def query_entities_by_emotion(
         return []
 
 
-# 导入时初始化
+# Initialize on import
 _init_neo4j()
 
 

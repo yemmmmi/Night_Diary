@@ -1,8 +1,8 @@
-"""MemoryRecallSkill — 场景 2 技能，检索相关的情节记忆。
+"""MemoryRecallSkill — scene 2 skill that retrieves relevant episodic memories.
 
-当用户提及过去的事件或询问对话历史时激活。
-该技能为场景 2 专用（多轮对话），补充场景 1 的技能
-（crisis_detector、sentiment_skill）。
+Activates when the user references past events or asks about conversation history.
+This skill is scene-2 specific (multi-turn conversation), complementing the
+scene-1 skills (crisis_detector, sentiment_skill).
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ _RECALL_TRIGGERS = (
 
 
 class MemoryRecallSkill(BaseSkill):
-    """当用户提及过去时，检索相关的情节记忆。"""
+    """Retrieve relevant episodic memories when the user references the past."""
 
     metadata = SkillMetadata(
         name="memory_recall",
@@ -59,5 +59,5 @@ class MemoryRecallSkill(BaseSkill):
         return 0.1
 
     def execute(self, context: dict[str, Any], **kwargs: Any) -> str:
-        """返回需要记忆回溯的提示（实际检索由上游完成）。"""
+        """Return a hint that memory recall is needed (actual retrieval is upstream)."""
         return "[memory_recall] 已触发记忆回溯，请在上下文中包含相关情节记忆。"

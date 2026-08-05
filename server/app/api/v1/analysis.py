@@ -1,4 +1,4 @@
-"""分析 API 路由。"""
+"""Analysis API routes."""
 
 from __future__ import annotations
 

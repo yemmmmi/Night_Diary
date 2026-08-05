@@ -1,4 +1,4 @@
-"""聊天对话与消息的 ORM 模型。"""
+"""ORM models for chat conversations and messages."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""风格反馈与提示词调优的领域类型。"""
+"""Domain types for style feedback and prompt tuning."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ DEFAULT_DIRECTNESS = 0.5
 
 
 class StylePreferenceRecord(BaseModel):
-    """单一回应风格的 Beta 分布参数。"""
+    """Beta distribution parameters for one response style."""
 
     style: str
     alpha: float = 1.0
@@ -53,7 +53,7 @@ class UserPreference(BaseModel):
 
 
 class StylePreferenceStore(Protocol):
-    """汤普森采样风格偏好的持久化端口。"""
+    """Persistence port for Thompson Sampling style preferences."""
 
     def get_preferences(self, user_id: str) -> list[StylePreferenceRecord]: ...
 

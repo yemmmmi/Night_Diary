@@ -1,22 +1,23 @@
-"""Retrieval Worker 智能体——基于用户自己日记的 RAG 增强上下文。
+"""Retrieval Worker Agent — RAG-augmented context over the user's own diaries.
 
-从 V1 ``agents/retrieval_agent.py`` 迁移，并为 V2 重新定位（Q4 = 最小化）：
+Migrated from V1 ``agents/retrieval_agent.py`` and re-scoped for V2 (Q4 = minimal):
 
-* 检索通过注入的 B-3 :class:`~app.domain.rag.retriever.HybridRetriever`
-  （Chroma + BM25 + RRF + 可选重排序）和共享的
-  :class:`~app.domain.knowledge.store.DomainKnowledgeStore` 进行。没有智能体本地的
-  ChromaDB 客户端。
-* V1 的结构化 ``KnowledgeEntry`` SQL 分支**已删除**——该表在 V2 中
-  不存在，且超出 B-8 范围。
-* 多跳检索（≤ 3 跳）带*锚点*守卫：每个精炼查询必须在词汇上
-  接近原始查询（相似度 ≥ ``anchor_threshold``），否则跳转循环停止
-  以防止查询漂移。相似度函数是可注入的；默认是 jieba token 重叠
-  （Jaccard）启发式，因此锚点在运行时不需要嵌入模型（B-10 可以注入语义的）。
-* ``time_range`` 被接受但保留：``HybridRetriever.retrieve`` 尚无
-  日期过滤器，且客户端后过滤无法提高召回率，因此 B-8
-  将其保留为 ``None``。现在声明该参数以使签名稳定。
-* 这里没有 LLM 调用，因此没有 ``LLMCallTracer``——此智能体只检索和
-  摘要。``run`` 是异步的纯粹为了统一的 Worker 接口。
+* Retrieval goes through the injected B-3 :class:`~app.domain.rag.retriever.HybridRetriever`
+  (Chroma + BM25 + RRF + optional rerank) and the shared
+  :class:`~app.domain.knowledge.store.DomainKnowledgeStore`. No agent-local
+  ChromaDB clients.
+* V1's structured ``KnowledgeEntry`` SQL branch is **dropped** — that table does
+  not exist in V2 and is out of B-8 scope.
+* Multi-hop retrieval (≤ 3 hops) with an *anchor* guard: each refined query must
+  stay lexically close to the original query (similarity ≥ ``anchor_threshold``),
+  otherwise the hop loop stops to prevent query drift. The similarity function is
+  injectable; the default is a jieba token-overlap (Jaccard) heuristic so the
+  anchor needs no embedding model at runtime (B-10 can inject a semantic one).
+* ``time_range`` is accepted but reserved: ``HybridRetriever.retrieve`` has no
+  date filter yet, and client-side post-filtering cannot improve recall, so B-8
+  leaves it ``None``. The parameter is declared now so the signature is stable.
+* No LLM call here, hence no ``LLMCallTracer`` — this agent only retrieves and
+  summarises. ``run`` is async purely for a uniform Worker interface.
 """
 
 from __future__ import annotations

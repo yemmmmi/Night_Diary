@@ -1,4 +1,4 @@
-"""情景记忆与长期记忆持久化的 ORM 模型。"""
+"""ORM models for episodic and long-term memory persistence."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""用户配置的 LLM 供应商的 ORM 模型（``model_providers``）。"""
+"""ORM model for user-configured LLM providers (``model_providers``)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""管道追踪存储的 ORM 模型（``pipeline_traces``）。"""
+"""ORM model for pipeline trace storage (``pipeline_traces``)."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ from app.infrastructure.database import Base
 
 
 class PipelineTraceRow(Base):
-    """完整管道执行追踪的持久化表示。
+    """Persisted representation of a full pipeline execution trace.
 
-    每行存储高层元数据（场景、用户、时间、状态），
-    以及完整的追踪载荷（JSON 格式存储在 ``trace_json`` 中），
-    以便在不重新运行管道的情况下回放或审查。
+    Each row stores the high-level metadata (scenario, user, timing, status)
+    plus the complete trace payload as JSON in ``trace_json`` so it can be
+    replayed or inspected without re-running the pipeline.
     """
 
     __tablename__ = "pipeline_traces"

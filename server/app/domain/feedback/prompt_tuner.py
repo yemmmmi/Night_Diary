@@ -1,6 +1,6 @@
-"""基于学习到的用户偏好进行动态提示词调优。
+"""Dynamic prompt tuning based on learned user preferences.
 
-示例::
+Example::
 
     from app.domain.feedback.prompt_tuner import PromptTuner
     from app.domain.feedback.thompson_sampling import ThompsonSampling
@@ -68,7 +68,7 @@ _DIRECTNESS_PROMPTS = {
 
 @dataclass(frozen=True, slots=True)
 class ResponseLengthContext:
-    """回应长度推断的输入；B-9 智能体可传入更丰富的上下文。"""
+    """Inputs for response-length inference; B-9 agents can pass richer context."""
 
     diary_word_count: int = 0
     hour: int | None = None
@@ -76,7 +76,7 @@ class ResponseLengthContext:
 
 
 class PromptTuner:
-    """根据实时风格偏好构建动态提示词片段。"""
+    """Build dynamic prompt fragments from live style preferences."""
 
     def __init__(
         self,
@@ -94,7 +94,7 @@ class PromptTuner:
         hour: int | None = None,
         emotion_intensity: float = 0.5,
     ) -> UserPreference:
-        """为单次分析请求加载当前偏好向量。"""
+        """Load the current preference vector for one analysis request."""
         try:
             preferences = self._load_preferences(user_id)
             if not preferences:
@@ -193,7 +193,7 @@ def infer_response_length(
     preferences: list[StylePreferenceRecord] | None = None,
     context: ResponseLengthContext | None = None,
 ) -> ResponseLength:
-    """从反馈历史和日记上下文推断回应长度。"""
+    """Infer response length from feedback history and diary context."""
     ctx = context or ResponseLengthContext()
 
     if preferences:
@@ -215,7 +215,7 @@ def infer_response_length(
 
 
 def infer_directness(preferences: list[StylePreferenceRecord]) -> float:
-    """从风格成功率推断直接程度。"""
+    """Infer directness from style success rates."""
     if not preferences:
         return DEFAULT_DIRECTNESS
 

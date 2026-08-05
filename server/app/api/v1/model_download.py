@@ -1,4 +1,4 @@
-"""首次运行时 embedding / reranker 模型下载的 API 路由。"""
+"""API routes for first-run embedding / reranker model downloads."""
 
 from __future__ import annotations
 

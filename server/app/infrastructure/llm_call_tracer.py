@@ -1,4 +1,4 @@
-"""基于 SQLite 的 LLMCallTracer 实现。"""
+"""SQLite-backed LLMCallTracer implementation."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from app.shared.tracing import LLMCallRecord
 
 
 class SqliteLLMCallTracer:
-    """将每次 LLM 调用持久化到 ``llm_call_logs`` 表，用于成本/延迟审查。"""
+    """Persist each LLM call to ``llm_call_logs`` for cost/latency inspection."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory

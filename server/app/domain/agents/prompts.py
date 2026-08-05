@@ -1,20 +1,19 @@
-"""Worker 智能体的集中式、带版本管理的提示词资产。
+"""Centralised, versioned prompt assets for the Worker Agents.
 
-提示词以带版本注释的常量形式存在于此（而非散落在各智能体内部的
-字符串字面量中），使其有唯一的归属和可见的版本
-历史——与 B-7 对 judge/rubric 提示词的做法相同。动态组装
-（风格、长度、危机模式、情景记忆/知识块）留在
-智能体中，因为它是*逻辑*，不是静态模板；这些常量是
-逻辑拼接的固定片段。
+Prompts live here as version-commented constants (rather than scattered string
+literals inside each agent) so they have a single home and a visible version
+history — the same approach B-7 took for the judge/rubric prompts. The dynamic
+assembly (style, length, crisis mode, episodic/knowledge blocks) stays in the
+agents because it is *logic*, not a static template; these constants are the
+fixed pieces that logic stitches together.
 
-当 Phase C 服务层落地时，如果需要更丰富的提示词管理，
-这些可能升级为 ``app/services/ai/prompts/`` 下的独立模板
-文件。
+When the Phase C services layer lands, these may graduate to standalone template
+files under ``app/services/ai/prompts/`` if richer prompt management is needed.
 """
 
 from __future__ import annotations
 
-# ─────────────────────────── Empathy 智能体 ────────────────────────────
+# ─────────────────────────── Empathy Agent ────────────────────────────
 
 # prompt-version: empathy_v2.1 (2026-06-27) — 去机器自指, 改为不宣布身份的人话开场
 # (旧版「情感陪伴模块, 专注于...」是清嗓式机器自指, 强化人机感)
@@ -110,7 +109,7 @@ EMPATHY_GUIDELINES = (
     "- 不要使用 markdown 格式"
 )
 
-# 回退模板（无 LLM）：按意图索引。在 LLM 不可达时使用。
+# Fallback templates (no LLM): keyed by intent. Used when the LLM is unreachable.
 EMPATHY_FALLBACKS: dict[str, str] = {
     "pure_record": "感谢你今天的记录，每一天的书写都是对自己的关照。",
     "emotional_support": (
@@ -125,7 +124,7 @@ EMPATHY_CRISIS_FALLBACK = (
     "我注意到你现在可能正在经历很大的痛苦，我想让你知道，你的感受是真实的，你不需要独自面对这一切。"
 )
 
-# 每个意图的回应长度预算（汉字数）。
+# Response length budget (Chinese characters) per intent.
 EMPATHY_RESPONSE_LENGTH: dict[str, dict[str, int]] = {
     "pure_record": {"min": 50, "max": 150},
     "emotional_support": {"min": 100, "max": 300},
@@ -133,7 +132,7 @@ EMPATHY_RESPONSE_LENGTH: dict[str, dict[str, int]] = {
     "habit_tracking": {"min": 50, "max": 150},
 }
 
-# ─────────────────────────── Insight 智能体 ────────────────────────────
+# ─────────────────────────── Insight Agent ────────────────────────────
 
 # prompt-version: insight_v2.1 (2026-06-03) — +grounding/anti-fabrication (faithfulness eval)
 INSIGHT_SYSTEM = """你是一位专业的心理洞察分析师，擅长从日记中发现情绪模式和行为趋势。
@@ -173,7 +172,7 @@ INSIGHT_REPORT_SYSTEM = """你是一位专业的心理洞察分析师，正在�
 
 INSIGHT_FALLBACK = "暂时无法生成深入的分析，但你的记录已经被妥善保存。等状态恢复后可以再来回顾。"
 
-# ─────────────────────────── 意图分类器 ────────────────────────
+# ─────────────────────────── Intent Classifier ────────────────────────
 
 # prompt-version: intent_v2.0 (2026-06-03) — migrated from V1 intent_classifier
 INTENT_CLASSIFY_PROMPT = """你是一个日记意图分类器。请分析以下日记内容，判断用户的写作意图。
@@ -220,14 +219,14 @@ SUPERVISOR_SYNTHESIZE_PROMPT = """你是「夜记助手」的回应整合器。�
 
 请直接输出整合后的回应，不要添加任何前缀或解释："""
 
-# 合成提示词中每个 Worker 输出的显示标签。
+# Display labels for each worker output inside the synthesis prompt.
 SUPERVISOR_WORKER_LABELS = {
     "retrieval": "历史参考",
     "empathy": "情感回应",
     "insight": "洞察分析",
 }
 
-# 当所有 Worker 都失败时使用（没有非空输出可供合成）。
+# Used when every worker failed (no non-empty output to synthesize).
 SUPERVISOR_FALLBACK_RESPONSE = (
     "感谢你今天的记录！坚持写日记是一件很棒的事，"
     "每一天的记录都是珍贵的回忆。继续加油，期待明天的故事！"

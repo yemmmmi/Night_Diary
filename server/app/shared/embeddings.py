@@ -1,13 +1,13 @@
-"""用于向量检索的嵌入函数工厂。
+"""Embedding-function factory for vector retrieval.
 
-重量级的 ``chromadb`` / ``sentence-transformers`` 导入放在函数体内，因此
-导入本模块永远不会拉入 ``torch`` 或触发模型下载（与
-:meth:`app.domain.rag.reranker.Reranker._default_load` 的做法一致）。
+The heavy ``chromadb`` / ``sentence-transformers`` imports live inside the
+function body so importing this module never pulls ``torch`` or triggers a model
+download (mirrors :meth:`app.domain.rag.reranker.Reranker._default_load`).
 
-调用方从 :class:`~app.config.Settings` 构建嵌入函数，并通过依赖注入将其
-注入到 :class:`~app.domain.rag.collections.DiaryCollectionManager` 或
-:class:`~app.domain.knowledge.store.DomainKnowledgeStore` 中。领域代码
-绝不能直接导入模型，也不能用 ``os.getenv`` 读取模型名称。
+Callers build the embedding function from :class:`~app.config.Settings` and
+inject it into :class:`~app.domain.rag.collections.DiaryCollectionManager` or
+:class:`~app.domain.knowledge.store.DomainKnowledgeStore` via DI. Domain code
+must never import the model directly or read the model name with ``os.getenv``.
 """
 
 from __future__ import annotations
@@ -18,15 +18,16 @@ from app.config import Settings, get_settings
 
 
 def build_embedding_function(settings: Settings | None = None) -> Any:
-    """返回与 ``embedding_model_name`` 对应的 Chroma 兼容嵌入函数。
+    """Return a Chroma-compatible embedding function for ``embedding_model_name``.
 
-    默认使用中文优先模型（``BAAI/bge-small-zh-v1.5``）；日记语料为中文，
-    因此英文模型会将向量搜索退化为噪声。返回值满足 Chroma 的
-    ``EmbeddingFunction`` 协议，在单个进程内同时用于索引和查询嵌入。
+    The default is a Chinese-first model (``BAAI/bge-small-zh-v1.5``); the diary
+    corpus is Chinese, so an English model would degrade vector search to noise.
+    The return value satisfies Chroma's ``EmbeddingFunction`` protocol and is
+    used for both indexing and query embedding within a single process.
     """
     resolved = settings or get_settings()
-    # chromadb 通过 __getattr__ 惰性暴露此类，因此它在运行时可导入，
-    # 但对 mypy 的静态分析不可见。
+    # chromadb lazily exposes this class via __getattr__, so it is importable at
+    # runtime but invisible to mypy's static analysis.
     from chromadb.utils.embedding_functions import (  # type: ignore[attr-defined]
         SentenceTransformerEmbeddingFunction,
     )

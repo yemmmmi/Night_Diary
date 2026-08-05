@@ -90,7 +90,7 @@ def model_to_response(row: ModelProviderRow) -> ModelResponse:
 
 
 def card_to_response(row: Any) -> dict[str, Any]:
-    """将 MemoryCardRow 转换为 dict（供 CardResponse.model_validate 使用）。"""
+    """Convert MemoryCardRow to dict (for CardResponse.model_validate)."""
     from app.services.card_service import row_to_dict
 
     return row_to_dict(row)

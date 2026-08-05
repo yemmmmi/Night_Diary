@@ -1,11 +1,13 @@
-"""应用配置。
+"""Application configuration.
 
-所有敏感密钥必须通过环境变量或 ``.env`` 文件提供。如果缺少必需的密钥，应用会在启动时快速失败。
+All sensitive secrets MUST be provided via environment variables or a ``.env``
+file. The application fails fast at startup if a required secret is missing.
 
-数据库默认使用存储在 ``DATA_DIR`` 下的 SQLite。对于生产环境，可以设置
-``DATABASE_URL`` 环境变量（例如 ``mysql+pymysql://...``）来使用 MySQL 或其他受
-SQLAlchemy 支持的后端。已启用基于 JWT 的认证和多租户数据隔离；参见下方的
-``jwt_*`` 设置。
+The database defaults to SQLite stored under ``DATA_DIR``. For production a
+``DATABASE_URL`` environment variable (e.g. ``mysql+pymysql://...``) can be set
+to use MySQL or another SQLAlchemy-supported backend instead. JWT-based
+authentication and multi-tenant data isolation are enabled; see ``jwt_*``
+settings below.
 """
 
 from __future__ import annotations
@@ -36,15 +38,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ---- 应用配置 ----
+    # ---- Application ----
     app_env: Literal["development", "test", "production"] = "development"
     app_name: str = "night-diary-v2"
 
-    # ---- 路径 ----
+    # ---- Paths ----
     data_dir: str = Field(default_factory=_default_data_dir)
     port: int = Field(default=8000, description="TCP port to listen on (--port)")
 
-    # ---- 数据库 ----
+    # ---- Database ----
     database_url_env: str = Field(
         default="",
         validation_alias=AliasChoices("DATABASE_URL", "database_url_env"),
@@ -74,14 +76,14 @@ class Settings(BaseSettings):
     def logs_dir(self) -> str:
         return str(Path(self.data_dir) / "logs")
 
-    # ---- Redis（可选，用于生产环境缓存）----
+    # ---- Redis (optional, for production caching) ----
     redis_url: str = Field(
         default="",
         description="Redis connection URL (e.g. redis://localhost:6379/0). "
         "If empty, falls back to in-memory caching.",
     )
 
-    # ---- Neo4j（可选，用于实体图）----
+    # ---- Neo4j (optional, for entity graph) ----
     neo4j_url: str = Field(
         default="",
         description="Neo4j connection URL (e.g. neo4j://localhost:7687). "
@@ -90,7 +92,7 @@ class Settings(BaseSettings):
     neo4j_user: str = Field(default="neo4j", description="Neo4j username")
     neo4j_password: str = Field(default="neo4j", description="Neo4j password")
 
-    # ---- MCP（可选，用于外部工具集成）----
+    # ---- MCP (optional, for external tool integration) ----
     mcp_endpoints: str = Field(
         default="",
         description="Comma-separated MCP server endpoints (e.g. "
@@ -98,7 +100,7 @@ class Settings(BaseSettings):
         "If empty, only built-in tools are available.",
     )
 
-    # ---- 安全配置 ----
+    # ---- Security ----
     model_key_secret: str = Field(
         default="",
         min_length=0,
@@ -122,7 +124,7 @@ class Settings(BaseSettings):
         "Loopback (localhost/127.0.0.1) is always allowed.",
     )
 
-    # ---- LLM 默认值（可通过 ModelProvider 表按提供商覆盖）----
+    # ---- LLM defaults (can be overridden per provider via ModelProvider table) ----
     llm_api_key: str = Field(default="", description="Default LLM API key")
     llm_base_url: str = Field(
         default="https://api.deepseek.com/v1",
@@ -130,16 +132,17 @@ class Settings(BaseSettings):
     )
     llm_model: str = Field(default="deepseek-chat", description="Default LLM model name")
 
-    # ---- 嵌入 ----
-    # 中文优先默认值：日记语料为中文，因此需要中文检索模型才能实现有意义的
-    # 向量搜索。通过 ``app.shared.embeddings.build_embedding_function`` 惰性
-    # 构建并通过依赖注入注入；永远不要在领域代码中导入或使用 ``os.getenv`` 读取。
+    # ---- Embedding ----
+    # Chinese-first default: the diary corpus is Chinese, so a Chinese retrieval
+    # model is required for meaningful vector search. Built lazily via
+    # ``app.shared.embeddings.build_embedding_function`` and injected through DI;
+    # never imported or read with ``os.getenv`` inside domain code.
     embedding_model_name: str = Field(
         default="BAAI/bge-small-zh-v1.5",
         description="Sentence-transformers model name for vector embeddings.",
     )
 
-    # ---- HuggingFace（首次运行时模型下载）----
+    # ---- HuggingFace (first-run model download) ----
     hf_endpoint: str = Field(
         default="https://hf-mirror.com",
         description="HuggingFace mirror for embedding/reranker downloads (China-friendly).",

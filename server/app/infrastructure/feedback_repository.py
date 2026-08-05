@@ -1,4 +1,4 @@
-"""基于 SQLite 的风格偏好记录仓库。"""
+"""SQLite-backed repository for style preference records."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from app.infrastructure.models.feedback import StylePreferenceRow
 
 
 class SqliteStylePreferenceStore:
-    """在 SQLite 中持久化 Thompson 采样的 Beta 参数。"""
+    """Persist Thompson Sampling Beta parameters in SQLite."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory

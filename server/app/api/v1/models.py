@@ -1,4 +1,4 @@
-"""LLM 模型供应商 API 路由。"""
+"""LLM model provider API routes."""
 
 from __future__ import annotations
 

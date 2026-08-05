@@ -1,8 +1,8 @@
-"""两层对话意图分类器：规则层 + 可选的 LLM 层。
+"""Two-tier chat intent classifier: rule layer + optional LLM layer.
 
-为对话（多轮对话）场景设计。遵循与
-:class:`~app.domain.agents.intent_classifier.IntentClassifier` 相同的架构，
-但使用对话专用的意图类别：
+Designed for the conversation (multi-turn dialogue) scenario. Follows the
+same architecture as :class:`~app.domain.agents.intent_classifier.IntentClassifier`
+but with chat-specific intent categories:
 
 - ``casual_chat``: 闲聊，无需工具或检索
 - ``emotional_vent``: 情绪宣泄，需情感支持
@@ -11,8 +11,8 @@
 - ``crisis_signal``: 危机信号，短路到安全响应
 - ``entity_query``: 实体查询，需实体图查询
 
-规则层先运行，在置信度足够时（> 0.9）直接短路，不消耗任何 token；
-LLM 层仅在输入模糊时运行。
+The rule layer runs first and short-circuits when confident (> 0.9),
+spending zero tokens; the LLM layer only runs on ambiguous input.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
 logger = logging.getLogger(__name__)
 
-# ── 规则层关键词模式 ──────────────────────────────────────
+# ── Rule layer keyword patterns ──────────────────────────────────────
 
 _CRISIS_KEYWORDS = (
     "不想活",
@@ -129,7 +129,7 @@ _CASUAL_SIGNALS = (
     "哦",
 )
 
-#: 意图 → 路由表
+#: Intent → routing table
 _INTENT_ROUTING: dict[str, dict[str, Any]] = {
     ChatIntent.CASUAL_CHAT.value: {
         "need_retrieval": False,
@@ -200,10 +200,10 @@ _CHAT_INTENT_PROMPT = """请分析以下用户消息的意图，返回JSON格式
 
 
 class ChatIntentClassifier:
-    """通过规则层然后可选 LLM 层对对话意图进行分类。
+    """Classify conversation intent via rule layer then optional LLM layer.
 
-    镜像 :class:`IntentClassifier` 架构，但使用对话专用的类别和路由
-    （层级、工具、最大迭代次数）。
+    Mirrors :class:`IntentClassifier` architecture but with chat-specific
+    categories and routing (tier, tools, max_iterations).
     """
 
     CONFIDENCE_THRESHOLD = 0.9
@@ -220,11 +220,11 @@ class ChatIntentClassifier:
         self._model = model
 
     async def classify(self, content: str, *, context: str = "") -> ChatIntentResult:
-        """返回 ``content`` 的对话意图。
+        """Return the chat intent for ``content``.
 
         Args:
-            content: 用户的消息文本。
-            context: 用于消歧的简要压缩历史（可选）。
+            content: The user's message text.
+            context: Brief compressed history for disambiguation (optional).
         """
         if not content or not content.strip():
             return ChatIntentResult(
@@ -251,10 +251,10 @@ class ChatIntentClassifier:
         return rule_result
 
     def classify_sync(self, content: str, *, context: str = "") -> ChatIntentResult:
-        """用于同步代码路径的 :meth:`classify` 同步变体。
+        """Synchronous variant of :meth:`classify` for sync code paths.
 
-        先使用规则层。如果需要 LLM，则通过 ``llm.invoke()`` 同步调用，
-        而不是 ``await llm.ainvoke()``。
+        Uses the rule layer first. If LLM is needed, invokes synchronously
+        via ``llm.invoke()`` instead of ``await llm.ainvoke()``.
         """
         if not content or not content.strip():
             return ChatIntentResult(
@@ -291,13 +291,13 @@ class ChatIntentClassifier:
         return rule_result
 
     def _rule_classify(self, content: str) -> ChatIntentResult:
-        """基于关键词的快速分类（零 token）。"""
-        # 先检查危机信号——优先级最高
+        """Fast keyword-based classification (zero tokens)."""
+        # Crisis check first — highest priority
         for kw in _CRISIS_KEYWORDS:
             if kw in content:
                 return self._build_result(ChatIntent.CRISIS_SIGNAL.value, 0.98)
 
-        # 统计各类别的关键词命中数
+        # Count keyword hits per category
         retrospective_hits = sum(1 for kw in _RETROSPECTIVE_KEYWORDS if kw in content)
         advice_hits = sum(1 for kw in _ADVICE_KEYWORDS if kw in content)
         emotional_hits = sum(1 for kw in _EMOTIONAL_VENT_KEYWORDS if kw in content)
@@ -306,13 +306,13 @@ class ChatIntentClassifier:
 
         is_short = len(content.strip()) < 20
 
-        # 实体查询：提及某个人 + 询问其情况
+        # Entity query: mentions a person + asks about them
         if entity_hits >= 2 and retrospective_hits == 0:
             return self._build_result(ChatIntent.ENTITY_QUERY.value, 0.85)
         if entity_hits >= 1 and any(kw in content for kw in ("怎么样", "怎么了", "最近")):
             return self._build_result(ChatIntent.ENTITY_QUERY.value, 0.80)
 
-        # 回溯查询：时间关键词
+        # Retrospective query: temporal keywords
         if retrospective_hits >= 2:
             if advice_hits >= 1:
                 return self._build_result(ChatIntent.ADVICE_SEEKING.value, 0.90)
@@ -320,30 +320,30 @@ class ChatIntentClassifier:
         if retrospective_hits == 1 and advice_hits >= 1:
             return self._build_result(ChatIntent.ADVICE_SEEKING.value, 0.82)
 
-        # 求助建议
+        # Advice seeking
         if advice_hits >= 2:
             return self._build_result(ChatIntent.ADVICE_SEEKING.value, 0.88)
         if advice_hits == 1 and not is_short:
             return self._build_result(ChatIntent.ADVICE_SEEKING.value, 0.75)
 
-        # 情绪宣泄
+        # Emotional vent
         if emotional_hits >= 2:
             return self._build_result(ChatIntent.EMOTIONAL_VENT.value, 0.90)
         if emotional_hits == 1:
             return self._build_result(ChatIntent.EMOTIONAL_VENT.value, 0.75)
 
-        # 闲聊
+        # Casual chat
         if casual_hits >= 1 and is_short:
             return self._build_result(ChatIntent.CASUAL_CHAT.value, 0.92)
         if is_short and emotional_hits == 0 and advice_hits == 0:
             return self._build_result(ChatIntent.CASUAL_CHAT.value, 0.70)
 
-        # 默认：中等置信度的闲聊
+        # Default: medium confidence casual chat
         return self._build_result(ChatIntent.CASUAL_CHAT.value, 0.50)
 
     @staticmethod
     def _build_result(category: str, confidence: float) -> ChatIntentResult:
-        """根据路由表中的路由信息构建 ChatIntentResult。"""
+        """Build a ChatIntentResult with routing info from the routing table."""
         routing = _INTENT_ROUTING.get(category, _INTENT_ROUTING[ChatIntent.CASUAL_CHAT.value])
         return ChatIntentResult(
             intent_category=category,
@@ -356,7 +356,7 @@ class ChatIntentClassifier:
         )
 
     async def _llm_classify(self, content: str, rule_hint: ChatIntentResult) -> ChatIntentResult:
-        """针对模糊输入的基于 LLM 的分类。"""
+        """LLM-based classification for ambiguous input."""
         prompt = _CHAT_INTENT_PROMPT.format(content=content[:500])
 
         started = time.perf_counter()
@@ -386,7 +386,7 @@ class ChatIntentClassifier:
 
     @staticmethod
     def _parse_llm_output(text: str, rule_hint: ChatIntentResult) -> ChatIntentResult:
-        """解析 LLM 的 JSON 输出，失败时回退到规则提示。"""
+        """Parse LLM JSON output, falling back to rule hint on failure."""
         cleaned = text.strip()
         if cleaned.startswith("```"):
             cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)

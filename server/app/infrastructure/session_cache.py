@@ -1,8 +1,8 @@
-"""会话上下文缓存 — 跨重启持久化 SessionContext。
+"""Session context cache -- persists SessionContext across restarts.
 
-在生产环境中（Redis 可用），会话状态可在服务器重启后存活。
-在开发环境中（无 Redis），回退到 session_context.py 中的
-进程内 _sessions 字典。
+In production (Redis available), session state survives server restarts.
+In development (no Redis), falls back to the in-process _sessions dict
+in session_context.py.
 """
 
 from __future__ import annotations
@@ -14,26 +14,26 @@ from app.infrastructure.redis_client import cache_delete, cache_delete_pattern, 
 
 logger = logging.getLogger(__name__)
 
-SESSION_TTL = 1800  # 30 分钟
+SESSION_TTL = 1800  # 30 minutes
 SESSION_KEY_PREFIX = "session:"
 
 
 def cache_session(conversation_id: str, session_data: dict[str, Any]) -> None:
-    """缓存会话上下文。"""
+    """Cache a session context."""
     cache_set(f"{SESSION_KEY_PREFIX}{conversation_id}", session_data, SESSION_TTL)
 
 
 def get_cached_session(conversation_id: str) -> dict[str, Any] | None:
-    """获取缓存的会话上下文。"""
+    """Get a cached session context."""
     data = cache_get(f"{SESSION_KEY_PREFIX}{conversation_id}")
     return data if isinstance(data, dict) else None
 
 
 def delete_cached_session(conversation_id: str) -> None:
-    """删除缓存的会话上下文。"""
+    """Delete a cached session context."""
     cache_delete(f"{SESSION_KEY_PREFIX}{conversation_id}")
 
 
 def delete_all_sessions() -> None:
-    """删除所有缓存的会话（如登出时）。"""
+    """Delete all cached sessions (e.g. on logout)."""
     cache_delete_pattern(f"{SESSION_KEY_PREFIX}*")

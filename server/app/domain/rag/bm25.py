@@ -1,4 +1,4 @@
-"""内存中的 Okapi BM25 索引，支持增量式文档维护。"""
+"""In-memory Okapi BM25 index with incremental document maintenance."""
 
 from __future__ import annotations
 
@@ -15,15 +15,15 @@ _MIN_TOKEN_LEN = 2
 
 
 def tokenize(text: str) -> list[str]:
-    """通过 jieba 进行中文分词；丢弃单字符 token（V1：len > 1）。"""
+    """Chinese tokenization via jieba; drop single-character tokens (V1: len > 1)."""
     return [word for word in jieba.lcut(text) if len(word) >= _MIN_TOKEN_LEN]
 
 
 class BM25Index:
-    """进程内的 BM25 索引，``add_document`` / ``remove_document`` 均摊 O(1)。
+    """Per-process BM25 index with O(1) amortized ``add_document`` / ``remove_document``.
 
-    以增量方式维护文档频率（``df``）、平均文档长度（``avgdl``）以及
-    每个文档的 token 列表，而非每次都重建整个语料库。
+    Maintains document frequency (``df``), average document length (``avgdl``), and
+    per-document token lists incrementally instead of rebuilding the full corpus.
     """
 
     def __init__(self) -> None:
@@ -38,7 +38,7 @@ class BM25Index:
         return self._doc_count
 
     def known_doc_ids(self) -> set[str]:
-        """返回当前索引中所有 doc_id 的集合。"""
+        """Return the set of all doc_ids currently in the index."""
         return set(self._docs.keys())
 
     @property
@@ -48,7 +48,7 @@ class BM25Index:
         return self._total_dl / self._doc_count
 
     def clear(self) -> None:
-        """移除所有已索引的文档。"""
+        """Remove all indexed documents."""
         self._docs.clear()
         self._tokens.clear()
         self._df.clear()
@@ -56,13 +56,13 @@ class BM25Index:
         self._total_dl = 0
 
     def build(self, documents: list[BM25Doc]) -> None:
-        """根据文档列表重建索引（批量导入 / 迁移）。"""
+        """Rebuild the index from a document list (bulk import / migration)."""
         self.clear()
         for document in documents:
             self.add_document(document)
 
     def add_document(self, document: BM25Doc) -> None:
-        """插入或替换一个文档，无需重建整个索引。"""
+        """Insert or replace a document without rebuilding the full index."""
         if document.doc_id in self._docs:
             self.remove_document(document.doc_id)
 
@@ -76,7 +76,7 @@ class BM25Index:
             self._df[term] += 1
 
     def remove_document(self, doc_id: str) -> bool:
-        """移除一个文档并更新语料库统计信息。"""
+        """Remove a document and update corpus statistics."""
         if doc_id not in self._docs:
             return False
 
@@ -93,7 +93,7 @@ class BM25Index:
         return True
 
     def search(self, query: str, *, top_k: int = 20) -> list[SearchResult]:
-        """返回按 BM25 得分排序的 top-k chunk。"""
+        """Return top-k chunks ranked by BM25 score."""
         if self._doc_count == 0:
             return []
 
@@ -141,7 +141,7 @@ class BM25Index:
 
     @staticmethod
     def _idf(df: int, corpus_size: int) -> float:
-        """Okapi IDF（rank_bm25 / Lucene 变体）。"""
+        """Okapi IDF (rank_bm25 / Lucene variant)."""
         if df <= 0 or corpus_size <= 0:
             return 0.0
         return math.log((corpus_size - df + 0.5) / (df + 0.5) + 1.0)

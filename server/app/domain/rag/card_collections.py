@@ -1,8 +1,9 @@
-"""ChromaDB 中的卡片 chunk 集合 —— 用于记忆卡片搜索的语义索引。
+"""Card chunk collection in ChromaDB — semantic index for memory card search.
 
-遵循与 DiaryCollectionManager 相同的模式，但使用
-``card_chunks`` 集合。卡片比完整日记更简单，
-因此 chunk 为单文档形式（短事件摘要 + 情绪标签无需切分）。
+Follows the same pattern as DiaryCollectionManager but uses
+``card_chunks`` collection.  Cards are simpler than full diaries
+so chunks are single-document (no splitting needed for short
+event summaries + emotion labels).
 """
 
 from __future__ import annotations
@@ -19,10 +20,10 @@ CARD_COLLECTION_NAME = "card_chunks"
 
 
 class CardCollectionManager(BaseCollectionManager):
-    """管理用于记忆卡片搜索的 ``card_chunks`` Chroma 集合。
+    """Manage the ``card_chunks`` Chroma collection for memory card search.
 
-    单用户桌面应用：一个共享集合。写入失败仅记录日志，不会抛出异常
-    —— SQLite 仍是数据真源。
+    Single-user desktop app: one shared collection.  Write failures are
+    logged and do not raise — SQLite remains the source of truth.
     """
 
     _collection_name = CARD_COLLECTION_NAME
@@ -48,7 +49,7 @@ class CardCollectionManager(BaseCollectionManager):
         emotion: str = "",
         tags: str = "",
     ) -> int:
-        """索引单个卡片文档。成功返回 1，失败返回 0。"""
+        """Index a single card document.  Returns 1 on success, 0 on failure."""
         if not content.strip():
             return 0
 
@@ -91,7 +92,7 @@ class CardCollectionManager(BaseCollectionManager):
         query: str,
         top_k: int = 10,
     ) -> list[dict[str, Any]]:
-        """对卡片进行语义搜索。返回 {card_id, distance, metadata, content} 列表。"""
+        """Semantic search cards.  Returns list of {card_id, distance, metadata, content}."""
         try:
             collection = self.get_collection(create=False)
             if collection is None:

@@ -1,4 +1,4 @@
-"""API 层的 FastAPI 依赖项。"""
+"""FastAPI dependencies for the API layer."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: DbDep,
 ) -> UserRow:
-    """解码 JWT 并返回当前激活的用户行。"""
+    """Decode the JWT and return the active user row."""
     try:
         payload = decode_access_token(token)
         user_id = payload.get("sub")
@@ -49,7 +49,7 @@ def get_current_user(
     except jwt.PyJWTError as exc:
         raise UnauthorizedError("认证令牌已过期或无效") from exc
 
-    # 拒绝黑名单（已吊销）的令牌 -- 支持主动登出。
+    # Reject blacklisted (revoked) tokens -- supports active logout.
     jti = payload.get("jti", "")
     if jti and is_blacklisted(jti):
         raise UnauthorizedError("认证令牌已被吊销")
@@ -66,7 +66,7 @@ CurrentUserDep = Annotated[UserRow, Depends(get_current_user)]
 
 
 def get_user_context(db: DbDep, user: CurrentUserDep) -> UserContext:
-    """将数据库会话与已认证用户打包为单一上下文。"""
+    """Bundle the DB session and authenticated user into a single context."""
     return UserContext(db=db, user_id=str(user.id), user=user)
 
 

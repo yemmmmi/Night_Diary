@@ -1,4 +1,4 @@
-"""领域知识包 — ChromaDB 存储与实体提取。"""
+"""Domain knowledge package — ChromaDB store and entity extraction."""
 
 from app.domain.knowledge.types import (
     EntityRecord,

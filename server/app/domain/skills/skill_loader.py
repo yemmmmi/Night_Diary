@@ -1,6 +1,6 @@
-"""SkillDocLoader — 加载并解析 SKILL.md 文档，用于提示词注入。
+"""SkillDocLoader — load and parse SKILL.md documents for prompt injection.
 
-每个 SKILL.md 文件遵循以下结构::
+Each SKILL.md file follows this structure::
 
     ---
     name: skill_name
@@ -27,12 +27,12 @@
     ## 输出示例
     ...
 
-加载器解析 YAML front matter（使用轻量级内置解析器，无需 PyYAML 依赖），
-并将 Markdown 正文拆分为：
+The loader parses the YAML front matter (using a lightweight built-in parser
+so no PyYAML dependency is required) and splits the Markdown body into:
 
-- ``summary`` — front matter + ``## 一句话摘要`` 部分（精简且 token 高效的概览）
-- ``body``    — 其余部分（触发条件/能力详述/调用方式/输出示例）
-- ``full_text``— 完整的原始文件内容
+- ``summary`` — front matter + the ``## 一句话摘要`` section (compact token-efficient overview)
+- ``body``    — the remaining sections (触发条件/能力详述/调用方式/输出示例)
+- ``full_text``— the complete original file content
 """
 
 from __future__ import annotations
@@ -45,23 +45,23 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# 包含 SKILL.md 文件的默认目录（相对于本模块）。
+# Default directory containing SKILL.md files (relative to this module).
 DEFAULT_SKILL_DOCS_DIR = Path(__file__).resolve().parent / "skill_docs"
 
-# 一句话摘要的章节标记。
+# Section marker for the one-line summary.
 _SUMMARY_HEADER = "## 一句话摘要"
 
 
 @dataclass(frozen=True)
 class SkillDoc:
-    """单个 SKILL.md 文件的解析表示。
+    """Parsed representation of a single SKILL.md file.
 
     Attributes:
-        name: 技能标识符（来自 front matter 的 ``name`` 字段）。
-        summary: front matter + ``## 一句话摘要`` 部分 — 精简概览，
-                 适用于渐进式披露。
-        body: 其余 Markdown 部分（触发条件/能力详述/调用方式/输出示例）。
-        full_text: 完整的原始文件内容（front matter + body）。
+        name: skill identifier (from front matter ``name`` field).
+        summary: front matter + ``## 一句话摘要`` section — compact overview
+                 suitable for progressive disclosure.
+        body: remaining Markdown sections (触发条件/能力详述/调用方式/输出示例).
+        full_text: the complete original file content (front matter + body).
     """
 
     name: str
@@ -71,21 +71,21 @@ class SkillDoc:
 
 
 # ---------------------------------------------------------------------------
-# YAML front matter 解析（最小实现，无外部依赖）
+# YAML front-matter parsing (minimal, no external dependency)
 # ---------------------------------------------------------------------------
 
 def _split_front_matter(text: str) -> tuple[str, str]:
-    """将原始文件文本拆分为 ``(front_matter_text, markdown_body)``。
+    """Split raw file text into ``(front_matter_text, markdown_body)``.
 
-    front matter 以首行的 ``---`` 起始，以另一个 ``---`` 结束。
-    若未找到有效的 front matter，则返回 ``("", text)``。
+    Front matter is delimited by ``---`` on the first line and a closing
+    ``---``.  If no valid front matter is found, returns ``("", text)``.
     """
     stripped = text.lstrip()
     if not stripped.startswith("---"):
         return "", text
 
     lines = text.splitlines(keepends=True)
-    # 查找结束的 ``---``（跳过起始行）。
+    # Find the closing ``---`` (skip the opening line).
     end_idx: int | None = None
     for i in range(1, len(lines)):
         if lines[i].strip() == "---":
@@ -101,9 +101,9 @@ def _split_front_matter(text: str) -> tuple[str, str]:
 
 
 def _parse_scalar(value: str) -> Any:
-    """将单个 YAML 标量值解析为 Python 类型。"""
+    """Parse a single YAML scalar value into a Python type."""
     value = value.strip()
-    # 内联列表：  [a, b, c]
+    # Inline list:  [a, b, c]
     if value.startswith("[") and value.endswith("]"):
         inner = value[1:-1]
         if not inner.strip():
@@ -113,17 +113,17 @@ def _parse_scalar(value: str) -> Any:
             for item in inner.split(",")
             if item.strip()
         ]
-    # 引号字符串
+    # Quoted string
     if (value.startswith("'") and value.endswith("'")) or (
         value.startswith('"') and value.endswith('"')
     ):
         return value[1:-1]
-    # 整数
+    # Integer
     try:
         return int(value)
     except ValueError:
         pass
-    # 浮点数
+    # Float
     try:
         return float(value)
     except ValueError:
@@ -132,10 +132,10 @@ def _parse_scalar(value: str) -> Any:
 
 
 def _parse_front_matter(front_matter_text: str) -> dict[str, Any]:
-    """将最小化的 YAML front matter 块解析为字典。
+    """Parse a minimal YAML front-matter block into a dict.
 
-    支持 ``key: value`` 和 ``key: [item, item]`` 内联列表。
-    注释（``#``）和空行会被忽略。
+    Supports ``key: value`` and ``key: [item, item]`` inline lists.
+    Comments (``#``) and blank lines are ignored.
     """
     result: dict[str, Any] = {}
     for line in front_matter_text.splitlines():
@@ -153,26 +153,26 @@ def _parse_front_matter(front_matter_text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Markdown 章节拆分
+# Markdown section splitting
 # ---------------------------------------------------------------------------
 
 def _extract_summary_section(markdown: str) -> tuple[str, str]:
-    """将 markdown 正文拆分为 ``(summary_section, remaining_body)``。
+    """Split markdown body into ``(summary_section, remaining_body)``.
 
-    ``summary_section`` 包含 ``## 一句话摘要`` 标题及其内容。
-    ``remaining_body`` 包含其余所有内容（标题 + 其他章节）。
+    ``summary_section`` contains the ``## 一句话摘要`` header and its content.
+    ``remaining_body`` contains everything else (title + other sections).
     """
     idx = markdown.find(_SUMMARY_HEADER)
     if idx == -1:
-        # 无摘要章节 — 将整个正文视为剩余部分。
+        # No summary section — treat entire body as remaining.
         return "", markdown.strip()
 
     after_header = idx + len(_SUMMARY_HEADER)
 
-    # 查找摘要之后的下一个顶级章节标题（## ）。
+    # Find the next top-level section header (## ) after the summary.
     next_match = re.search(r"\n## ", markdown[after_header:])
     if next_match is None:
-        # 摘要是文件中的最后一个章节。
+        # Summary is the last section in the file.
         summary_section = markdown[idx:].strip()
         before = markdown[:idx].strip()
         remaining = before
@@ -187,12 +187,12 @@ def _extract_summary_section(markdown: str) -> tuple[str, str]:
 
 
 def parse_skill_doc(raw_text: str, fallback_name: str = "") -> SkillDoc:
-    """将原始 SKILL.md 文本解析为 :class:`SkillDoc`。
+    """Parse raw SKILL.md text into a :class:`SkillDoc`.
 
     Args:
-        raw_text: SKILL.md 文件的完整内容。
-        fallback_name: 当 front matter 中没有 ``name`` 字段时使用
-                       （通常取自文件名主干）。
+        raw_text: the complete contents of a SKILL.md file.
+        fallback_name: used when front matter has no ``name`` field
+                       (typically derived from the file stem).
     """
     front_matter_text, markdown = _split_front_matter(raw_text)
     meta = _parse_front_matter(front_matter_text)
@@ -200,7 +200,7 @@ def parse_skill_doc(raw_text: str, fallback_name: str = "") -> SkillDoc:
 
     summary_section, remaining_body = _extract_summary_section(markdown)
 
-    # summary = front matter 块 + 一句话摘要 部分
+    # summary = front matter block + 一句话摘要 section
     front_block = f"---\n{front_matter_text.strip()}\n---\n\n" if front_matter_text else ""
     summary = front_block + summary_section if summary_section else front_block + remaining_body
 
@@ -217,9 +217,9 @@ def parse_skill_doc(raw_text: str, fallback_name: str = "") -> SkillDoc:
 # ---------------------------------------------------------------------------
 
 class SkillDocLoader:
-    """从目录加载 SKILL.md 文档，支持优雅降级。
+    """Load SKILL.md documents from a directory, with graceful degradation.
 
-    用法::
+    Usage::
 
         loader = SkillDocLoader()
         all_docs = loader.load_all()          # dict[str, SkillDoc]
@@ -234,10 +234,10 @@ class SkillDocLoader:
         return self._docs_dir
 
     def load(self, name: str) -> SkillDoc | None:
-        """按技能名称加载单个 SKILL.md。
+        """Load a single SKILL.md by skill name.
 
-        若文件缺失或无法解析，则返回 ``None``（并记录警告）—
-        调用方应将其视为优雅降级处理。
+        Returns ``None`` (and logs a warning) if the file is missing or
+        cannot be parsed — callers should treat this as graceful degradation.
         """
         path = self._docs_dir / f"{name}.md"
         if not path.is_file():
@@ -255,10 +255,10 @@ class SkillDocLoader:
             return None
 
     def load_all(self) -> dict[str, SkillDoc]:
-        """加载技能文档目录中的所有 ``*.md`` 文件。
+        """Load every ``*.md`` file in the skill docs directory.
 
-        解析失败的文件会被跳过（优雅降级）；返回的字典将技能名映射到
-        :class:`SkillDoc`。
+        Files that fail to parse are skipped (graceful degradation); the
+        returned dict maps skill name -> :class:`SkillDoc`.
         """
         if not self._docs_dir.is_dir():
             logger.warning("Skill docs directory not found: %s", self._docs_dir)

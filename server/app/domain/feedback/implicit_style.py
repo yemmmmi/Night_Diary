@@ -1,20 +1,21 @@
-"""隐式风格信号提取器 — 从用户输入中推断风格偏好。
+"""Implicit style signal extractor — infers style preferences from user input.
 
-当用户隐式地表达风格偏好时（例如"谢谢你这么理性
-地帮我分析" → 对"practical"风格的正向信号），本模块提取
-该信号并将其作为弱奖励反馈给汤普森采样。
+When the user expresses a style preference implicitly (e.g., "谢谢你这么理性
+地帮我分析" → positive signal for "practical" style), this module extracts
+the signal and feeds it to Thompson Sampling as a weak reward.
 
-这是对显式反馈系统（FeedbackRow + submit_feedback）的补充，
-后者仅在用户点击点赞/点踩按钮时触发。
+This complements the explicit feedback system (FeedbackRow + submit_feedback)
+which only fires when the user clicks a thumbs-up/down button.
 
-检测到的信号类型：
-- **赞赏 + 风格关键词**："谢谢你的理性分析" → 正向，practical
-- **拒绝 + 风格关键词**："太啰嗦了" → 负向，empathetic（若为当前风格）
-- **风格请求**："能不能直接告诉我怎么办" → 正向，practical（隐式请求）
-- **长度偏好**："简短点" → 对冗长风格的负向信号
+Signal types detected:
+- **Appreciation + style keyword**: "谢谢你的理性分析" → positive, practical
+- **Rejection + style keyword**: "太啰嗦了" → negative, empathetic (if current style)
+- **Style request**: "能不能直接告诉我怎么办" → positive, practical (implicit request)
+- **Length preference**: "简短点" → negative for verbose styles
 
-置信度刻意设置较低（0.3-0.5），使隐式信号不会压过显式反馈。
-汤普森的 Beta 分布天然会弱化弱信号而强化强信号。
+Confidence is intentionally low (0.3-0.5) so implicit signals don't
+overpower explicit feedback. Thompson's Beta distribution naturally
+weights weak signals less than strong ones.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ── 风格关键词映射 ────────────────────────────────────────────
+# ── Style keyword mapping ────────────────────────────────────────────
 
 _STYLE_KEYWORDS: dict[str, list[str]] = {
     "empathetic": ["温暖", "关心", "共情", "理解我", "安慰", "陪伴", "倾听", "贴心", "柔软"],
@@ -40,7 +41,7 @@ _STYLE_KEYWORDS: dict[str, list[str]] = {
     "humorous": ["幽默", "轻松", "有趣", "好笑", "可爱", "活泼"],
 }
 
-# 赞赏模式（正向信号）
+# Appreciation patterns (positive signal)
 _APPRECIATION_PATTERNS = [
     re.compile(r"谢谢.{0,10}"),
     re.compile(r"感谢.{0,10}"),
@@ -52,7 +53,7 @@ _APPRECIATION_PATTERNS = [
     re.compile(r"说到.{0,5}心(里|坎)"),
 ]
 
-# 拒绝模式（负向信号）
+# Rejection patterns (negative signal)
 _REJECTION_PATTERNS = [
     re.compile(r"太(啰嗦|长|多)"),
     re.compile(r"不要.{0,5}(这样|那种)"),
@@ -66,11 +67,11 @@ _REJECTION_PATTERNS = [
 
 @dataclass
 class ImplicitStyleSignal:
-    """从用户输入中提取的隐式风格偏好信号。"""
+    """An implicit style preference signal extracted from user input."""
 
     style: str
     is_positive: bool
-    confidence: float  # 0.0-0.5，刻意设置为弱信号
+    confidence: float  # 0.0-0.5, intentionally weak
     matched_pattern: str = ""
 
 
@@ -79,15 +80,16 @@ def extract_implicit_style_signals(
     *,
     current_style: str = "",
 ) -> list[ImplicitStyleSignal]:
-    """从用户输入中提取隐式风格信号。
+    """Extract implicit style signals from user input.
 
     Args:
-        user_input: 用户的消息文本。
-        current_style: 上次回复所使用的风格（用于拒绝信号）。
+        user_input: The user's message text.
+        current_style: The style used in the last reply (for rejection signals).
 
     Returns:
-        信号列表，可能为空。单条输入可提取多个信号
-        （例如对一个风格的赞赏 + 对另一个风格的拒绝）。
+        List of signals, possibly empty. Multiple signals can be extracted
+        from a single input (e.g., appreciation for one style + rejection
+        of another).
     """
     if not user_input or not user_input.strip():
         return []
@@ -95,11 +97,11 @@ def extract_implicit_style_signals(
     text = user_input.strip()
     signals: list[ImplicitStyleSignal] = []
 
-    # 检查赞赏 + 风格关键词的组合
+    # Check appreciation + style keyword combinations
     for style, keywords in _STYLE_KEYWORDS.items():
         for kw in keywords:
             if kw in text:
-                # 检查附近是否有赞赏模式
+                # Check if there's an appreciation pattern nearby
                 for pattern in _APPRECIATION_PATTERNS:
                     if pattern.search(text):
                         signals.append(
@@ -112,7 +114,7 @@ def extract_implicit_style_signals(
                         )
                         break
                 else:
-                    # 无赞赏的风格关键词 — 更弱的信号
+                    # Style keyword without appreciation — weaker signal
                     signals.append(
                         ImplicitStyleSignal(
                             style=style,
@@ -121,12 +123,12 @@ def extract_implicit_style_signals(
                             matched_pattern=f"keyword:{kw}",
                         )
                     )
-                break  # 每种风格只取一个信号
+                break  # Only one signal per style
 
-    # 检查拒绝模式
+    # Check rejection patterns
     for pattern in _REJECTION_PATTERNS:
         if pattern.search(text):
-            # 拒绝当前风格（若已知）
+            # Rejection of current style (if known)
             if current_style and current_style in STYLES:
                 signals.append(
                     ImplicitStyleSignal(
@@ -136,7 +138,7 @@ def extract_implicit_style_signals(
                         matched_pattern=f"rejection:{pattern.pattern}",
                     )
                 )
-            # 检查拒绝是否暗示对另一种风格的偏好
+            # Check if rejection implies preference for another style
             if "直接" in text or "简单" in text or "具体" in text:
                 signals.append(
                     ImplicitStyleSignal(
@@ -155,7 +157,7 @@ def extract_implicit_style_signals(
                         matched_pattern="rejection→not_philosophical",
                     )
                 )
-            break  # 一个拒绝信号足矣
+            break  # One rejection signal is enough
 
     return signals
 
@@ -166,26 +168,26 @@ def apply_implicit_signals(
     *,
     user_id: str,
 ) -> int:
-    """将隐式风格信号应用到汤普森采样。
+    """Apply implicit style signals to Thompson Sampling.
 
-    使用比显式反馈更弱的奖励权重（0.5 而非 1.0），
-    使隐式信号不会压过显式信号。
+    Uses a weaker reward weight than explicit feedback (0.5 instead of 1.0)
+    so implicit signals don't overpower explicit ones.
 
     Args:
-        thompson: ThompsonSampling 实例。
-        signals: 要应用的 ImplicitStyleSignal 列表。
-        user_id: 用于汤普森更新的用户 ID。
+        thompson: ThompsonSampling instance.
+        signals: List of ImplicitStyleSignal to apply.
+        user_id: User ID for the Thompson update.
 
     Returns:
-        成功应用的信号数量。
+        Number of signals successfully applied.
     """
     applied = 0
     for signal in signals:
         try:
-            # 对隐式信号使用分数奖励
-            # 汤普森的 update_reward 会使 alpha/beta 加 1，因此我们
-            # 根据置信度多次调用来进行缩放
-            # 为简化处理，这里仅按信号极性调用一次
+            # Use fractional reward for implicit signals
+            # Thompson's update_reward adds 1 to alpha/beta, so we scale by
+            # calling it multiple times based on confidence
+            # For simplicity, we just call it once with the signal's polarity
             thompson.update_reward(
                 user_id,
                 signal.style,
