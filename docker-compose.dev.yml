@@ -6,11 +6,13 @@ services:
       - APP_ENV=development
       - DATABASE_URL=
       - REDIS_URL=
+    depends_on: !reset null  # Dev mode runs without MySQL/Redis (SQLite + in-memory fallback)
     volumes:
       - ./server:/app
       - backend_data_dev:/app/data
   worker:
     profiles: ["full"]  # Only start worker with --profile full
+    depends_on: !reset null  # Dev mode runs without MySQL/Redis (SQLite + in-memory fallback)
     volumes:
       - ./server:/app
       - backend_data_dev:/app/data
