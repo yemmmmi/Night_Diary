@@ -1,7 +1,7 @@
 [project]
 name = "night-diary-server"
 version = "0.0.1"
-description = "Night Diary V2 — local AI engine (FastAPI sidecar)."
+description = "Night Diary V2 — AI engine (FastAPI backend)."
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi>=0.115,<1.0",

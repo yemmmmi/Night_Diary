@@ -6,7 +6,7 @@
   事实来源——没有重复的估算器）。
 * 语义相似度是**可注入的**；默认为
   :func:`~app.domain.agents.retrieval_agent.lexical_similarity`（jieba Jaccard），
-  使得 sidecar 在运行时不需要嵌入模型。B-10+ 调用方可以在可用时注入一个
+  使得压缩器在运行时不需要嵌入模型。B-10+ 调用方可以在可用时注入一个
   语义评分器。
 * 可选的 :class:`~app.shared.llm.LLMClient` 用于长条目摘要；当
   不可用或无法访问时，条目在句子边界处截断。

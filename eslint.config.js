@@ -11,7 +11,6 @@ export default tseslint.config(
       'public/**',
       'memory-card-feasibility/**',
       'server/.venv/**',
-      'src-tauri/target/**',
       'scripts/**',
     ],
   },

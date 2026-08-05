@@ -156,13 +156,6 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
         """开发辅助工具——让前端检测过期的后端进程。"""
         return {"version": _app_build_version()}
 
-    @app.post("/shutdown", tags=["meta"])
-    async def shutdown() -> dict[str, str]:
-        """优雅关闭——在 SIGTERM 之前调用。"""
-        loop = asyncio.get_running_loop()
-        loop.call_later(0.3, lambda: os._exit(0))
-        return {"status": "shutting_down"}
-
     return app
 
 

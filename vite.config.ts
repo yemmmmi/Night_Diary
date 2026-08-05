@@ -5,7 +5,6 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   plugins: [vue()],
   clearScreen: false,
-  envPrefix: ['VITE_', 'TAURI_'],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

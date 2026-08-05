@@ -240,7 +240,7 @@ class ServiceContainer:
 
     @classmethod
     def create(cls, settings: Settings | None = None) -> ServiceContainer:
-        """Full container for tests and production sidecar."""
+        """Full container for tests and the production backend."""
         core = cls.create_core(settings)
         core.ensure_ai_stack()
         return core
