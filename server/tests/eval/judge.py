@@ -128,6 +128,12 @@ class LLMJudge:
     def _parse(self, content: str) -> tuple[dict[str, float], str]:
         match = _JSON_BLOCK.search(content)
         if match is None:
+            # Truncated output (the judge hit max_tokens mid-JSON, so there is no
+            # closing brace). Recover whatever dimension scores are visible rather
+            # than failing the whole eval run on one verbose case.
+            scores = self._parse_scores_fallback(content)
+            if scores:
+                return scores, ""
             raise JudgeParseError(f"no JSON object in judge output: {content!r}")
         blob = match.group(0)
         data: dict[str, Any] | None = None

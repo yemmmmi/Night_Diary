@@ -279,7 +279,7 @@ def test_dataset_integrity(eval_cases: list[dict[str, Any]]) -> None:
         assert c["gold_intent"] in _EXPECTED_GOLD_INTENTS, (
             f"{c['case_id']}: unknown gold_intent {c.get('gold_intent')}"
         )
-        assert isinstance(c.get("rule_confidence"), (int, float)), (
+        assert isinstance(c.get("rule_confidence"), int | float), (
             f"{c['case_id']}: rule_confidence missing"
         )
         assert isinstance(c.get("rule_short_circuits"), bool), (

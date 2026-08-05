@@ -16,7 +16,7 @@ if sys.version_info < (3, 11):  # noqa: UP036
 
     if not hasattr(enum, "StrEnum"):
 
-        class StrEnum(str, enum.Enum):  # noqa: UP042
+        class StrEnum(str, enum.Enum):
             """Backport of Python 3.11's StrEnum for 3.10 test runs."""
 
             def __str__(self) -> str:

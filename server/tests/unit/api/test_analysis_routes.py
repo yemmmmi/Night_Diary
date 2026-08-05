@@ -31,11 +31,15 @@ def test_trigger_and_get_analysis(authed_client: TestClient) -> None:
     assert fetched.json()["id"] == body["id"]
 
 
-def test_duplicate_analysis_returns_409(authed_client: TestClient) -> None:
+def test_retrigger_analysis_replaces_existing(authed_client: TestClient) -> None:
+    """Retriggering analysis on an already-analyzed diary upserts (no 409)."""
     diary_id = _create_diary(authed_client)
     assert authed_client.post(f"/api/v1/analysis/{diary_id}").status_code == 201
-    duplicate = authed_client.post(f"/api/v1/analysis/{diary_id}")
-    assert duplicate.status_code == 409
+
+    retriggered = authed_client.post(f"/api/v1/analysis/{diary_id}")
+    assert retriggered.status_code == 201
+    assert retriggered.json()["diary_id"] == diary_id
+    assert retriggered.json()["reply"]
 
 
 def test_regenerate_analysis_replaces_existing(authed_client: TestClient) -> None:
