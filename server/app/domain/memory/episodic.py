@@ -1,4 +1,4 @@
-"""Episodic memory — in-process deque with optional SQLite persistence.
+"""情景记忆 —— 进程内 deque，可选 SQLite 持久化。
 
 Example::
 
@@ -39,21 +39,20 @@ logger = logging.getLogger(__name__)
 
 SimilarityFn = Callable[[str, str], float]
 
-#: Weight of query relevance when blending with importance * decay.
+#: 查询相关性与 importance * decay 混合时的权重。
 #: final_score = time_score * (1.0 + relevance * RELEVANCE_WEIGHT)
-#: At 1.0, a perfectly relevant entry doubles its base score -- enough to
-#: overcome a moderate importance gap (e.g. 0.6 relevant > 0.7 irrelevant)
-#: while still preserving the importance-decay ordering when relevance is 0.
+#: 取 1.0 时，一个完全相关的条目会使其基础分翻倍 —— 足以
+#: 克服中等程度的 importance 差距（例如 0.6 相关 > 0.7 不相关），
+#: 同时在相关性为 0 时仍保留 importance-decay 的排序。
 RELEVANCE_WEIGHT = 1.0
 
 
 def char_jaccard(left: str, right: str) -> float:
-    """Character-level Jaccard overlap for short Chinese text.
+    """针对短中文文本的字符级 Jaccard 重叠度。
 
-    Episodic ``event_summary`` labels are typically 2-4 characters ("失眠", "加班").
-    Word-level jieba tokenisation treats these as single tokens, yielding zero
-    overlap between semantically related labels like "失眠" and "睡眠".
-    Character-level matching catches the shared "眠" character.
+    情景记忆的 ``event_summary`` 标签通常为 2-4 个字符（"失眠"、"加班"）。
+    词级 jieba 分词会把它们当作单个 token，导致在语义相关的标签（如"失眠"和"睡眠"）
+    之间得到零重叠。字符级匹配可以捕获共享的"眠"字符。
     """
     left_chars = {c for c in left if c.strip()}
     right_chars = {c for c in right if c.strip()}
@@ -65,7 +64,7 @@ def char_jaccard(left: str, right: str) -> float:
 
 
 class EpisodicMemory:
-    """Process-local episodic memory backed by ``deque`` with SQLite persistence."""
+    """进程本地的情景记忆，由 ``deque`` 支撑并具备 SQLite 持久化。"""
 
     MAX_ENTRIES = 100
     IMPORTANCE_THRESHOLD = 0.5
@@ -83,11 +82,11 @@ class EpisodicMemory:
         self._user_id = user_id
         self._persist = persist and store is not None
         self._entries: deque[EpisodicEntry] = deque()
-        # Lazy import to avoid jieba load cost when no query is ever passed.
+        # 延迟导入，以避免在从未传入查询时承担 jieba 的加载成本。
         self._similarity = similarity
 
     def load(self) -> None:
-        """Load persisted entries into the in-process deque."""
+        """将持久化的条目加载到进程内 deque 中。"""
         if self._store is None:
             return
 
@@ -99,7 +98,7 @@ class EpisodicMemory:
         self._enforce_capacity()
 
     def store(self, entry: EpisodicEntry) -> bool:
-        """Store an episodic entry when importance exceeds the threshold."""
+        """当 importance 超过阈值时，存储一条情景记忆条目。"""
         if entry.importance <= self.IMPORTANCE_THRESHOLD:
             logger.debug(
                 "Skip episodic store: importance=%.2f <= %.2f",
@@ -117,7 +116,7 @@ class EpisodicMemory:
         return True
 
     def upsert(self, entry: EpisodicEntry) -> None:
-        """Persist a single entry to SQLite."""
+        """将单条条目持久化到 SQLite。"""
         if not self._persist or self._store is None:
             return
         self._store.upsert_entry(self._user_id, entry)
@@ -128,13 +127,12 @@ class EpisodicMemory:
         top_k: int = 5,
         now: float | None = None,
     ) -> list[EpisodicEntry]:
-        """Return top entries ranked by importance * decay, boosted by query relevance.
+        """返回按 importance * decay 排序的顶部条目，并由查询相关性加权提升。
 
-        When *query* is non-empty, entries whose ``event_summary`` text overlaps with the
-        query receive a multiplicative boost (up to ``1 + RELEVANCE_WEIGHT``).
-        Entries that don't overlap keep their base score, so relevance affects
-        ranking order but never lowers a qualified entry below its natural
-        importance-decay position.
+        当 *query* 非空时，``event_summary`` 文本与查询有重叠的条目会获得
+        乘法加成（最高可达 ``1 + RELEVANCE_WEIGHT``）。无重叠的条目保持其基础分，
+        因此相关性会影响排序顺序，但绝不会把合格的条目压低到低于其自然的
+        importance-decay 位置。
         """
         if now is None:
             now = time.time()
@@ -159,13 +157,13 @@ class EpisodicMemory:
         return [entry for _, entry in scored[:top_k]]
 
     def _resolve_similarity(self) -> SimilarityFn:
-        """Return the configured similarity function, defaulting to char Jaccard."""
+        """返回已配置的相似度函数，默认为 char Jaccard。"""
         if self._similarity is not None:
             return self._similarity
         return char_jaccard
 
     def evict_lowest(self, now: float | None = None) -> int:
-        """Evict stale entries and enforce the LRU capacity limit."""
+        """清除过期条目并强制执行 LRU 容量上限。"""
         if now is None:
             now = time.time()
 
@@ -174,7 +172,7 @@ class EpisodicMemory:
         return removed
 
     def purge_stale(self, now: float | None = None) -> int:
-        """Remove entries whose effective score dropped below the threshold."""
+        """移除有效分已降至阈值以下的条目。"""
         if now is None:
             now = time.time()
 
@@ -227,10 +225,21 @@ class EpisodicMemory:
         return len(self._entries)
 
     def get_entries(self) -> list[EpisodicEntry]:
-        """Return a snapshot of all episodic entries (public API)."""
+        """返回所有情景记忆条目的快照（公开 API）。"""
         return list(self._entries)
+
+    def get_all_entries_for_user(self, user_id: str) -> list[EpisodicEntry]:
+        """从存储中加载某用户的全部条目。
+
+        与 ``get_entries``（返回经 decay 过滤、并被 ``MAX_ENTRIES`` 封顶的内存 deque）不同，
+        本方法会从存储中加载每一条已持久化的条目，且不做 decay 过滤。
+        供长期记忆提升器用于在完整历史中检测重复模式，而非仅限于最近活跃的窗口。
+        """
+        if self._store is None:
+            return list(self._entries)
+        return self._store.load_entries(user_id)
 
     @property
     def user_id(self) -> str:
-        """Return the user_id this memory store is scoped to."""
+        """返回该记忆存储所绑定的 user_id。"""
         return self._user_id

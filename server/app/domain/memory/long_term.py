@@ -1,4 +1,4 @@
-"""Long-term memory — user profile JSON with episodic promotion rules."""
+"""长期记忆 —— 用户画像 JSON，附带情景记忆提升规则。"""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class LongTermMemory:
-    """Manage the persisted user profile and promote recurring themes."""
+    """管理已持久化的用户画像，并提升重复出现的主题。"""
 
     PROMOTION_THRESHOLD_DAYS = 3
 
@@ -25,6 +25,17 @@ class LongTermMemory:
 
         profile = self._store.get_profile(user_id)
         return profile if profile is not None else UserProfile()
+
+    def _has_profile(self, user_id: str) -> bool:
+        """检查存储中是否确实持久化了某用户画像。
+
+        与 ``get_profile``（总是返回非 None 的默认值）不同，
+        本方法仅在存储中确实存在真实画像时才返回 True。
+        供 ``promote_from_episodic`` 用于判断是否要强制保存首次画像。
+        """
+        if self._store is None:
+            return False
+        return self._store.get_profile(user_id) is not None
 
     def update_profile(self, user_id: str, profile: UserProfile) -> None:
         if self._store is None:
@@ -40,24 +51,31 @@ class LongTermMemory:
         user_id: str,
         episodic_entries: list[EpisodicEntry],
     ) -> None:
-        """Promote emotions/topics that appear on 3+ consecutive days."""
+        """提升在连续 3 天及以上出现的情绪 / 主题。"""
         if not episodic_entries:
             logger.info("No episodic entries to promote for user_id=%s", user_id)
             return
 
         profile = self.get_profile(user_id)
+        had_profile = self._has_profile(user_id)
 
         entries_by_date: dict[str, list[EpisodicEntry]] = {}
         for entry in episodic_entries:
-            date_key = datetime.fromtimestamp(entry.timestamp).strftime("%Y-%m-%d")
+            # 优先使用 event_date（用户指定的日记日期）而非 timestamp
+            # （记录创建时间）。timestamp 始终反映"当下"，这会让批量导入时
+            # 所有条目看起来都落在同一天。
+            if entry.event_date:
+                date_key = entry.event_date
+            else:
+                date_key = datetime.fromtimestamp(entry.timestamp).strftime("%Y-%m-%d")
             entries_by_date.setdefault(date_key, []).append(entry)
 
         daily_emotions: dict[str, set[str]] = {}
         daily_topics: dict[str, set[str]] = {}
         for date_key, entries in entries_by_date.items():
             daily_emotions[date_key] = {entry.emotion for entry in entries if entry.emotion}
-            # Use structured tags for topic detection (P2-2 fix).
-            # Fallback to event_summary only if no tags available.
+            # 使用结构化 tags 进行主题检测（P2-2 修复）。
+            # 仅在没有可用 tags 时才回退到 event_summary。
             topics: set[str] = set()
             for entry in entries:
                 if entry.tags:
@@ -96,7 +114,13 @@ class LongTermMemory:
                         emotion_counts[emotion] += 1
 
             most_common_emotion = emotion_counts.most_common(1)[0][0]
-            if profile.emotion_baseline.dominant_emotion != most_common_emotion:
+            # 当主导情绪发生变化，或者这是一个尚未持久化的新画像时更新。
+            # 若没有此检查，一个新画像的默认 dominant_emotion（"neutral"）
+            # 恰好与提升后的情绪一致时，就永远不会被保存。
+            if (
+                profile.emotion_baseline.dominant_emotion != most_common_emotion
+                or not had_profile
+            ):
                 profile.emotion_baseline.dominant_emotion = most_common_emotion
                 logger.info(
                     "Updated dominant emotion to '%s' for user_id=%s",

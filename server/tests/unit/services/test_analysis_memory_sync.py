@@ -47,6 +47,9 @@ class _FakeEpisodic:
     def get_entries(self) -> list[EpisodicEntry]:
         return self.stored_entries
 
+    def get_all_entries_for_user(self, user_id: str) -> list[EpisodicEntry]:
+        return self.stored_entries
+
 
 class _FakeLongTerm:
     """Minimal long-term memory mock."""
