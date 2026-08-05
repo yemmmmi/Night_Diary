@@ -1,0 +1,108 @@
+---
+description: "Night Diary V2 目标架构：本地桌面端、Tauri + Vue 3 + Python AI 引擎"
+alwaysApply: false
+---
+
+# V2 目标架构
+
+本项目是从 V1 老旧项目**在新仓库中从零重建**。V1 参考代码在 `D:\work\night_diary`，不可直接修改。
+
+**架构转型**: V2 已从 Web 多用户应用转为**本地桌面端应用**。无 MySQL、无 Redis、无 JWT 认证。详见 `docs/本地化桌面端重构方案.md`。
+
+## 目录结构
+
+```
+night-diary-v2/
+├── .github/workflows/ci.yml
+├── .pre-commit-config.yaml
+├── Makefile
+│
+├── src-tauri/                       # Tauri (Rust) 桌面壳
+│   └── src/
+│       ├── main.rs                  # 入口：启动 Python sidecar、管理生命周期
+│       ├── lib.rs                   # Tauri commands（get_backend_port 等）
+│       └── process.rs               # Python 子进程管理
+│
+├── src/                             # Vue 3 前端（原 web/，Tauri WebView 内运行）
+│   ├── pages/                       # 场景级页面（HomeScene, DiaryScene, ...）
+│   ├── features/                    # 按业务领域组织
+│   │   ├── diary/
+│   │   ├── analysis/
+│   │   ├── review/
+│   │   └── settings/
+│   ├── shared/
+│   │   ├── api/                     # HTTP 客户端（连接 localhost Python 后端）
+│   │   ├── components/              # 通用游戏化 UI 组件
+│   │   ├── composables/             # useBackend, useTheme, useSound
+│   │   ├── stores/                  # Pinia stores
+│   │   └── types/index.ts
+│   └── styles/
+│       ├── themes/                  # day.css / night.css
+│       └── animations/
+│
+├── server/                          # Python AI 引擎（FastAPI sidecar）
+│   ├── pyproject.toml
+│   ├── .env.example
+│   └── app/
+│       ├── main.py                  # FastAPI（仅绑定 127.0.0.1，无 CORS，无 auth）
+│       ├── config.py                # pydantic-settings + CLI 参数（--port --data-dir）
+│       ├── database.py              # SQLAlchemy + SQLite
+│       ├── api/v1/                  # 路由层（薄层，无业务逻辑）
+│       ├── services/                # 服务层（业务编排）
+│       ├── domain/                  # 领域层
+│       │   ├── agents/              #   Multi-Agent 协调
+│       │   ├── memory/              #   三层记忆（进程内存储，无 Redis）
+│       │   ├── skills/              #   Skill 系统
+│       │   ├── feedback/            #   Thompson Sampling + PromptTuner
+│       │   ├── knowledge/           #   领域知识库
+│       │   └── rag/                 #   RAG 检索
+│       ├── shared/                  # 共享工具
+│       │   ├── errors.py            #   统一错误类型
+│       │   ├── llm.py               #   LLM 工厂
+│       │   ├── tracing.py           #   LLMCallTracer + AgentDecisionLogger
+│       │   ├── emotion_estimator.py #   情感估计（消除 V1 重复）
+│       │   └── token_utils.py       #   Token 估算（消除 V1 重复）
+│       └── infrastructure/          # 基础设施（精简）
+│           ├── database.py
+│           └── models/              #   SQLAlchemy ORM
+│               ├── diary_entry.py
+│               ├── analysis.py
+│               ├── tag.py
+│               ├── model_provider.py
+│               ├── feedback.py
+│               ├── style_preference.py
+│               ├── app_config.py
+│               ├── llm_call_log.py         #   LLM 调用追踪
+│               ├── agent_decision.py       #   Agent 决策日志（含 skill_ids JSON 列）
+│               └── skill_activation.py     #   Skill 激活追踪（激活+抑制全记录）
+│
+└── docs/                            # 文档
+    └── 本地化桌面端重构方案.md
+```
+
+## 后端分层（依赖方向单向）
+
+```
+api/  →  services/  →  domain/  →  shared/ + infrastructure/
+(薄层)    (编排)       (核心逻辑)    (工具)     (DB/安全)
+```
+
+## 关键架构决策
+
+1. **本地桌面应用**: Tauri v2 (Rust) 作为桌面壳，Vue 3 在系统 WebView 中运行，Python AI 引擎作为 sidecar 子进程
+2. **SQLite 替代 MySQL**: 单用户本地应用，SQLite 完全足够。数据库文件存储在 `%APPDATA%/night-diary/`
+3. **无 Redis**: 情景记忆用进程内 `deque` + SQLite 默认持久化（50KB，重启不丢记忆），分布式锁/限流/缓存全部删除（单用户单进程）
+4. **无用户认证**: 单用户桌面应用，不需要 JWT、登录、注册
+5. **依赖注入**: Agent/Skill 通过参数接收 LLM 和 DB session，不自行创建
+6. **统一错误**: `shared/errors.py` 定义 `AppError` 子类，替代字符串匹配
+7. **Skill 系统集成**: Supervisor 中调用 `SkillRegistry.select_skills()`（V1 中是死代码）；MVP 策略先激活 `crisis_detector` + `sentiment_skill`，其余 stub 逐步激活
+8. **Skill 可观测性**: `skill_activations` 表记录每次 `can_activate()` 调用（激活和抑制全部记录），开发者可完整追溯每次 AI 分析的 skill 判定过程
+9. **LLM 统一管理**: `shared/llm.py` 提供 `LLMFactory`
+10. **配置管理**: `pydantic-settings` + CLI 参数（`--port`, `--data-dir`），无硬编码 fallback
+11. **前端状态**: 关键数据走 Pinia stores，页面级数据走 composables
+12. **Agent 通信模式**: Supervisor hub-and-spoke + Worker 升级权。Worker 可标记 `needs_more_context`，触发 Supervisor 重新路由（如 EmpathyAgent 发现需要历史上下文 → 请求 RetrievalAgent 介入）
+13. **分级模型选择**: ExecutionPlanner 支持 per-tier model selection，用户可为 light/medium/heavy 分别配置不同 LLM 模型，最大化成本/质量比
+14. **ChromaDB 线程安全**: 使用 `chromadb.PersistentClient`（非默认 in-memory Client）；FastAPI 生产环境单 worker 部署（`--workers 1`），因为 ChromaDB 的 in-process 模式不支持并发
+15. **降级路径**: LLM API 不可达 → 预设安全模板（非异常）；RAG 检索失败 → 纯 LLM 回复（不带知识库）；Supervisor 分类低置信度 → 默认 EmpathyAgent only（最安全路径，最少 token）
+16. **BM25 增量索引**: `BM25Index` 维护文档级倒排索引，新增/删除日记时增量更新，不每次全量重建。`tokenize` + `df` + `avgdl` 三个核心数据结构均为增量维护
+17. **Episodic 记忆持久化**: `EpisodicMemory` 启动时从 SQLite `load()`，写入时 `upsert()`。默认开启（非可选），确保用户重启应用后 AI 保留短期记忆连续性

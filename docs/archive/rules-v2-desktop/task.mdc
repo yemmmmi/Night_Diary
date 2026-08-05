@@ -1,0 +1,30 @@
+---
+description: "Night Diary V2 任务总纲 — 本地桌面端新架构"
+alwaysApply: true
+---
+
+# 任务总纲
+
+> **重要**: V2 采用本地桌面端架构（24 PR：Phase A:5 + B:11 + C:3 + D:4 + E:1）。完整方案见 `docs/本地化桌面端重构方案.md`，施工清单见仓库根目录 `task.md`。
+
+## 0. 工作类型判定（动手前先执行）
+
+收到用户请求后，**先判断工作类型**，再按下方路由阅读对应文档：
+
+| 工作类型 | 判定信号 | 必读文档（按顺序） |
+|----------|----------|-------------------|
+| **A. Phase PR 施工** | 实现新方案的某 Phase | `current_phase.mdc` → `execution-plan.mdc` → `architecture.mdc` → `coding-standards.mdc` → `v1-migration.mdc` → `collaboration.mdc` |
+| **B. Bug 修复** | `fix/` 分支；报错、回归、CI 失败 | `architecture.mdc`（涉及层）→ `coding-standards.mdc` → `collaboration.mdc` |
+| **C. 重构 / 迁移** | `refactor/` 分支；从 V1 迁代码 | `architecture.mdc` → `execution-plan.mdc` → `coding-standards.mdc` → `v1-migration.mdc` → `collaboration.mdc` |
+| **D. 纯问答 / 探索** | 解释代码、只读调研 | `architecture.mdc`（按需） |
+| **E. Git / PR 流程** | 提交、开 PR、合并 | `collaboration.mdc`；若合并 Phase PR 则同步更新 `current_phase.mdc` |
+| **F. 文档 / 杂项** | `docs/`、`chore/`、依赖/CI 配置 | `collaboration.mdc` |
+
+**V1 参考**（类型 A/C 可能用到）：`D:\work\night_diary` 只读。V2 代码不得 import V1。
+
+## Agent 执行须知
+
+1. **新架构原则**: 无 MySQL、无 Redis、无 JWT、无 Docker。单用户本地桌面应用。
+2. **严格按 Phase 顺序**: A（地基）→ B（AI 核心）→ C（业务层）→ D（游戏化 UI）→ E（交付）。
+3. **分支**: 使用 `feature/` 前缀；勿直接向 `main` 提交。
+4. **当前进度**: 以 `current_phase.mdc` 为准；完成 Phase 后更新该文件。
