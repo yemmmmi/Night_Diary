@@ -36,8 +36,10 @@ _test_data
 .trae
 # Project-local (not tracked)
 night-diary-v2-cursor-rules.md
-前端参考图/
+docs/assets/前端参考图/
+docs/reports/
 docker-compose.override.yml
+.venv-build/
 
 # System
 .DS_Store
