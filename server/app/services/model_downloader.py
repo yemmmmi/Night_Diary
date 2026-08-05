@@ -49,7 +49,7 @@ def configure_hf_environment(settings: Settings) -> None:
 
     Sets ``HF_HUB_OFFLINE=1`` when models are already cached locally, so
     SentenceTransformer / huggingface_hub skip network HEAD requests that
-    each take 10s+ to time out (5 retries × 2 files = ~2 min of pure
+    each take 10s+ to time out (5 retries x 2 files = ~2 min of pure
     network-wait on a machine without VPN access to huggingface.co).
     """
     models_dir = str(Path(settings.models_dir).resolve())

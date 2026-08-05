@@ -66,14 +66,16 @@ async def publish_trace_complete(trace: PipelineTrace) -> None:
 
 
 def publish_trace_complete_sync(trace: PipelineTrace) -> None:
-    """同步版 trace_complete 推送。
+    """Synchronous trace_complete push.
 
-    在同步端点 (线程池线程) 中调用 asyncio.run() 会在 Windows 上
-    导致 ProactorEventLoop 冲突使进程崩溃。TraceEventBus.publish
-    内部仅使用 put_nowait (同步操作), 无需事件循环, 因此直接
-    内联其逻辑即可。
+    Calling asyncio.run() on a sync endpoint (thread-pool thread) crashes the
+    process on Windows (ProactorEventLoop conflict). TraceEventBus.publish only
+    uses put_nowait internally (a synchronous op), so no event loop is needed —
+    inline that logic here.
     """
     try:
+        from contextlib import suppress
+
         from app.shared.trace_event_bus import get_event_bus
 
         event_bus = get_event_bus()
@@ -88,16 +90,14 @@ def publish_trace_complete_sync(trace: PipelineTrace) -> None:
         }
         queues = event_bus._subscribers.get(trace.trace_id, [])
         for queue in queues:
-            try:
+            with suppress(Exception):
                 queue.put_nowait(event)
-            except Exception:
-                pass
     except Exception as e:
         logger.warning("Failed to publish trace_complete (sync): %s", e)
 
 
 async def publish_span_complete(trace: PipelineTrace, span: TraceSpan) -> None:
-    """通过 EventBus 推送 span_complete 事件。best-effort。"""
+    """Push a span_complete event through the EventBus. Best-effort."""
     try:
         from app.shared.trace_event_bus import get_event_bus
 

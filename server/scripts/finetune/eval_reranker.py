@@ -31,8 +31,8 @@ def load_jsonl(path: str) -> list[dict]:
 
 def compute_auc(scores: list[float], labels: list[int]) -> float:
     """简易 AUC 计算（Mann-Whitney U 统计量）。"""
-    pos_scores = [s for s, l in zip(scores, labels) if l == 1]
-    neg_scores = [s for s, l in zip(scores, labels) if l == 0]
+    pos_scores = [s for s, lab in zip(scores, labels, strict=True) if lab == 1]
+    neg_scores = [s for s, lab in zip(scores, labels, strict=True) if lab == 0]
     if not pos_scores or not neg_scores:
         return 0.0
 
@@ -62,10 +62,10 @@ def evaluate_model(model_path: str, val_rows: list[dict]) -> dict:
     scores = [float(s) for s in raw_scores]
 
     preds = [1 if s > 0.5 else 0 for s in scores]
-    tp = sum(1 for p, l in zip(preds, labels) if p == 1 and l == 1)
-    fp = sum(1 for p, l in zip(preds, labels) if p == 1 and l == 0)
-    tn = sum(1 for p, l in zip(preds, labels) if p == 0 and l == 0)
-    fn = sum(1 for p, l in zip(preds, labels) if p == 0 and l == 1)
+    tp = sum(1 for p, lab in zip(preds, labels, strict=True) if p == 1 and lab == 1)
+    fp = sum(1 for p, lab in zip(preds, labels, strict=True) if p == 1 and lab == 0)
+    tn = sum(1 for p, lab in zip(preds, labels, strict=True) if p == 0 and lab == 0)
+    fn = sum(1 for p, lab in zip(preds, labels, strict=True) if p == 0 and lab == 1)
 
     accuracy = (tp + tn) / len(labels) if labels else 0.0
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0

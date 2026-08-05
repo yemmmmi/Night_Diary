@@ -124,6 +124,14 @@ ignore = ["E501"]
 "app/domain/skills/injection.py" = ["RUF001"]
 "app/shared/tool_protocol.py" = ["RUF001"]
 "tests/unit/domain/test_orchestrator.py" = ["RUF001"]
+"scripts/seed_dev_traces.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/finetune/export_reranker_pairs.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/finetune/train_reranker_lora.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/finetune/eval_reranker.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/finetune/verify_container.py" = ["RUF001", "RUF002", "RUF003"]
+# Migration script imports every model module for its Base.metadata side
+# effect; ruff's F401 autofix would strip those imports, so disable F401 here.
+"scripts/migrate_sqlite_to_mysql.py" = ["F401"]
 
 # ---- Mypy ----
 [tool.mypy]

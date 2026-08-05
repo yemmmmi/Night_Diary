@@ -31,6 +31,7 @@ os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 os.environ.setdefault("TENSORBOARD_PROXY_URL", "")
 # 阻止 transformers.Trainer 尝试导入 tensorboard
 import types
+
 _tb_stub = types.ModuleType("torch.utils.tensorboard")
 _tb_stub.SummaryWriter = None
 sys.modules.setdefault("torch.utils.tensorboard", _tb_stub)
@@ -130,11 +131,15 @@ def train_lora(
     训练后需合并 LoRA 权重再保存，或用 peft 加载。
     """
     try:
-        import torch
-        from peft import LoraConfig, TaskType, get_peft_model
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trainer, TrainingArguments
         from datasets import Dataset
-    except ImportError as e:
+        from peft import LoraConfig, TaskType, get_peft_model
+        from transformers import (
+            AutoModelForSequenceClassification,
+            AutoTokenizer,
+            Trainer,
+            TrainingArguments,
+        )
+    except ImportError:
         logger.error("LoRA 模式需要额外依赖: pip install peft transformers datasets torch")
         raise
 

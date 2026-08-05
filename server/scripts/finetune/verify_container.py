@@ -13,9 +13,10 @@ logger = logging.getLogger("verify")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.config import Settings
-from app.infrastructure.database import create_db_engine, create_session_factory
-from app.shared.llm_factory import LLMFactory
+from app.config import Settings  # noqa: E402
+from app.infrastructure.database import create_db_engine, create_session_factory  # noqa: E402
+from app.shared.llm_factory import LLMFactory  # noqa: E402
+
 
 def main():
     settings = Settings()
@@ -36,9 +37,9 @@ def main():
     session_factory = create_session_factory(engine)
     llm_factory = LLMFactory(settings)
     
-    from app.shared.tracing import NoOpLLMCallTracer, NoOpAgentDecisionLogger, NoOpSkillActivationTracer
     from app.infrastructure.feedback_repository import SqliteStylePreferenceStore
-    
+    from app.shared.tracing import NoOpAgentDecisionLogger, NoOpLLMCallTracer
+
     tracer = NoOpLLMCallTracer()
     decision_logger = NoOpAgentDecisionLogger()
     style_store = SqliteStylePreferenceStore(session_factory)

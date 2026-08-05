@@ -32,8 +32,8 @@ import logging
 import os
 import shutil
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
@@ -41,28 +41,30 @@ from sqlalchemy.engine import Engine
 # Ensure the app package is importable when running from server/
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.config import get_settings  # noqa: E402
-from app.infrastructure.database import Base, create_db_engine  # noqa: E402
+from app.config import get_settings
+from app.infrastructure.database import Base, create_db_engine
 
 # Import every model module so Base.metadata is fully populated (mirrors
-# the import list in database.init_db).
-from app.infrastructure.models import (  # noqa: E402, F401
-    agent_decision as _agent_decision,
-    analysis as _analysis,
-    app_config as _app_config,
-    conversation as _conversation,
-    diary_entry as _diary_entry,
-    feedback as _feedback,
-    feedback_record as _feedback_record,
-    llm_call_log as _llm_call_log,
-    memory as _memory,
-    memory_card as _memory_card,
-    model_provider as _model_provider,
-    pipeline_trace as _pipeline_trace,
-    skill_activation as _skill_activation,
-    tag as _tag,
-    user as _user,
-    weekly_report as _weekly_report,
+# the import list in database.init_db).  F401 is disabled per-file in
+# pyproject.toml: ruff's autofix would otherwise strip these side-effect
+# imports.
+from app.infrastructure.models import (
+    agent_decision,
+    analysis,
+    app_config,
+    conversation,
+    diary_entry,
+    feedback,
+    feedback_record,
+    llm_call_log,
+    memory,
+    memory_card,
+    model_provider,
+    pipeline_trace,
+    skill_activation,
+    tag,
+    user,
+    weekly_report,
 )
 
 logger = logging.getLogger("migrate")
@@ -178,7 +180,7 @@ def _migrate_table(
 
     # Intersect source columns with destination columns to handle drift
     src_columns = set(rows[0].keys())
-    columns = [c for c in rows[0].keys() if c in dst_columns]
+    columns = [c for c in rows[0] if c in dst_columns]
     dropped = src_columns - dst_columns
     if dropped:
         logger.warning(

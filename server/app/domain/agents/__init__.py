@@ -1,14 +1,14 @@
-"""多智能体管道：共享状态、意图分类、Worker、编排。
+"""Multi-agent pipeline: shared state, intent classification, workers, orchestration.
 
-B-8 交付了三个 Worker 智能体（Empathy / Retrieval / Insight）和
-IntentClassifier。B-9 新增 :class:`SupervisorAgent`（意图 + 技能
-集成 + 层级路由 + 合成）以及编排它们的纯 asyncio
-:class:`MultiAgentGraph`（不使用 LangGraph）。
+B-8 delivered the three worker agents (Empathy / Retrieval / Insight) and
+IntentClassifier. B-9 added :class:`SupervisorAgent` (intent + skill
+integration + tiered routing + synthesis) and the pure-asyncio
+:class:`MultiAgentGraph` that orchestrates them (no LangGraph).
 
-模块通过 ``__getattr__`` 懒加载，避免在启动时拉入沉重的
-langchain / chromadb / sentence_transformers 依赖链。直接子模块导入（如
-``from app.domain.agents.graph import MultiAgentGraph``）会绕过此
-``__init__``，只加载实际需要的部分。
+This module lazy-loads via ``__getattr__`` so importing it does not pull the
+heavy langchain / chromadb / sentence_transformers dependency chain at startup.
+Direct submodule imports (e.g. ``from app.domain.agents.graph import
+MultiAgentGraph``) bypass this ``__init__`` and load only what is needed.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ def __getattr__(name: str) -> object:
     if name in __all__:
         import importlib
 
-        # 将公开名称映射到其源模块。
+        # Map the public names to their source modules.
         _module_map = {
             "ContextCompressor": "app.domain.agents.context_compressor",
             "EmpathyAgent": "app.domain.agents.empathy_agent",

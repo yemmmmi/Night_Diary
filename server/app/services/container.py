@@ -12,7 +12,6 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings, get_settings
-from app.shared.embeddings import build_embedding_function
 from app.infrastructure.agent_decision_logger import SqliteAgentDecisionLogger
 from app.infrastructure.database import create_db_engine, create_session_factory, init_db
 from app.infrastructure.feedback_repository import SqliteStylePreferenceStore
@@ -22,6 +21,7 @@ from app.infrastructure.memory_repository import (
     SqliteLongTermProfileStore,
 )
 from app.infrastructure.skill_activation_tracer import SqliteSkillActivationTracer
+from app.shared.embeddings import build_embedding_function
 from app.shared.errors import AIServiceUnavailableError
 from app.shared.llm import LLMClient
 from app.shared.llm_factory import LLMFactory
@@ -32,15 +32,8 @@ from app.shared.tracing_llm import TracingLLMClient
 # These modules are imported lazily inside methods that actually need them.
 if TYPE_CHECKING:
     from app.domain.agents.chat_intent_classifier import ChatIntentClassifier
-    from app.domain.agents.context_compressor import ContextCompressor
-    from app.domain.agents.empathy_agent import EmpathyAgent
-    from app.domain.agents.graph import MultiAgentGraph, create_multi_agent_graph
-    from app.domain.agents.insight_agent import InsightAgent
-    from app.domain.agents.intent_classifier import IntentClassifier
-    from app.domain.agents.retrieval_agent import RetrievalAgent
-    from app.domain.agents.supervisor import SupervisorAgent
+    from app.domain.agents.graph import MultiAgentGraph
     from app.domain.feedback.prompt_tuner import PromptTuner
-    from app.domain.feedback.thompson_sampling import ThompsonSampling
     from app.domain.knowledge.store import DomainKnowledgeStore
     from app.domain.memory.episodic import EpisodicMemory
     from app.domain.memory.long_term import LongTermMemory
@@ -50,8 +43,7 @@ if TYPE_CHECKING:
     from app.domain.rag.collections import DiaryCollectionManager
     from app.domain.rag.reranker import Reranker
     from app.domain.rag.retriever import HybridRetriever
-    from app.domain.skills.registry import create_diary_registry
-    from app.services.ai.router import ExecutionPlanner, resolve_llm_clients_by_tier
+    from app.services.ai.router import ExecutionPlanner
 
 logger = logging.getLogger(__name__)
 
@@ -193,9 +185,9 @@ class ServiceContainer:
                 return
 
             cfg = self.settings
-            from app.domain.rag.collections import DiaryCollectionManager
             from app.domain.knowledge.store import DomainKnowledgeStore
             from app.domain.rag.bm25 import BM25Index
+            from app.domain.rag.collections import DiaryCollectionManager
             from app.domain.rag.retriever import HybridRetriever
 
             embedding_fn = build_embedding_function(cfg)
@@ -232,6 +224,8 @@ class ServiceContainer:
         """
         fine_tuned = Path(cfg.models_dir) / "reranker-night-diary"
         model_name = str(fine_tuned) if fine_tuned.exists() else "BAAI/bge-reranker-base"
+        from app.domain.rag.reranker import Reranker
+
         try:
             return Reranker(model_name=model_name, local_files_only=True)
         except Exception as exc:

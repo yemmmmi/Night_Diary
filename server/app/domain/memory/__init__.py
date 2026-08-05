@@ -1,7 +1,7 @@
-"""用于日记分析的三层记忆系统。
+"""Three-tier memory system for diary analysis.
 
-模块在首次使用时才延迟导入。请勿在此处添加即时导入 ——
-``working.py`` 会传递性导入 ``context_compressor``，后者会引入
-langchain / chromadb，使启动时间增加约 15 秒。每个调用方应导入
-自己所需的特定子模块。
+Submodules are imported lazily on first use. Do not add eager imports here —
+``working.py`` transitively imports ``context_compressor``, which pulls in
+langchain / chromadb and adds ~15s to startup. Callers should import the
+specific submodule they need.
 """

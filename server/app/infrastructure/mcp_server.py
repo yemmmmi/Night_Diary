@@ -1,14 +1,14 @@
-"""MCP 服务器 — 通过模型上下文协议暴露现有工具。
+"""MCP server — exposes the existing tools over the Model Context Protocol.
 
-这允许外部 MCP 客户端（如 Claude Desktop、其他 AI 智能体）
-通过标准化协议发现并调用日记工具。
+This lets external MCP clients (e.g. Claude Desktop, other AI agents)
+discover and call the diary tools through a standardised protocol.
 
-该服务器包装了 tool_factory.py 中相同的 ToolFn 可调用对象，
-因此行为与进程内工具调用完全一致。两种传输模式：
-- stdio：用于本地 CLI 客户端
-- SSE：  用于远程 HTTP 客户端
+The server wraps the same ``ToolFn`` callables from ``tool_factory.py``, so
+behaviour is identical to in-process tool calls. Two transports:
+- stdio: for local CLI clients
+- SSE:   for remote HTTP clients
 
-用法：
+Usage:
     python -m app.infrastructure.mcp_server --transport stdio
     python -m app.infrastructure.mcp_server --transport sse --port 8080
 """
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def _specs_to_mcp_tools(specs: list[ToolSpec]) -> list[dict[str, Any]]:
-    """将内部 ToolSpec 列表转换为 MCP 工具定义。"""
+    """Convert the internal ``ToolSpec`` list into MCP tool definitions."""
     return [
         {
             "name": spec.name,
@@ -37,11 +37,11 @@ def _specs_to_mcp_tools(specs: list[ToolSpec]) -> list[dict[str, Any]]:
 
 
 class MCPServer:
-    """将现有工具工厂包装为兼容 MCP 的服务器。
+    """Wrap the existing tool factory into an MCP-compatible server.
 
-    核心逻辑（``list_tools``/``call_tool``）与 MCP 库解耦，
-    以便独立测试。传输方法（``run_stdio``/``run_sse``）
-    处理 MCP 协议的底层连接。
+    The core logic (``list_tools``/``call_tool``) is decoupled from the MCP
+    library so it can be tested independently. The transport methods
+    (``run_stdio``/``run_sse``) handle the low-level MCP protocol connections.
     """
 
     def __init__(self, container: Any, *, user_id: str = "default") -> None:
@@ -51,7 +51,7 @@ class MCPServer:
         self._specs: list[ToolSpec] = []
 
     def initialize(self) -> None:
-        """构建工具映射和规格。
+        """Build the tool map and specs.
 
         Uses the container's session_factory so tools open short-lived
         sessions on demand — no long-held DB connection during tool calls.
@@ -71,11 +71,11 @@ class MCPServer:
         self._specs = build_tool_specs()
 
     def list_tools(self) -> list[dict[str, Any]]:
-        """返回 MCP 格式的工具定义。"""
+        """Return the MCP-format tool definitions."""
         return _specs_to_mcp_tools(self._specs)
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
-        """按名称及给定参数调用工具。"""
+        """Call a tool by name with the given arguments."""
         fn = self._tools.get(name)
         if fn is None:
             return f"Unknown tool: {name}"
@@ -86,32 +86,47 @@ class MCPServer:
             return f"Tool {name} error: {exc}"
 
     def run_stdio(self) -> None:
-        """通过 stdio 传输运行 MCP 服务器。"""
+        """Run the MCP server over stdio transport."""
         try:
             from mcp.server import Server
             from mcp.server.stdio import stdio_server
-            from mcp.types import TextContent, Tool
+            from mcp.types import (
+                CallToolRequestParams,
+                CallToolResult,
+                ListToolsResult,
+                PaginatedRequestParams,
+                TextContent,
+                Tool,
+            )
         except ImportError:
             logger.error("mcp package not installed; run: pip install mcp")
             return
 
-        server = Server("night-diary")
+        async def list_tools(
+            ctx: Any, params: PaginatedRequestParams | None
+        ) -> ListToolsResult:
+            del ctx, params  # protocol handler; request metadata not needed
+            return ListToolsResult(
+                tools=[
+                    Tool(
+                        name=spec.name,
+                        description=spec.description,
+                        input_schema=spec.parameters,
+                    )
+                    for spec in self._specs
+                ]
+            )
 
-        @server.list_tools()  # type: ignore[untyped-decorator, no-untyped-call]
-        async def list_tools() -> list[Tool]:
-            return [
-                Tool(
-                    name=spec.name,
-                    description=spec.description,
-                    inputSchema=spec.parameters,
-                )
-                for spec in self._specs
-            ]
+        async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
+            del ctx
+            result = self.call_tool(params.name, params.arguments or {})
+            return CallToolResult(content=[TextContent(type="text", text=result)])
 
-        @server.call_tool()  # type: ignore[untyped-decorator, no-untyped-call]
-        async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-            result = self.call_tool(name, arguments)
-            return [TextContent(type="text", text=result)]
+        server = Server(
+            "night-diary",
+            on_list_tools=list_tools,
+            on_call_tool=call_tool,
+        )
 
         import asyncio
 
@@ -122,39 +137,51 @@ class MCPServer:
         asyncio.run(_main())
 
     def run_sse(self, *, port: int = 8080) -> None:
-        """通过 SSE 传输运行 MCP 服务器（HTTP）。"""
+        """Run the MCP server over SSE transport (HTTP)."""
         try:
             import uvicorn
             from mcp.server import Server
             from mcp.server.sse import SseServerTransport
+            from mcp.types import (
+                CallToolRequestParams,
+                CallToolResult,
+                ListToolsResult,
+                PaginatedRequestParams,
+                TextContent,
+                Tool,
+            )
             from starlette.applications import Starlette
             from starlette.routing import Mount, Route
         except ImportError:
             logger.error("mcp/SSE deps not installed; run: pip install mcp uvicorn starlette")
             return
 
-        server = Server("night-diary-sse")
+        async def list_tools(
+            ctx: Any, params: PaginatedRequestParams | None
+        ) -> ListToolsResult:
+            del ctx, params  # protocol handler; request metadata not needed
+            return ListToolsResult(
+                tools=[
+                    Tool(
+                        name=spec.name,
+                        description=spec.description,
+                        input_schema=spec.parameters,
+                    )
+                    for spec in self._specs
+                ]
+            )
+
+        async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
+            del ctx
+            result = self.call_tool(params.name, params.arguments or {})
+            return CallToolResult(content=[TextContent(type="text", text=result)])
+
+        server = Server(
+            "night-diary-sse",
+            on_list_tools=list_tools,
+            on_call_tool=call_tool,
+        )
         sse = SseServerTransport("/messages/")
-
-        @server.list_tools()  # type: ignore[untyped-decorator, no-untyped-call]
-        async def list_tools() -> list[Any]:
-            from mcp.types import Tool
-
-            return [
-                Tool(
-                    name=spec.name,
-                    description=spec.description,
-                    inputSchema=spec.parameters,
-                )
-                for spec in self._specs
-            ]
-
-        @server.call_tool()  # type: ignore[untyped-decorator, no-untyped-call]
-        async def call_tool(name: str, arguments: dict[str, Any]) -> list[Any]:
-            from mcp.types import TextContent
-
-            result = self.call_tool(name, arguments)
-            return [TextContent(type="text", text=result)]
 
         async def handle_sse(request: Any) -> Any:
             async with sse.connect_sse(request.scope, request.receive, request._send) as (
@@ -175,7 +202,7 @@ class MCPServer:
 
 
 def main() -> None:
-    """MCP 服务器的 CLI 入口点。"""
+    """CLI entry point for the MCP server."""
     parser = argparse.ArgumentParser(description="Night Diary MCP Server")
     parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio")
     parser.add_argument("--port", type=int, default=8080)

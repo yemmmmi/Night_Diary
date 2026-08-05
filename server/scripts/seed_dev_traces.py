@@ -915,7 +915,7 @@ class DevTraceSeeder:
 
             # ── 记忆验证 ──
             if not self.skip_memory_check:
-                print(f"\n  --- 记忆验证 ---")
+                print("\n  --- 记忆验证 ---")
                 try:
                     memory = self.verify_memory(token)
                     print(memory)
@@ -962,7 +962,7 @@ class DevTraceSeeder:
     def _print_dry_run(self) -> None:
         """仅打印测试用例清单，不调用 API。"""
         print(f"\n{'=' * 70}")
-        print(f"  开发者模式测试数据清单 (DRY-RUN)")
+        print("  开发者模式测试数据清单 (DRY-RUN)")
         print(f"{'=' * 70}")
         print(f"  API 地址  : {self.base_url}")
         print(f"  密码      : {DEFAULT_PASSWORD}")

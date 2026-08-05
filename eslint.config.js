@@ -12,6 +12,8 @@ export default tseslint.config(
       'memory-card-feasibility/**',
       'server/.venv/**',
       'scripts/**',
+      'docs/reports/**',
+      '.trae/**',
     ],
   },
   js.configs.recommended,
