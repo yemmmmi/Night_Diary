@@ -22,12 +22,8 @@ def container(tmp_path) -> ServiceContainer:
 
 
 def test_container_builds_execution_planner(container: ServiceContainer) -> None:
-    db = container.session()
-    try:
-        planner = container.build_execution_planner(db)
-        assert isinstance(planner, ExecutionPlanner)
-    finally:
-        db.close()
+    planner = container.build_execution_planner()
+    assert isinstance(planner, ExecutionPlanner)
 
 
 def test_trigger_analysis_end_to_end(container: ServiceContainer) -> None:
@@ -50,35 +46,23 @@ def test_skill_tracer_instantiated(container: ServiceContainer) -> None:
 
 def test_multi_agent_graph_has_context_compressor(container: ServiceContainer) -> None:
     """build_multi_agent_graph must inject ContextCompressor (not None)."""
-    db = container.session()
-    try:
-        graph = container.build_multi_agent_graph(db)
-        if graph is not None:
-            assert graph is not None
-    finally:
-        db.close()
+    graph = container.build_multi_agent_graph()
+    if graph is not None:
+        assert graph is not None
 
 
 def test_prompt_tuner_instantiated(container: ServiceContainer) -> None:
     """Container must have a non-None prompt_tuner after build_multi_agent_graph."""
-    db = container.session()
-    try:
-        container.build_multi_agent_graph(db)
-        assert container.prompt_tuner is not None
-    finally:
-        db.close()
+    container.build_multi_agent_graph()
+    assert container.prompt_tuner is not None
 
 
 def test_prompt_tuner_builds_style_fragment(container: ServiceContainer) -> None:
     """prompt_tuner.build_dynamic_prompt should return a non-empty style fragment."""
-    db = container.session()
-    try:
-        container.build_multi_agent_graph(db)
-        fragment = container.prompt_tuner.build_dynamic_prompt(
-            agent_type="empathy",
-            diary_word_count=100,
-        )
-        assert fragment
-        assert "风格" in fragment or "回应" in fragment
-    finally:
-        db.close()
+    container.build_multi_agent_graph()
+    fragment = container.prompt_tuner.build_dynamic_prompt(
+        agent_type="empathy",
+        diary_word_count=100,
+    )
+    assert fragment
+    assert "风格" in fragment or "回应" in fragment

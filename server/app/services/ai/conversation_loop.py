@@ -181,7 +181,7 @@ def _run_via_graph(
 
     # Get LLM
     tier = intent_result.tier if intent_result else "medium"
-    llm = container._llm_for_tier(db, tier, agent_name="conversation_graph")
+    llm = container._llm_for_tier(tier, agent_name="conversation_graph")
     if llm is None:
         return None
 
@@ -337,7 +337,7 @@ def run_conversation_loop(
             )
 
         # Get LLM
-        llm: LLMClient | None = container._llm_for_tier(db, tier, agent_name="chat")
+        llm: LLMClient | None = container._llm_for_tier(tier, agent_name="chat")
         if llm is None:
             logger.warning("ConversationLoop: LLM unavailable")
             return LoopResult(

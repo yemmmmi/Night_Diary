@@ -9,12 +9,12 @@ from app.services.ai.tool_factory import build_tool_map_with_mcp
 
 def test_build_tool_map_with_mcp_no_endpoints() -> None:
     """Without MCP endpoints, only built-in tools are returned."""
-    db = MagicMock()
+    session_factory = MagicMock()
     retriever = MagicMock()
     llm = MagicMock()
 
     tools = build_tool_map_with_mcp(
-        db,
+        session_factory,
         retriever=retriever,
         llm=llm,
         mcp_endpoints=None,
@@ -31,12 +31,12 @@ def test_build_tool_map_with_mcp_no_endpoints() -> None:
 
 def test_build_tool_map_with_mcp_empty_endpoints() -> None:
     """Empty MCP endpoints list returns only built-in tools."""
-    db = MagicMock()
+    session_factory = MagicMock()
     retriever = MagicMock()
     llm = MagicMock()
 
     tools = build_tool_map_with_mcp(
-        db,
+        session_factory,
         retriever=retriever,
         llm=llm,
         mcp_endpoints=[],
@@ -47,12 +47,12 @@ def test_build_tool_map_with_mcp_empty_endpoints() -> None:
 
 def test_build_tool_map_with_mcp_empty_string_endpoints() -> None:
     """Empty string endpoints are skipped."""
-    db = MagicMock()
+    session_factory = MagicMock()
     retriever = MagicMock()
     llm = MagicMock()
 
     tools = build_tool_map_with_mcp(
-        db,
+        session_factory,
         retriever=retriever,
         llm=llm,
         mcp_endpoints=["", "  ", ""],
@@ -63,14 +63,14 @@ def test_build_tool_map_with_mcp_empty_string_endpoints() -> None:
 
 def test_build_tool_map_with_mcp_load_failure_non_blocking() -> None:
     """MCP loading failure does not block built-in tools."""
-    db = MagicMock()
+    session_factory = MagicMock()
     retriever = MagicMock()
     llm = MagicMock()
 
     # Mock _load_mcp_tools to return empty (simulating failure)
     with patch("app.services.ai.tool_factory._load_mcp_tools", return_value={}):
         tools = build_tool_map_with_mcp(
-            db,
+            session_factory,
             retriever=retriever,
             llm=llm,
             mcp_endpoints=["http://localhost:9999/sse"],
@@ -83,7 +83,7 @@ def test_build_tool_map_with_mcp_load_failure_non_blocking() -> None:
 
 def test_build_tool_map_with_mcp_merges_external_tools() -> None:
     """External MCP tools are merged into the tool map."""
-    db = MagicMock()
+    session_factory = MagicMock()
     retriever = MagicMock()
     llm = MagicMock()
 
@@ -94,7 +94,7 @@ def test_build_tool_map_with_mcp_merges_external_tools() -> None:
         return_value={"external_search": external_tool},
     ):
         tools = build_tool_map_with_mcp(
-            db,
+            session_factory,
             retriever=retriever,
             llm=llm,
             mcp_endpoints=["http://localhost:8081/sse"],
@@ -108,7 +108,7 @@ def test_build_tool_map_with_mcp_merges_external_tools() -> None:
 
 def test_build_tool_map_with_mcp_multiple_endpoints() -> None:
     """Multiple MCP endpoints are all loaded."""
-    db = MagicMock()
+    session_factory = MagicMock()
     retriever = MagicMock()
     llm = MagicMock()
 
@@ -127,7 +127,7 @@ def test_build_tool_map_with_mcp_multiple_endpoints() -> None:
 
     with patch("app.services.ai.tool_factory._load_mcp_tools", side_effect=mock_load):
         tools = build_tool_map_with_mcp(
-            db,
+            session_factory,
             retriever=retriever,
             llm=llm,
             mcp_endpoints=[

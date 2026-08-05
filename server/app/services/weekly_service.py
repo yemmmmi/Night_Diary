@@ -256,7 +256,7 @@ def generate_weekly_report(
     reference: date | None = None,
 ) -> WeeklyReportRow:
     """End-to-end entry: build planner from container and create a weekly report."""
-    planner = container.build_execution_planner(db, user_id=user_id)
+    planner = container.build_execution_planner(user_id=user_id)
     return create_weekly_report(db, user_id=user_id, planner=planner, reference=reference)
 
 
@@ -270,5 +270,5 @@ def regenerate_weekly_report(
     """Force a fresh weekly report — replaces any existing one for the week."""
     start, _ = week_bounds(reference)
     delete_report_for_period(db, user_id=user_id, period_start=start)
-    planner = container.build_execution_planner(db, user_id=user_id)
+    planner = container.build_execution_planner(user_id=user_id)
     return create_weekly_report(db, user_id=user_id, planner=planner, reference=reference)

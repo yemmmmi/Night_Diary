@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, ClassVar
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.services.ai import agent_executor, chain_executor, multi_agent_executor
 from app.services.ai.prompts import FALLBACK_FEEDBACK, TEMPORAL_KEYWORDS
@@ -70,7 +70,7 @@ class ExecutionPlanner:
         long_term: Any | None = None,
         working_memory: Any | None = None,
         decision_logger: AgentDecisionLogger | None = None,
-        db: Session | None = None,
+        session_factory: sessionmaker[Session] | None = None,
         multi_agent_enabled: bool = True,
     ) -> None:
         self._llm_by_tier = llm_by_tier
@@ -80,7 +80,7 @@ class ExecutionPlanner:
         self._long_term = long_term
         self._working_memory = working_memory
         self._decision_logger = decision_logger or NoOpAgentDecisionLogger()
-        self._db = db
+        self._session_factory = session_factory
         self._multi_agent_enabled = multi_agent_enabled
 
     def plan(
@@ -101,7 +101,7 @@ class ExecutionPlanner:
         if self._multi_agent_enabled and self._graph is not None:
             mode = ExecutionMode.MULTI_AGENT
             reason = "multi-agent graph available"
-        elif has_temporal and self._db is not None and self._retriever is not None:
+        elif has_temporal and self._session_factory is not None and self._retriever is not None:
             mode = ExecutionMode.AGENT
             reason = "temporal keywords detected"
         elif self._llm_by_tier:
@@ -213,8 +213,8 @@ class ExecutionPlanner:
                     referenced_memory_count=run.referenced_memory_count,
                 )
 
-            if decision.mode == ExecutionMode.AGENT and self._db is not None:
-                tools = build_tool_map(self._db, retriever=self._retriever, llm=llm)
+            if decision.mode == ExecutionMode.AGENT and self._session_factory is not None:
+                tools = build_tool_map(self._session_factory, retriever=self._retriever, llm=llm)
                 text, tokens, log = agent_executor.run_agent(llm, context, tools)
                 activated_agents = "react_tools"
                 return AnalysisResult(

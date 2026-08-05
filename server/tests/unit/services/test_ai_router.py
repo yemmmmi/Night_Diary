@@ -19,7 +19,7 @@ def test_plan_light_for_short_diary() -> None:
 def test_plan_agent_for_temporal_keywords() -> None:
     planner = ExecutionPlanner(
         llm_by_tier={"default": StubLLMClient()},
-        db=MagicMock(),
+        session_factory=MagicMock(),
         retriever=MagicMock(),
         multi_agent_enabled=False,
     )

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 import httpx
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.models.app_config import AppConfigRow
 from app.services.ai.utils import filter_diary_results, format_diary_result
@@ -94,21 +94,26 @@ def _fetch_weather_from_api(city: str, api_key: str) -> str | None:
         return None
 
 
-def create_weather_tool(db: Session, *, weather_api_key: str = "") -> ToolFn:
+def create_weather_tool(
+    session_factory: sessionmaker[Session], *, weather_api_key: str = ""
+) -> ToolFn:
     def get_weather_info() -> str:
-        address = _get_config_value(db, "user_address")
+        with session_factory() as session:
+            address = _get_config_value(session, "user_address")
+            api_key = weather_api_key or _get_config_value(session, "weather_api_key")
+        # session closed — connection released before the network call
         if not address:
             return "未设置地址。"
-        api_key = weather_api_key or _get_config_value(db, "weather_api_key")
         result = _fetch_weather_from_api(address, api_key)
         return result or "天气获取失败"
 
     return get_weather_info
 
 
-def create_address_tool(db: Session) -> ToolFn:
+def create_address_tool(session_factory: sessionmaker[Session]) -> ToolFn:
     def get_user_address() -> str:
-        address = _get_config_value(db, "user_address")
+        with session_factory() as session:
+            address = _get_config_value(session, "user_address")
         return address or "用户未设置地址信息"
 
     return get_user_address
@@ -181,7 +186,7 @@ def create_entity_graph_tool(user_id: str = "default") -> ToolFn:
 
 
 def build_tool_map(
-    db: Session,
+    session_factory: sessionmaker[Session],
     *,
     retriever: Any,
     llm: LLMClient,
@@ -190,8 +195,8 @@ def build_tool_map(
 ) -> dict[str, ToolFn]:
     return {
         "search_diary": create_diary_search_tool(retriever),
-        "get_weather_info": create_weather_tool(db, weather_api_key=weather_api_key),
-        "get_user_address": create_address_tool(db),
+        "get_weather_info": create_weather_tool(session_factory, weather_api_key=weather_api_key),
+        "get_user_address": create_address_tool(session_factory),
         "analyze_sentiment": create_sentiment_tool(llm),
         "query_entity_graph": create_entity_graph_tool(user_id=user_id),
     }
@@ -317,7 +322,7 @@ def _load_mcp_tools(endpoint: str) -> dict[str, ToolFn]:
 
 
 def build_tool_map_with_mcp(
-    db: Session,
+    session_factory: sessionmaker[Session],
     *,
     retriever: Any,
     llm: LLMClient,
@@ -340,7 +345,7 @@ def build_tool_map_with_mcp(
     """
     # Start with built-in tools
     tools = build_tool_map(
-        db,
+        session_factory,
         retriever=retriever,
         llm=llm,
         weather_api_key=weather_api_key,

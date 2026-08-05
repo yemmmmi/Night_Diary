@@ -33,7 +33,7 @@ class _FakeContainer:
     def __init__(self, planner: ExecutionPlanner) -> None:
         self._planner = planner
 
-    def build_execution_planner(self, _db, *, user_id: str = "default") -> ExecutionPlanner:
+    def build_execution_planner(self, *, user_id: str = "default") -> ExecutionPlanner:
         return self._planner
 
 

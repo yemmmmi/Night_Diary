@@ -6,31 +6,13 @@ import logging
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings, get_settings
-from app.domain.agents.chat_intent_classifier import ChatIntentClassifier
-from app.domain.agents.context_compressor import ContextCompressor
-from app.domain.agents.empathy_agent import EmpathyAgent
-from app.domain.agents.graph import MultiAgentGraph, create_multi_agent_graph
-from app.domain.agents.insight_agent import InsightAgent
-from app.domain.agents.intent_classifier import IntentClassifier
-from app.domain.agents.retrieval_agent import RetrievalAgent
-from app.domain.agents.supervisor import SupervisorAgent
-from app.domain.feedback.prompt_tuner import PromptTuner
-from app.domain.feedback.thompson_sampling import ThompsonSampling
-from app.domain.knowledge.store import DomainKnowledgeStore
-from app.domain.memory.episodic import EpisodicMemory
-from app.domain.memory.long_term import LongTermMemory
-from app.domain.memory.working import WorkingMemory
-from app.domain.rag.bm25 import BM25Index
-from app.domain.rag.card_collections import CardCollectionManager
-from app.domain.rag.collections import DiaryCollectionManager
-from app.domain.rag.retriever import HybridRetriever
-from app.domain.skills.registry import create_diary_registry
+from app.shared.embeddings import build_embedding_function
 from app.infrastructure.agent_decision_logger import SqliteAgentDecisionLogger
 from app.infrastructure.database import create_db_engine, create_session_factory, init_db
 from app.infrastructure.feedback_repository import SqliteStylePreferenceStore
@@ -40,11 +22,36 @@ from app.infrastructure.memory_repository import (
     SqliteLongTermProfileStore,
 )
 from app.infrastructure.skill_activation_tracer import SqliteSkillActivationTracer
-from app.services.ai.router import ExecutionPlanner, resolve_llm_clients_by_tier
 from app.shared.errors import AIServiceUnavailableError
 from app.shared.llm import LLMClient
 from app.shared.llm_factory import LLMFactory
 from app.shared.tracing_llm import TracingLLMClient
+
+# Heavy AI/RAG imports deferred to TYPE_CHECKING so that ``create_core``
+# (diary CRUD only) doesn't trigger langchain / chromadb / torch loads.
+# These modules are imported lazily inside methods that actually need them.
+if TYPE_CHECKING:
+    from app.domain.agents.chat_intent_classifier import ChatIntentClassifier
+    from app.domain.agents.context_compressor import ContextCompressor
+    from app.domain.agents.empathy_agent import EmpathyAgent
+    from app.domain.agents.graph import MultiAgentGraph, create_multi_agent_graph
+    from app.domain.agents.insight_agent import InsightAgent
+    from app.domain.agents.intent_classifier import IntentClassifier
+    from app.domain.agents.retrieval_agent import RetrievalAgent
+    from app.domain.agents.supervisor import SupervisorAgent
+    from app.domain.feedback.prompt_tuner import PromptTuner
+    from app.domain.feedback.thompson_sampling import ThompsonSampling
+    from app.domain.knowledge.store import DomainKnowledgeStore
+    from app.domain.memory.episodic import EpisodicMemory
+    from app.domain.memory.long_term import LongTermMemory
+    from app.domain.memory.working import WorkingMemory
+    from app.domain.rag.bm25 import BM25Index
+    from app.domain.rag.card_collections import CardCollectionManager
+    from app.domain.rag.collections import DiaryCollectionManager
+    from app.domain.rag.reranker import Reranker
+    from app.domain.rag.retriever import HybridRetriever
+    from app.domain.skills.registry import create_diary_registry
+    from app.services.ai.router import ExecutionPlanner, resolve_llm_clients_by_tier
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +143,10 @@ class ServiceContainer:
         if self.episodic_memory is not None:
             return
 
+        from app.domain.memory.episodic import EpisodicMemory
+        from app.domain.memory.long_term import LongTermMemory
+        from app.domain.memory.working import WorkingMemory
+
         episodic_store = SqliteEpisodicMemoryStore(self.session_factory)
         episodic = EpisodicMemory(store=episodic_store, user_id=user_id)
         try:
@@ -152,7 +163,12 @@ class ServiceContainer:
     def _ensure_card_collection_locked(self) -> None:
         """Initialise the card Chroma collection. Hold ``self._ai_lock``. Idempotent."""
         if self.card_collection is None:
-            self.card_collection = CardCollectionManager(settings=self.settings)
+            from app.domain.rag.card_collections import CardCollectionManager
+
+            self.card_collection = CardCollectionManager(
+                settings=self.settings,
+                embedding_function=build_embedding_function(self.settings),
+            )
 
     def ensure_memory(self, *, user_id: str = "default") -> None:
         """Lightweight path for card flows: three-layer memory + card collection.
@@ -177,13 +193,24 @@ class ServiceContainer:
                 return
 
             cfg = self.settings
-            diary_collection = DiaryCollectionManager(settings=cfg)
+            from app.domain.rag.collections import DiaryCollectionManager
+            from app.domain.knowledge.store import DomainKnowledgeStore
+            from app.domain.rag.bm25 import BM25Index
+            from app.domain.rag.retriever import HybridRetriever
+
+            embedding_fn = build_embedding_function(cfg)
+            diary_collection = DiaryCollectionManager(
+                settings=cfg,
+                embedding_function=embedding_fn,
+            )
             self._ensure_card_collection_locked()
             knowledge_store = DomainKnowledgeStore(settings=cfg)
             bm25 = BM25Index()
+            reranker = self._build_reranker(cfg)
             retriever = HybridRetriever(
                 collection_manager=diary_collection,
                 bm25_index=bm25,
+                reranker=reranker,
             )
 
             self._ensure_memory_layers_locked(user_id=user_id)
@@ -193,6 +220,23 @@ class ServiceContainer:
             self.bm25_index = bm25
             self.retriever = retriever
             logger.info("AI stack ready (RAG + memory + agents)")
+
+    @staticmethod
+    def _build_reranker(cfg: Settings) -> Reranker | None:
+        """Build a reranker from local model weights, gracefully degrade to None.
+
+        Looks for a fine-tuned reranker under ``models_dir/reranker-night-diary``;
+        falls back to the base ``BAAI/bge-reranker-base`` if the fine-tuned
+        directory is absent. Any load failure is caught and logged — the
+        retriever still works without reranking (RRF-fused order is returned).
+        """
+        fine_tuned = Path(cfg.models_dir) / "reranker-night-diary"
+        model_name = str(fine_tuned) if fine_tuned.exists() else "BAAI/bge-reranker-base"
+        try:
+            return Reranker(model_name=model_name, local_files_only=True)
+        except Exception as exc:
+            logger.warning("Reranker init skipped (%s); degrading to no-rerank: %s", model_name, exc)
+            return None
 
     @classmethod
     def create(cls, settings: Settings | None = None) -> ServiceContainer:
@@ -206,17 +250,26 @@ class ServiceContainer:
 
     def _llm_for_tier(
         self,
-        db: Session,
         tier: str,
         *,
         agent_name: str = "execution_planner",
     ) -> LLMClient | None:
-        clients = resolve_llm_clients_by_tier(
-            db,
-            llm_factory=self.llm_factory,
-            tracer=self.llm_tracer,
-            prefer_active=True,
-        )
+        """Resolve an LLM client for a given tier using a short-lived session.
+
+        The DB query (reading model_providers rows) is a quick operation, so
+        we open a dedicated session, fetch the config, and close it immediately
+        — the connection is released back to the pool before this method
+        returns.  This avoids holding a connection during long LLM calls.
+        """
+        from app.services.ai.router import resolve_llm_clients_by_tier
+
+        with self.session_factory() as session:
+            clients = resolve_llm_clients_by_tier(
+                session,
+                llm_factory=self.llm_factory,
+                tracer=self.llm_tracer,
+                prefer_active=True,
+            )
         if clients:
             return clients.get(tier) or clients.get("default") or next(iter(clients.values()))
         try:
@@ -232,7 +285,7 @@ class ServiceContainer:
             return None
 
     def get_chat_intent_classifier(
-        self, db: Session, *, user_id: str = "default"
+        self, *, user_id: str = "default"
     ) -> ChatIntentClassifier:
         """Get a cached ChatIntentClassifier wired with a light-tier LLM.
 
@@ -242,7 +295,9 @@ class ServiceContainer:
         """
         if self._chat_intent_classifier is not None:
             return self._chat_intent_classifier
-        llm = self._llm_for_tier(db, "light", agent_name="chat_intent_classifier")
+        from app.domain.agents.chat_intent_classifier import ChatIntentClassifier
+
+        llm = self._llm_for_tier("light", agent_name="chat_intent_classifier")
         self._chat_intent_classifier = ChatIntentClassifier(
             llm=llm,
             tracer=self.llm_tracer,
@@ -277,7 +332,7 @@ class ServiceContainer:
         return self._conversation_graph
 
     def build_multi_agent_graph(
-        self, db: Session, *, user_id: str = "default"
+        self, *, user_id: str = "default"
     ) -> MultiAgentGraph | None:
         self.ensure_ai_stack(user_id=user_id)
         assert self.knowledge_store is not None and self.retriever is not None
@@ -285,7 +340,19 @@ class ServiceContainer:
         if self._multi_agent_graph is not None:
             return self._multi_agent_graph
 
-        llm = self._llm_for_tier(db, "heavy", agent_name="supervisor")
+        # Lazy imports — only loaded when multi-agent graph is actually built.
+        from app.domain.agents.context_compressor import ContextCompressor
+        from app.domain.agents.empathy_agent import EmpathyAgent
+        from app.domain.agents.graph import create_multi_agent_graph
+        from app.domain.agents.insight_agent import InsightAgent
+        from app.domain.agents.intent_classifier import IntentClassifier
+        from app.domain.agents.retrieval_agent import RetrievalAgent
+        from app.domain.agents.supervisor import SupervisorAgent
+        from app.domain.feedback.prompt_tuner import PromptTuner
+        from app.domain.feedback.thompson_sampling import ThompsonSampling
+        from app.domain.skills.registry import create_diary_registry
+
+        llm = self._llm_for_tier("heavy", agent_name="supervisor")
         if llm is None:
             return None
 
@@ -306,14 +373,14 @@ class ServiceContainer:
         graph = create_multi_agent_graph(
             supervisor,
             EmpathyAgent(
-                self._llm_for_tier(db, "medium", agent_name="empathy") or llm,
+                self._llm_for_tier("medium", agent_name="empathy") or llm,
                 self.knowledge_store,
                 model=model_name,
                 tracer=self.llm_tracer,
             ),
             RetrievalAgent(self.retriever, self.knowledge_store),
             InsightAgent(
-                self._llm_for_tier(db, "heavy", agent_name="insight") or llm,
+                self._llm_for_tier("heavy", agent_name="insight") or llm,
                 self.knowledge_store,
                 model=model_name,
                 tracer=self.llm_tracer,
@@ -325,7 +392,9 @@ class ServiceContainer:
         self.prompt_tuner = prompt_tuner
         return graph
 
-    def build_execution_planner(self, db: Session, *, user_id: str = "default") -> ExecutionPlanner:
+    def build_execution_planner(self, *, user_id: str = "default") -> ExecutionPlanner:
+        from app.services.ai.router import ExecutionPlanner, resolve_llm_clients_by_tier
+
         self.ensure_ai_stack(user_id=user_id)
         assert (
             self.retriever is not None
@@ -334,12 +403,15 @@ class ServiceContainer:
             and self.working_memory is not None
         )
 
-        llm_by_tier = resolve_llm_clients_by_tier(
-            db,
-            llm_factory=self.llm_factory,
-            tracer=self.llm_tracer,
-            prefer_active=True,
-        )
+        # Use a short-lived session for LLM client resolution so the
+        # connection is released immediately (before any LLM network call).
+        with self.session_factory() as session:
+            llm_by_tier = resolve_llm_clients_by_tier(
+                session,
+                llm_factory=self.llm_factory,
+                tracer=self.llm_tracer,
+                prefer_active=True,
+            )
         if not llm_by_tier:
             try:
                 default = self.llm_factory.create_default()
@@ -358,7 +430,7 @@ class ServiceContainer:
             except AIServiceUnavailableError:
                 llm_by_tier = {}
 
-        graph = self.build_multi_agent_graph(db, user_id=user_id) if llm_by_tier else None
+        graph = self.build_multi_agent_graph(user_id=user_id) if llm_by_tier else None
         return ExecutionPlanner(
             llm_by_tier=llm_by_tier,
             multi_agent_graph=graph,
@@ -367,6 +439,6 @@ class ServiceContainer:
             long_term=self.long_term_memory,
             working_memory=self.working_memory,
             decision_logger=self.decision_logger,
-            db=db,
+            session_factory=self.session_factory,
             multi_agent_enabled=graph is not None,
         )

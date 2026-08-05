@@ -44,7 +44,7 @@ def persist_trace(db: Session, trace: PipelineTrace, ref_id: str | None = None) 
 
 
 async def publish_trace_complete(trace: PipelineTrace) -> None:
-    """通过 EventBus 推送 trace_complete 事件。best-effort。"""
+    """通过 EventBus 推送 trace_complete 事件 (异步版, 供 SSE handler 使用)。best-effort。"""
     try:
         from app.shared.trace_event_bus import get_event_bus
 
@@ -63,6 +63,37 @@ async def publish_trace_complete(trace: PipelineTrace) -> None:
         )
     except Exception as e:
         logger.warning("Failed to publish trace_complete: %s", e)
+
+
+def publish_trace_complete_sync(trace: PipelineTrace) -> None:
+    """同步版 trace_complete 推送。
+
+    在同步端点 (线程池线程) 中调用 asyncio.run() 会在 Windows 上
+    导致 ProactorEventLoop 冲突使进程崩溃。TraceEventBus.publish
+    内部仅使用 put_nowait (同步操作), 无需事件循环, 因此直接
+    内联其逻辑即可。
+    """
+    try:
+        from app.shared.trace_event_bus import get_event_bus
+
+        event_bus = get_event_bus()
+        event = {
+            "type": "trace_complete",
+            "trace_id": trace.trace_id,
+            "trace": {
+                "status": trace.status,
+                "duration_ms": trace.duration_ms,
+                "span_count": len(trace.spans),
+            },
+        }
+        queues = event_bus._subscribers.get(trace.trace_id, [])
+        for queue in queues:
+            try:
+                queue.put_nowait(event)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning("Failed to publish trace_complete (sync): %s", e)
 
 
 async def publish_span_complete(trace: PipelineTrace, span: TraceSpan) -> None:

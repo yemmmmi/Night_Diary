@@ -1,14 +1,14 @@
-"""MCP Server — exposes existing tools via the Model Context Protocol.
+"""MCP 服务器 — 通过模型上下文协议暴露现有工具。
 
-This allows external MCP clients (e.g. Claude Desktop, other AI agents) to
-discover and invoke the diary tools through a standardized protocol.
+这允许外部 MCP 客户端（如 Claude Desktop、其他 AI 智能体）
+通过标准化协议发现并调用日记工具。
 
-The server wraps the same ToolFn callables from tool_factory.py, so behavior
-is identical to the in-process tool calls. Two transport modes:
-- stdio: for local CLI clients
-- SSE:   for remote HTTP clients
+该服务器包装了 tool_factory.py 中相同的 ToolFn 可调用对象，
+因此行为与进程内工具调用完全一致。两种传输模式：
+- stdio：用于本地 CLI 客户端
+- SSE：  用于远程 HTTP 客户端
 
-Usage:
+用法：
     python -m app.infrastructure.mcp_server --transport stdio
     python -m app.infrastructure.mcp_server --transport sse --port 8080
 """
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def _specs_to_mcp_tools(specs: list[ToolSpec]) -> list[dict[str, Any]]:
-    """Convert internal ToolSpec list to MCP tool definitions."""
+    """将内部 ToolSpec 列表转换为 MCP 工具定义。"""
     return [
         {
             "name": spec.name,
@@ -37,11 +37,11 @@ def _specs_to_mcp_tools(specs: list[ToolSpec]) -> list[dict[str, Any]]:
 
 
 class MCPServer:
-    """Wraps the existing tool factory as an MCP-compatible server.
+    """将现有工具工厂包装为兼容 MCP 的服务器。
 
-    The core logic (``list_tools``/``call_tool``) is decoupled from the MCP
-    library so it can be tested independently. Transport methods
-    (``run_stdio``/``run_sse``) handle the MCP protocol wiring.
+    核心逻辑（``list_tools``/``call_tool``）与 MCP 库解耦，
+    以便独立测试。传输方法（``run_stdio``/``run_sse``）
+    处理 MCP 协议的底层连接。
     """
 
     def __init__(self, container: Any, *, user_id: str = "default") -> None:
@@ -50,16 +50,20 @@ class MCPServer:
         self._tools: dict[str, Any] = {}
         self._specs: list[ToolSpec] = []
 
-    def initialize(self, db_session: Any) -> None:
-        """Build the tool map and specs (requires a DB session)."""
+    def initialize(self) -> None:
+        """构建工具映射和规格。
+
+        Uses the container's session_factory so tools open short-lived
+        sessions on demand — no long-held DB connection during tool calls.
+        """
         from app.services.ai.tool_factory import build_tool_map, build_tool_specs
 
         self._container.ensure_ai_stack(user_id=self._user_id)
         if self._container.retriever is None:
             raise RuntimeError("Retriever unavailable — AI stack not initialized")
-        llm = self._container._llm_for_tier(db_session, "light", agent_name="mcp_tool")
+        llm = self._container._llm_for_tier("light", agent_name="mcp_tool")
         self._tools = build_tool_map(
-            db_session,
+            self._container.session_factory,
             retriever=self._container.retriever,
             llm=llm or self._container.llm_factory.create_default(),
             user_id=self._user_id,
@@ -67,11 +71,11 @@ class MCPServer:
         self._specs = build_tool_specs()
 
     def list_tools(self) -> list[dict[str, Any]]:
-        """Return MCP-formatted tool definitions."""
+        """返回 MCP 格式的工具定义。"""
         return _specs_to_mcp_tools(self._specs)
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
-        """Invoke a tool by name with the given arguments."""
+        """按名称及给定参数调用工具。"""
         fn = self._tools.get(name)
         if fn is None:
             return f"Unknown tool: {name}"
@@ -82,7 +86,7 @@ class MCPServer:
             return f"Tool {name} error: {exc}"
 
     def run_stdio(self) -> None:
-        """Run the MCP server over stdio transport."""
+        """通过 stdio 传输运行 MCP 服务器。"""
         try:
             from mcp.server import Server
             from mcp.server.stdio import stdio_server
@@ -118,7 +122,7 @@ class MCPServer:
         asyncio.run(_main())
 
     def run_sse(self, *, port: int = 8080) -> None:
-        """Run the MCP server over SSE transport (HTTP)."""
+        """通过 SSE 传输运行 MCP 服务器（HTTP）。"""
         try:
             import uvicorn
             from mcp.server import Server
@@ -171,7 +175,7 @@ class MCPServer:
 
 
 def main() -> None:
-    """CLI entry point for the MCP server."""
+    """MCP 服务器的 CLI 入口点。"""
     parser = argparse.ArgumentParser(description="Night Diary MCP Server")
     parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio")
     parser.add_argument("--port", type=int, default=8080)
@@ -185,8 +189,7 @@ def main() -> None:
     container = ServiceContainer.create_core()
     server = MCPServer(container, user_id=args.user_id)
 
-    with container.session() as db:
-        server.initialize(db)
+    server.initialize()
 
     if args.transport == "stdio":
         server.run_stdio()
