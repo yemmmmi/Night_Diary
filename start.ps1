@@ -10,6 +10,26 @@ Write-Host "       YeJi NightDiary V2  Start" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
+# 0. Load .env file (so child processes inherit DATABASE_URL etc.)
+$EnvFile = Join-Path $ProjectRoot ".env"
+if (Test-Path $EnvFile) {
+    Write-Host "[0/2] Loading .env..." -ForegroundColor Yellow
+    Get-Content $EnvFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith("#")) {
+            $parts = $line -split '=', 2
+            if ($parts.Length -eq 2) {
+                $key = $parts[0].Trim()
+                $value = $parts[1].Trim().Trim('"').Trim("'")
+                Set-Item -Path "Env:$key" -Value $value
+            }
+        }
+    }
+    Write-Host "      .env loaded" -ForegroundColor Green
+} else {
+    Write-Host "[0/2] No .env found, using defaults (SQLite)" -ForegroundColor DarkGray
+}
+
 # 1. Start backend
 Write-Host "[1/2] Starting backend (port 8000)..." -ForegroundColor Yellow
 $backendCmd = Start-Process -FilePath "python" `
