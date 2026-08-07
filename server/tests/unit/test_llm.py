@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -146,3 +147,36 @@ def test_create_default_raises_when_env_unconfigured() -> None:
     factory = LLMFactory(settings=Settings(llm_api_key=""))
     with pytest.raises(AIServiceUnavailableError):
         factory.create_default()
+
+
+@pytest.mark.asyncio
+async def test_tracing_llm_client_astream_delegates_to_inner():
+    """TracingLLMClient.astream 应委托给 inner 的 astream 并逐 token yield。"""
+    from app.shared.tracing_llm import TracingLLMClient
+
+    class StubStreamLLM:
+        """Stub LLM that supports astream yielding token chunks."""
+
+        def invoke(self, prompt: str) -> Any:
+            return "full reply"
+
+        async def ainvoke(self, prompt: str) -> Any:
+            return "full reply"
+
+        async def astream(self, prompt: str):
+            for token in ["Hello", " ", "world"]:
+                yield token
+
+    stub = StubStreamLLM()
+    client = TracingLLMClient(inner=stub, model="test-model")
+    tokens = []
+    async for token in client.astream("test prompt"):
+        tokens.append(token)
+    assert tokens == ["Hello", " ", "world"]
+
+
+def test_llm_client_protocol_has_astream():
+    """LLMClient Protocol 应声明 astream 方法。"""
+    from app.shared.llm import LLMClient
+
+    assert hasattr(LLMClient, "astream")
