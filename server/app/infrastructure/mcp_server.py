@@ -1,10 +1,10 @@
-"""MCP Server — exposes existing tools via the Model Context Protocol.
+"""MCP server — exposes the existing tools over the Model Context Protocol.
 
-This allows external MCP clients (e.g. Claude Desktop, other AI agents) to
-discover and invoke the diary tools through a standardized protocol.
+This lets external MCP clients (e.g. Claude Desktop, other AI agents)
+discover and call the diary tools through a standardised protocol.
 
-The server wraps the same ToolFn callables from tool_factory.py, so behavior
-is identical to the in-process tool calls. Two transport modes:
+The server wraps the same ``ToolFn`` callables from ``tool_factory.py``, so
+behaviour is identical to in-process tool calls. Two transports:
 - stdio: for local CLI clients
 - SSE:   for remote HTTP clients
 
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def _specs_to_mcp_tools(specs: list[ToolSpec]) -> list[dict[str, Any]]:
-    """Convert internal ToolSpec list to MCP tool definitions."""
+    """Convert the internal ``ToolSpec`` list into MCP tool definitions."""
     return [
         {
             "name": spec.name,
@@ -37,11 +37,11 @@ def _specs_to_mcp_tools(specs: list[ToolSpec]) -> list[dict[str, Any]]:
 
 
 class MCPServer:
-    """Wraps the existing tool factory as an MCP-compatible server.
+    """Wrap the existing tool factory into an MCP-compatible server.
 
     The core logic (``list_tools``/``call_tool``) is decoupled from the MCP
-    library so it can be tested independently. Transport methods
-    (``run_stdio``/``run_sse``) handle the MCP protocol wiring.
+    library so it can be tested independently. The transport methods
+    (``run_stdio``/``run_sse``) handle the low-level MCP protocol connections.
     """
 
     def __init__(self, container: Any, *, user_id: str = "default") -> None:
@@ -50,16 +50,20 @@ class MCPServer:
         self._tools: dict[str, Any] = {}
         self._specs: list[ToolSpec] = []
 
-    def initialize(self, db_session: Any) -> None:
-        """Build the tool map and specs (requires a DB session)."""
+    def initialize(self) -> None:
+        """Build the tool map and specs.
+
+        Uses the container's session_factory so tools open short-lived
+        sessions on demand — no long-held DB connection during tool calls.
+        """
         from app.services.ai.tool_factory import build_tool_map, build_tool_specs
 
         self._container.ensure_ai_stack(user_id=self._user_id)
         if self._container.retriever is None:
             raise RuntimeError("Retriever unavailable — AI stack not initialized")
-        llm = self._container._llm_for_tier(db_session, "light", agent_name="mcp_tool")
+        llm = self._container._llm_for_tier("light", agent_name="mcp_tool")
         self._tools = build_tool_map(
-            db_session,
+            self._container.session_factory,
             retriever=self._container.retriever,
             llm=llm or self._container.llm_factory.create_default(),
             user_id=self._user_id,
@@ -67,11 +71,11 @@ class MCPServer:
         self._specs = build_tool_specs()
 
     def list_tools(self) -> list[dict[str, Any]]:
-        """Return MCP-formatted tool definitions."""
+        """Return the MCP-format tool definitions."""
         return _specs_to_mcp_tools(self._specs)
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
-        """Invoke a tool by name with the given arguments."""
+        """Call a tool by name with the given arguments."""
         fn = self._tools.get(name)
         if fn is None:
             return f"Unknown tool: {name}"
@@ -86,28 +90,43 @@ class MCPServer:
         try:
             from mcp.server import Server
             from mcp.server.stdio import stdio_server
-            from mcp.types import TextContent, Tool
+            from mcp.types import (
+                CallToolRequestParams,
+                CallToolResult,
+                ListToolsResult,
+                PaginatedRequestParams,
+                TextContent,
+                Tool,
+            )
         except ImportError:
             logger.error("mcp package not installed; run: pip install mcp")
             return
 
-        server = Server("night-diary")
+        async def list_tools(
+            ctx: Any, params: PaginatedRequestParams | None
+        ) -> ListToolsResult:
+            del ctx, params  # protocol handler; request metadata not needed
+            return ListToolsResult(
+                tools=[
+                    Tool(
+                        name=spec.name,
+                        description=spec.description,
+                        input_schema=spec.parameters,
+                    )
+                    for spec in self._specs
+                ]
+            )
 
-        @server.list_tools()  # type: ignore[untyped-decorator, no-untyped-call]
-        async def list_tools() -> list[Tool]:
-            return [
-                Tool(
-                    name=spec.name,
-                    description=spec.description,
-                    inputSchema=spec.parameters,
-                )
-                for spec in self._specs
-            ]
+        async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
+            del ctx
+            result = self.call_tool(params.name, params.arguments or {})
+            return CallToolResult(content=[TextContent(type="text", text=result)])
 
-        @server.call_tool()  # type: ignore[untyped-decorator, no-untyped-call]
-        async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-            result = self.call_tool(name, arguments)
-            return [TextContent(type="text", text=result)]
+        server = Server(
+            "night-diary",
+            on_list_tools=list_tools,
+            on_call_tool=call_tool,
+        )
 
         import asyncio
 
@@ -123,34 +142,46 @@ class MCPServer:
             import uvicorn
             from mcp.server import Server
             from mcp.server.sse import SseServerTransport
+            from mcp.types import (
+                CallToolRequestParams,
+                CallToolResult,
+                ListToolsResult,
+                PaginatedRequestParams,
+                TextContent,
+                Tool,
+            )
             from starlette.applications import Starlette
             from starlette.routing import Mount, Route
         except ImportError:
             logger.error("mcp/SSE deps not installed; run: pip install mcp uvicorn starlette")
             return
 
-        server = Server("night-diary-sse")
+        async def list_tools(
+            ctx: Any, params: PaginatedRequestParams | None
+        ) -> ListToolsResult:
+            del ctx, params  # protocol handler; request metadata not needed
+            return ListToolsResult(
+                tools=[
+                    Tool(
+                        name=spec.name,
+                        description=spec.description,
+                        input_schema=spec.parameters,
+                    )
+                    for spec in self._specs
+                ]
+            )
+
+        async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
+            del ctx
+            result = self.call_tool(params.name, params.arguments or {})
+            return CallToolResult(content=[TextContent(type="text", text=result)])
+
+        server = Server(
+            "night-diary-sse",
+            on_list_tools=list_tools,
+            on_call_tool=call_tool,
+        )
         sse = SseServerTransport("/messages/")
-
-        @server.list_tools()  # type: ignore[untyped-decorator, no-untyped-call]
-        async def list_tools() -> list[Any]:
-            from mcp.types import Tool
-
-            return [
-                Tool(
-                    name=spec.name,
-                    description=spec.description,
-                    inputSchema=spec.parameters,
-                )
-                for spec in self._specs
-            ]
-
-        @server.call_tool()  # type: ignore[untyped-decorator, no-untyped-call]
-        async def call_tool(name: str, arguments: dict[str, Any]) -> list[Any]:
-            from mcp.types import TextContent
-
-            result = self.call_tool(name, arguments)
-            return [TextContent(type="text", text=result)]
 
         async def handle_sse(request: Any) -> Any:
             async with sse.connect_sse(request.scope, request.receive, request._send) as (
@@ -185,8 +216,7 @@ def main() -> None:
     container = ServiceContainer.create_core()
     server = MCPServer(container, user_id=args.user_id)
 
-    with container.session() as db:
-        server.initialize(db)
+    server.initialize()
 
     if args.transport == "stdio":
         server.run_stdio()

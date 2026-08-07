@@ -1,0 +1,119 @@
+---
+description: "Night Diary V2 当前施工进度"
+alwaysApply: true
+---
+
+# 当前进度
+
+> **项目状态**：✅ Phase A（5/5）。✅ Phase B（11/11）。✅ Phase C（3/3）。✅ **Phase D**（4/4）。▶ **Phase E** — 交付打包待施工。
+>
+> **全项目进度**：23/24 PR（Phase A:5 + Phase B:11 + Phase C:3 + Phase D:4）。
+>
+> **最后更新**：2026-06-12（进入 **E-1** `chore/delivery`）
+
+## 架构转型说明
+
+V2 已放弃 SQL/Redis/JWT 等后端数据基础设施，转型为**本地桌面应用**：
+- **桌面壳**: Tauri v2 (Rust) + Vue 3 (WebView)
+- **数据存储**: SQLite（替代 MySQL）
+- **AI 引擎**: Python FastAPI sidecar 子进程
+- **无认证**: 单用户本地应用，无需登录
+- **详细方案**: `docs/本地化桌面端重构方案.md`
+
+## Phase A: 新地基 ✅ 已完成
+
+**已合并**（5/5 PR）：
+
+| PR | Branch | 对应 task.md | 内容 |
+|----|--------|-------------|------|
+| #3 | `refactor/desktop-architecture` | phase-a-1 | 服务端适配：config/main 去 Redis/JWT，SQLite，删除 docker-compose |
+| #6 | `feature/tauri-shell` | phase-a-2 | Tauri v2 初始化：src-tauri/、Rust sidecar 进程管理、splash |
+| #7 | `feature/frontend-migration` | phase-a-3 | Vue 迁移：`web/` → `src/`；Vue-Tauri 桥接；根目录标准布局 |
+| #9 | `chore/frontend-cleanup` | phase-a-4 | 构建链路验证收尾，README 目录结构更新 |
+| #10 | `feature/python-pyinstaller` | phase-a-5 | PyInstaller 打包：`server/build.spec` → `nightdiary-backend.exe` |
+
+## Phase B: AI 核心 ✅ 已完成
+
+**已合并 / 已交付**（11/11 PR）：
+
+| PR | 分支 | 内容 |
+|----|------|------|
+| B-1 ✅ | `feature/domain-knowledge` | ChromaDB 知识库：DomainKnowledgeStore + EntityExtractor |
+| B-2 ✅ | `feature/rag-foundation` | RAG 基础：ChunkSplitter + BM25Index（增量）+ DiaryCollectionManager |
+| B-3 ✅ | `feature/rag-retrieval` | RAG 检索：HybridRetriever + Reranker（降级） |
+| B-3.5 ✅ | `feature/eval-rag-baseline` | RAG 离线评估：30×20 标注数据集 + Recall@5/MRR/nDCG@5 检索基线 |
+| B-4 ✅ | `feature/domain-memory` | 三层记忆（Episodic 默认持久化 + Long-Term + Working）+ 多轮 eval scenario |
+| B-5 ✅ | `feature/domain-feedback` | Thompson Sampling + PromptTuner |
+| B-6 ✅ | `feature/skills-migration` | 10 Skill 迁移（MVP: crisis_detector + sentiment_skill）+ tracer 基础设施 |
+| B-7 ✅ | `feature/agents-shared` | Agent 共享设施 + LLM-as-Judge 评估框架 |
+| B-8 ✅ | `feature/agents-workers` | 3 Worker Agent + IntentClassifier + 生成质量基线 |
+| B-9 ✅ | `feature/agents-orchestration` | Supervisor + asyncio Graph + Skill 生产集成 + 多轮 eval（PR #24） |
+| B-10 ✅ | `feature/agents-resilience` | ContextCompressor + 韧性单测 + 8 条对抗 eval |
+
+**Phase B 管线入口**：`create_multi_agent_graph()`（`supervisor.py` + `graph.py`）→ classify → 分相扇出（retrieval → empathy/insight）→ synthesize；入口自动 ContextCompressor。
+
+### Phase B/C 遗留约束（Phase D 仍须遵守）
+
+1. **检索基线**：改动 `domain/rag/` 或 `domain/knowledge/` 后跑 `make eval-rag`，容差 0.05。
+2. **Tracer 边界**：Agent 经 DI 接收 `LLMCallTracer` / `AgentDecisionLogger`，禁止 domain 直写 ORM。
+3. **Skill 生产路径**：`Supervisor.classify()` → `SkillRegistry.select_skills()` 为唯一生产调用点。
+4. **LLM 接线**：`LLMFactory.create_for_tier` / `resolve_by_tier` + `#/settings` 配置页；per-tier 路由经 `ServiceContainer` → `ExecutionPlanner`。
+5. **API 入口**：业务调用走 `/api/v1/*`；分析编排 `analysis_service.trigger_analysis()`。
+
+## Phase C: 业务层 ✅ 已完成
+
+**目标**：服务层 + API 路由 + LLM 配置管理，使 AI 分析端到端可调用。
+
+| PR | 分支 | 内容 |
+|----|------|------|
+| C-1 ✅ | `feature/services-layer` | diary/analysis/ai 服务层 + ServiceContainer + 22 服务单测（**#26**） |
+| C-2 ✅ | `feature/api-routes` | api/v1 全部路由 + AppError HTTP 映射 + stats_service（**#27**） |
+| C-3 ✅ | `feature/llm-management` | LLMFactory tier 解析 + SettingsScene + test_llm（**#28**） |
+
+**C-3 交付摘要**（2026-06-05，7 commits）：
+- **LLMFactory**：`create_for_tier` / `resolve_by_tier`；router 委托工厂解析 per-tier 客户端
+- **前端**：`#/settings` LLM 配置表单 + `shared/api/models.ts`；`vue-router` hash 路由
+- **测试**：`tests/unit/test_llm.py` 7 tests；全量 unit **239 passed**
+- **分支注记**：Phase C 栈（C-1~C-3）在 `feature/services-layer`（#9392e51）；开 D-1 前建议从该栈或已同步的 `main` 拉取
+
+## Phase D: 游戏化 UI ✅ 已完成
+
+| PR | 分支 | 内容 |
+|----|------|------|
+| D-1 ✅ | `feature/design-system` | GlassPanel / GameButton / ParticleBackground / PageTransition 等（**#29**） |
+| D-2 ✅ | `feature/home-and-diary` | 首页 + 日记写作场景（**#31**） |
+| D-3 ✅ | `feature/startup-optimization` | AI 分析 + 历史回顾（**#32**，含 D-3 场景与启动优化） |
+| D-4 ✅ | `feature/settings-and-onboarding` | 游戏化设置 + 首次引导（**#33**） |
+
+## 当前 Phase: E — 交付
+
+| PR | 分支 | 内容 |
+|----|------|------|
+| E-1 ▶ | `chore/delivery` | PyInstaller 最终 spec + Tauri bundle（嵌入 Python .exe）+ Windows 安装器 + E2E + 用户/开发文档 |
+
+**E-1 施工清单**（详见 `task.md` → `phase-e-1-delivery`）：
+1. `server/build.spec` — hidden imports / 二进制依赖收尾
+2. `tauri.conf.json` — bundle resources + NSIS 安装器
+3. 模型下载器（首次启动 embedding/reranker，进度 UI）
+4. 自动备份 — D-4 已有 Tauri `backup.rs` + 退出 hook，E-1 验收对齐
+5. Playwright E2E：日记 CRUD → AI 分析 → 反馈
+6. 性能 smoke（embedding warmup / LLM 延迟）
+7. `README.md`、`docs/user-guide.md`、`docs/dev-guide.md`
+
+## 后续 Phase
+
+（E-1 为最后一 PR；合并后 **24/24** 交付完成）
+
+## Agent 须知
+
+1. **所有新 PR 使用新架构**：无 MySQL、无 Redis、无 JWT、无 Docker
+2. **V1 只读参考**：`D:\work\night_diary`（不可 import）
+3. **当前 Workdir**：**Phase E-1** `chore/delivery` — 从 `main` 施工交付打包（见 `task.md` phase-e-1-delivery）
+4. **Phase B/C 成果直接复用（不得重造）**：
+   - `create_multi_agent_graph()` — 多 Agent 编排唯一入口
+   - `ServiceContainer` + `/api/v1/*` — 业务层唯一 HTTP 入口
+   - `LLMFactory.resolve_by_tier` — per-tier LLM 生产接线
+   - `tests/eval/generation/BASELINE.md` — empathy / insight / multiturn / adversarial 四段基线
+   - `tests/eval/rag/baseline.json` — 检索四分支基线
+5. **分支命名**：`feature/`、`refactor/`（见 `collaboration.mdc`）
+6. **检索回归检查**：凡 PR 涉及 RAG/知识库目录，合并前 `make eval-rag` 确认无退化

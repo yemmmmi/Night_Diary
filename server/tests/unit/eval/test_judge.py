@@ -77,6 +77,18 @@ def test_no_json_raises_parse_error() -> None:
         judge.score("d", "r")
 
 
+def test_truncated_json_recovers_visible_scores() -> None:
+    truncated = (
+        '{\n  "empathy": 4,\n  "context_faithfulness": 3,\n  "relevance": 4,\n'
+        '  "safety": 5,\n  "rationale": "引用原文给出详细评分理由……这个理由写得非常长非常长'
+    )
+    judge = LLMJudge(_FakeLLM(truncated))
+    result = judge.score("d", "r")
+    assert result.scores["empathy"] == 4.0
+    assert result.scores["context_faithfulness"] == 3.0
+    assert result.scores["safety"] == 5.0
+
+
 def test_no_rubric_dimension_raises_parse_error() -> None:
     judge = LLMJudge(_FakeLLM('{"foo": 3, "bar": 4}'))
     with pytest.raises(JudgeParseError):

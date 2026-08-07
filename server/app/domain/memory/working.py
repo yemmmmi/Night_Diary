@@ -1,7 +1,7 @@
-"""Working memory — session context with token-budget enforcement.
+"""Working memory — session context with token budget enforcement.
 
-This PR delivers the domain-level integration contract only. Supervisor /
-Multi-Agent wiring lands in Phase B-9 / C-1.
+This PR only delivers the domain-layer integration contract. The wiring into
+Supervisor / Multi-Agent lands in Phase B-9 / C-1.
 
 Example::
 
@@ -26,11 +26,13 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from app.domain.agents.context_compressor import ContextCompressor
 from app.domain.memory.types import UserProfile, WorkingContext
 from app.shared.token_utils import estimate_tokens
+
+if TYPE_CHECKING:
+    from app.domain.agents.context_compressor import ContextCompressor
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +46,22 @@ _CONTEXT_FIELDS = (
 
 
 class WorkingMemory:
-    """Session-level working memory for one diary analysis turn."""
+    """Session-level working memory for a single diary analysis turn."""
 
     MAX_CONTEXT_TOKENS = MAX_CONTEXT_TOKENS
 
     def __init__(self, *, context_compressor: ContextCompressor | None = None) -> None:
         self._context: WorkingContext | None = None
-        self._compressor = context_compressor or ContextCompressor()
+        if context_compressor is not None:
+            self._compressor = context_compressor
+        else:
+            # Deferred import to avoid pulling the langchain/chromadb import
+            # chain at module load time (~15s of startup time).
+            from app.domain.agents.context_compressor import (
+                ContextCompressor as _ContextCompressor,
+            )
+
+            self._compressor = _ContextCompressor()
 
     @property
     def context(self) -> WorkingContext | None:
@@ -83,7 +94,7 @@ class WorkingMemory:
         return deepcopy(self._context)
 
     def update_context(self, ctx: WorkingContext, turn_result: dict[str, Any]) -> None:
-        """Merge turn output into working memory and enforce token limits."""
+        """Merge a turn's output into working memory, enforcing the token cap."""
         merged = deepcopy(ctx)
         for key, value in turn_result.items():
             if key in _CONTEXT_FIELDS and isinstance(value, str):

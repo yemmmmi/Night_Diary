@@ -13,7 +13,7 @@ from app.main import create_app
 
 
 def _wait_for_bootstrap(client: TestClient, timeout_s: float = 30.0) -> None:
-    """Wait until async sidecar bootstrap sets ``app.state.container``."""
+    """Wait until async backend bootstrap sets ``app.state.container``."""
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         if getattr(client.app.state, "bootstrap_done", False):

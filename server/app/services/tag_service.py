@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.infrastructure.models.tag import TagRow
@@ -20,7 +19,7 @@ DEFAULT_MOOD_TAGS: tuple[tuple[str, str], ...] = (
 
 
 def list_tags(db: Session, *, user_id: str, sort_by_usage: bool = True) -> list[TagRow]:
-    order = desc(TagRow.usage_count) if sort_by_usage else desc(TagRow.created_at)
+    order = TagRow.usage_count.desc() if sort_by_usage else TagRow.created_at.desc()
     return db.query(TagRow).filter(TagRow.user_id == user_id).order_by(order).all()
 
 

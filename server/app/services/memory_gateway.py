@@ -216,7 +216,7 @@ class MemoryGateway:
             # Best-effort long-term promotion.
             if self._long_term is not None:
                 try:
-                    all_entries = self._episodic.get_entries()
+                    all_entries = self._episodic.get_all_entries_for_user(user_id)
                     self._long_term.promote_from_episodic(user_id=user_id, episodic_entries=all_entries)
                 except Exception as exc:
                     logger.warning("MemoryGateway: profile promotion failed: %s", exc)

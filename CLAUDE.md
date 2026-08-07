@@ -131,10 +131,23 @@ make smoke        # 性能冒烟检查
 
 ## 当前状态
 
-✅ Phase 1–3（Web 多用户架构 + 基础设施）+ Agent 架构优化（P1–P3 共 10 个任务）全部完成。
+✅ V2（Web 多用户架构 + 基础设施 + Agent 架构优化 P1–P3）全部完成。▶ **V3 施工中**。
 
 - 后端测试：550+ 通过
 - Web 端可用：Docker Compose 编排（MySQL + Redis + Neo4j + Nginx）
 - Agent 架构：InputPreprocessor / SlotExtractor / HybridEntityExtractor / LangGraph StateGraph / OrchestratorProtocol / Citation 系统 / MCP 集成 / 统一反馈通道
-- 架构分析文档：`.trae/documents/agent架构深度分析与优化实施计划.md`
-- 数据链路报告：`agent-data-flow/agent-data-flow.html`
+- 后端架构文档：`docs/backend-architecture.md`
+
+## V3 定位与路线图
+
+V3 将夜记从「日记记录」升级为**记录 + 规划双轮**的个人生活助手：场景二对话 Agent 助手化，
+新增任务规划域（Task/Plan 模型、PlannerAgent、PlanScene），采用「提案-确认」写路径
+（Agent 只读提案，用户确认后落库）。
+
+阶段顺序：**清洗（▶ 当前）→ P0 流式基础与流式安全 → P1 容错体系 → P2 结构化协议块 →
+P3 任务规划域 → P4 记忆升级 → P5 评估闭环 → P6 性能优化 →（可选 P7 中间件）**
+
+- 当前阶段指针：`.cursor/rules/current_phase.mdc`
+- 分阶段验收与 eval 闸门：`.cursor/rules/execution-plan.mdc`
+- 设计方案（第二版）：`docs/reports/night-diary-v3-agent-analysis/night-diary-v3-agent-analysis.html`（本地未入库）
+- 历史（桌面时代）文档：`docs/archive/`

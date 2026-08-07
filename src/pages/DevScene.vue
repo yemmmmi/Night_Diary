@@ -4,6 +4,7 @@ import { listTraces, getTrace, getDevStats, getMiddlewareStatus, type TraceSumma
 import TraceList from '@/features/dev/TraceList.vue'
 import TraceWaterfall from '@/features/dev/TraceWaterfall.vue'
 import MiddlewareStatus from '@/features/dev/MiddlewareStatus.vue'
+import AccountSwitcher from '@/features/dev/AccountSwitcher.vue'
 
 const traces = ref<TraceSummary[]>([])
 const total = ref(0)
@@ -44,6 +45,12 @@ async function loadStats() {
   }
 }
 
+function reload() {
+  selectedTrace.value = null
+  loadTraces()
+  loadStats()
+}
+
 onMounted(() => {
   loadTraces()
   loadStats()
@@ -57,6 +64,7 @@ onMounted(() => {
     </div>
     <div class="dev-scene__main">
       <div class="dev-scene__topbar">
+        <AccountSwitcher @switched="reload" />
         <MiddlewareStatus v-if="middleware" :status="middleware" />
         <div v-if="stats" class="dev-scene__stats">
           <span>{{ stats.total_traces }} 条</span>

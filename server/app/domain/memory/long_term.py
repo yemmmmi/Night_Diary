@@ -26,6 +26,18 @@ class LongTermMemory:
         profile = self._store.get_profile(user_id)
         return profile if profile is not None else UserProfile()
 
+    def _has_profile(self, user_id: str) -> bool:
+        """Whether a real profile has actually been persisted in the store.
+
+        Unlike ``get_profile`` (which always returns a non-None default),
+        this returns True only when a real profile exists in the store.
+        Used by ``promote_from_episodic`` to decide whether to force-save the
+        first profile.
+        """
+        if self._store is None:
+            return False
+        return self._store.get_profile(user_id) is not None
+
     def update_profile(self, user_id: str, profile: UserProfile) -> None:
         if self._store is None:
             logger.warning("Long-term profile store unavailable; skip update user_id=%s", user_id)
@@ -40,16 +52,24 @@ class LongTermMemory:
         user_id: str,
         episodic_entries: list[EpisodicEntry],
     ) -> None:
-        """Promote emotions/topics that appear on 3+ consecutive days."""
+        """Promote emotions / topics that appear on 3 or more consecutive days."""
         if not episodic_entries:
             logger.info("No episodic entries to promote for user_id=%s", user_id)
             return
 
         profile = self.get_profile(user_id)
+        had_profile = self._has_profile(user_id)
 
         entries_by_date: dict[str, list[EpisodicEntry]] = {}
         for entry in episodic_entries:
-            date_key = datetime.fromtimestamp(entry.timestamp).strftime("%Y-%m-%d")
+            # Prefer event_date (the user-specified diary date) over timestamp
+            # (record creation time). timestamp always reflects "now", which
+            # would make every entry look like it falls on the same day during
+            # batch imports.
+            if entry.event_date:
+                date_key = entry.event_date
+            else:
+                date_key = datetime.fromtimestamp(entry.timestamp).strftime("%Y-%m-%d")
             entries_by_date.setdefault(date_key, []).append(entry)
 
         daily_emotions: dict[str, set[str]] = {}
@@ -57,7 +77,7 @@ class LongTermMemory:
         for date_key, entries in entries_by_date.items():
             daily_emotions[date_key] = {entry.emotion for entry in entries if entry.emotion}
             # Use structured tags for topic detection (P2-2 fix).
-            # Fallback to event_summary only if no tags available.
+            # Fall back to event_summary only when no tags are available.
             topics: set[str] = set()
             for entry in entries:
                 if entry.tags:
@@ -96,7 +116,14 @@ class LongTermMemory:
                         emotion_counts[emotion] += 1
 
             most_common_emotion = emotion_counts.most_common(1)[0][0]
-            if profile.emotion_baseline.dominant_emotion != most_common_emotion:
+            # Update when the dominant emotion changes, or when this is a new
+            # profile that has not been persisted yet. Without this check, a new
+            # profile whose default dominant_emotion ("neutral") matches the
+            # promoted emotion would never be saved.
+            if (
+                profile.emotion_baseline.dominant_emotion != most_common_emotion
+                or not had_profile
+            ):
                 profile.emotion_baseline.dominant_emotion = most_common_emotion
                 logger.info(
                     "Updated dominant emotion to '%s' for user_id=%s",

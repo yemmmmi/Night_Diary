@@ -1,0 +1,165 @@
+---
+description: "V1→V2 迁移准则：禁止盲目照抄 V1 代码，需评估可行性、有自己的判断、不确定时向用户提问"
+alwaysApply: true
+---
+
+# V1 → V2 迁移准则
+
+> **适用工作类型**: A（Phase PR 施工）、C（重构/迁移）。收到涉及 V1 代码的任务时，必须阅读本文件。
+
+## 核心原则
+
+**V1 代码是参考材料，不是蓝图。** 每次从 V1 迁移代码时，你必须在脑中执行以下三步：
+
+```
+1. 理解 V1 做了什么
+2. 判断它在 V2 的新架构中是否仍然成立
+3. 决定保留 / 改造 / 丢弃，并给出理由
+```
+
+**禁止的行为**:
+- 打开 V1 文件 → 复制粘贴 → 改个文件名 → 提交
+- 假设 "V1 能跑的代码 = V2 也能跑"
+- 看到自己不理解的 V1 逻辑时，选择保留而非追问
+
+## V1 的已知问题（迁移时必须警觉）
+
+V1 代码是**被诊断过的、存在已知缺陷的代码**。以下问题已在前序分析中确认，迁移时遇到必须主动处理：
+
+| V1 问题                   | 表现                                                                                             | V2 必须怎么做                                                                 |
+|:--------------------------|:-------------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------|
+| **坏味 2: 死代码**         | `skills/` 整个目录从未被调用；`working_memory` 有实现但未集成                                  | 不能简单原样迁过来。重新评估每个模块是否真的需要，需要时正确集成到管线                     |
+| **坏味 3: 全局副作用**     | 模块级 `load_dotenv()`、`os.environ["HF_HUB_OFFLINE"]=1`、模块级 dict 作为缓存          | 全部改为类实例 + 构造函数注入；配置统一走 `config.py`                                |
+| **坏味 3: 重复实现**       | emotion_estimator 在 empathy_agent 和 crisis_detector 中各自实现；token_utils 在 retrieval_agent 和 context_compressor 中重复 | 提取到 `shared/` 作为统一入口                                                   |
+| **坏味 4: 字符串匹配错误**  | `if "不存在" in str(e)` 判断错误类型                                                      | 使用 `AppError` 子类                                                         |
+| **God class**             | `ai_service.py` 987 行、`vector_service.py` 771 行                                            | 按 task.md 的要求拆分为独立模块                                                 |
+| **Redis/MySQL 依赖**      | `episodic.py` 依赖 Redis Sorted Set；`long_term.py` 依赖 MySQL JSON                           | 替换为进程内 `deque` + SQLite                                                |
+| **自行创建依赖**           | Agent 内部 `SessionLocal()`、`ChatOpenAI(api_key=os.getenv(...))`                             | 全部改为构造函数 DI                                                            |
+
+## 迁移决策框架
+
+当你面对一段 V1 代码时，按以下优先级做决策：
+
+### 优先级 1: 可以直接迁移的（少数情况）
+
+同时满足以下 **所有** 条件：
+- V1 代码不依赖 Redis / MySQL / JWT / Docker
+- 没有模块级副作用（不写 `os.environ`、不调 `load_dotenv()`）
+- 在当前 task.md PR 范围内
+- 你理解每一行在做什么
+- V2 架构文档中没有提到需要修改这个模块
+
+→ **可以照搬**，但在提交信息中注明来源。
+
+### 优先级 2: 需要改造的（多数情况）
+
+满足以下 **任一** 条件：
+- V1 依赖了 Redis / MySQL → 替换存储层
+- V1 有模块级副作用 → 改为类实例 + DI
+- V1 代码结构不合理（God class、重复） → 按 task.md 要求拆分/提取
+- V1 使用了 `HTTPException` → 改为 `AppError`
+- V1 硬编码了路径/密钥 → 改为 `config.py` 注入
+
+→ **先理解逻辑 → 设计方案 → 实施改造**，在提交信息中注明「从 V1 xxx 迁移，做了哪些改动」。
+
+### 优先级 3: 必须丢弃的
+
+满足以下 **任一** 条件：
+- 功能在 V2 架构中不再需要（如 `routers/auth.py`、`routers/admin.py`）
+- 依赖了 V2 已删除的基础设施且无法替换（如分布式锁）
+- 属于 V1 的临时方案/workaround
+
+→ **直接跳过**，不创建对应文件。
+
+### 优先级 4: 需要问我的
+
+满足以下 **任一** 条件：
+- V1 代码做了某事，但你无法确定它在 V2 中是否还需要
+- V1 有看起来奇怪但可能是刻意为之的逻辑
+- 你对某个模块的边界划分有疑问（「这块应该放 domain/ 还是 shared/？」）
+- V1 的某个算法/参数你需要确认是否保留（如阈值、权重、超时时间）
+- 你发现 V1 中可能存在未在 task.md 中提到的 bug 或设计缺陷
+
+→ **停下来，向我提问**。格式如下：
+
+```
+⚠️ 迁移疑问：[模块名]
+
+V1 代码：[粘贴关键片段]
+我的判断：[你的分析]
+需要你确认：[具体问题]
+```
+
+## 具体场景示例
+
+### ✅ 好的迁移
+
+```
+V1: backend/app/knowledge/domain_store.py (187 行)
+    - 使用 chromadb.PersistentClient ✓
+    - 没有 Redis/MySQL 依赖 ✓
+    - 没有模块级副作用 ✓
+    - 所有 Agent 应该通过这一个入口查询 ✗ (V1 中重复实现)
+
+迁移方案:
+    - 保留: PersistentClient 初始化、query()/add()/delete() 核心逻辑
+    - 改造: 确保单例、从 config.py 读 chroma_persist_dir
+    - 新增: query() 加 trace 日志 (task.md 要求)
+    - 删除: V1 中其他地方的重复 ChromaDB 查询代码 (不在本 PR)
+```
+
+### ❌ 差的迁移
+
+```
+V1: backend/app/memory/episodic.py (224 行)
+    - 使用 redis.Redis 作为存储 ← V2 没有 Redis！
+    - 简单改一下 → 复制全部逻辑，把 Redis 换成 deque ← 不够
+    - 存储语义不同: Redis 持久化 vs deque 易失
+
+应该做的:
+    - 理解 V1 的 add/get/evict/prune 逻辑
+    - 重新设计: deque + SQLite 持久化
+    - 注意: V1 依赖 Redis 的 TTL 做过期 → V2 需要自己实现时间衰减
+    - 不确定的地方: 半衰期 7 天是否合适？→ 问用户
+```
+
+### ❌ 更差的迁移
+
+```
+V1: backend/app/skills/registry.py (231 行)
+    - 发现这个文件从未被调用过 ← 死代码
+    - 不管, 原样迁到 V2 ← 错！
+    
+应该做的:
+    - 先确认: task.md 要求 skills 在 V2 中必须集成
+    - 但这不意味着原样照搬: 激活阈值 0.3 合理吗? 没验证过
+    - 贪心算法正确吗? 没在真实数据上跑过
+    - → 问用户: 阈值是否保持 0.3? 是否需要调整?
+```
+
+## 迁移时的默认假设
+
+除非我明确告诉你，否则你在迁移时应该：
+
+- **怀疑 V1 的参数值**: 阈值、权重、超时时间等魔法数字，默认认为需要重新评估
+- **优先简单方案**: V1 可能是过度工程化的，V2 可以从简开始
+- **保持模块独立**: 每个模块不需要知道它将在多大系统中运作
+- **可测试优先**: 每个模块必须能独立单元测试 (mock 依赖)
+
+## Git 网络代理（Agent 必读）
+
+本机通过本地代理访问 GitHub，但 **git 默认不读系统代理**，Agent 新开的 shell 也不继承终端代理。
+因此 Agent 直连 GitHub 会失败（TCP 443 能通，但 TLS 握手被 RST，报
+`fatal: unable to access ...: OpenSSL SSL_connect: SSL_ERROR_SYSCALL`）。
+
+- **代理地址**：`http://127.0.0.1:7897`（系统代理，Clash/Mihomo 类）
+- **症状**：`git fetch/pull/push/ls-remote` 直连报 `SSL_ERROR_SYSCALL`；纯本地操作
+  （`commit`/`log`/`status`/`checkout`/`branch`）不受影响，无需代理。
+
+### 凡涉及远端的 git 操作，二选一加代理
+
+**单条命令（推荐，最不污染环境）**：
+
+```powershell
+git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push -u origin <branch>
+git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 fetch origin

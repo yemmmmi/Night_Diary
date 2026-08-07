@@ -83,10 +83,14 @@ class ContentNormalizer:
                 tags = [t.name for t in entry.tags if t.name]
 
             event_date = None
-            if hasattr(entry, "created_at") and entry.created_at:
-                event_date = entry.created_at.date() if hasattr(entry.created_at, "date") else None
-            elif hasattr(entry, "date") and entry.date:
+            # Prefer user-specified diary date over created_at timestamp.
+            # created_at reflects when the record was inserted (always "today"
+            # for seed scripts), while date is the actual diary date that
+            # should be used for episodic memory grouping and profile promotion.
+            if hasattr(entry, "date") and entry.date:
                 event_date = entry.date
+            elif hasattr(entry, "created_at") and entry.created_at:
+                event_date = entry.created_at.date() if hasattr(entry.created_at, "date") else None
 
             atom = UnifiedMemoryAtom(
                 source="diary",

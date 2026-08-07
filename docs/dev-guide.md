@@ -92,7 +92,7 @@ docker compose -f docker-compose.yml up -d
 
 | 模块 | 职责 |
 |------|------|
-| `server/app/main.py` | FastAPI 入口、`/health` `/ready` `/shutdown` |
+| `server/app/main.py` | FastAPI 入口、`/health` `/ready` |
 | `server/app/services/model_downloader.py` | 首次模型下载（HF 镜像） |
 | `server/app/services/container.py` | DI 容器、AI 栈懒加载 |
 | `server/app/domain/agents/graph.py` | Multi-Agent 编排入口 |

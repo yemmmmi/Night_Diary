@@ -19,17 +19,23 @@ function card(partial: Partial<MemoryCard> & Pick<MemoryCard, 'card_id' | 'creat
 
 describe('moodTrend', () => {
   it('groups cards by day with emotions for tooltip', () => {
+    // Dates must be relative to "now": the util filters to the last N days.
+    const isoDaysAgo = (offsetDays: number) => {
+      const d = new Date()
+      d.setDate(d.getDate() - offsetDays)
+      return d.toISOString().slice(0, 10)
+    }
     const points = buildMoodTrendPoints(
       [
         card({
           card_id: 'a',
-          created_at: '2026-06-16T10:00:00',
+          created_at: `${isoDaysAgo(3)}T10:00:00`,
           mood_score: 0.8,
           emotions: ['平静', '期待'],
         }),
         card({
           card_id: 'b',
-          created_at: '2026-06-23T10:00:00',
+          created_at: `${isoDaysAgo(10)}T10:00:00`,
           mood_score: 0.3,
           emotion: '疲惫',
           emotions: ['疲惫'],
@@ -39,9 +45,12 @@ describe('moodTrend', () => {
     )
 
     expect(points).toHaveLength(2)
-    expect(points[0].date).toBe('2026-06-16')
-    expect(points[0].emotions).toEqual(['平静', '期待'])
-    expect(points[1].avgMood).toBeCloseTo(0.3)
+    // Sorted ascending by date: the older card comes first.
+    expect(points[0].date).toBe(isoDaysAgo(10))
+    expect(points[0].emotions).toEqual(['疲惫'])
+    expect(points[0].avgMood).toBeCloseTo(0.3)
+    expect(points[1].date).toBe(isoDaysAgo(3))
+    expect(points[1].emotions).toEqual(['平静', '期待'])
   })
 
   it('labels mood level', () => {

@@ -1,0 +1,62 @@
+---
+description: "Night Diary V2 分阶段执行计划（已更新为本地桌面端架构）"
+alwaysApply: true
+---
+
+# 分阶段执行计划
+
+> **注意**: 原 18-PR Web 架构蓝图（task.md）已被新的本地桌面端方案替代。详见 `docs/本地化桌面端重构方案.md`。
+
+## Phase A: 新地基 （✅）
+
+**目标**: Tauri 壳 + Python sidecar + SQLite + Vue-Tauri 桥接就位。
+
+- [x] 服务端适配：config.py 去 Redis/JWT → SQLite + CLI 参数
+- [x] 服务端适配：main.py 去 CORS/auth → 127.0.0.1 + /shutdown
+- [x] 依赖清理：pyproject.toml 去 redis/pymysql/cryptography → aiosqlite
+- [x] 测试更新：适配新 config
+- [x] 清理：docker-compose.yml 删除，Makefile 简化，CI 更新
+- [x] Tauri v2 项目初始化：src-tauri/ 目录、Cargo.toml、tauri.conf.json
+- [x] Rust 侧：Python 进程管理（spawn、健康检查、优雅关闭）
+- [x] Vue 迁移：web/ → src/，Vite-Tauri 桥接
+- [x] 文档更新：README、cursor rules
+
+## Phase B: AI 核心 （✅）
+
+**目标**: 核心 AI 管线就位。从 V1 迁移并改进。
+
+- [x] domain/knowledge/ — DomainKnowledgeStore（ChromaDB，唯一查询入口）
+- [x] domain/rag/ — Chunker, BM25, HybridRetriever, Reranker + RAG eval 基线
+- [x] domain/memory/ — 三层记忆（进程内存储，无 Redis）
+- [x] domain/feedback/ — Thompson Sampling + PromptTuner
+- [x] domain/skills/ — 10 Skills + SkillRegistry（Supervisor 生产集成）
+- [x] domain/agents/ — Workers + IntentClassifier + 生成质量 eval 基线
+- [x] domain/agents/ — Supervisor + asyncio Graph + Skill 集成 + 多轮 eval
+- [x] domain/agents/ — ContextCompressor + 韧性单测 + 8 条对抗 eval
+
+## Phase C: 业务层 （✅）
+
+**目标**: 服务层 + API 路由 + LLM 配置管理。
+
+- [x] services/ — diary_service, analysis_service, ai_router（分级执行）+ ServiceContainer DI（C-1 ✅ #26）
+- [x] api/v1/ — diary, analysis, feedback, tags, models, stats 路由 + AppError 映射（C-2 ✅ #27）
+- [x] LLM 配置管理：Settings UI + LLMFactory 生产接线（C-3 ✅ #28）
+
+## Phase D: 游戏化 UI （✅）
+
+**目标**: Tauri 桌面端前端，游戏化设计系统。
+
+- [x] 设计系统：GlassPanel, GameButton, ParticleBackground, PageTransition
+- [x] 首页场景 + 日记写作场景
+- [x] AI 分析场景 + 历史回顾场景
+- [x] 设置场景 + 首次使用引导
+
+## Phase E: 交付 （▶ 当前）
+
+**目标**: 可双击运行的 .exe。
+
+- [ ] PyInstaller 打包 Python AI 引擎
+- [ ] Tauri build 桌面应用
+- [ ] Windows 安装器（NSIS/Inno Setup）
+- [ ] E2E 测试
+- [ ] 用户文档

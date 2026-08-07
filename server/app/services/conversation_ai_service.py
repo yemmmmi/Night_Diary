@@ -153,14 +153,14 @@ def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[
 
 
 def _build_tools(
-    db: Session, container: ServiceContainer, *, user_id: str = "default"
+    container: ServiceContainer, *, user_id: str = "default"
 ) -> dict[str, ToolFn] | None:
     """Build the tool map for the Agentic Loop, or None if unavailable."""
     try:
-        llm = container._llm_for_tier(db, "light", agent_name="tool")
+        llm = container._llm_for_tier("light", agent_name="tool")
         if llm is None or container.retriever is None:
             return None
-        return build_tool_map(db, retriever=container.retriever, llm=llm, user_id=user_id)
+        return build_tool_map(container.session_factory, retriever=container.retriever, llm=llm, user_id=user_id)
     except Exception as exc:
         logger.warning("Tool map build failed: %s", exc)
         return None
@@ -260,7 +260,7 @@ def generate_reply(
 
         # ── Stage 2.5: Chat intent classification (drives routing) ──
         with trace_span("S4_intent", "意图分类", input_snapshot={"raw_text": content}) as span:
-            intent_classifier = container.get_chat_intent_classifier(db, user_id=user_id)
+            intent_classifier = container.get_chat_intent_classifier(user_id=user_id)
             intent_result = intent_classifier.classify_sync(content, context=brief_context)
             if span:
                 span.metadata["intent_category"] = intent_result.intent_category
@@ -363,7 +363,7 @@ def generate_reply(
         if auto_retrieve and intent_result.need_retrieval:
             from app.domain.agents.query_understander import QueryUnderstander
 
-            query_llm = container._llm_for_tier(db, "light", agent_name="query_understander")
+            query_llm = container._llm_for_tier("light", agent_name="query_understander")
             understander = QueryUnderstander(
                 llm=query_llm,
                 tracer=container.llm_tracer,
@@ -406,7 +406,7 @@ def generate_reply(
 
         # ── Build tools (intent-filtered subset) ──
         with trace_span("S7d_tools", "工具构建") as span:
-            all_tools = _build_tools(db, container, user_id=user_id)
+            all_tools = _build_tools(container, user_id=user_id)
             if span:
                 span.metadata["tool_count"] = len(all_tools) if all_tools else 0
         tools: dict[str, ToolFn] | None = None
@@ -414,6 +414,11 @@ def generate_reply(
             tools = {name: fn for name, fn in all_tools.items() if name in intent_result.need_tools}
             if not tools:
                 tools = None
+
+        # Release the DB connection before the long-running Agentic Loop
+        # (LLM network calls). The session re-acquires a connection when
+        # run_conversation_loop / downstream code next queries the DB.
+        db.commit()
 
         # ── Stage 4: Agentic Loop ──
         with trace_span("S8_loop", "Agentic Loop", input_snapshot={"content": content}) as span:
@@ -519,7 +524,14 @@ def generate_reply(
         raise
     finally:
         if trace is not None:
-            persist_trace(db, trace, ref_id=conversation_id)
+            try:
+                trace_db = container.session()
+                try:
+                    persist_trace(trace_db, trace, ref_id=conversation_id)
+                finally:
+                    trace_db.close()
+            except Exception as exc:
+                logger.warning("Trace persistence failed: %s", exc)
             with contextlib.suppress(Exception):
                 publish_trace_complete_sync(trace)
             if token is not None:
@@ -671,7 +683,7 @@ def generate_night_talk(
 
     # ── Stage 1: Draft — LLM extracts resonance-worthy fragments ──
     container.ensure_ai_stack(user_id=user_id)
-    llm: LLMClient | None = container._llm_for_tier(db, "light", agent_name="night-talk")
+    llm: LLMClient | None = container._llm_for_tier("light", agent_name="night-talk")
     if llm is None:
         logger.warning("Night-talk LLM unavailable; returning emotion-only result")
         return {

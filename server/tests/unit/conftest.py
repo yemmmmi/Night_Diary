@@ -6,6 +6,13 @@ import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.database import create_db_engine, init_db
+from tests.embedding_stub import patch_chroma_embedding_function
+
+
+@pytest.fixture(autouse=True)
+def _no_real_embedding_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit tests never load the real embedding model (heavy ML deps absent)."""
+    patch_chroma_embedding_function(monkeypatch)
 
 
 @pytest.fixture()

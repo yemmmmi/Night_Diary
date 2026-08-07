@@ -1,27 +1,37 @@
 """FastAPI application entry point.
 
-Binds to ``127.0.0.1`` by default (use ``--host 0.0.0.0`` for Docker).  Accepts
-``--port`` and ``--data-dir`` CLI arguments.
+Binds to ``127.0.0.1`` by default (use ``--host 0.0.0.0`` in Docker).
+Accepts ``--port`` and ``--data-dir`` CLI arguments.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import faulthandler
 import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, status
-from fastapi.responses import JSONResponse
+# Enable faulthandler to capture native crash tracebacks
+faulthandler.enable()
+
+from fastapi import FastAPI, status  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+
+# Apply the chromadb x posthog telemetry compat patch before any chromadb
+# import. Must run early — chromadb fires telemetry calls on import.
+from app.shared.chromadb_telemetry_compat import apply_telemetry_compat_patch  # noqa: E402
+
+apply_telemetry_compat_patch()
 
 logger = logging.getLogger(__name__)
 
 
 def _app_build_version() -> str:
-    """Best-effort git short hash for dev stale-backend detection."""
+    """Best-effort git short hash, so the frontend can detect a stale backend."""
     import subprocess
 
     try:
@@ -58,7 +68,7 @@ def _ensure_dirs(settings) -> None:  # type: ignore[no-untyped-def]
 
 
 def _bootstrap_core_sync(app: FastAPI) -> None:
-    """SQLite + session factory — fast enough for ``/ready`` and diary CRUD."""
+    """SQLite + session factory — fast enough to back ``/ready`` and diary CRUD."""
     import time as _time
 
     from app.services.container import ServiceContainer
@@ -71,7 +81,7 @@ def _bootstrap_core_sync(app: FastAPI) -> None:
 
 
 def _bootstrap_ai_sync(app: FastAPI) -> None:
-    """RAG / agents — runs after core; first AI call may trigger if still pending."""
+    """RAG / agents — runs after core bootstrap; first AI call may trigger it."""
     container = app.state.container
     if container is not None:
         container.ensure_ai_stack()
@@ -102,7 +112,7 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     app = FastAPI(title=cfg.app_name, version="0.0.1", lifespan=lifespan)
 
-    # CORS: loopback is always allowed; additional origins via config.
+    # CORS: always allow loopback origins; extra origins come from config.
     import re as _re
 
     from fastapi.middleware.cors import CORSMiddleware
@@ -133,7 +143,7 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
 
     @app.get("/ready", tags=["meta"])
     def ready() -> JSONResponse:
-        """Core bootstrap complete — diary CRUD safe."""
+        """Core bootstrap done — diary CRUD is safe to use."""
         if getattr(app.state, "bootstrap_done", False) and app.state.container is not None:
             return JSONResponse({"status": "ok"})
         return JSONResponse(
@@ -145,13 +155,6 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
     def meta_version() -> dict[str, str]:
         """Dev helper — lets the frontend detect a stale backend process."""
         return {"version": _app_build_version()}
-
-    @app.post("/shutdown", tags=["meta"])
-    async def shutdown() -> dict[str, str]:
-        """Graceful shutdown — called before SIGTERM."""
-        loop = asyncio.get_running_loop()
-        loop.call_later(0.3, lambda: os._exit(0))
-        return {"status": "shutting_down"}
 
     return app
 
@@ -178,7 +181,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
 
-def __getattr__(name: str) -> FastAPI:  # PEP 562 lazy export for tests
+def __getattr__(name: str) -> FastAPI:  # PEP 562 lazy export, for tests
     if name == "app":
         return create_app()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -182,15 +182,26 @@ def create_analysis(
 
     recent_entries = diary_service.get_recent_entries(db, user_id=user_id)
     context = _build_context(db, entry, recent_entries, user_id=user_id)
+
+    # Extract plain data before committing — ORM attributes expire on commit
+    # (expire_on_commit=True), so we capture the content string now to avoid
+    # a lazy reload during the LLM call below.
+    content_text = entry.content or ""
+
+    # Release the DB connection back to the pool before the long-running LLM
+    # network call. The session remains usable — it will re-acquire a
+    # connection on the next query (in _persist_analysis).
+    db.commit()
+
     with trace_span(
         "S2_routing",
         "路由决策",
-        input_snapshot={"diary_id": diary_id, "content_len": len(entry.content or "")},
+        input_snapshot={"diary_id": diary_id, "content_len": len(content_text)},
     ) as span:
         result = planner.execute(
             diary_id=diary_id,
             context=context,
-            content=entry.content or "",
+            content=content_text,
             style_fragment=style_fragment,
         )
         if span:
@@ -279,10 +290,17 @@ def update_analysis(
 
     recent_entries = diary_service.get_recent_entries(db, user_id=user_id)
     context = _build_context(db, entry, recent_entries, user_id=user_id)
+
+    # Extract plain data before committing — ORM attributes expire on commit.
+    content_text = entry.content or ""
+
+    # Release the DB connection before the long-running LLM call.
+    db.commit()
+
     result = planner.execute(
         diary_id=diary_id,
         context=context,
-        content=entry.content or "",
+        content=content_text,
         style_fragment=style_fragment,
     )
 
@@ -357,7 +375,7 @@ def regenerate_analysis(
 ) -> tuple[AnalysisRow, int]:
     """Force a fresh AI reply — replaces any existing analysis."""
     delete_analysis_for_diary(db, diary_id, user_id=user_id)
-    planner = container.build_execution_planner(db, user_id=user_id)
+    planner = container.build_execution_planner(user_id=user_id)
     return create_analysis(
         db,
         diary_id,
@@ -379,10 +397,18 @@ def trigger_analysis(
 ) -> tuple[AnalysisRow, int]:
     """End-to-end entry: build planner from container and create analysis.
 
+    Uses **upsert** semantics: if an analysis already exists for this diary,
+    it is deleted and recreated.  This avoids ``UNIQUE constraint`` failures
+    when the frontend re-triggers analysis on a diary that was previously
+    analyzed (e.g. after editing the diary content).
+
     When *trace_id* is provided (developer mode), a :class:`PipelineTrace` is
     created and set in the context so that nested ``trace_span`` calls record
     their stages.  The trace is finalized, persisted, and published in the
     ``finally`` block — all best-effort.
+
+    Trace persistence uses a **separate session** so that a failed analysis
+    commit does not corrupt the session used for trace storage.
     """
     trace: PipelineTrace | None = None
     token = None
@@ -392,7 +418,13 @@ def trigger_analysis(
         )
         token = set_trace(trace)
     try:
-        planner = container.build_execution_planner(db, user_id=user_id)
+        # Upsert: if an analysis already exists, remove it first so that
+        # create_analysis doesn't hit a UNIQUE constraint violation.
+        existing = db.query(AnalysisRow).filter(AnalysisRow.diary_id == diary_id).first()
+        if existing is not None:
+            delete_analysis_for_diary(db, diary_id, user_id=user_id)
+
+        planner = container.build_execution_planner(user_id=user_id)
         result = create_analysis(
             db,
             diary_id,
@@ -410,7 +442,17 @@ def trigger_analysis(
         raise
     finally:
         if trace is not None:
-            persist_trace(db, trace, ref_id=str(diary_id))
+            # Use a separate session so that a failed analysis commit
+            # (which leaves the request session in a rolled-back state)
+            # does not prevent trace persistence.
+            try:
+                trace_db = container.session()
+                try:
+                    persist_trace(trace_db, trace, ref_id=str(diary_id))
+                finally:
+                    trace_db.close()
+            except Exception as exc:
+                logger.warning("Trace persistence failed: %s", exc)
             with contextlib.suppress(Exception):
                 publish_trace_complete_sync(trace)
             if token is not None:
@@ -426,7 +468,7 @@ def rerun_analysis(
     style_fragment: str | None = None,
 ) -> tuple[AnalysisRow, int]:
     """Re-run analysis when diary content changed."""
-    planner = container.build_execution_planner(db, user_id=user_id)
+    planner = container.build_execution_planner(user_id=user_id)
     return update_analysis(
         db,
         diary_id,

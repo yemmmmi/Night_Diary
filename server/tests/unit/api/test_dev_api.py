@@ -76,7 +76,7 @@ def test_get_dev_stats(authed_client: TestClient) -> None:
     assert "error_count" in data
     assert isinstance(data["total_traces"], int)
     assert isinstance(data["by_scenario"], dict)
-    assert isinstance(data["avg_duration_ms"], (int, float))
+    assert isinstance(data["avg_duration_ms"], int | float)
     assert isinstance(data["error_count"], int)
 
 

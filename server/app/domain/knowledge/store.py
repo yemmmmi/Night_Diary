@@ -1,4 +1,4 @@
-"""Psychology domain knowledge store backed by ChromaDB."""
+"""ChromaDB-backed psychology domain knowledge store."""
 
 from __future__ import annotations
 
@@ -20,12 +20,22 @@ _chroma_client: Any | None = None
 
 
 def get_chroma_client(persist_dir: str) -> Any:
-    """Return a process-wide Chroma ``PersistentClient`` singleton."""
+    """Return a process-level Chroma ``PersistentClient`` singleton.
+
+    ``anonymized_telemetry=False`` disables chromadb's anonymous usage
+    reporting (posthog). This is a personal diary app — telemetry is not
+    needed, and this also avoids the chromadb 0.5.x / posthog 7.x API
+    incompatibility.
+    """
     global _chroma_client
     if _chroma_client is None:
         import chromadb
+        from chromadb.config import Settings as ChromaSettings
 
-        _chroma_client = chromadb.PersistentClient(path=persist_dir)
+        settings = ChromaSettings(anonymized_telemetry=False)
+        _chroma_client = chromadb.PersistentClient(
+            path=persist_dir, settings=settings
+        )
     return _chroma_client
 
 
@@ -40,10 +50,10 @@ class EmbeddingFunction(Protocol):
 
 
 class DomainKnowledgeStore:
-    """Read/write interface for the shared psychology domain knowledge collection.
+    """Read/write interface over the shared psychology domain knowledge collection.
 
-    All agents must query domain knowledge through this class (single entry point).
-    Query failures degrade to an empty result list without raising.
+    All agents must query domain knowledge through this class (single entry
+    point). Query failures degrade to an empty result list instead of raising.
     """
 
     def __init__(
@@ -138,7 +148,7 @@ class DomainKnowledgeStore:
         source: str,
         doc_id: str | None = None,
     ) -> str | None:
-        """Insert a domain knowledge document. Returns the document id."""
+        """Insert one domain knowledge document. Returns the document id."""
         if not content.strip():
             return None
 
@@ -171,7 +181,7 @@ class DomainKnowledgeStore:
             return False
 
     def is_initialized(self) -> bool:
-        """Return True when the collection exists and contains documents."""
+        """Return True when the collection exists and holds documents."""
         try:
             collection = self._get_collection(create=False)
             if collection is None:
@@ -247,7 +257,7 @@ _store: DomainKnowledgeStore | None = None
 
 
 def get_domain_store(settings: Settings | None = None) -> DomainKnowledgeStore:
-    """Return a process-wide ``DomainKnowledgeStore`` singleton."""
+    """Return the process-wide ``DomainKnowledgeStore`` singleton."""
     global _store
     if _store is None:
         _store = DomainKnowledgeStore(settings=settings)
@@ -255,6 +265,6 @@ def get_domain_store(settings: Settings | None = None) -> DomainKnowledgeStore:
 
 
 def reset_domain_store() -> None:
-    """Clear cached store — for tests only."""
+    """Clear the cached store — for tests only."""
     global _store
     _store = None

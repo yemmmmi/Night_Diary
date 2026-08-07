@@ -44,7 +44,7 @@ def persist_trace(db: Session, trace: PipelineTrace, ref_id: str | None = None) 
 
 
 async def publish_trace_complete(trace: PipelineTrace) -> None:
-    """通过 EventBus 推送 trace_complete 事件。best-effort。"""
+    """通过 EventBus 推送 trace_complete 事件 (异步版, 供 SSE handler 使用)。best-effort。"""
     try:
         from app.shared.trace_event_bus import get_event_bus
 
@@ -66,7 +66,7 @@ async def publish_trace_complete(trace: PipelineTrace) -> None:
 
 
 async def publish_span_complete(trace: PipelineTrace, span: TraceSpan) -> None:
-    """通过 EventBus 推送 span_complete 事件。best-effort。"""
+    """Push a span_complete event through the EventBus. Best-effort."""
     try:
         from app.shared.trace_event_bus import get_event_bus
 
