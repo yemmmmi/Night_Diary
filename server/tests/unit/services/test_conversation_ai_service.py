@@ -171,14 +171,14 @@ def test_split_into_chunks_empty_returns_empty_list() -> None:
 
 
 def test_split_into_chunks_chinese_punctuation() -> None:
-    """中文句末标点（。！？）应作为切分点，且标点保留在前一段。"""
+    """Chinese end-of-sentence marks act as split points and stay with the prior chunk."""
     text = "你好。世界！今天怎么样？"
     chunks = conversation_ai_service._split_into_chunks(text, chunk_size=20)
     assert chunks == ["你好。", "世界！", "今天怎么样？"]
 
 
 def test_split_into_chunks_english_punctuation() -> None:
-    """英文句末标点（.!?）和换行也应作为切分点。"""
+    """English end-of-sentence marks and newlines also act as split points."""
     text = "Hello world. How are you? I am fine!"
     chunks = conversation_ai_service._split_into_chunks(text, chunk_size=20)
     assert chunks == ["Hello world.", "How are you?", "I am fine!"]
@@ -206,7 +206,7 @@ def test_split_into_chunks_newline_also_splits() -> None:
 async def test_generate_reply_streaming_crisis_publishes_single_chunk(
     db_session,
 ) -> None:
-    """危机检测结果应通过 SSE 发布为单个 TEXT_DELTA（不分段）。"""
+    """Crisis detection result is published via SSE as a single TEXT_DELTA (not chunked)."""
     from app.shared.streaming_events import StreamingEventType
     from app.shared.trace_event_bus import get_event_bus
 
@@ -222,9 +222,7 @@ async def test_generate_reply_streaming_crisis_publishes_single_chunk(
         is_crisis=True,
     )
 
-    with patch.object(
-        conversation_ai_service, "generate_reply", return_value=crisis_result
-    ):
+    with patch.object(conversation_ai_service, "generate_reply", return_value=crisis_result):
         await conversation_ai_service.generate_reply_streaming(
             db_session,
             container,
@@ -279,9 +277,7 @@ async def test_generate_reply_streaming_non_crisis_publishes_multiple_chunks(
         token_info={"total_tokens_used": 42},
     )
 
-    with patch.object(
-        conversation_ai_service, "generate_reply", return_value=normal_result
-    ):
+    with patch.object(conversation_ai_service, "generate_reply", return_value=normal_result):
         await conversation_ai_service.generate_reply_streaming(
             db_session,
             container,
@@ -316,7 +312,7 @@ async def test_generate_reply_streaming_non_crisis_publishes_multiple_chunks(
 async def test_generate_reply_streaming_no_trace_id_publishes_nothing(
     db_session,
 ) -> None:
-    """空 trace_id 时不应向 bus 发布任何事件（没有 SSE 订阅者）。"""
+    """Empty trace_id must not publish any event to the bus (no SSE subscriber)."""
     from app.shared.trace_event_bus import get_event_bus
 
     bus = get_event_bus()
@@ -331,9 +327,7 @@ async def test_generate_reply_streaming_no_trace_id_publishes_nothing(
         retrieved_memory_ids=[],
     )
 
-    with patch.object(
-        conversation_ai_service, "generate_reply", return_value=normal_result
-    ):
+    with patch.object(conversation_ai_service, "generate_reply", return_value=normal_result):
         # Empty trace_id → early return after generate_reply.
         await conversation_ai_service.generate_reply_streaming(
             db_session,

@@ -61,13 +61,11 @@ def test_send_message_rejects_too_many_pins(authed_client: TestClient) -> None:
 def test_send_message_streaming_disabled_returns_fallback(
     authed_client: TestClient,
 ) -> None:
-    """STREAMING_ENABLED=false（默认）时返回 {streaming: False, trace_id: ''}。"""
+    """STREAMING_ENABLED=false (default) returns {streaming: False, trace_id: ''}."""
     conversation_id = _create_conversation(authed_client)
 
     # Ensure the global setting is the default (False).
-    with patch(
-        "app.api.v1.conversation.get_settings"
-    ) as mock_settings:
+    with patch("app.api.v1.conversation.get_settings") as mock_settings:
         mock_settings.return_value.streaming_enabled = False
         response = authed_client.post(
             f"/api/v1/conversations/{conversation_id}/messages/stream",
@@ -88,9 +86,7 @@ def test_send_message_streaming_enabled_returns_trace_id(
     # Patch the streaming generator to a no-op AsyncMock so the background
     # task doesn't actually run the LLM pipeline.
     with (
-        patch(
-            "app.api.v1.conversation.get_settings"
-        ) as mock_settings,
+        patch("app.api.v1.conversation.get_settings") as mock_settings,
         patch(
             "app.services.conversation_ai_service.generate_reply_streaming",
             new=AsyncMock(return_value=None),
@@ -117,9 +113,7 @@ def test_send_message_streaming_generates_trace_id_when_missing(
     conversation_id = _create_conversation(authed_client)
 
     with (
-        patch(
-            "app.api.v1.conversation.get_settings"
-        ) as mock_settings,
+        patch("app.api.v1.conversation.get_settings") as mock_settings,
         patch(
             "app.services.conversation_ai_service.generate_reply_streaming",
             new=AsyncMock(return_value=None),
