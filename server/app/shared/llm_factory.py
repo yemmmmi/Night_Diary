@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import SecretStr
@@ -38,6 +39,11 @@ class StubLLMClient:
 
     async def ainvoke(self, prompt: str) -> Any:
         return self.invoke(prompt)
+
+    async def astream(self, prompt: str) -> AsyncGenerator[str, None]:
+        """Yield the stub reply as a single token (Protocol compliance)."""
+        self.prompts.append(prompt)
+        yield self._reply
 
 
 class LLMFactory:

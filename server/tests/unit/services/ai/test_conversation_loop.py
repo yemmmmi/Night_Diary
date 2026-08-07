@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.domain.agents.types import ChatIntentResult
 from app.services.ai.conversation_loop import (
     _needs_tool_call,
     run_conversation_loop,
+    run_conversation_loop_streaming,
 )
 from app.services.ai.session_context import clear_session
 from app.shared.llm_factory import StubLLMClient
+from app.shared.streaming_events import StreamingEventType
 from app.shared.tool_protocol import ToolCallResult, parse_text_tag_calls
+from app.shared.trace_event_bus import get_event_bus
 
 
 def test_parse_tool_calls_extracts_name_and_args() -> None:
@@ -258,3 +265,162 @@ def test_no_citations_when_no_context(db_session) -> None:
     assert len(result.citations) == 0
     assert "参考来源" not in result.reply_text
     clear_session("no-citation-test")
+
+
+# ── Streaming variant tests (V3 P0) ──
+
+
+class _StreamingStubLLM:
+    """Stub LLM supporting both invoke (tool rounds) and astream (final reply)."""
+
+    def __init__(self, *, tokens: list[str], invoke_reply: str = "") -> None:
+        self._tokens = list(tokens)
+        self._invoke_reply = invoke_reply
+        self.astream_prompts: list[str] = []
+        self.invoke_prompts: list[str] = []
+
+    def invoke(self, prompt: str) -> Any:
+        self.invoke_prompts.append(prompt)
+        return SimpleNamespace(
+            content=self._invoke_reply,
+            response_metadata={"token_usage": {"total_tokens": 10, "completion_tokens": 5}},
+        )
+
+    async def ainvoke(self, prompt: str) -> Any:
+        return self.invoke(prompt)
+
+    async def astream(self, prompt: str):  # type: ignore[override]
+        self.astream_prompts.append(prompt)
+        for token in self._tokens:
+            yield token
+
+
+@pytest.mark.asyncio
+async def test_run_conversation_loop_streaming_yields_tokens() -> None:
+    """流式 loop 应逐 token yield 字符串。"""
+    clear_session("stream-tokens-test")
+    llm = _StreamingStubLLM(tokens=["你", "好", "呀"])
+
+    container = MagicMock()
+    container.long_term_memory = None
+    container._llm_for_tier.return_value = llm
+
+    collected: list[str] = []
+    async for item in run_conversation_loop_streaming(
+        MagicMock(),
+        container,
+        conversation_id="stream-tokens-test",
+        content="你好",
+        pinned_diaries_text="（无）",
+        retrieved_diaries_text="（无）",
+        episodic_text="（无）",
+        memory_ids=[],
+        trace_id="stream-tokens-test",
+    ):
+        if isinstance(item, str):
+            collected.append(item)
+
+    assert "你" in collected
+    assert "好" in collected
+    assert len(llm.astream_prompts) == 1  # astream called exactly once for the final reply
+    clear_session("stream-tokens-test")
+
+
+@pytest.mark.asyncio
+async def test_run_conversation_loop_streaming_publishes_events() -> None:
+    """流式 loop 应通过 TraceEventBus 发布 TEXT_DELTA 事件。"""
+    clear_session("stream-events-test")
+    bus = get_event_bus()
+    trace_id = "stream-events-test"
+    queue = await bus.subscribe(trace_id)
+
+    llm = _StreamingStubLLM(tokens=["你", "好"])
+    container = MagicMock()
+    container.long_term_memory = None
+    container._llm_for_tier.return_value = llm
+
+    async for _ in run_conversation_loop_streaming(
+        MagicMock(),
+        container,
+        conversation_id="stream-events-test",
+        content="你好",
+        pinned_diaries_text="（无）",
+        retrieved_diaries_text="（无）",
+        episodic_text="（无）",
+        memory_ids=[],
+        trace_id=trace_id,
+    ):
+        pass
+
+    events: list[dict[str, Any]] = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    types = [e["type"] for e in events]
+
+    assert StreamingEventType.REPLY_START in types
+    assert StreamingEventType.TEXT_DELTA in types
+    assert StreamingEventType.TEXT_END in types
+    assert StreamingEventType.REPLY_END in types
+
+    delta_events = [e for e in events if e["type"] == StreamingEventType.TEXT_DELTA]
+    delta_text = "".join(e.get("text", "") for e in delta_events)
+    assert "你" in delta_text
+    assert "好" in delta_text
+
+    await bus.unsubscribe(trace_id, queue)
+    clear_session("stream-events-test")
+
+
+@pytest.mark.asyncio
+async def test_run_conversation_loop_streaming_retract_on_crisis() -> None:
+    """流式过程中检测到危机应发布 RETRACT 并停止。"""
+    clear_session("stream-retract-test")
+    bus = get_event_bus()
+    trace_id = "stream-retract-test"
+    queue = await bus.subscribe(trace_id)
+
+    # LLM streams crisis content (user input itself is safe)
+    llm = _StreamingStubLLM(tokens=["我不想活了"])
+    container = MagicMock()
+    container.long_term_memory = None
+    container._llm_for_tier.return_value = llm
+
+    collected: list[Any] = []
+    async for item in run_conversation_loop_streaming(
+        MagicMock(),
+        container,
+        conversation_id="stream-retract-test",
+        content="今天好累",  # safe user input; crisis is in LLM output
+        pinned_diaries_text="（无）",
+        retrieved_diaries_text="（无）",
+        episodic_text="（无）",
+        memory_ids=[],
+        intent_result=ChatIntentResult(
+            intent_category="emotional_vent",
+            confidence=0.9,
+            need_retrieval=False,
+            need_tools=[],
+            need_entity_query=False,
+            tier="medium",
+            max_iterations=1,
+        ),
+        trace_id=trace_id,
+    ):
+        collected.append(item)
+
+    events: list[dict[str, Any]] = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    types = [e["type"] for e in events]
+
+    assert StreamingEventType.RETRACT in types
+
+    # RETRACT dict should also be yielded to the caller
+    retract_yields = [c for c in collected if isinstance(c, dict) and c.get("retract")]
+    assert len(retract_yields) >= 1
+
+    retract_events = [e for e in events if e["type"] == StreamingEventType.RETRACT]
+    assert "crisis_in_stream" in retract_events[0]["reason"]
+
+    await bus.unsubscribe(trace_id, queue)
+    clear_session("stream-retract-test")
