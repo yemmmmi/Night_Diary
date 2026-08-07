@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -53,3 +53,99 @@ def test_send_message_rejects_too_many_pins(authed_client: TestClient) -> None:
         json={"content": "测试", "diary_ids": [1, 2, 3, 4]},
     )
     assert response.status_code == 422
+
+
+# ── V3 P0: streaming endpoint ────────────────────────────────────────
+
+
+def test_send_message_streaming_disabled_returns_fallback(
+    authed_client: TestClient,
+) -> None:
+    """STREAMING_ENABLED=false（默认）时返回 {streaming: False, trace_id: ''}。"""
+    conversation_id = _create_conversation(authed_client)
+
+    # Ensure the global setting is the default (False).
+    with patch(
+        "app.api.v1.conversation.get_settings"
+    ) as mock_settings:
+        mock_settings.return_value.streaming_enabled = False
+        response = authed_client.post(
+            f"/api/v1/conversations/{conversation_id}/messages/stream",
+            json={"content": "你好"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {"streaming": False, "trace_id": ""}
+
+
+def test_send_message_streaming_enabled_returns_trace_id(
+    authed_client: TestClient,
+) -> None:
+    """STREAMING_ENABLED=true 时返回 {streaming: True, trace_id: <uuid>}。"""
+    conversation_id = _create_conversation(authed_client)
+
+    # Patch the streaming generator to a no-op AsyncMock so the background
+    # task doesn't actually run the LLM pipeline.
+    with (
+        patch(
+            "app.api.v1.conversation.get_settings"
+        ) as mock_settings,
+        patch(
+            "app.services.conversation_ai_service.generate_reply_streaming",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        mock_settings.return_value.streaming_enabled = True
+        response = authed_client.post(
+            f"/api/v1/conversations/{conversation_id}/messages/stream",
+            json={"content": "你好"},
+            headers={"X-Trace-Id": "client-supplied-trace-id"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["streaming"] is True
+    # When X-Trace-Id is supplied it should be echoed back.
+    assert body["trace_id"] == "client-supplied-trace-id"
+
+
+def test_send_message_streaming_generates_trace_id_when_missing(
+    authed_client: TestClient,
+) -> None:
+    """When X-Trace-Id is absent, a UUID trace_id is generated."""
+    conversation_id = _create_conversation(authed_client)
+
+    with (
+        patch(
+            "app.api.v1.conversation.get_settings"
+        ) as mock_settings,
+        patch(
+            "app.services.conversation_ai_service.generate_reply_streaming",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        mock_settings.return_value.streaming_enabled = True
+        response = authed_client.post(
+            f"/api/v1/conversations/{conversation_id}/messages/stream",
+            json={"content": "你好"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["streaming"] is True
+    # A UUID was generated server-side.
+    assert isinstance(body["trace_id"], str)
+    assert len(body["trace_id"]) > 0
+    assert body["trace_id"] != ""
+
+
+def test_send_message_streaming_unknown_conversation_404(
+    authed_client: TestClient,
+) -> None:
+    """Unknown conversation_id should raise ConversationNotFoundError (404)."""
+    response = authed_client.post(
+        "/api/v1/conversations/nonexistent/messages/stream",
+        json={"content": "你好"},
+    )
+    assert response.status_code == 404

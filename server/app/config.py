@@ -148,6 +148,14 @@ class Settings(BaseSettings):
         description="HuggingFace mirror for embedding/reranker downloads (China-friendly).",
     )
 
+    # ---- 流式输出 (V3 P0) ----
+    streaming_enabled: bool = Field(
+        default=False,
+        description="Enable token-level streaming output for AI replies. "
+        "When True, scene-2 conversation uses streaming SSE. When False, "
+        "falls back to synchronous full-response (V2 behavior).",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

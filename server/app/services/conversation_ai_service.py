@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass
@@ -536,6 +537,125 @@ def generate_reply(
                 publish_trace_complete_sync(trace)
             if token is not None:
                 reset_trace(token)
+
+
+# ── V3 P0: Streaming variants ────────────────────────────────────────
+
+
+async def generate_reply_streaming(
+    db: Session,
+    container: ServiceContainer,
+    *,
+    conversation_id: str,
+    content: str,
+    diary_ids: list[int],
+    user_id: str,
+    auto_retrieve: bool = True,
+    crisis_guard: CrisisGuard | None = None,
+    trace_id: str = "",
+) -> None:
+    """Streaming version of :func:`generate_reply`.
+
+    Runs Stage 1-5 synchronously (via :func:`generate_reply`'s logic, which
+    includes all V2 safety checks), then publishes the reply via SSE.
+
+    P0 strategy (see design doc): *simulated streaming* — the reply text is
+    generated fully by :func:`generate_reply` (including LLM call, safety
+    checks, episodic write-back), then this function re-publishes the
+    already-generated text in sentence-like chunks through the
+    :class:`TraceEventBus`. The chunking produces a natural streaming feel
+    for the frontend without requiring a true ``astream`` LLM call.
+
+    Fallback cases (single-chunk publish, no streaming):
+    - ``result.is_crisis`` — the reply is the safety template; emit it as
+      one ``TEXT_DELTA`` (per streaming-safety line 1: crisis never streams).
+    - Empty ``trace_id`` — no SSE subscriber possible; nothing to publish.
+
+    P6 will replace this with true token-level streaming that wires
+    :func:`run_conversation_loop_streaming` directly into the publish path.
+    """
+    from app.shared.streaming_events import (
+        publish_reply_end,
+        publish_reply_start,
+        publish_text_delta,
+        publish_text_end,
+    )
+
+    # ── Step 1: Full synchronous pipeline (all V2 safety checks included) ──
+    result = generate_reply(
+        db,
+        container,
+        conversation_id=conversation_id,
+        content=content,
+        diary_ids=diary_ids,
+        user_id=user_id,
+        auto_retrieve=auto_retrieve,
+        crisis_guard=crisis_guard,
+        trace_id=trace_id or None,
+    )
+
+    # ── Step 2: No trace_id → nothing to publish to (no SSE subscriber) ──
+    if not trace_id:
+        return
+
+    # ── Step 3: Crisis → publish the safe template as a single chunk ──
+    if result.is_crisis:
+        await publish_reply_start(trace_id, intent="crisis_signal")
+        await publish_text_delta(trace_id, result.reply_text)
+        await publish_text_end(trace_id)
+        await publish_reply_end(trace_id)
+        return
+
+    # ── Step 4: Non-crisis → simulate streaming with sentence-like chunks ──
+    await publish_reply_start(trace_id, intent="streaming")
+
+    chunks = _split_into_chunks(result.reply_text, chunk_size=20)
+    for chunk in chunks:
+        await publish_text_delta(trace_id, chunk)
+        await asyncio.sleep(0.02)  # 20ms delay for visual streaming effect
+
+    await publish_text_end(trace_id)
+    await publish_reply_end(
+        trace_id,
+        citations=[],  # citations are already embedded in reply_text
+        usage=result.token_info or {},
+    )
+
+
+def _split_into_chunks(text: str, chunk_size: int = 20) -> list[str]:
+    """Split *text* into sentence-like chunks for a streaming effect.
+
+    Splits on Chinese/English sentence-ending punctuation first (keeping the
+    punctuation), then further subdivides any resulting segment that is
+    longer than *chunk_size* characters.
+
+    Examples
+    --------
+    >>> _split_into_chunks("你好。世界！")
+    ['你好。', '世界！']
+    >>> _split_into_chunks("", 20)
+    []
+    """
+    if not text:
+        return []
+
+    import re
+
+    # Split *after* sentence-ending punctuation (Chinese 。！？ + newline +
+    # English .!?). The lookbehind keeps the punctuation attached to the
+    # preceding segment.
+    sentences = re.split(r"(?<=[。！？\n.!?])", text)
+    chunks: list[str] = []
+    for sent in sentences:
+        sent = sent.strip()
+        if not sent:
+            continue
+        while len(sent) > chunk_size:
+            chunks.append(sent[:chunk_size])
+            sent = sent[chunk_size:]
+        if sent:
+            chunks.append(sent)
+    return chunks
 
 
 #: Minimum emotion intensity (abs score) to trigger episodic write-back.
