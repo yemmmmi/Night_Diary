@@ -19,12 +19,9 @@ from app.api.schemas import (
 from app.config import get_settings
 from app.services import conversation_ai_service, conversation_service
 from app.shared.errors import ConversationNotFoundError
+from app.shared.task_registry import get_task_registry
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
-
-#: Strong references to fire-and-forget streaming tasks so they are not
-#: garbage-collected mid-flight. Each task removes itself on completion.
-_background_streaming_tasks: set[asyncio.Task[None]] = set()
 
 
 @router.get("", response_model=list[ConversationResponse])
@@ -179,12 +176,36 @@ async def send_message_streaming(
             trace_id=trace_id,
         )
     )
-    # Keep a strong reference so the task is not garbage-collected, and
-    # auto-discard on completion to avoid unbounded set growth.
-    _background_streaming_tasks.add(task)
-    task.add_done_callback(_background_streaming_tasks.discard)
+    # Register with TaskRegistry for lifecycle management (cancel on abort,
+    # auto-cleanup on done, cancel_all on shutdown).
+    get_task_registry().register(trace_id, task)
 
     return {"streaming": True, "trace_id": trace_id}
+
+
+@router.post(
+    "/{conversation_id}/messages/abort",
+    response_model=dict[str, Any],
+    status_code=status.HTTP_200_OK,
+)
+async def abort_message(
+    conversation_id: str,
+    body: dict[str, Any],
+    user: CurrentUserDep,
+) -> dict[str, Any]:
+    """Abort a streaming reply by trace_id.
+
+    Returns ``{"cancelled": bool}`` indicating whether a live task was
+    found and cancelled. The cancelled task's ``_terminating_reply``
+    finally-block will still emit ``REPLY_END(error="cancelled")`` so the
+    frontend can exit the streaming state cleanly.
+    """
+    trace_id = body.get("trace_id", "")
+    if not trace_id:
+        return {"cancelled": False}
+
+    cancelled = await get_task_registry().cancel(trace_id)
+    return {"cancelled": cancelled}
 
 
 @router.post("/{conversation_id}/night-talk", response_model=dict[str, Any])
