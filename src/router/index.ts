@@ -82,6 +82,11 @@ const router = createRouter({
       component: () => import('@/pages/ChatScene.vue'),
     },
     {
+      path: '/plan',
+      name: 'plan',
+      component: () => import('@/features/plan/PlanScene.vue'),
+    },
+    {
       path: '/models',
       name: 'models',
       component: () => import('@/pages/ModelsScene.vue'),

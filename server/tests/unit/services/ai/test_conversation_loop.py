@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -424,3 +424,150 @@ async def test_run_conversation_loop_streaming_retract_on_crisis() -> None:
 
     await bus.unsubscribe(trace_id, queue)
     clear_session("stream-retract-test")
+
+
+# ── P2: PlannerAgent integration for plan_exploration intent ──
+
+
+def test_plan_exploration_intent_routes_to_planner_agent(db_session) -> None:
+    """plan_exploration 意图应触发 PlannerAgent，不走工具循环。"""
+    clear_session("conv-plan-test")
+
+    intent = ChatIntentResult(
+        intent_category="plan_exploration",
+        need_tools=["list_todos", "get_plan_progress"],
+        tier="heavy",
+        max_iterations=5,
+    )
+
+    fake_response = MagicMock()
+    fake_response.content = "placeholder"
+    fake_response.response_metadata = {
+        "token_usage": {"total_tokens": 10, "prompt_tokens": 5, "completion_tokens": 5}
+    }
+    llm = MagicMock()
+    llm.invoke.return_value = fake_response
+
+    container = MagicMock()
+    container.long_term_memory = None
+    container._llm_for_tier.return_value = llm
+
+    with patch(
+        "app.domain.agents.planner_agent.PlannerAgent.run",
+        new_callable=AsyncMock,
+    ) as mock_planner_run:
+        result = run_conversation_loop(
+            db_session,
+            container,
+            conversation_id="conv-plan-test",
+            content="帮我规划早睡",
+            pinned_diaries_text="",
+            retrieved_diaries_text="",
+            episodic_text="",
+            memory_ids=[],
+            intent_result=intent,
+            user_id="user-1",
+            use_graph=False,  # force the legacy loop
+        )
+        # PlannerAgent.run must be invoked exactly once.
+        assert mock_planner_run.called
+        assert mock_planner_run.call_count == 1
+        # The loop returns a completed result without entering the Agentic Loop.
+        assert result.stop_reason == "completed"
+
+    clear_session("conv-plan-test")
+
+
+def test_non_plan_intent_does_not_route_to_planner(db_session) -> None:
+    """非 plan 意图不应触发 PlannerAgent。"""
+    clear_session("conv-casual")
+
+    intent = ChatIntentResult(
+        intent_category="casual_chat",
+        tier="light",
+        max_iterations=1,
+    )
+
+    fake_response = MagicMock()
+    fake_response.content = "你好呀，今天怎么样？"
+    fake_response.response_metadata = {
+        "token_usage": {"total_tokens": 50, "prompt_tokens": 40, "completion_tokens": 10}
+    }
+    llm = MagicMock()
+    llm.invoke.return_value = fake_response
+
+    container = MagicMock()
+    container.long_term_memory = None
+    container._llm_for_tier.return_value = llm
+
+    with patch(
+        "app.domain.agents.planner_agent.PlannerAgent.run",
+        new_callable=AsyncMock,
+    ) as mock_planner_run:
+        result = run_conversation_loop(
+            db_session,
+            container,
+            conversation_id="conv-casual",
+            content="你好",
+            pinned_diaries_text="",
+            retrieved_diaries_text="",
+            episodic_text="",
+            memory_ids=[],
+            intent_result=intent,
+            user_id="user-1",
+            use_graph=False,
+        )
+        # PlannerAgent must NOT be called for a casual_chat intent.
+        assert not mock_planner_run.called
+        assert result.stop_reason == "completed"
+
+    clear_session("conv-casual")
+
+
+@pytest.mark.asyncio
+async def test_plan_exploration_streaming_routes_to_planner_agent() -> None:
+    """流式 loop 中 plan_exploration 应委托给 PlannerAgent 并提前返回。"""
+    clear_session("conv-plan-stream")
+
+    intent = ChatIntentResult(
+        intent_category="plan_exploration",
+        need_tools=["list_todos"],
+        tier="heavy",
+        max_iterations=5,
+    )
+
+    llm = _StreamingStubLLM(tokens=["不", "应", "到", "达"])
+
+    container = MagicMock()
+    container.long_term_memory = None
+    container._llm_for_tier.return_value = llm
+
+    with patch(
+        "app.domain.agents.planner_agent.PlannerAgent.run",
+        new_callable=AsyncMock,
+    ) as mock_planner_run:
+        collected: list[Any] = []
+        async for item in run_conversation_loop_streaming(
+            MagicMock(),
+            container,
+            conversation_id="conv-plan-stream",
+            content="帮我规划早睡",
+            pinned_diaries_text="",
+            retrieved_diaries_text="",
+            episodic_text="",
+            memory_ids=[],
+            intent_result=intent,
+            user_id="user-1",
+            trace_id="conv-plan-stream",
+        ):
+            collected.append(item)
+
+        # PlannerAgent.run was awaited exactly once.
+        assert mock_planner_run.called
+        assert mock_planner_run.call_count == 1
+        # The streaming Agentic Loop must not be entered, so no LLM tokens are
+        # yielded from astream.
+        assert collected == []
+        assert llm.astream_prompts == []
+
+    clear_session("conv-plan-stream")

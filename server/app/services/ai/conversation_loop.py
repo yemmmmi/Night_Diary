@@ -19,6 +19,8 @@ as the existing :mod:`agent_executor`.
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import contextlib
 import logging
 from collections.abc import AsyncGenerator
@@ -258,6 +260,48 @@ def _run_via_graph(
     )
 
 
+# ── P2: plan_exploration multi-turn context storage ──
+# Module-level store keyed by conversation_id so the PlannerAgent can
+# accumulate clarifications across turns. SessionContext is a frozen-ish
+# dataclass for chat history; the plan context lives here to keep that
+# responsibility cleanly separated.
+_plan_exploration_contexts: dict[str, str] = {}
+
+
+def _get_plan_context(session: Any) -> str | None:
+    """Return the accumulated plan_exploration context for a session."""
+    conv_id = getattr(session, "conversation_id", None) or str(id(session))
+    return _plan_exploration_contexts.get(conv_id)
+
+
+def _set_plan_context(session: Any, context: str) -> None:
+    """Store the accumulated plan_exploration context for a session."""
+    conv_id = getattr(session, "conversation_id", None) or str(id(session))
+    _plan_exploration_contexts[conv_id] = context
+
+
+def _run_planner_sync(planner: Any, inp: Any) -> None:
+    """Bridge async ``PlannerAgent.run`` into the synchronous legacy loop.
+
+    The legacy ``run_conversation_loop`` is synchronous (called from the
+    synchronous ``generate_reply``), but ``PlannerAgent.run`` is a
+    coroutine.  ``asyncio.run`` is used when no loop is running (the common
+    production path); when a loop is already running we offload to a worker
+    thread so we never nest event loops.
+    """
+    coro = planner.run(inp)
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop — the typical production path.
+        asyncio.run(coro)
+        return
+    # Already inside a running loop (e.g. an async test harness): run the
+    # coroutine in a dedicated thread with its own fresh event loop.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(asyncio.run, coro).result()
+
+
 def run_conversation_loop(
     db: Session,
     container: ServiceContainer,
@@ -369,6 +413,36 @@ def run_conversation_loop(
 
         if enable_tools and not use_native:
             system_prompt += build_tool_hint(tool_specs)
+
+        # ── P2: plan_exploration 意图分支 → PlannerAgent ──
+        # Route to PlannerAgent before entering the Agentic Loop so the
+        # plan skill owns multi-turn clarification / proposal flow.
+        if (
+            intent_result is not None
+            and intent_result.intent_category == "plan_exploration"
+        ):
+            from app.domain.agents.planner_agent import PlannerAgent, PlannerInput
+
+            prior_context = _get_plan_context(session) or ""
+            planner = PlannerAgent(llm=llm)
+            planner_inp = PlannerInput(
+                user_input=content,
+                prior_context=prior_context,
+                trace_id="",  # legacy loop has no trace_id (streaming only)
+                user_id=user_id,
+                conversation_id=conversation_id,
+            )
+            try:
+                _run_planner_sync(planner, planner_inp)
+            except Exception as exc:
+                logger.warning("PlannerAgent failed in legacy loop: %s", exc)
+            # Persist accumulated context for multi-turn clarification.
+            _set_plan_context(session, f"{prior_context}\n{content}".strip())
+            return LoopResult(
+                reply_text=FALLBACK_FEEDBACK,
+                token_info={},
+                stop_reason="completed",
+            )
 
         # ── Agentic Loop (stage 4) ──
         total_usage: dict[str, int] = {}
@@ -571,6 +645,28 @@ async def run_conversation_loop_streaming(
         logger.warning("ConversationLoop streaming: LLM unavailable")
         yield FALLBACK_FEEDBACK
         return
+
+    # ── P2: plan_exploration 意图分支 → PlannerAgent (streaming) ──
+    # PlannerAgent publishes its own REPLY_START / protocol blocks / REPLY_END,
+    # so we delegate and return immediately without entering the Agentic Loop.
+    if (
+        intent_result is not None
+        and intent_result.intent_category == "plan_exploration"
+    ):
+        from app.domain.agents.planner_agent import PlannerAgent, PlannerInput
+
+        planner = PlannerAgent(llm=llm)
+        prior_context = _get_plan_context(session) or ""
+        planner_inp = PlannerInput(
+            user_input=content,
+            prior_context=prior_context,
+            trace_id=trace_id,
+            user_id=user_id,
+            conversation_id=conversation_id,
+        )
+        await planner.run(planner_inp)
+        _set_plan_context(session, f"{prior_context}\n{content}".strip())
+        return  # PlannerAgent already emitted all events
 
     # Detect tool protocol path and build tool specs
     tool_specs = specs_for_names(list((tools or {}).keys())) if tools else []

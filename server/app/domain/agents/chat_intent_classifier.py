@@ -10,6 +10,8 @@ but with chat-specific intent categories:
 - ``advice_seeking``: 求助建议，需检索 + 分析
 - ``crisis_signal``: 危机信号，短路到安全响应
 - ``entity_query``: 实体查询，需实体图查询
+- ``plan_exploration``: 计划探索（P2），需只读计划/任务工具
+- ``task_command``: 任务指令（P2），需只读待办工具
 
 The rule layer runs first and short-circuits when confident (> 0.9),
 spending zero tokens; the LLM layer only runs on ambiguous input.
@@ -115,6 +117,32 @@ _ENTITY_QUERY_KEYWORDS = (
     "在干嘛",
 )
 
+# P2: plan-exploration cues (build / quit / plan phrases)
+_PLAN_EXPLORATION_KEYWORDS = (
+    "帮我规划",
+    "想养成",
+    "想开始",
+    "计划一下",
+    "做个计划",
+    "安排一下",
+    "帮我安排",
+    "想坚持",
+    "想戒掉",
+    "想改掉",
+    "规划",
+)
+
+# P2: task-command cues (todo add / complete / remind)
+_TASK_COMMAND_KEYWORDS = (
+    "加到待办",
+    "加个待办",
+    "记一下待办",
+    "提醒我",
+    "完成了",
+    "做完了",
+    "标记完成",
+)
+
 _CASUAL_SIGNALS = (
     "早安",
     "晚安",
@@ -171,6 +199,21 @@ _INTENT_ROUTING: dict[str, dict[str, Any]] = {
         "need_tools": ["query_entity_graph"],
         "need_entity_query": True,
         "tier": "medium",
+        "max_iterations": 2,
+    },
+    # P2 新增意图的路由配置
+    ChatIntent.PLAN_EXPLORATION.value: {
+        "need_retrieval": False,
+        "need_tools": ["list_todos", "get_plan_progress"],
+        "need_entity_query": False,
+        "tier": "heavy",
+        "max_iterations": 5,
+    },
+    ChatIntent.TASK_COMMAND.value: {
+        "need_retrieval": False,
+        "need_tools": ["list_todos"],
+        "need_entity_query": False,
+        "tier": "light",
         "max_iterations": 2,
     },
 }
@@ -331,6 +374,20 @@ class ChatIntentClassifier:
             return self._build_result(ChatIntent.EMOTIONAL_VENT.value, 0.90)
         if emotional_hits == 1:
             return self._build_result(ChatIntent.EMOTIONAL_VENT.value, 0.75)
+
+        # P2: task command (concrete action phrases; checked before the
+        # casual short-text fallback). Crisis already short-circuited above,
+        # so this never shadows a crisis. Confidence > threshold so it does
+        # not fall through to the LLM layer (whose prompt is not yet updated
+        # to know the new intents).
+        for kw in _TASK_COMMAND_KEYWORDS:
+            if kw in content:
+                return self._build_result(ChatIntent.TASK_COMMAND.value, 0.92)
+
+        # P2: plan exploration (build / quit / plan phrases)
+        for kw in _PLAN_EXPLORATION_KEYWORDS:
+            if kw in content:
+                return self._build_result(ChatIntent.PLAN_EXPLORATION.value, 0.92)
 
         # Casual chat
         if casual_hits >= 1 and is_short:
