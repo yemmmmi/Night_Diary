@@ -126,14 +126,22 @@ class TracingLLMClient:
     def _record_streaming(
         self, prompt: str, full_text: str, started: float, error: str | None
     ) -> None:
-        """Record a streaming LLM call as a synthetic message-like response."""
+        """Record a streaming LLM call with estimated token usage."""
 
         class _Msg:
-            response_metadata: dict[str, Any]
-
             def __init__(self, content: str) -> None:
                 self.content = content
-                self.response_metadata = {}
+                # Estimate tokens (rough: ~3 chars/token for mixed CJK+Latin).
+                # Better than zeros — usage stats have a reference value.
+                est_prompt = max(1, len(prompt) // 3)
+                est_completion = max(1, len(content) // 3)
+                self.response_metadata = {
+                    "token_usage": {
+                        "prompt_tokens": est_prompt,
+                        "completion_tokens": est_completion,
+                        "total_tokens": est_prompt + est_completion,
+                    }
+                }
 
         self._record(prompt, _Msg(full_text), started, error)
 
