@@ -9,8 +9,28 @@ const TEXT_DELTA_EVENT = 'text_delta'
 const TEXT_END_EVENT = 'text_end'
 const REPLY_END_EVENT = 'reply_end'
 const RETRACT_EVENT = 'retract'
+const PROTOCOL_BLOCK_EVENT = 'protocol_block'
 
 export type StreamingReplyStatus = 'idle' | 'streaming' | 'done' | 'retracted'
+
+/**
+ * RenderSegment
+ *
+ * P2 render model: a reply is now an ordered list of segments that mix
+ * plain text with structured protocol blocks. Text deltas accumulate into
+ * the `currentTextBuffer` and are flushed as a single `text` segment
+ * whenever a protocol block arrives or the reply ends, so adjacent text
+ * deltas never fragment into many tiny segments.
+ */
+export type RenderSegment =
+  | { kind: 'text'; content: string }
+  | {
+      kind: 'protocol_block'
+      blockType: string
+      blockId: string
+      data: Record<string, unknown>
+      status: 'pending' | 'accepted' | 'rejected'
+    }
 
 export interface ReplyEndPayload {
   citations?: Array<Record<string, unknown>>
@@ -27,10 +47,13 @@ export interface StreamingReplyReturn {
   replyText: Ref<string>
   status: Ref<StreamingReplyStatus>
   citations: Ref<Array<Record<string, unknown>>>
+  segments: Ref<RenderSegment[]>
   connect: (sseUrl: string) => void
   disconnect: () => void
   reset: () => void
   abort: (conversationId: string, traceId: string) => void
+  acceptBlock: (blockId: string) => Promise<void>
+  rejectBlock: (blockId: string) => void
 }
 
 /**
@@ -60,9 +83,15 @@ export function useStreamingReply(): StreamingReplyReturn {
   const replyText = ref('')
   const status = ref<StreamingReplyStatus>('idle')
   const citations = ref<Array<Record<string, unknown>>>([])
+  const segments = ref<RenderSegment[]>([])
 
   let eventSource: EventSource | null = null
   let pendingTokens = ''
+  // segments model: text deltas accumulate here and are flushed as a single
+  // `text` segment when a protocol block arrives or the reply ends. Unlike
+  // pendingTokens (RAF-batched for render perf), this buffer is only flushed
+  // at segment boundaries.
+  let currentTextBuffer = ''
   let rafId: number | null = null
   let watchdogTimer: ReturnType<typeof setTimeout> | null = null
   let abortConfirmTimer: ReturnType<typeof setTimeout> | null = null
@@ -114,6 +143,8 @@ export function useStreamingReply(): StreamingReplyReturn {
     replyText.value = ''
     pendingTokens = ''
     citations.value = []
+    segments.value = []
+    currentTextBuffer = ''
     status.value = 'streaming'
 
     eventSource = new EventSource(sseUrl)
@@ -126,6 +157,10 @@ export function useStreamingReply(): StreamingReplyReturn {
       try {
         const { text } = JSON.parse(e.data) as { text: string }
         pendingTokens += text
+        // segments 模型用：累积到独立的文本 buffer，在协议块到达或
+        // reply_end 时 flush 为一个 text segment。replyText 仍走原有的
+        // pendingTokens + RAF flush 路径（向后兼容历史消息渲染）。
+        currentTextBuffer += text
         scheduleFlush()
         resetWatchdog()
       } catch {
@@ -139,6 +174,14 @@ export function useStreamingReply(): StreamingReplyReturn {
     })
 
     eventSource.addEventListener(REPLY_END_EVENT, (e: MessageEvent) => {
+      // flush 剩余文本为最后一个 text segment
+      if (currentTextBuffer) {
+        segments.value = [
+          ...segments.value,
+          { kind: 'text', content: currentTextBuffer },
+        ]
+        currentTextBuffer = ''
+      }
       try {
         const data = JSON.parse(e.data) as ReplyEndPayload
         flushTokens()
@@ -174,6 +217,40 @@ export function useStreamingReply(): StreamingReplyReturn {
       clearWatchdog()
     })
 
+    eventSource.addEventListener(PROTOCOL_BLOCK_EVENT, (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data) as {
+          block: {
+            block_type: string
+            block_id: string
+            data: Record<string, unknown>
+          }
+        }
+        // 先 flush 文本 buffer 为一个 text segment
+        if (currentTextBuffer) {
+          segments.value = [
+            ...segments.value,
+            { kind: 'text', content: currentTextBuffer },
+          ]
+          currentTextBuffer = ''
+        }
+        // 再 push 协议块 segment
+        segments.value = [
+          ...segments.value,
+          {
+            kind: 'protocol_block',
+            blockType: payload.block.block_type,
+            blockId: payload.block.block_id,
+            data: payload.block.data,
+            status: 'pending',
+          },
+        ]
+        resetWatchdog()
+      } catch {
+        // Malformed — ignore
+      }
+    })
+
     eventSource.onerror = () => {
       if (status.value === 'streaming') {
         flushTokens()
@@ -203,6 +280,22 @@ export function useStreamingReply(): StreamingReplyReturn {
     }, ABORT_CONFIRM_TIMEOUT_MS)
   }
 
+  async function acceptBlock(blockId: string): Promise<void> {
+    segments.value = segments.value.map((s) =>
+      s.kind === 'protocol_block' && s.blockId === blockId
+        ? { ...s, status: 'accepted' as const }
+        : s,
+    )
+  }
+
+  function rejectBlock(blockId: string): void {
+    segments.value = segments.value.map((s) =>
+      s.kind === 'protocol_block' && s.blockId === blockId
+        ? { ...s, status: 'rejected' as const }
+        : s,
+    )
+  }
+
   function disconnect(): void {
     if (eventSource) {
       eventSource.close()
@@ -215,6 +308,7 @@ export function useStreamingReply(): StreamingReplyReturn {
       abortConfirmTimer = null
     }
     pendingTokens = ''
+    currentTextBuffer = ''
   }
 
   function reset(): void {
@@ -222,6 +316,8 @@ export function useStreamingReply(): StreamingReplyReturn {
     replyText.value = ''
     status.value = 'idle'
     citations.value = []
+    segments.value = []
+    currentTextBuffer = ''
   }
 
   onUnmounted(() => {
@@ -232,9 +328,12 @@ export function useStreamingReply(): StreamingReplyReturn {
     replyText,
     status,
     citations,
+    segments,
     connect,
     disconnect,
     reset,
     abort,
+    acceptBlock,
+    rejectBlock,
   }
 }

@@ -138,3 +138,155 @@ describe('useStreamingReply', () => {
     expect(citations.value).toEqual(testCitations)
   })
 })
+
+describe('useStreamingReply protocol block segments', () => {
+  beforeEach(() => {
+    MockEventSource.instances = []
+    vi.useFakeTimers()
+    vi.stubGlobal('EventSource', MockEventSource)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('accumulates protocol_block as separate segment from text', async () => {
+    const { segments, connect } = useStreamingReply()
+    connect('http://localhost/sse')
+
+    const mockES = MockEventSource.instances[0]
+    mockES.simulateEvent('text_delta', { text: '你好，' })
+    mockES.simulateEvent('text_delta', { text: '我有个建议：' })
+    await vi.runAllTimersAsync()
+
+    mockES.simulateEvent('protocol_block', {
+      type: 'protocol_block',
+      trace_id: 'test',
+      block: {
+        block_type: 'plan_proposal',
+        block_id: 'p1',
+        data: { title: '早睡计划', tasks: [] },
+      },
+    })
+    await vi.runAllTimersAsync()
+
+    // 应该有 2 个段：1 个文本段 + 1 个协议块段
+    expect(segments.value.length).toBe(2)
+    expect(segments.value[0].kind).toBe('text')
+    expect(segments.value[0].content).toContain('你好')
+    expect(segments.value[1].kind).toBe('protocol_block')
+    expect(segments.value[1].blockType).toBe('plan_proposal')
+  })
+
+  it('protocol_block segment has pending status initially', async () => {
+    const { segments, connect } = useStreamingReply()
+    connect('http://localhost/sse')
+
+    const mockES = MockEventSource.instances[0]
+    mockES.simulateEvent('protocol_block', {
+      type: 'protocol_block',
+      trace_id: 'test',
+      block: {
+        block_type: 'plan_proposal',
+        block_id: 'p1',
+        data: { title: '测试', tasks: [] },
+      },
+    })
+    await vi.runAllTimersAsync()
+
+    expect(segments.value.length).toBe(1)
+    expect(segments.value[0].kind).toBe('protocol_block')
+    if (segments.value[0].kind === 'protocol_block') {
+      expect(segments.value[0].status).toBe('pending')
+    }
+  })
+
+  it('acceptBlock updates segment status to accepted', async () => {
+    const { segments, connect, acceptBlock } = useStreamingReply()
+    connect('http://localhost/sse')
+
+    const mockES = MockEventSource.instances[0]
+    mockES.simulateEvent('protocol_block', {
+      type: 'protocol_block',
+      trace_id: 'test',
+      block: {
+        block_type: 'plan_proposal',
+        block_id: 'p1',
+        data: { title: '测试', tasks: [] },
+      },
+    })
+    await vi.runAllTimersAsync()
+
+    await acceptBlock('p1')
+    if (segments.value[0].kind === 'protocol_block') {
+      expect(segments.value[0].status).toBe('accepted')
+    }
+  })
+
+  it('rejectBlock updates segment status to rejected', async () => {
+    const { segments, connect, rejectBlock } = useStreamingReply()
+    connect('http://localhost/sse')
+
+    const mockES = MockEventSource.instances[0]
+    mockES.simulateEvent('protocol_block', {
+      type: 'protocol_block',
+      trace_id: 'test',
+      block: {
+        block_type: 'plan_proposal',
+        block_id: 'p1',
+        data: { title: '测试', tasks: [] },
+      },
+    })
+    await vi.runAllTimersAsync()
+
+    rejectBlock('p1')
+    if (segments.value[0].kind === 'protocol_block') {
+      expect(segments.value[0].status).toBe('rejected')
+    }
+  })
+
+  it('replyText still works for backward compat', async () => {
+    const { replyText, connect } = useStreamingReply()
+    connect('http://localhost/sse')
+
+    const mockES = MockEventSource.instances[0]
+    mockES.simulateEvent('text_delta', { text: '纯文本回复' })
+    await vi.runAllTimersAsync()
+
+    // replyText 仍然累积纯文本（向后兼容历史消息渲染）
+    expect(replyText.value).toBe('纯文本回复')
+  })
+
+  it('text after protocol_block creates new text segment', async () => {
+    const { segments, connect } = useStreamingReply()
+    connect('http://localhost/sse')
+
+    const mockES = MockEventSource.instances[0]
+    mockES.simulateEvent('text_delta', { text: '前文' })
+    await vi.runAllTimersAsync()
+
+    mockES.simulateEvent('protocol_block', {
+      type: 'protocol_block',
+      trace_id: 'test',
+      block: {
+        block_type: 'plan_proposal',
+        block_id: 'p1',
+        data: {},
+      },
+    })
+    await vi.runAllTimersAsync()
+
+    mockES.simulateEvent('text_delta', { text: '后文' })
+    await vi.runAllTimersAsync()
+
+    mockES.simulateEvent('reply_end', {})
+    await vi.runAllTimersAsync()
+
+    // 3 段：text + protocol_block + text
+    expect(segments.value.length).toBe(3)
+    expect(segments.value[0].kind).toBe('text')
+    expect(segments.value[1].kind).toBe('protocol_block')
+    expect(segments.value[2].kind).toBe('text')
+  })
+})
