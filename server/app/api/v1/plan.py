@@ -12,7 +12,7 @@ import json
 
 from fastapi import APIRouter, Query, status
 
-from app.api.deps import CurrentUserDep, DbDep
+from app.api.deps import ContainerDep, CurrentUserDep, DbDep
 from app.api.schemas import (
     PlanCreateRequest,
     PlanResponse,
@@ -157,12 +157,24 @@ def get_today_tasks(db: DbDep, user: CurrentUserDep) -> list[TaskResponse]:
 
 @tasks_router.patch("/{task_id}", response_model=TaskResponse)
 def update_task(
-    task_id: str, body: TaskUpdateRequest, db: DbDep, user: CurrentUserDep
+    task_id: str,
+    body: TaskUpdateRequest,
+    db: DbDep,
+    user: CurrentUserDep,
+    container: ContainerDep,
 ) -> TaskResponse:
     fields = body.model_dump(exclude_unset=True)
     if "status" in fields:
+        # Task completion must trigger episodic memory write-back (closed-loop
+        # for source=task). ``ensure_memory`` lazily loads the three memory
+        # layers; without it ``episodic_memory`` is None and the write no-ops.
+        container.ensure_memory(user_id=str(user.id))
         task = plan_service.update_task_status(
-            db, task_id=task_id, user_id=str(user.id), status=fields.pop("status")
+            db,
+            task_id=task_id,
+            user_id=str(user.id),
+            status=fields.pop("status"),
+            container=container,
         )
         if fields:
             task = plan_service.update_task(

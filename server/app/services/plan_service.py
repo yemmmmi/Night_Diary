@@ -177,7 +177,15 @@ def update_task_status(
 def _persist_task_memory(
     db: Session, task: TaskRow, container: Any, user_id: str
 ) -> None:
-    """将任务状态变更写入 episodic memory (best-effort, 失败不阻塞)."""
+    """将任务状态变更写入 episodic memory (best-effort, 失败不阻塞).
+
+    ``ServiceContainer`` does not expose a ``memory_gateway`` attribute, so we
+    construct one via :meth:`MemoryGateway.from_container`. The caller (API
+    layer) is responsible for calling ``container.ensure_memory`` first so the
+    underlying ``episodic_memory`` / ``long_term_memory`` layers are loaded;
+    otherwise ``persist_atom`` silently no-ops (returns ``False``).
+    """
+    from app.services.memory_gateway import MemoryGateway
     from app.services.normalizer import ContentNormalizer
 
     try:
@@ -193,7 +201,7 @@ def _persist_task_memory(
             status=task.status,
             user_id=user_id,
         )
-        gateway = container.memory_gateway
+        gateway = MemoryGateway.from_container(container)
         gateway.persist_atom(atom)
     except Exception as exc:
         logger.warning("Task memory persist failed (non-fatal): %s", exc)

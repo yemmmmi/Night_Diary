@@ -165,3 +165,42 @@ def test_task_can_be_undone(e2e_client: TestClient) -> None:
     )
     assert undone.json()["status"] == "pending"
     assert undone.json()["completed_at"] is None
+
+
+def test_task_completion_persists_episodic_memory(e2e_client: TestClient) -> None:
+    """任务完成应写入 episodic memory (source=task) 形成记忆闭环.
+
+    验证 PATCH /tasks/{id} -> done 触发 MemoryGateway.persist_atom, 最终在
+    episodic_memories 表落一条 source=task 的记录. payload_json 由 pydantic
+    ``model_dump_json`` 生成 (紧凑格式, 无键值间空格), 故 source 片段匹配
+    ``"source":"task"``.
+    """
+    from app.infrastructure.models.memory import EpisodicMemoryRow
+
+    create = e2e_client.post(
+        "/api/v1/tasks",
+        json={"title": "记忆回写测试任务"},
+    )
+    assert create.status_code == 201, create.text
+    task_id = create.json()["id"]
+
+    patch = e2e_client.patch(
+        f"/api/v1/tasks/{task_id}",
+        json={"status": "done"},
+    )
+    assert patch.status_code == 200, patch.text
+
+    container = e2e_client.app.state.container
+    db = container.session()
+    try:
+        task_memories = (
+            db.query(EpisodicMemoryRow)
+            .filter(EpisodicMemoryRow.payload_json.contains('"source":"task"'))
+            .filter(EpisodicMemoryRow.payload_json.contains("记忆回写测试任务"))
+            .all()
+        )
+        assert (
+            len(task_memories) >= 1
+        ), "Task completion should persist an episodic memory with source=task"
+    finally:
+        db.close()
