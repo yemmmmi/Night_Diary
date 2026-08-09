@@ -3,10 +3,17 @@ import { computed } from 'vue'
 
 import type { ChatMessage } from '@/shared/api/conversation'
 import { chatCopy } from '@/shared/copy/chat'
+import type { RenderSegment } from '@/shared/composables/useStreamingReply'
+import PlanProposalCard from './PlanProposalCard.vue'
+import ClarificationCard from './ClarificationCard.vue'
 
 const props = defineProps<{
   message: ChatMessage
   diaryLabels?: Record<number, string>
+  /** 流式协议块段：仅对正在/刚结束的 assistant 流式消息传入。
+   *  历史消息（从 DB 加载）不传，仍走纯文本渲染。 */
+  segments?: RenderSegment[]
+  conversationId?: string
 }>()
 
 const referenceLabels = computed(() => {
@@ -14,12 +21,37 @@ const referenceLabels = computed(() => {
   if (ids.length === 0) return []
   return ids.map((id) => props.diaryLabels?.[id] ?? `#${id}`)
 })
+
+const hasSegments = computed(
+  () => Array.isArray(props.segments) && props.segments.length > 0,
+)
 </script>
 
 <template>
   <div class="chat-msg" :class="`chat-msg--${message.role}`">
-    <p class="chat-msg__content">{{ message.content }}</p>
-    <p v-if="message.role === 'assistant' && referenceLabels.length > 0" class="chat-msg__refs">
+    <!-- 有协议块段时按段渲染（流式消息）；否则纯文本（历史消息） -->
+    <template v-if="hasSegments">
+      <template v-for="(seg, i) in segments" :key="i">
+        <p v-if="seg.kind === 'text'" class="chat-msg__content">{{ seg.content }}</p>
+        <PlanProposalCard
+          v-else-if="seg.kind === 'protocol_block' && seg.blockType === 'plan_proposal'"
+          :proposal="seg.data"
+          :conversation-id="conversationId"
+        />
+        <ClarificationCard
+          v-else-if="
+            seg.kind === 'protocol_block' && seg.blockType === 'clarification_request'
+          "
+          :clarification="seg.data"
+        />
+      </template>
+    </template>
+    <p v-else class="chat-msg__content">{{ message.content }}</p>
+
+    <p
+      v-if="message.role === 'assistant' && referenceLabels.length > 0"
+      class="chat-msg__refs"
+    >
       {{ chatCopy.messageReferences }}：{{ referenceLabels.join('、') }}
     </p>
   </div>
