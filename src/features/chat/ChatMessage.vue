@@ -35,14 +35,14 @@ const hasSegments = computed(
         <p v-if="seg.kind === 'text'" class="chat-msg__content">{{ seg.content }}</p>
         <PlanProposalCard
           v-else-if="seg.kind === 'protocol_block' && seg.blockType === 'plan_proposal'"
-          :proposal="seg.data"
+          :proposal="seg.data as any"
           :conversation-id="conversationId"
         />
         <ClarificationCard
           v-else-if="
             seg.kind === 'protocol_block' && seg.blockType === 'clarification_request'
           "
-          :clarification="seg.data"
+          :clarification="seg.data as any"
         />
       </template>
     </template>

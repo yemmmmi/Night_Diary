@@ -6,7 +6,7 @@ Individual modules are also imported explicitly in ``database.init_db`` and
 ``alembic/env.py`` for robustness.
 """
 
-from app.infrastructure.models.plan import PlanRow, TaskRow
 from app.infrastructure.models.pipeline_trace import PipelineTraceRow
+from app.infrastructure.models.plan import PlanRow, TaskRow
 
 __all__ = ["PipelineTraceRow", "PlanRow", "TaskRow"]

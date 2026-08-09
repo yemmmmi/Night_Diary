@@ -174,9 +174,11 @@ describe('useStreamingReply protocol block segments', () => {
     // 应该有 2 个段：1 个文本段 + 1 个协议块段
     expect(segments.value.length).toBe(2)
     expect(segments.value[0].kind).toBe('text')
-    expect(segments.value[0].content).toContain('你好')
+    expect((segments.value[0] as { content: string }).content).toContain('你好')
     expect(segments.value[1].kind).toBe('protocol_block')
-    expect(segments.value[1].blockType).toBe('plan_proposal')
+    expect(
+      (segments.value[1] as { blockType: string }).blockType,
+    ).toBe('plan_proposal')
   })
 
   it('protocol_block segment has pending status initially', async () => {
