@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.services import conversation_service, diary_service
 from app.services.ai.conversation_loop import run_conversation_loop
 from app.services.ai.input_preprocessor import InputPreprocessor
+from app.services.ai.prompts import FALLBACK_FEEDBACK
 from app.services.ai.session_context import get_or_create_session
 from app.services.ai.tool_factory import ToolFn, build_tool_map
 from app.services.memory_gateway import MemoryGateway
@@ -554,25 +555,24 @@ async def generate_reply_streaming(
     crisis_guard: CrisisGuard | None = None,
     trace_id: str = "",
 ) -> None:
-    """Streaming version of :func:`generate_reply`.
+    """Streaming version of :func:`generate_reply` with _terminating_reply guarantee.
 
-    Runs Stage 1-5 synchronously (via :func:`generate_reply`'s logic, which
-    includes all V2 safety checks), then publishes the reply via SSE.
+    Wraps the P0 simulated-streaming logic in a try/finally that guarantees
+    a ``REPLY_END`` event is always published — even when the synchronous
+    :func:`generate_reply` raises, or when the task is cancelled by the
+    abort endpoint. This is the P1 layer-2 "agent terminating reply"
+    mechanism: the frontend can never be left stuck in ``streaming`` state.
 
-    P0 strategy (see design doc): *simulated streaming* — the reply text is
-    generated fully by :func:`generate_reply` (including LLM call, safety
-    checks, episodic write-back), then this function re-publishes the
-    already-generated text in sentence-like chunks through the
-    :class:`TraceEventBus`. The chunking produces a natural streaming feel
-    for the frontend without requiring a true ``astream`` LLM call.
+    Three paths through the try block:
 
-    Fallback cases (single-chunk publish, no streaming):
-    - ``result.is_crisis`` — the reply is the safety template; emit it as
-      one ``TEXT_DELTA`` (per streaming-safety line 1: crisis never streams).
-    - Empty ``trace_id`` — no SSE subscriber possible; nothing to publish.
+    1. **Normal**: generate_reply succeeds → chunked publish → REPLY_END
+    2. **CancelledError**: task cancelled by abort → REPLY_END(error="cancelled")
+    3. **Other Exception**: any other failure → REPLY_END(error=str(exc))
 
-    P6 will replace this with true token-level streaming that wires
-    :func:`run_conversation_loop_streaming` directly into the publish path.
+    The ``finally`` block is a safety net: if the except branch itself
+    raises before publishing REPLY_END, the finally publishes a
+    "finalized" fallback. A ``reply_end_sent`` flag prevents duplicates
+    on the normal path.
     """
     from app.shared.streaming_events import (
         publish_reply_end,
@@ -581,45 +581,81 @@ async def generate_reply_streaming(
         publish_text_end,
     )
 
-    # ── Step 1: Full synchronous pipeline (all V2 safety checks included) ──
-    result = generate_reply(
-        db,
-        container,
-        conversation_id=conversation_id,
-        content=content,
-        diary_ids=diary_ids,
-        user_id=user_id,
-        auto_retrieve=auto_retrieve,
-        crisis_guard=crisis_guard,
-        trace_id=trace_id or None,
-    )
+    reply_started = False
+    reply_end_sent = False
 
-    # ── Step 2: No trace_id → nothing to publish to (no SSE subscriber) ──
-    if not trace_id:
-        return
+    try:
+        # ── Step 1: Full synchronous pipeline (all V2 safety checks included) ──
+        result = generate_reply(
+            db,
+            container,
+            conversation_id=conversation_id,
+            content=content,
+            diary_ids=diary_ids,
+            user_id=user_id,
+            auto_retrieve=auto_retrieve,
+            crisis_guard=crisis_guard,
+            trace_id=trace_id or None,
+        )
 
-    # ── Step 3: Crisis → publish the safe template as a single chunk ──
-    if result.is_crisis:
-        await publish_reply_start(trace_id, intent="crisis_signal")
-        await publish_text_delta(trace_id, result.reply_text)
+        # ── Step 2: No trace_id → nothing to publish to (no SSE subscriber) ──
+        if not trace_id:
+            return
+
+        # ── Step 3: Crisis → publish the safe template as a single chunk ──
+        if result.is_crisis:
+            await publish_reply_start(trace_id, intent="crisis_signal")
+            reply_started = True
+            await publish_text_delta(trace_id, result.reply_text)
+            await publish_text_end(trace_id)
+            await publish_reply_end(trace_id)
+            reply_end_sent = True
+            return
+
+        # ── Step 4: Non-crisis → simulate streaming with sentence-like chunks ──
+        await publish_reply_start(trace_id, intent="streaming")
+        reply_started = True
+
+        chunks = _split_into_chunks(result.reply_text, chunk_size=20)
+        for chunk in chunks:
+            await publish_text_delta(trace_id, chunk)
+            await asyncio.sleep(0.02)  # 20ms delay for visual streaming effect
+
         await publish_text_end(trace_id)
-        await publish_reply_end(trace_id)
-        return
+        await publish_reply_end(
+            trace_id,
+            citations=[],  # citations are already embedded in reply_text
+            usage=result.token_info or {},
+        )
+        reply_end_sent = True
 
-    # ── Step 4: Non-crisis → simulate streaming with sentence-like chunks ──
-    await publish_reply_start(trace_id, intent="streaming")
+    except asyncio.CancelledError:
+        # User-initiated abort — clean shutdown, no fallback text needed.
+        if reply_started and not reply_end_sent and trace_id:
+            with contextlib.suppress(Exception):
+                await publish_reply_end(trace_id, error="cancelled")
+            reply_end_sent = True
+        raise  # Propagate CancelledError to the task registry
 
-    chunks = _split_into_chunks(result.reply_text, chunk_size=20)
-    for chunk in chunks:
-        await publish_text_delta(trace_id, chunk)
-        await asyncio.sleep(0.02)  # 20ms delay for visual streaming effect
+    except Exception as exc:
+        logger.exception("Streaming reply failed: %s", exc)
+        if trace_id:
+            if not reply_started:
+                with contextlib.suppress(Exception):
+                    await publish_reply_start(trace_id, intent="error")
+                reply_started = True
+            with contextlib.suppress(Exception):
+                await publish_text_delta(trace_id, FALLBACK_FEEDBACK)
+            with contextlib.suppress(Exception):
+                await publish_reply_end(trace_id, error=str(exc))
+            reply_end_sent = True
 
-    await publish_text_end(trace_id)
-    await publish_reply_end(
-        trace_id,
-        citations=[],  # citations are already embedded in reply_text
-        usage=result.token_info or {},
-    )
+    finally:
+        # Ultimate fallback: if an exception path itself failed before
+        # publishing REPLY_END, ensure it happens here.
+        if trace_id and reply_started and not reply_end_sent:
+            with contextlib.suppress(Exception):
+                await publish_reply_end(trace_id, error="finalized")
 
 
 def _split_into_chunks(text: str, chunk_size: int = 20) -> list[str]:

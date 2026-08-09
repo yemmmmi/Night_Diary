@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -343,3 +345,139 @@ async def test_generate_reply_streaming_no_trace_id_publishes_nothing(
     assert queue.empty()
 
     await bus.unsubscribe(trace_id_unused, queue)
+
+
+# ── P1 Task 3: _terminating_reply guarantee tests ─────────────────────
+
+
+async def test_streaming_emits_reply_end_on_generate_reply_failure() -> None:
+    """generate_reply 抛异常时，generate_reply_streaming 必须发出 REPLY_END。"""
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-trace-llm-failure"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    try:
+        with patch.object(
+            conversation_ai_service,
+            "generate_reply",
+            side_effect=RuntimeError("LLM crashed"),
+        ):
+            # Should NOT raise — the exception is caught by the try/finally.
+            await conversation_ai_service.generate_reply_streaming(
+                db=MagicMock(),
+                container=MagicMock(),
+                conversation_id="test-conv",
+                content="你好",
+                diary_ids=[],
+                user_id="test-user",
+                trace_id=trace_id,
+            )
+
+        # Collect all events published to the subscribed queue.
+        events: list[dict] = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+
+        # Must carry a REPLY_END event with the error marker.
+        reply_ends = [e for e in events if e.get("type") == StreamingEventType.REPLY_END]
+        assert len(reply_ends) >= 1, (
+            f"Expected REPLY_END event, got events: {[e.get('type') for e in events]}"
+        )
+        assert reply_ends[-1]["error"] is not None
+        assert "LLM crashed" in reply_ends[-1]["error"]
+    finally:
+        await bus.unsubscribe(trace_id, queue)
+
+
+async def test_streaming_emits_reply_end_on_cancel() -> None:
+    """generate_reply_streaming 被 cancel 时必须发出 REPLY_END。"""
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-trace-cancel"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    try:
+        # A long reply yields many chunks → the streaming loop has many await
+        # points (asyncio.sleep per chunk), giving us a window to cancel the
+        # task mid-stream. 1000 chars / chunk_size 20 = 50 chunks ≈ 1s.
+        long_text = "字" * 1000
+        mock_result = MagicMock()
+        mock_result.is_crisis = False
+        mock_result.reply_text = long_text
+        mock_result.token_info = {"total_tokens_used": 10}
+
+        with patch.object(
+            conversation_ai_service, "generate_reply", return_value=mock_result
+        ):
+            task = asyncio.create_task(
+                conversation_ai_service.generate_reply_streaming(
+                    db=MagicMock(),
+                    container=MagicMock(),
+                    conversation_id="test-conv",
+                    content="你好",
+                    diary_ids=[],
+                    user_id="test-user",
+                    trace_id=trace_id,
+                )
+            )
+            # Let the task reach the streaming loop (REPLY_START + a few deltas).
+            await asyncio.sleep(0.15)
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+        events: list[dict] = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+
+        reply_ends = [e for e in events if e.get("type") == StreamingEventType.REPLY_END]
+        assert len(reply_ends) >= 1, (
+            f"Expected REPLY_END on cancel, got: {[e.get('type') for e in events]}"
+        )
+    finally:
+        await bus.unsubscribe(trace_id, queue)
+
+
+async def test_streaming_normal_path_single_reply_end() -> None:
+    """正常路径只发一次 REPLY_END，不重复。"""
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-trace-normal"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    try:
+        mock_result = MagicMock()
+        mock_result.is_crisis = False
+        mock_result.reply_text = "你好呀"
+        mock_result.token_info = {"total_tokens_used": 10}
+
+        with patch.object(
+            conversation_ai_service, "generate_reply", return_value=mock_result
+        ):
+            await conversation_ai_service.generate_reply_streaming(
+                db=MagicMock(),
+                container=MagicMock(),
+                conversation_id="test-conv",
+                content="你好",
+                diary_ids=[],
+                user_id="test-user",
+                trace_id=trace_id,
+            )
+
+        events: list[dict] = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+
+        reply_ends = [e for e in events if e.get("type") == StreamingEventType.REPLY_END]
+        assert len(reply_ends) == 1, (
+            f"Expected exactly 1 REPLY_END, got {len(reply_ends)}"
+        )
+    finally:
+        await bus.unsubscribe(trace_id, queue)
