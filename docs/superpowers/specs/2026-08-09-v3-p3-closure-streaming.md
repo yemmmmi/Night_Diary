@@ -29,14 +29,16 @@
 3. `plan_service.update_task_status` 在状态变更时触发记忆回写
 4. `weekly_service._build_weekly_content` 注入 plan/task 数据块
 5. `INSIGHT_REPORT_SYSTEM` prompt 新增"计划执行回顾"段落指引
-6. `generate_reply_streaming` 重构：提取 `_prepare_reply_context()` 前置函数，流式路径改用 `run_conversation_loop_streaming`
+6. `generate_reply_streaming` 重构：提取 `_prepare_reply_context()` 前置函数（方案 B，只改流式路径），流式路径改用 `run_conversation_loop_streaming`
 7. `TracingLLMClient._record_streaming` 修复 token 统计丢失
-8. 单元测试 + e2e 测试
+8. **场景一流式**——单 content worker 路径（PURE_RECORD / EMOTIONAL_SUPPORT / HABIT_TRACKING，占 75%）走 astream；多 worker 路径（RETROSPECTIVE_REVIEW）保持非流式
+9. PlannerAgent 前置文本流式——调用 ainvoke 生成 JSON 前先流式发一句过渡语，优化等待体验
+10. 单元测试 + e2e 测试 + 流式/非流式一致性测试
 
 ### 本阶段不包含
 - **Thompson Sampling 规划风格反馈**——用户明确去掉（无用户验证，需 A/B 测试，推迟到有用户基础后）
-- **场景一流式**（Supervisor.synthesize / Empathy+Insight 并发）——架构冲突大（fan-out + synthesize 步骤），推迟到独立阶段评估
-- **PlannerAgent 改 astream**——JSON 结构化输出不适合流式解析，保持一次性 ainvoke
+- **PlannerAgent 改 astream**——JSON 结构化输出不适合流式解析（详见 §3.5），保持一次性 ainvoke，仅加前置文本流式优化体验
+- **多 worker 路径的场景一流式**（RETROSPECTIVE_REVIEW 的 empathy+insight 合成）——synthesize 步骤需要完整输入，保持非流式
 - **重复任务 / 提醒推送 / 日历集成**——继续推迟
 - **记忆检索时对 source=task 的特殊加权**——task 记忆和 diary/chat 记忆平等参与检索，不做特殊处理
 
@@ -259,9 +261,13 @@ P0 的 `generate_reply_streaming` 走"模拟流式"：先调用同步 `generate_
 
 `run_conversation_loop_streaming`（P0 加的）已实现真正的 astream（工具轮 invoke + 最终回复 astream + 安全守卫），但**只被测试调用，未接入生产**。
 
-#### 方案 A：提取前置上下文函数
+#### 方案 B：只改流式路径（采纳）
 
-从 `generate_reply` 的 370 行中提取 Stage 1-3（前置上下文准备）为独立函数 `_prepare_reply_context()`，让流式路径复用它 + `run_conversation_loop_streaming`，非流式路径继续用完整的 `generate_reply`。
+从 `generate_reply` 的 370 行中提取 Stage 1-3（前置上下文准备）为独立函数 `_prepare_reply_context()`，**只供流式路径使用**。非流式 `generate_reply` 保持原样不动（降低回归风险）。
+
+为防止两份代码 drift，新增一个**一致性测试**：断言 `_prepare_reply_context` 的产出和 `generate_reply` 内部对应阶段的中间状态一致。
+
+**为何不选方案 A（两条路径都重构）**：P3 的核心目标是升级流式，不是重构 generate_reply。方案 A 把变更面扩大一倍，600+ 测试的回归风险不值得。如果半年后 Stage 1-3 真的需要改，那时再统一重构。
 
 ```python
 # server/app/services/conversation_ai_service.py
@@ -422,6 +428,150 @@ def _record_streaming(self, prompt: str, full_text: str, started: float, error: 
 ```
 
 注意：这是**估算**，不是真实 token 数（真实需要 tokenizer）。但比全零好——usage 统计、token 成本追踪至少有参考值。字段名 `token_usage` 要和现有 `extract_token_usage` 函数的解析逻辑一致（确认 `app/services/ai/utils.py` 的 `extract_token_usage` 读哪个 key）。
+
+### 3.4 场景一流式（单 worker 路径）
+
+#### 架构分析
+
+场景一（日记→AI 回信）的 `MultiAgentGraph` 按 `INTENT_ROUTING` 路由 worker：
+
+| 意图 | Workers | Content Workers 数 | synthesize 方式 |
+|------|---------|-------------------|----------------|
+| PURE_RECORD | empathy | 1 | 直接返回（第 261 行） |
+| EMOTIONAL_SUPPORT | empathy + retrieval | 1（retrieval 被过滤） | 直接返回 |
+| RETROSPECTIVE_REVIEW | empathy + retrieval + insight | 2 | LLM synthesize |
+| HABIT_TRACKING | retrieval + insight | 1 | 直接返回 |
+
+**4 种意图里 3 种（75%）是单 content worker 路径**——synthesize 跳过 LLM 合成，直接返回 worker 输出。这些路径可以流式化。
+
+#### 实现方案
+
+在 `server/app/domain/agents/supervisor.py` 新增流式合成方法 `synthesize_streaming`：
+
+```python
+async def synthesize_streaming(
+    self, outputs: dict[str, str], state: Any, *, trace_id: str = ""
+) -> AsyncGenerator[str | dict, None]:
+    """流式版本的 synthesize。
+
+    单 content worker 路径：直接 astream 那个 worker 的回复。
+    多 content worker 路径：降级为非流式（调 synthesize 后一次性 yield）。
+
+    yields:
+        str → TEXT_DELTA 内容（调用方发布到 TraceEventBus）
+        dict → {"reply_end": True} 等信号
+    """
+    content_outputs = {k: v for k, v in outputs.items() if k != "retrieval"}
+
+    if len(content_outputs) == 1:
+        # 单 worker 路径——让 worker 重新 astream
+        worker_name = next(iter(content_outputs.keys()))
+        worker = self._workers.get(worker_name)
+        if worker is not None and hasattr(worker, "run_streaming"):
+            # Worker 支持流式——逐 token yield
+            async for token in worker.run_streaming(state, trace_id=trace_id):
+                yield token
+            return
+        # Worker 不支持流式——降级为一次性返回已有输出
+        yield content_outputs[worker_name]
+        return
+
+    # 多 worker 路径——降级为非流式 synthesize
+    result = await self.synthesize(outputs, state)
+    yield result["final_response"]
+```
+
+#### Worker 流式方法
+
+EmpathyAgent 和 InsightAgent 新增 `run_streaming` 方法（与 `run` 并行，不破坏现有路径）：
+
+```python
+# EmpathyAgent（同理 InsightAgent）
+async def run_streaming(self, state: Any, *, trace_id: str = "") -> AsyncGenerator[str, None]:
+    """流式版本——重新构建 prompt 并 astream。
+
+    与 run() 共用 prompt 构建逻辑（提取为 _build_prompt），但用 astream
+    替代 ainvoke。SafetyGuard 过滤由调用方（场景二）或此处内联（场景一）
+    处理——场景一复用 P0 的 StreamingSafetyGuard。
+    """
+    from app.shared.streaming_safety import StreamingSafetyGuard
+    from app.shared.crisis_guard import CrisisGuard
+
+    prompt = self._build_prompt(state)  # 提取的共用方法
+    guard = StreamingSafetyGuard(CrisisGuard())
+
+    async def _raw_stream():
+        async for token in self._llm.astream(prompt):
+            yield token
+
+    async for item in guard.filter_stream(_raw_stream(), intent="emotional_vent"):
+        if isinstance(item, str):
+            yield item
+        # RETRACT 在场景一由调用方处理（前端 segments 模型）
+```
+
+#### 场景一流式入口
+
+`server/app/services/analysis_service.py` 的分析触发逻辑，新增流式变体。当 trace_id 存在时走流式：
+
+```python
+async def trigger_analysis_streaming(
+    self, db, container, diary_id, user_id, *, trace_id: str
+) -> None:
+    """场景一流式版本——复用 MultiAgentGraph 但用 synthesize_streaming。"""
+    # ... 前置 Retrieval/Empathy/Insight worker 并发执行（不变）...
+    # synthesize 阶段改为：
+    async for token in supervisor.synthesize_streaming(outputs, state, trace_id=trace_id):
+        if isinstance(token, str):
+            await publish_text_delta(trace_id, token)
+    await publish_reply_end(trace_id)
+```
+
+**关键约束**：
+- 场景一流式只在 trace_id 存在时触发（和场景二一样的灰度模式）
+- 多 worker 路径（RETROSPECTIVE_REVIEW）自动降级为非流式 synthesize，用户体验是"等一下然后一次性显示"
+- Worker 的 `run_streaming` 和 `run` 共用 `_build_prompt`，不重复 prompt 逻辑
+
+### 3.5 PlannerAgent 前置文本流式
+
+#### 为什么不改 astream（技术约束）
+
+PlannerAgent 生成的是 JSON 协议块。流式 JSON 的核心问题：
+
+1. **无法增量解析**：JSON 是严格嵌套结构，`{"title": "早睡` 收到一半时无法确定 title 的值，只能等完整 JSON 到齐再 `json.loads`——和一次性 ainvoke 无区别。
+2. **前端无法增量渲染**：协议块是一个完整 UI 单元（一张卡片）。title 来了但 tasks 没来，卡片无法画——用户看到残缺闪烁的卡片，体验比等待更差。
+3. **流式 JSON 解析器**（ijson 等）对 LLM 输出容错差，复杂度高收益低。
+
+#### 优化方案：前置过渡语文本流式
+
+在 PlannerAgent 调用 ainvoke 生成 JSON 之前，先流式发一句过渡语，让用户知道 Agent 在工作：
+
+```python
+# planner_agent.py 的 _emit_plan_proposal 方法
+
+async def _emit_plan_proposal(self, inp, completeness):
+    # 先流式发过渡语（基于 completeness 判断语境）
+    transition = self._build_transition_text(completeness)
+    await publish_text_delta(inp.trace_id, transition)
+    await publish_text_end(inp.trace_id)
+
+    # 然后调用 ainvoke 生成 JSON（非流式）
+    response = await self._llm.ainvoke(prompt)
+    # ... 现有 JSON 解析 + publish_protocol_block 逻辑 ...
+```
+
+过渡语文本示例：
+
+```python
+def _build_transition_text(self, completeness: Any) -> str:
+    """根据上下文生成自然的过渡语。"""
+    what = getattr(completeness, "what", None) or "你的目标"
+    return f"基于你提到的「{what}」，结合你的历史记录，我整理了一个建议：\n\n"
+```
+
+**效果**：用户说"我想早睡，11点前睡"，会先看到"基于你提到的「早睡」，结合你的历史记录，我整理了一个建议："这段文字流式打出，然后紧接着出现 plan_proposal 卡片。等待感大幅降低，且文本是流式的（打字机效果），JSON 部分保持一次性渲染（卡片完整出现）。
+
+**澄清路径（clarification_request）不需要前置文本**——因为 clarification 本身就是文本 question，已经是自然的反馈。
 
 ## 4. 数据流
 
