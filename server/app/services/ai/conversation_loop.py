@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
@@ -35,8 +36,17 @@ from app.services.ai.prompts import (
 from app.services.ai.session_context import get_or_create_session
 from app.services.ai.tool_factory import ToolFn, specs_for_names
 from app.services.ai.utils import extract_token_usage, merge_token_info
+from app.shared.crisis_guard import CrisisGuard
 from app.shared.llm import LLMClient, message_text
 from app.shared.pipeline_trace import trace_span
+from app.shared.streaming_events import (
+    publish_reply_end,
+    publish_reply_start,
+    publish_retract,
+    publish_text_delta,
+    publish_text_end,
+)
+from app.shared.streaming_safety import StreamingSafetyGuard
 from app.shared.tool_protocol import (
     build_tool_hint,
     extract_native_tool_calls,
@@ -491,9 +501,265 @@ def run_conversation_loop(
         )
 
 
+async def run_conversation_loop_streaming(
+    db: Session,
+    container: ServiceContainer,
+    *,
+    conversation_id: str,
+    content: str,
+    pinned_diaries_text: str,
+    retrieved_diaries_text: str,
+    episodic_text: str,
+    memory_ids: list[str],
+    tools: dict[str, ToolFn] | None = None,
+    crisis_guard: Any | None = None,
+    user_id: str = "default",
+    intent_result: ChatIntentResult | None = None,
+    trace_id: str = "",
+) -> AsyncGenerator[str | dict[str, Any], None]:
+    """Streaming variant of :func:`run_conversation_loop` for V3 P0.
+
+    Tool-call rounds remain non-streaming (``invoke``); only the final reply
+    round uses ``astream`` wrapped by :class:`StreamingSafetyGuard`.
+
+    Yields:
+        ``str`` — safe text tokens to forward to the frontend.
+        ``{"retract": True, "replacement": str}`` — crisis detected mid-stream;
+            caller must stop after emitting the RETRACT event.
+
+    This function does **not** handle crisis short-circuit (Stage 2) — the
+    caller (:func:`generate_reply`) is responsible for routing crisis intents
+    to the non-streaming path. This function only handles safe intents whose
+    final reply should be streamed.
+    """
+    # ── Stage 1-3: Session + context assembly (mirrors legacy loop) ──
+    session = get_or_create_session(conversation_id, container=container, user_id=user_id)
+
+    # Intent-driven routing
+    if intent_result is not None:
+        enable_tools = tools is not None and len(tools) > 0 and len(intent_result.need_tools) > 0
+        tier = intent_result.tier
+        max_iterations = intent_result.max_iterations
+        intent = intent_result.intent_category
+    else:
+        enable_tools = tools is not None and len(tools) > 0 and _needs_tool_call(content)
+        tier = "medium"
+        max_iterations = MAX_LOOP_ITERATIONS
+        intent = "casual_chat"
+
+    # Build the base prompt
+    system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
+
+    chat_history = session.get_history()
+    topics_text = "、".join(session.profile_topics) if session.profile_topics else "（暂无）"
+
+    base_user_prompt = CHAT_USER_PROMPT_TEMPLATE.format(
+        pinned_diaries=pinned_diaries_text,
+        retrieved_diaries=retrieved_diaries_text,
+        episodic_memories=episodic_text,
+        chat_history=chat_history,
+        user_message=content.strip(),
+    )
+    if session.profile_style or session.profile_topics:
+        base_user_prompt += (
+            f"\n\n【用户画像】偏好风格：{session.profile_style or '自然'}；近期关注：{topics_text}"
+        )
+
+    # Get LLM
+    llm: LLMClient | None = container._llm_for_tier(tier, agent_name="chat")
+    if llm is None:
+        logger.warning("ConversationLoop streaming: LLM unavailable")
+        yield FALLBACK_FEEDBACK
+        return
+
+    # Detect tool protocol path and build tool specs
+    tool_specs = specs_for_names(list((tools or {}).keys())) if tools else []
+    use_native = supports_native_tools(llm) and bool(tool_specs)
+    bound_llm = None
+    if use_native:
+        try:
+            bound_llm = llm.bind_tools(tool_specs)  # type: ignore[attr-defined]
+        except Exception as exc:
+            logger.warning("bind_tools failed, falling back to text-tag: %s", exc)
+            use_native = False
+
+    if enable_tools and not use_native:
+        system_prompt += build_tool_hint(tool_specs)
+
+    # ── Stage 4a: Tool-call rounds (non-streaming, invoke) ──
+    # Leave the last iteration for the streaming final reply.
+    total_usage: dict[str, int] = {}
+    tool_calls_made: list[str] = []
+    tool_results_text = ""
+    current_prompt = f"{system_prompt}\n\n{base_user_prompt}"
+    citations: list[Citation] = []
+
+    # Track context sources as citations
+    if pinned_diaries_text and pinned_diaries_text.strip():
+        citations.append(
+            Citation(
+                source_type="diary",
+                source_name="用户置顶日记",
+                content_summary=pinned_diaries_text[:100],
+            )
+        )
+    if retrieved_diaries_text and retrieved_diaries_text.strip():
+        citations.append(
+            Citation(
+                source_type="diary",
+                source_name="检索日记",
+                content_summary=retrieved_diaries_text[:100],
+            )
+        )
+    if episodic_text and episodic_text.strip():
+        citations.append(
+            Citation(
+                source_type="memory",
+                source_name="情景记忆",
+                content_summary=episodic_text[:100],
+            )
+        )
+
+    tool_rounds = max(0, max_iterations - 1) if enable_tools else 0
+    for iteration in range(tool_rounds):
+        # 4.2 Call model (same as legacy loop)
+        try:
+            if use_native and bound_llm is not None:
+                response = bound_llm.invoke(current_prompt)
+            else:
+                if tool_results_text:
+                    current_prompt += f"\n\n## 工具结果\n{tool_results_text}"
+                response = llm.invoke(current_prompt)
+        except Exception as exc:
+            logger.warning(
+                "ConversationLoop streaming LLM invoke failed (iter %d): %s",
+                iteration,
+                exc,
+            )
+            yield FALLBACK_FEEDBACK
+            return
+
+        turn_usage = extract_token_usage(response)
+        total_usage = merge_token_info(total_usage, turn_usage)
+        result_text = message_text(response).strip()
+
+        # Parse tool calls
+        if use_native:
+            tool_call_results = extract_native_tool_calls(response)
+        else:
+            tool_call_results = parse_text_tag_calls(result_text)
+
+        if not tool_call_results:
+            # No more tool calls — proceed to final streaming reply
+            break
+
+        # Execute tools and backfill results
+        tool_results: list[str] = []
+        for tc in tool_call_results:
+            tool_calls_made.append(tc.name)
+            result = _execute_tool(tc.name, tc.args, tools or {})
+            tool_results.append(result)
+            citations.append(
+                Citation(
+                    source_type="tool",
+                    source_name=tc.name,
+                    content_summary=result[:100],
+                )
+            )
+        tool_results_text = "\n".join(tool_results)
+
+    # ── Stage 4b: Final streaming reply round ──
+    final_prompt = current_prompt
+    if tool_results_text:
+        final_prompt += f"\n\n## 工具结果\n{tool_results_text}"
+
+    # Build safety guard
+    cg = crisis_guard if crisis_guard is not None else CrisisGuard()
+    guard = StreamingSafetyGuard(crisis_guard=cg)
+
+    citation_dicts = [
+        {
+            "source_type": c.source_type,
+            "source_name": c.source_name,
+            "content_summary": c.content_summary,
+        }
+        for c in citations
+    ]
+
+    # Defense line 1: should we stream at all?
+    # (Should not happen — caller filters crisis in Stage 2 — but safety net.)
+    if not guard.should_stream_directly(intent, content):
+        safe_text = cg.safe_response
+        await publish_reply_start(trace_id, intent=intent, reply_id=conversation_id)
+        await publish_text_delta(trace_id, safe_text)
+        await publish_text_end(trace_id)
+        session.accumulate_usage(total_usage)
+        session.add_turn(content, safe_text)
+        await publish_reply_end(trace_id, citations=citation_dicts, usage=total_usage)
+        yield safe_text
+        return
+
+    # Publish REPLY_START
+    await publish_reply_start(trace_id, intent=intent, reply_id=conversation_id)
+
+    # Raw token stream with astream -> ainvoke fallback
+    async def _raw_stream() -> AsyncGenerator[str, None]:
+        try:
+            async for token in llm.astream(final_prompt):
+                yield token
+        except (AttributeError, NotImplementedError):
+            # LLM does not support astream — degrade to ainvoke (single chunk)
+            response = await llm.ainvoke(final_prompt)
+            yield message_text(response)
+
+    # Stream through safety guard (defense lines 2 + 3)
+    aggregated_text = ""
+    async for item in guard.filter_stream(_raw_stream(), intent):
+        if isinstance(item, dict):
+            # RETRACT — crisis detected mid-stream
+            replacement = str(item.get("replacement", ""))
+            await publish_retract(
+                trace_id, reason="crisis_in_stream", replacement=replacement
+            )
+            session.accumulate_usage(total_usage)
+            session.add_turn(content, replacement)
+            await publish_reply_end(trace_id, citations=citation_dicts, usage=total_usage)
+            yield item
+            return
+        # Safe token — forward to caller and publish TEXT_DELTA
+        token = item
+        aggregated_text += token
+        yield token
+        await publish_text_delta(trace_id, token)
+
+    # Normal completion
+    await publish_text_end(trace_id)
+
+    # Append citations section
+    citations_section = _format_citations(citations)
+    if citations_section:
+        aggregated_text += citations_section
+
+    # Update session
+    session.accumulate_usage(total_usage)
+    session.add_turn(content, aggregated_text)
+
+    logger.info(
+        "ConversationLoop streaming completed: conversation=%s tools=%s tokens=%d citations=%d",
+        conversation_id,
+        tool_calls_made,
+        total_usage.get("total_tokens_used", 0),
+        len(citations),
+    )
+
+    # Publish REPLY_END
+    await publish_reply_end(trace_id, citations=citation_dicts, usage=total_usage)
+
+
 __all__ = [
     "MAX_LOOP_ITERATIONS",
     "Citation",
     "LoopResult",
     "run_conversation_loop",
+    "run_conversation_loop_streaming",
 ]

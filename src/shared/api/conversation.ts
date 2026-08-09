@@ -81,3 +81,24 @@ export async function generateCardSummary(
   )
   return data
 }
+
+export interface SendMessageStreamingResponse {
+  streaming: boolean
+  trace_id: string
+}
+
+export async function sendMessageStreaming(
+  conversationId: string,
+  payload: SendMessagePayload,
+  traceId?: string,
+): Promise<SendMessageStreamingResponse> {
+  const client = await getHttpClient()
+  const headers: Record<string, string> = {}
+  if (traceId) headers['X-Trace-Id'] = traceId
+  const { data } = await client.post<SendMessageStreamingResponse>(
+    `/api/v1/conversations/${conversationId}/messages/stream`,
+    payload,
+    { headers },
+  )
+  return data
+}

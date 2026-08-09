@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Request, Response, status
@@ -14,10 +16,15 @@ from app.api.schemas import (
     SendMessageRequest,
     SendMessageResponse,
 )
+from app.config import get_settings
 from app.services import conversation_ai_service, conversation_service
 from app.shared.errors import ConversationNotFoundError
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+#: Strong references to fire-and-forget streaming tasks so they are not
+#: garbage-collected mid-flight. Each task removes itself on completion.
+_background_streaming_tasks: set[asyncio.Task[None]] = set()
 
 
 @router.get("", response_model=list[ConversationResponse])
@@ -117,6 +124,67 @@ def send_message(
         message=message_to_response(user_msg),
         reply=message_to_response(reply_msg),
     )
+
+
+@router.post(
+    "/{conversation_id}/messages/stream",
+    response_model=dict[str, Any],
+    status_code=status.HTTP_200_OK,
+)
+async def send_message_streaming(
+    conversation_id: str,
+    body: SendMessageRequest,
+    db: DbDep,
+    user: CurrentUserDep,
+    container: ContainerDep,
+    http_request: Request,
+) -> dict[str, Any]:
+    """Streaming endpoint - returns ``trace_id`` immediately.
+
+    Content streams via SSE at ``/api/v1/dev/traces/{trace_id}/stream``.
+
+    When ``STREAMING_ENABLED=false`` (the default), this endpoint returns
+    ``{"streaming": False, "trace_id": ""}`` so the frontend can fall back
+    to the synchronous :http:post:`/conversations/{id}/messages` endpoint.
+
+    When ``STREAMING_ENABLED=true``, it launches
+    :func:`generate_reply_streaming` as a background task and returns a
+    ``trace_id`` that the frontend subscribes to for SSE events.
+    """
+    settings = get_settings()
+    trace_id = http_request.headers.get("X-Trace-Id") or str(uuid.uuid4())
+
+    conv = conversation_service.get_conversation(
+        db, user_id=str(user.id), conversation_id=conversation_id
+    )
+    if conv is None:
+        raise ConversationNotFoundError(conversation_id=conversation_id)
+
+    if not settings.streaming_enabled:
+        # Fallback: tell the frontend to use the synchronous endpoint.
+        return {"streaming": False, "trace_id": ""}
+
+    # Launch streaming generation as a background task so this endpoint
+    # returns immediately. The frontend subscribes to the trace_id SSE
+    # stream to receive TEXT_DELTA / REPLY_END events.
+    task = asyncio.create_task(
+        conversation_ai_service.generate_reply_streaming(
+            db=db,
+            container=container,
+            conversation_id=conversation_id,
+            content=body.content,
+            diary_ids=body.diary_ids or [],
+            user_id=str(user.id),
+            auto_retrieve=body.auto_retrieve,
+            trace_id=trace_id,
+        )
+    )
+    # Keep a strong reference so the task is not garbage-collected, and
+    # auto-discard on completion to avoid unbounded set growth.
+    _background_streaming_tasks.add(task)
+    task.add_done_callback(_background_streaming_tasks.discard)
+
+    return {"streaming": True, "trace_id": trace_id}
 
 
 @router.post("/{conversation_id}/night-talk", response_model=dict[str, Any])

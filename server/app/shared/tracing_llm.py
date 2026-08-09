@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from app.domain.agents.state import extract_token_usage
@@ -72,6 +73,33 @@ class TracingLLMClient:
                 except Exception as trace_exc:
                     logger.warning("Tracing record failed (non-fatal): %s", trace_exc)
 
+    async def astream(self, prompt: str) -> AsyncGenerator[str, None]:
+        """Stream ``prompt`` completion, yielding text tokens.
+
+        Delegates to ``inner.astream()`` if the inner model supports it.
+        Tracing records the full response after streaming completes (the
+        aggregated text), not per-token.
+        """
+        started = time.perf_counter()
+        chunks: list[str] = []
+        error: str | None = None
+        try:
+            async for chunk in self._inner.astream(prompt):
+                chunks.append(chunk)
+                yield chunk
+        except Exception as exc:
+            error = str(exc)
+            raise
+        finally:
+            if chunks or error is not None:
+                full_text = "".join(chunks)
+                try:
+                    await asyncio.to_thread(
+                        self._record_streaming, prompt, full_text, started, error
+                    )
+                except Exception as trace_exc:
+                    logger.warning("Streaming tracing record failed (non-fatal): %s", trace_exc)
+
     def _record(self, prompt: str, response: Any, started: float, error: str | None) -> None:
         usage = extract_token_usage(response) if response is not None else {}
         text = message_text(response) if response is not None else ""
@@ -94,6 +122,20 @@ class TracingLLMClient:
                 error=error,
             )
         )
+
+    def _record_streaming(
+        self, prompt: str, full_text: str, started: float, error: str | None
+    ) -> None:
+        """Record a streaming LLM call as a synthetic message-like response."""
+
+        class _Msg:
+            response_metadata: dict[str, Any]
+
+            def __init__(self, content: str) -> None:
+                self.content = content
+                self.response_metadata = {}
+
+        self._record(prompt, _Msg(full_text), started, error)
 
     def bind_tools(self, tools: list[Any]) -> TracingLLMClient:
         """Delegate bind_tools to inner if supported, else raise.

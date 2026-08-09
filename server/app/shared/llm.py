@@ -26,6 +26,7 @@ thin HTTP adapter.
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -41,6 +42,10 @@ class LLMClient(Protocol):
         """Asynchronously complete ``prompt`` and return a message-like result."""
         ...
 
+    async def astream(self, prompt: str) -> AsyncGenerator[str, None]:
+        """Asynchronously stream ``prompt`` completion, yielding text tokens."""
+        yield ""  # pragma: no cover
+
 
 @runtime_checkable
 class ToolCapableLLMClient(Protocol):
@@ -54,6 +59,9 @@ class ToolCapableLLMClient(Protocol):
     def invoke(self, prompt: str) -> Any: ...
 
     async def ainvoke(self, prompt: str) -> Any: ...
+
+    async def astream(self, prompt: str) -> AsyncGenerator[str, None]:
+        yield ""  # pragma: no cover
 
     def bind_tools(self, tools: list[Any]) -> Any: ...
 
