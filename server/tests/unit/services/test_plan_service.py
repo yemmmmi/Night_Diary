@@ -90,3 +90,77 @@ def test_get_plan_not_found_raises(db):
     from app.shared.errors import NotFoundError
     with pytest.raises(NotFoundError):
         plan_service.get_plan(db, plan_id="nonexistent", user_id="user-1")
+
+
+# ── Task 2: episodic memory write-back on status change ──────────────
+
+
+def test_update_task_status_done_triggers_memory_persist(db, monkeypatch):
+    """update_task_status 标记 done 时应触发记忆回写。"""
+    from unittest.mock import MagicMock
+
+    from app.services import plan_service
+
+    task = plan_service.create_task(db, user_id="user-1", title="测试任务")
+
+    mock_container = MagicMock()
+    mock_gateway = MagicMock()
+    mock_container.memory_gateway = mock_gateway
+
+    plan_service.update_task_status(
+        db, task_id=task.id, user_id="user-1", status="done",
+        container=mock_container,
+    )
+
+    assert mock_gateway.persist_atom.called
+    call_args = mock_gateway.persist_atom.call_args
+    atom = call_args[0][0]  # 第一个位置参数是 atom
+    assert atom.source == "task"
+    assert atom.importance >= 0.6
+
+
+def test_update_task_status_without_container_no_persist(db):
+    """container=None 时不触发记忆回写（向后兼容）。"""
+    from app.services import plan_service
+
+    task = plan_service.create_task(db, user_id="user-1", title="测试")
+    plan_service.update_task_status(
+        db, task_id=task.id, user_id="user-1", status="done",
+    )
+    # 只要不抛异常就算通过
+
+
+def test_update_task_status_same_status_no_persist(db):
+    """状态未变更时不触发记忆回写。"""
+    from unittest.mock import MagicMock
+
+    from app.services import plan_service
+
+    task = plan_service.create_task(db, user_id="user-1", title="测试")
+    mock_container = MagicMock()
+    mock_container.memory_gateway = MagicMock()
+
+    plan_service.update_task_status(
+        db, task_id=task.id, user_id="user-1", status="pending",
+        container=mock_container,
+    )
+    assert not mock_container.memory_gateway.persist_atom.called
+
+
+def test_persist_task_memory_failure_does_not_block(db):
+    """记忆回写失败不影响任务状态变更。"""
+    from unittest.mock import MagicMock
+
+    from app.services import plan_service
+
+    task = plan_service.create_task(db, user_id="user-1", title="测试")
+    mock_container = MagicMock()
+    mock_container.memory_gateway = MagicMock()
+    mock_container.memory_gateway.persist_atom.side_effect = RuntimeError("DB down")
+
+    result = plan_service.update_task_status(
+        db, task_id=task.id, user_id="user-1", status="done",
+        container=mock_container,
+    )
+    assert result.status == "done"
+    assert result.completed_at is not None
