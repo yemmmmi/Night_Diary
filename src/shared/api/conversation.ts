@@ -102,3 +102,15 @@ export async function sendMessageStreaming(
   )
   return data
 }
+
+export async function abortStreaming(
+  conversationId: string,
+  traceId: string,
+): Promise<{ cancelled: boolean }> {
+  const client = await getHttpClient()
+  const { data } = await client.post<{ cancelled: boolean }>(
+    `/api/v1/conversations/${conversationId}/messages/abort`,
+    { trace_id: traceId },
+  )
+  return data
+}

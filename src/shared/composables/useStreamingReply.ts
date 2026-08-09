@@ -1,6 +1,8 @@
 import { ref, onUnmounted, type Ref } from 'vue'
+import { abortStreaming } from '@/shared/api/conversation'
 
 const WATCHDOG_TIMEOUT_MS = 120_000 // 120s no-event → idle
+const ABORT_CONFIRM_TIMEOUT_MS = 10_000 // 10s abort 确认超时
 
 const REPLY_START_EVENT = 'reply_start'
 const TEXT_DELTA_EVENT = 'text_delta'
@@ -28,6 +30,7 @@ export interface StreamingReplyReturn {
   connect: (sseUrl: string) => void
   disconnect: () => void
   reset: () => void
+  abort: (conversationId: string, traceId: string) => void
 }
 
 /**
@@ -62,6 +65,7 @@ export function useStreamingReply(): StreamingReplyReturn {
   let pendingTokens = ''
   let rafId: number | null = null
   let watchdogTimer: ReturnType<typeof setTimeout> | null = null
+  let abortConfirmTimer: ReturnType<typeof setTimeout> | null = null
 
   function flushTokens(): void {
     if (pendingTokens) {
@@ -145,6 +149,10 @@ export function useStreamingReply(): StreamingReplyReturn {
       }
       status.value = 'done'
       clearWatchdog()
+      if (abortConfirmTimer) {
+        clearTimeout(abortConfirmTimer)
+        abortConfirmTimer = null
+      }
       eventSource?.close()
       eventSource = null
     })
@@ -177,6 +185,24 @@ export function useStreamingReply(): StreamingReplyReturn {
     resetWatchdog()
   }
 
+  function abort(conversationId: string, traceId: string): void {
+    if (status.value !== 'streaming') return
+
+    // 发送 abort 请求（fire-and-forget，响应不重要——10s 确认定时器兜底）
+    abortStreaming(conversationId, traceId).catch(() => {
+      // 网络错误忽略——10s 确认定时器会强制回 idle
+    })
+
+    // 启动 10s 确认定时器
+    if (abortConfirmTimer) clearTimeout(abortConfirmTimer)
+    abortConfirmTimer = setTimeout(() => {
+      // 10s 内未收到 REPLY_END → 强制回 idle
+      flushTokens()
+      status.value = 'idle'
+      abortConfirmTimer = null
+    }, ABORT_CONFIRM_TIMEOUT_MS)
+  }
+
   function disconnect(): void {
     if (eventSource) {
       eventSource.close()
@@ -184,6 +210,10 @@ export function useStreamingReply(): StreamingReplyReturn {
     }
     cancelFlush()
     clearWatchdog()
+    if (abortConfirmTimer) {
+      clearTimeout(abortConfirmTimer)
+      abortConfirmTimer = null
+    }
     pendingTokens = ''
   }
 
@@ -205,5 +235,6 @@ export function useStreamingReply(): StreamingReplyReturn {
     connect,
     disconnect,
     reset,
+    abort,
   }
 }
