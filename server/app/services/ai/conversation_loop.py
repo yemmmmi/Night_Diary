@@ -643,6 +643,11 @@ async def run_conversation_loop_streaming(
     llm: LLMClient | None = container._llm_for_tier(tier, agent_name="chat")
     if llm is None:
         logger.warning("ConversationLoop streaming: LLM unavailable")
+        await publish_reply_start(trace_id, intent=intent, reply_id=conversation_id)
+        await publish_text_delta(trace_id, FALLBACK_FEEDBACK)
+        await publish_text_end(trace_id)
+        session.add_turn(content, FALLBACK_FEEDBACK)
+        await publish_reply_end(trace_id, citations=[], usage={})
         yield FALLBACK_FEEDBACK
         return
 
@@ -731,6 +736,22 @@ async def run_conversation_loop_streaming(
                 "ConversationLoop streaming LLM invoke failed (iter %d): %s",
                 iteration,
                 exc,
+            )
+            citation_dicts = [
+                {
+                    "source_type": c.source_type,
+                    "source_name": c.source_name,
+                    "content_summary": c.content_summary,
+                }
+                for c in citations
+            ]
+            await publish_reply_start(trace_id, intent=intent, reply_id=conversation_id)
+            await publish_text_delta(trace_id, FALLBACK_FEEDBACK)
+            await publish_text_end(trace_id)
+            session.accumulate_usage(total_usage)
+            session.add_turn(content, FALLBACK_FEEDBACK)
+            await publish_reply_end(
+                trace_id, citations=citation_dicts, usage=total_usage
             )
             yield FALLBACK_FEEDBACK
             return

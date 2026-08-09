@@ -168,6 +168,299 @@ def _build_tools(
         return None
 
 
+@dataclass
+class ReplyContext:
+    """Stage 1-3 output shared by streaming and non-streaming paths.
+
+    Produced by :func:`_prepare_reply_context` (streaming path only).
+    The non-streaming :func:`generate_reply` keeps its own inline copy of
+    Stage 1-3 (approach B — minimize regression risk).
+    """
+
+    conversation_id: str
+    content: str
+    intent_result: Any  # ChatIntentResult | None
+    pinned_diaries_text: str
+    retrieved_diaries_text: str
+    retrieved_diary_ids: list[int]
+    episodic_text: str
+    memory_ids: list[str]
+    tools: Any  # dict[str, ToolFn] | None
+    crisis_guard: Any  # CrisisGuard | None
+    is_crisis: bool
+    safe_response: str | None
+    trace_id: str
+
+
+def _prepare_reply_context(
+    db: Session,
+    container: ServiceContainer,
+    *,
+    conversation_id: str,
+    content: str,
+    diary_ids: list[int],
+    user_id: str,
+    auto_retrieve: bool,
+    crisis_guard: CrisisGuard | None,
+    trace_id: str | None,
+) -> ReplyContext:
+    """Extract Stage 1-3 from generate_reply for streaming path reuse.
+
+    Approach B: generate_reply (non-streaming) stays unchanged.
+    This function is only called by generate_reply_streaming.
+
+    The Stage 2.1-3 code below is copied verbatim from generate_reply
+    (lines 206-423). ``trace_span`` calls are no-ops when no PipelineTrace
+    is active (the streaming path does not set one).
+    """
+    pinned_ids = _normalize_diary_ids(diary_ids)
+    container.ensure_ai_stack(user_id=user_id)
+
+    # ── Stage 2: Crisis guard (P0 safety) ──
+    guard = crisis_guard or get_crisis_guard()
+    with trace_span("S2_crisis", "危机检测", input_snapshot={"raw_text": content}) as span:
+        is_crisis = guard.detect(content)
+        if span:
+            span.metadata["is_crisis"] = is_crisis
+    if is_crisis:
+        logger.warning(
+            "Crisis detected in conversation=%s, returning safety resources",
+            conversation_id,
+        )
+        return ReplyContext(
+            conversation_id=conversation_id,
+            content=content,
+            intent_result=None,
+            pinned_diaries_text="",
+            retrieved_diaries_text="",
+            retrieved_diary_ids=pinned_ids,
+            episodic_text="",
+            memory_ids=[],
+            tools=None,
+            crisis_guard=guard,
+            is_crisis=True,
+            safe_response=guard.safe_response,
+            trace_id=trace_id or "",
+        )
+
+    # ── Validate pinned diaries ──
+    pinned_entries = diary_service.get_entries_by_ids(db, pinned_ids, user_id=user_id)
+    if len(pinned_entries) != len(pinned_ids):
+        raise ValidationError("引用的日记不存在或已被删除")
+
+    # ── Stage 2.1: Session routing + Input preprocessing ──
+    with trace_span("S1_session", "会话路由", input_snapshot={"conversation_id": conversation_id}) as span:
+        session_ctx = get_or_create_session(
+            conversation_id, container=container, user_id=user_id
+        )
+        brief_context = (
+            session_ctx.compressed_history[:300]
+            if session_ctx.compressed_history
+            else ""
+        )
+
+    with trace_span("S3_preprocess", "输入预处理", input_snapshot={"raw_text": content}) as span:
+        preprocessor = InputPreprocessor()
+        preprocess_result = preprocessor.process(content, context=brief_context)
+        content = preprocess_result.clean_text  # Use cleaned text for all downstream
+        if span:
+            span.metadata["safety_flag"] = preprocess_result.security_flags.has_injection
+            span.metadata["omission_flag"] = preprocess_result.negation_detected
+
+    if preprocess_result.security_flags.has_injection:
+        logger.warning(
+            "input.injection_detected conversation=%s patterns=%s",
+            conversation_id,
+            preprocess_result.security_flags.injection_patterns,
+        )
+    if preprocess_result.negation_detected:
+        logger.info("input.negation_detected conversation=%s", conversation_id)
+
+    # ── Stage 2.5: Chat intent classification (drives routing) ──
+    with trace_span("S4_intent", "意图分类", input_snapshot={"raw_text": content}) as span:
+        intent_classifier = container.get_chat_intent_classifier(user_id=user_id)
+        intent_result = intent_classifier.classify_sync(content, context=brief_context)
+        if span:
+            span.metadata["intent_category"] = intent_result.intent_category
+            span.metadata["tier"] = intent_result.tier
+
+    # Crisis signal from intent classifier as a secondary safety net
+    if intent_result.intent_category == "crisis_signal" and not guard.detect(content):
+        logger.warning(
+            "Intent classifier detected crisis missed by guard: conversation=%s",
+            conversation_id,
+        )
+        return ReplyContext(
+            conversation_id=conversation_id,
+            content=content,
+            intent_result=intent_result,
+            pinned_diaries_text="",
+            retrieved_diaries_text="",
+            retrieved_diary_ids=pinned_ids,
+            episodic_text="",
+            memory_ids=[],
+            tools=None,
+            crisis_guard=guard,
+            is_crisis=True,
+            safe_response=guard.safe_response,
+            trace_id=trace_id or "",
+        )
+
+    logger.info(
+        "chat.intent conversation=%s category=%s tier=%s tools=%s retrieval=%s entity=%s",
+        conversation_id,
+        intent_result.intent_category,
+        intent_result.tier,
+        intent_result.need_tools,
+        intent_result.need_retrieval,
+        intent_result.need_entity_query,
+    )
+
+    # ── Stage 2.5b: Slot extraction (task decomposition) ──
+    from app.domain.agents.slot_extractor import SlotExtractor
+
+    with trace_span("S5_slot", "槽位抽取", input_snapshot={"raw_text": content}) as span:
+        slot_extractor = SlotExtractor()
+        slot_result = slot_extractor.extract(content, intent=intent_result.intent_category)
+        if span:
+            span.metadata["is_multi_task"] = slot_result.is_multi_task
+
+    if slot_result.is_multi_task:
+        logger.info(
+            "chat.multi_task conversation=%s sub_tasks=%d",
+            conversation_id,
+            len(slot_result.sub_tasks),
+        )
+    if slot_result.style_constraints:
+        logger.info(
+            "chat.style_constraints conversation=%s constraints=%s",
+            conversation_id,
+            slot_result.style_constraints,
+        )
+
+    # ── Stage 2.6: Skill selection (scene-2 SkillRegistry) ──
+    skill_registry = container.get_chat_skill_registry()
+    from app.domain.skills.types import SkillProfileContext as _SkillProfile
+
+    skill_profile: _SkillProfile = {
+        "intent": intent_result.intent_category,
+        "user_id": user_id,
+        "recurring_topics": session_ctx.profile_topics,
+    }
+    with trace_span(
+        "S6_skills", "技能选择", input_snapshot={"intent": intent_result.intent_category}
+    ) as span:
+        selected_skills = skill_registry.select_skills(
+            content,
+            skill_profile,
+            token_budget=4000,
+            decision_id=conversation_id,
+        )
+        if span:
+            span.metadata["selected_count"] = len(selected_skills)
+
+    # Execute analysis skills (crisis_detector, sentiment_skill) and append
+    # their output to context if they produce text
+    skill_outputs: list[str] = []
+    for skill in selected_skills:
+        if skill.metadata.category.value == "analysis":
+            try:
+                skill_ctx = {
+                    "diary_content": content,
+                    "user_id": user_id,
+                    "intent": intent_result.intent_category,
+                }
+                output = skill.execute(skill_ctx)
+                if output and not output.startswith("["):
+                    skill_outputs.append(f"【{skill.metadata.name}】{output}")
+            except Exception as exc:
+                logger.debug("Skill %s execute failed (best-effort): %s", skill.metadata.name, exc)
+
+    skill_context_text = "\n".join(skill_outputs) if skill_outputs else ""
+
+    # ── Stage 3: Context assembly (intent-driven) ──
+    exclude_ids = set(pinned_ids)
+    retrieved_ids: list[int] = []
+
+    retrieval_query = content
+    # Query understanding + RAG only when intent needs retrieval
+    if auto_retrieve and intent_result.need_retrieval:
+        from app.domain.agents.query_understander import QueryUnderstander
+
+        query_llm = container._llm_for_tier("light", agent_name="query_understander")
+        understander = QueryUnderstander(
+            llm=query_llm,
+            tracer=container.llm_tracer,
+            model=getattr(query_llm, "model", "") if query_llm else "",
+        )
+        with trace_span("S7a_query_rewrite", "查询改写", input_snapshot={"raw_text": content}) as span:
+            understanding = understander.understand(content, context=brief_context)
+            retrieval_query = understanding.rewritten
+        logger.debug(
+            "query.understood original=%s rewritten=%s terms=%s confidence=%.2f",
+            content[:50],
+            understanding.rewritten[:50],
+            understanding.key_terms,
+            understanding.confidence,
+        )
+
+        with trace_span("S7b_rag", "RAG检索", input_snapshot={"query": retrieval_query}) as span:
+            retrieved_ids = _retrieve_related_diary_ids(
+                container, retrieval_query, exclude_ids=exclude_ids
+            )
+            if span:
+                span.metadata["retrieved_count"] = len(retrieved_ids)
+    elif auto_retrieve:
+        # No retrieval needed — still run query understanding for episodic search
+        logger.debug(
+            "Intent skips diary RAG, using raw content for episodic: %s",
+            intent_result.intent_category,
+        )
+
+    all_context_ids = pinned_ids + [did for did in retrieved_ids if did not in pinned_ids]
+
+    with trace_span("S7c_episodic", "情景记忆", input_snapshot={"query": retrieval_query}) as span:
+        episodic_text, memory_ids = _format_episodic_memories(container, retrieval_query)
+        if span:
+            span.metadata["memory_count"] = len(memory_ids)
+    if skill_context_text:
+        episodic_text = f"{episodic_text}\n\n## 技能分析\n{skill_context_text}"
+    pinned_text = _format_retrieved_diaries(db, pinned_ids, user_id=user_id)
+    retrieved_text = _format_retrieved_diaries(db, retrieved_ids, user_id=user_id)
+
+    # ── Build tools (intent-filtered subset) ──
+    with trace_span("S7d_tools", "工具构建") as span:
+        all_tools = _build_tools(container, user_id=user_id)
+        if span:
+            span.metadata["tool_count"] = len(all_tools) if all_tools else 0
+    tools: dict[str, ToolFn] | None = None
+    if all_tools and intent_result.need_tools:
+        tools = {name: fn for name, fn in all_tools.items() if name in intent_result.need_tools}
+        if not tools:
+            tools = None
+
+    # Release the DB connection before the long-running streaming loop.
+    # The session re-acquires a connection when downstream code next
+    # queries the DB.
+    db.commit()
+
+    return ReplyContext(
+        conversation_id=conversation_id,
+        content=content,
+        intent_result=intent_result,
+        pinned_diaries_text=pinned_text,
+        retrieved_diaries_text=retrieved_text,
+        retrieved_diary_ids=all_context_ids,
+        episodic_text=episodic_text,
+        memory_ids=memory_ids,
+        tools=tools,
+        crisis_guard=guard,
+        is_crisis=False,
+        safe_response=None,
+        trace_id=trace_id or "",
+    )
+
+
 def generate_reply(
     db: Session,
     container: ServiceContainer,
@@ -555,25 +848,17 @@ async def generate_reply_streaming(
     crisis_guard: CrisisGuard | None = None,
     trace_id: str = "",
 ) -> None:
-    """Streaming version of :func:`generate_reply` with _terminating_reply guarantee.
+    """Real streaming (P3): _prepare_reply_context -> run_conversation_loop_streaming -> post-write.
 
-    Wraps the P0 simulated-streaming logic in a try/finally that guarantees
-    a ``REPLY_END`` event is always published — even when the synchronous
-    :func:`generate_reply` raises, or when the task is cancelled by the
-    abort endpoint. This is the P1 layer-2 "agent terminating reply"
-    mechanism: the frontend can never be left stuck in ``streaming`` state.
+    Replaces P0 simulated streaming. The try/finally guarantees a
+    ``REPLY_END`` event is always published (P1 terminating_reply).
 
-    Three paths through the try block:
-
-    1. **Normal**: generate_reply succeeds → chunked publish → REPLY_END
-    2. **CancelledError**: task cancelled by abort → REPLY_END(error="cancelled")
-    3. **Other Exception**: any other failure → REPLY_END(error=str(exc))
-
-    The ``finally`` block is a safety net: if the except branch itself
-    raises before publishing REPLY_END, the finally publishes a
-    "finalized" fallback. A ``reply_end_sent`` flag prevents duplicates
-    on the normal path.
+    For the non-crisis path, ``run_conversation_loop_streaming`` publishes
+    all SSE events (REPLY_START, TEXT_DELTA*, TEXT_END, REPLY_END)
+    internally — this function does **not** duplicate them. It only
+    publishes events for the crisis path and for error/cancel fallbacks.
     """
+    from app.services.ai.conversation_loop import run_conversation_loop_streaming
     from app.shared.streaming_events import (
         publish_reply_end,
         publish_reply_start,
@@ -583,10 +868,10 @@ async def generate_reply_streaming(
 
     reply_started = False
     reply_end_sent = False
+    final_reply_text = ""
 
     try:
-        # ── Step 1: Full synchronous pipeline (all V2 safety checks included) ──
-        result = generate_reply(
+        ctx = _prepare_reply_context(
             db,
             container,
             conversation_id=conversation_id,
@@ -598,36 +883,57 @@ async def generate_reply_streaming(
             trace_id=trace_id or None,
         )
 
-        # ── Step 2: No trace_id → nothing to publish to (no SSE subscriber) ──
+        # No trace_id → no SSE subscriber → nothing to publish.
         if not trace_id:
             return
 
-        # ── Step 3: Crisis → publish the safe template as a single chunk ──
-        if result.is_crisis:
+        # ── Crisis path: publish safe template as a single chunk ──
+        if ctx.is_crisis:
             await publish_reply_start(trace_id, intent="crisis_signal")
             reply_started = True
-            await publish_text_delta(trace_id, result.reply_text)
+            await publish_text_delta(trace_id, ctx.safe_response or "")
             await publish_text_end(trace_id)
             await publish_reply_end(trace_id)
             reply_end_sent = True
             return
 
-        # ── Step 4: Non-crisis → simulate streaming with sentence-like chunks ──
-        await publish_reply_start(trace_id, intent="streaming")
+        # ── Non-crisis path: delegate to run_conversation_loop_streaming ──
+        # The loop publishes REPLY_START, TEXT_DELTA*, TEXT_END, and
+        # REPLY_END internally via the TraceEventBus. We set reply_started
+        # optimistically (the loop publishes REPLY_START very early) so
+        # that the cancel/error handlers know to send a fallback REPLY_END.
         reply_started = True
 
-        chunks = _split_into_chunks(result.reply_text, chunk_size=20)
-        for chunk in chunks:
-            await publish_text_delta(trace_id, chunk)
-            await asyncio.sleep(0.02)  # 20ms delay for visual streaming effect
+        async for item in run_conversation_loop_streaming(
+            db=db,
+            container=container,
+            conversation_id=conversation_id,
+            content=content,
+            pinned_diaries_text=ctx.pinned_diaries_text,
+            retrieved_diaries_text=ctx.retrieved_diaries_text,
+            episodic_text=ctx.episodic_text,
+            memory_ids=ctx.memory_ids,
+            tools=ctx.tools,
+            crisis_guard=ctx.crisis_guard,
+            user_id=user_id,
+            intent_result=ctx.intent_result,
+            trace_id=trace_id,
+        ):
+            if isinstance(item, str):
+                final_reply_text += item
 
-        await publish_text_end(trace_id)
-        await publish_reply_end(
-            trace_id,
-            citations=[],  # citations are already embedded in reply_text
-            usage=result.token_info or {},
-        )
+        # The loop has already published REPLY_END on normal completion.
         reply_end_sent = True
+
+        # ── Stage 5: post-write (best-effort, non-fatal) ──
+        with contextlib.suppress(Exception):
+            _maybe_persist_episodic(
+                container,
+                content=content,
+                reply_text=final_reply_text,
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
 
     except asyncio.CancelledError:
         # User-initiated abort — clean shutdown, no fallback text needed.
