@@ -103,3 +103,39 @@ def test_fallback_direct_call(
 ) -> None:
     agent = InsightAgent(fake_llm, knowledge_store)
     assert agent.fallback()["insight_response"] == INSIGHT_FALLBACK
+
+
+# ----- run_streaming (V3 P3) -----
+
+
+async def test_run_streaming_yields_reply_tokens(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """run_streaming yields the reply — retrospective_query streams directly."""
+    agent = InsightAgent(fake_llm, knowledge_store)
+    tokens = [
+        token
+        async for token in agent.run_streaming(
+            {"diary_content": "为什么我总是焦虑？想找找规律。", "intent": "emotional_support"}
+        )
+    ]
+    assert "".join(tokens) == fake_llm.reply
+    assert fake_llm.calls  # astream received a prompt
+
+
+async def test_run_streaming_builds_same_prompt_as_run(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """run and run_streaming must produce an identical prompt via _build_prompt."""
+    agent = InsightAgent(fake_llm, knowledge_store)
+    state = {"diary_content": "复盘一下最近的状态。"}
+
+    await agent.run(state)
+    run_prompt = fake_llm.calls[-1]
+    fake_llm.calls.clear()
+
+    [token async for token in agent.run_streaming(state)]
+
+    assert fake_llm.calls[-1] == run_prompt

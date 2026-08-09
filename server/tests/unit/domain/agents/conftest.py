@@ -8,6 +8,7 @@ drive every agent's ``fallback()`` path.
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,6 +51,12 @@ class FakeLLM:
     async def ainvoke(self, prompt: str) -> FakeMessage:
         self.calls.append(prompt)
         return FakeMessage(content=self.reply, response_metadata=usage_metadata())
+
+    async def astream(self, prompt: str) -> AsyncGenerator[str, None]:
+        """Stream ``reply`` in 2-character chunks (mimics token streaming)."""
+        self.calls.append(prompt)
+        for i in range(0, len(self.reply), 2):
+            yield self.reply[i : i + 2]
 
 
 class FailingLLM:
