@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, date, datetime, time, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.infrastructure.models.memory_card import MemoryCardRow
 from app.infrastructure.models.weekly_report import WeeklyReportRow
-from app.services import diary_service
+from app.services import diary_service, plan_service
 from app.services.ai.router import ExecutionPlanner
 from app.shared.errors import (
     WeeklyReportEmptyError,
@@ -31,6 +31,7 @@ from app.shared.errors import (
 )
 
 if TYPE_CHECKING:
+    from app.infrastructure.models import PlanRow, TaskRow
     from app.services.container import ServiceContainer
 
 logger = logging.getLogger(__name__)
@@ -100,23 +101,77 @@ def _avg_mood(cards: list[MemoryCardRow]) -> float | None:
     return round(sum(scores) / len(scores), 3)
 
 
+class PlansInWeek(TypedDict):
+    """Plans/tasks snapshot with activity (created or completed) in the week."""
+
+    active_plans: list[PlanRow]
+    week_tasks: list[TaskRow]
+
+
+def _task_in_range(t: TaskRow, start: date, end: date) -> bool:
+    """True if a task was created or completed within [start, end]."""
+    if t.created_at and start <= t.created_at.date() <= end:
+        return True
+    return bool(t.completed_at and start <= t.completed_at.date() <= end)
+
+
+def _plans_in_week(
+    db: Session, *, user_id: str, start: date, end: date
+) -> PlansInWeek:
+    """Query plans/tasks that had activity (created or completed) this week.
+
+    A plan counts as "active this week" when at least one of its tasks was
+    created or completed within the window. Standalone tasks (no ``plan_id``)
+    with in-window activity are collected separately so the weekly letter can
+    mention them too.
+    """
+    active_plans: list[PlanRow] = []
+    week_tasks: list[TaskRow] = []
+
+    for plan in plan_service.list_plans(db, user_id=user_id, status="active"):
+        in_range = [t for t in plan.tasks if _task_in_range(t, start, end)]
+        if in_range:
+            active_plans.append(plan)
+            week_tasks.extend(in_range)
+
+    # Standalone tasks (no plan_id) created or completed this week.
+    for t in plan_service.list_tasks(db, user_id=user_id, status=None):
+        if t.plan_id is None and _task_in_range(t, start, end):
+            week_tasks.append(t)
+
+    return {"active_plans": active_plans, "week_tasks": week_tasks}
+
+
 def _build_weekly_content(
     start: date,
     end: date,
     diaries: list[DiaryEntryRow],
     cards: list[MemoryCardRow],
+    plans_data: PlansInWeek | None = None,
 ) -> str:
     """Aggregate diaries + cards into one prompt body (contains the 本周/周报
     keyword so InsightAgent switches to weekly-report mode)."""
     diary_block = diary_service.format_history_summary(diaries)
     card_block = _format_cards(cards)
-    return (
+    content = (
         f"这是本周（{start.isoformat()} 至 {end.isoformat()}）的周报回顾。"
         f"请基于以下本周的日记与记忆卡片，写一封温暖、有洞察的周记回信，"
         f"总结这一周的情绪起伏、反复出现的主题，并给出温和的建议。\n\n"
         f"【本周日记】\n{diary_block}\n\n"
         f"【本周记忆卡片】\n{card_block}"
     )
+    if plans_data and (plans_data.get("active_plans") or plans_data.get("week_tasks")):
+        content += "\n\n【本周计划执行】"
+        for plan in plans_data.get("active_plans", []):
+            done = sum(1 for t in plan.tasks if t.status == "done")
+            total = len(plan.tasks)
+            content += f"\n- 计划「{plan.title}」: {done}/{total} 完成"
+        for task in plans_data.get("week_tasks", []):
+            # 只列出不属于任何计划的独立任务, 计划内任务已汇总在上面.
+            if task.plan_id is None:
+                mark = "✓" if task.status == "done" else "○"
+                content += f"\n- {mark} {task.title}"
+    return content
 
 
 def _build_context(content: str) -> dict[str, str]:
@@ -214,7 +269,8 @@ def create_weekly_report(
     if not diaries and not cards:
         raise WeeklyReportEmptyError()
 
-    content = _build_weekly_content(start, end, diaries, cards)
+    plans_data = _plans_in_week(db, user_id=user_id, start=start, end=end)
+    content = _build_weekly_content(start, end, diaries, cards, plans_data=plans_data)
     result = planner.execute(
         diary_id=_WEEKLY_SENTINEL_ID,
         context=_build_context(content),
