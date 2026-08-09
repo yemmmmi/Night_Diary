@@ -26,7 +26,9 @@ def test_build_tool_map_with_mcp_no_endpoints() -> None:
     assert "get_user_address" in tools
     assert "analyze_sentiment" in tools
     assert "query_entity_graph" in tools
-    assert len(tools) == 5
+    assert "list_todos" in tools
+    assert "get_plan_progress" in tools
+    assert len(tools) == 7
 
 
 def test_build_tool_map_with_mcp_empty_endpoints() -> None:
@@ -42,7 +44,7 @@ def test_build_tool_map_with_mcp_empty_endpoints() -> None:
         mcp_endpoints=[],
     )
 
-    assert len(tools) == 5  # Only built-in tools
+    assert len(tools) == 7  # Only built-in tools
 
 
 def test_build_tool_map_with_mcp_empty_string_endpoints() -> None:
@@ -58,7 +60,7 @@ def test_build_tool_map_with_mcp_empty_string_endpoints() -> None:
         mcp_endpoints=["", "  ", ""],
     )
 
-    assert len(tools) == 5  # Only built-in tools
+    assert len(tools) == 7  # Only built-in tools
 
 
 def test_build_tool_map_with_mcp_load_failure_non_blocking() -> None:
@@ -78,7 +80,7 @@ def test_build_tool_map_with_mcp_load_failure_non_blocking() -> None:
 
     # Built-in tools still available
     assert "search_diary" in tools
-    assert len(tools) == 5
+    assert len(tools) == 7
 
 
 def test_build_tool_map_with_mcp_merges_external_tools() -> None:
@@ -103,7 +105,7 @@ def test_build_tool_map_with_mcp_merges_external_tools() -> None:
     # Both built-in and external tools present
     assert "search_diary" in tools
     assert "external_search" in tools
-    assert len(tools) == 6  # 5 built-in + 1 external
+    assert len(tools) == 8  # 7 built-in + 1 external
 
 
 def test_build_tool_map_with_mcp_multiple_endpoints() -> None:
@@ -139,4 +141,4 @@ def test_build_tool_map_with_mcp_multiple_endpoints() -> None:
     assert call_count[0] == 2
     assert "tool_a" in tools
     assert "tool_b" in tools
-    assert len(tools) == 7  # 5 built-in + 2 external
+    assert len(tools) == 9  # 7 built-in + 2 external
