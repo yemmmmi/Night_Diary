@@ -264,60 +264,72 @@ def specs_for_names(names: list[str]) -> list[ToolSpec]:
 def _load_mcp_tools(endpoint: str) -> dict[str, ToolFn]:
     """Load tools from an external MCP server endpoint.
 
-    Uses the MCP client protocol to discover tools and wraps them as ToolFn
-    callables. Best-effort: returns empty dict on failure.
+    Uses :class:`PersistentMCPConnection` to keep the MCP session alive
+    beyond the initial discovery call (fixes the P0 session-closure bug
+    where ``async with`` exit killed the session that tool closures
+    captured).
+
+    Best-effort: returns empty dict on failure (import error, connection
+    error, or tool listing error).
 
     Args:
         endpoint: MCP server SSE endpoint URL (e.g. http://localhost:8081/sse).
     """
-    try:
-        import asyncio
+    import asyncio
+    import contextlib
 
-        from mcp import ClientSession
-        from mcp.client.sse import sse_client
-    except ImportError:
-        logger.warning("mcp package not installed; cannot load MCP tools from %s", endpoint)
-        return {}
+    from app.services.ai.mcp_persistent import PersistentMCPConnection
 
     async def _discover_and_create() -> dict[str, ToolFn]:
         tools: dict[str, ToolFn] = {}
+        conn = PersistentMCPConnection(endpoint)
         try:
-            async with sse_client(endpoint) as (read, write), ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.list_tools()
+            await conn.connect()
+            result = await conn.list_tools()
 
-                for mcp_tool in result.tools:
-                    # Capture tool name in closure
-                    tool_name = mcp_tool.name
+            for mcp_tool in result.tools:
+                tool_name = mcp_tool.name
 
-                    def make_fn(name: str) -> Any:
-                        async def _call_async(**kwargs: Any) -> str:
-                            resp = await session.call_tool(name, kwargs)
-                            # Extract text from response content
-                            texts = [c.text for c in resp.content if hasattr(c, "text")]
-                            return "\n".join(texts) if texts else str(resp)
+                def make_fn(name: str, connection: PersistentMCPConnection) -> Any:
+                    async def _call_async(**kwargs: Any) -> str:
+                        resp = await connection.call_tool(name, kwargs)
+                        texts = [c.text for c in resp.content if hasattr(c, "text")]
+                        return "\n".join(texts) if texts else str(resp)
 
-                        def _call_sync(**kwargs: Any) -> str:
-                            try:
-                                return asyncio.run(_call_async(**kwargs))
-                            except Exception as exc:
-                                logger.error("MCP tool %s failed: %s", name, exc)
-                                return f"MCP tool {name} error: {exc}"
+                    def _call_sync(**kwargs: Any) -> str:
+                        try:
+                            return asyncio.run(_call_async(**kwargs))
+                        except Exception as exc:
+                            logger.error("MCP tool %s failed: %s", name, exc)
+                            return f"MCP tool {name} error: {exc}"
 
-                        return _call_sync
+                    return _call_sync
 
-                    tools[tool_name] = make_fn(tool_name)
-                    logger.info("Loaded MCP tool: %s from %s", tool_name, endpoint)
+                tools[tool_name] = make_fn(tool_name, conn)
+                logger.info("Loaded MCP tool: %s from %s", tool_name, endpoint)
 
+            # NOTE: We intentionally do NOT close conn here when tools were
+            # loaded. The connection must stay alive for subsequent tool
+            # calls. It lives for the lifetime of the process — acceptable
+            # because MCP endpoints are static config, and P5 will add a
+            # proper connection pool. If no tools were loaded, close to
+            # avoid leaking a useless connection.
+            if not tools:
+                await conn.close()
+
+        except ImportError as exc:
+            logger.warning("mcp package not installed; cannot load MCP tools from %s: %s", endpoint, exc)
         except Exception as exc:
             logger.error("Failed to load MCP tools from %s: %s", endpoint, exc)
+            with contextlib.suppress(Exception):
+                await conn.close()
 
         return tools
 
     try:
         return asyncio.run(_discover_and_create())
     except Exception as exc:
-        logger.error("MCP discovery failed for %s: %s", endpoint, exc)
+        logger.error("MCP tool loading from %s failed: %s", endpoint, exc)
         return {}
 
 
