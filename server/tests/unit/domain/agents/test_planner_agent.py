@@ -175,3 +175,52 @@ async def test_planner_emits_reply_start_and_end():
     types = [e["type"] for e in events]
     assert StreamingEventType.REPLY_START in types
     assert StreamingEventType.REPLY_END in types
+
+
+@pytest.mark.asyncio
+async def test_planner_emits_transition_text_before_proposal():
+    """PlannerAgent 应在 plan_proposal 前发过渡语文本。"""
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-transition"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(
+        return_value=MagicMock(
+            content='{"title":"早睡计划","motivation":"改善睡眠","tasks":[{"title":"11点前睡"}]}'
+        )
+    )
+
+    planner = PlannerAgent(llm=mock_llm)
+    inp = PlannerInput(
+        user_input="我想早睡，每天11点睡",
+        prior_context="",
+        trace_id=trace_id,
+        user_id="user-1",
+        conversation_id="conv-1",
+    )
+
+    with patch("app.domain.agents.planner_agent.CrisisGuard") as mock_crisis_cls:
+        mock_crisis_cls.return_value.detect.return_value = False
+        await planner.run(inp)
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    await bus.unsubscribe(trace_id, queue)
+
+    deltas = [e for e in events if e.get("type") == StreamingEventType.TEXT_DELTA]
+    blocks = [e for e in events if e.get("type") == StreamingEventType.PROTOCOL_BLOCK]
+
+    # 应先有 TEXT_DELTA（过渡语），再有 PROTOCOL_BLOCK
+    assert len(deltas) >= 1, f"Expected transition text deltas, got {len(deltas)}"
+    assert len(blocks) == 1, f"Expected 1 protocol block, got {len(blocks)}"
+
+    # 过渡语应包含"基于"或相关引导词
+    transition_text = "".join(d.get("text", "") for d in deltas)
+    assert "基于" in transition_text or "整理" in transition_text, (
+        f"Transition text should contain guidance word, got: {transition_text}"
+    )
