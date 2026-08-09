@@ -41,9 +41,7 @@ class StreamingEventType:
     TRACE_SPAN = "span_complete"  # backward-compatible with existing trace events
 
 
-async def publish_reply_start(
-    trace_id: str, *, intent: str = "", reply_id: str = ""
-) -> None:
+async def publish_reply_start(trace_id: str, *, intent: str = "", reply_id: str = "") -> None:
     """Publish a REPLY_START event marking the beginning of a streaming reply."""
     bus = get_event_bus()
     await bus.publish(
@@ -71,9 +69,7 @@ async def publish_text_delta(trace_id: str, text: str) -> None:
 async def publish_text_end(trace_id: str) -> None:
     """Publish a TEXT_END event marking the end of the current text block."""
     bus = get_event_bus()
-    await bus.publish(
-        trace_id, {"type": StreamingEventType.TEXT_END, "trace_id": trace_id}
-    )
+    await bus.publish(trace_id, {"type": StreamingEventType.TEXT_END, "trace_id": trace_id})
 
 
 async def publish_reply_end(
@@ -102,9 +98,7 @@ async def publish_reply_end(
     )
 
 
-async def publish_retract(
-    trace_id: str, *, reason: str, replacement: str
-) -> None:
+async def publish_retract(trace_id: str, *, reason: str, replacement: str) -> None:
     """Publish a RETRACT event - crisis safety override.
 
     Frontend replaces ALL accumulated reply text with ``replacement``
@@ -118,5 +112,37 @@ async def publish_retract(
             "trace_id": trace_id,
             "reason": reason,
             "replacement": replacement,
+        },
+    )
+
+
+async def publish_protocol_block(
+    trace_id: str,
+    *,
+    block_type: str,
+    block_id: str,
+    data: dict[str, Any],
+) -> None:
+    """Publish a PROTOCOL_BLOCK event carrying structured content.
+
+    Protocol blocks are produced by skills (e.g. PlannerAgent's
+    ``plan_proposal``). The frontend renders them as interactive cards
+    within the streaming reply — distinct from plain TEXT_DELTA content.
+
+    The ``block`` field nests block_type / block_id / data so the SSE
+    event envelope stays flat (type / trace_id at top level, structured
+    payload under ``block``).
+    """
+    bus = get_event_bus()
+    await bus.publish(
+        trace_id,
+        {
+            "type": StreamingEventType.PROTOCOL_BLOCK,
+            "trace_id": trace_id,
+            "block": {
+                "block_type": block_type,
+                "block_id": block_id,
+                "data": data,
+            },
         },
     )
