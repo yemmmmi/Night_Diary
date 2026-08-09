@@ -165,6 +165,11 @@ def update_task(
 ) -> TaskRow:
     row = get_task(db, task_id=task_id, user_id=user_id)
     for key, value in fields.items():
+        # Coerce due_date strings to date objects so the ORM Date column
+        # accepts them (mirrors create_task's parsing). SQL backends like
+        # SQLite reject raw ISO strings for Date columns.
+        if key == "due_date" and isinstance(value, str):
+            value = date.fromisoformat(value)
         if hasattr(row, key) and value is not None:
             setattr(row, key, value)
     db.commit()

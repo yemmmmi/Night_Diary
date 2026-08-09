@@ -345,3 +345,69 @@ class SendMessageRequest(BaseModel):
 class SendMessageResponse(BaseModel):
     message: MessageResponse
     reply: MessageResponse
+
+
+# ── Plan / Task (V3 P2) ──────────────────────────────────────────────
+
+
+class SourceRef(BaseModel):
+    """A citation backing a plan's motivation (diary/memory/episodic)."""
+
+    type: str = Field(description="diary | episodic | memory")
+    id: str | int
+    date: str | None = None
+    snippet: str | None = None
+
+
+class TaskCreateRequest(BaseModel):
+    title: str = Field(max_length=200)
+    note: str | None = None
+    due_date: str | None = Field(default=None, description="ISO date YYYY-MM-DD")
+    plan_id: str | None = None
+    source: str = Field(default="manual", pattern="^(manual|agent)$")
+    created_from_conversation_id: str | None = None
+
+
+class TaskResponse(BaseModel):
+    id: str
+    plan_id: str | None = None
+    title: str
+    note: str | None = None
+    due_date: str | None = None
+    status: str
+    source: str
+    completed_at: str | None = None
+    created_at: str
+
+
+class TaskUpdateRequest(BaseModel):
+    title: str | None = None
+    note: str | None = None
+    due_date: str | None = None
+    status: str | None = Field(default=None, pattern="^(pending|done|skipped)$")
+
+
+class PlanCreateRequest(BaseModel):
+    title: str = Field(max_length=200)
+    motivation: str | None = None
+    source_refs: list[SourceRef] = Field(default_factory=list)
+    tasks: list[TaskCreateRequest] = Field(default_factory=list)
+    source: str = Field(default="manual", pattern="^(manual|agent)$")
+    created_from_conversation_id: str | None = None
+
+
+class PlanResponse(BaseModel):
+    id: str
+    title: str
+    motivation: str | None = None
+    source_refs: list[SourceRef] = Field(default_factory=list)
+    status: str
+    source: str
+    tasks: list[TaskResponse] = Field(default_factory=list)
+    created_at: str
+
+
+class PlanUpdateRequest(BaseModel):
+    title: str | None = None
+    motivation: str | None = None
+    status: str | None = Field(default=None, pattern="^(active|archived|completed)$")

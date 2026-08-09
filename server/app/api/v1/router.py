@@ -16,6 +16,7 @@ from app.api.v1 import (
     memory,
     model_download,
     models,
+    plan,
     stats,
     tags,
     weekly,
@@ -36,3 +37,5 @@ api_router.include_router(weekly.router)
 api_router.include_router(memory.router)
 api_router.include_router(export.router)
 api_router.include_router(dev.router)
+api_router.include_router(plan.router)
+api_router.include_router(plan.tasks_router)
