@@ -185,6 +185,56 @@ def create_entity_graph_tool(user_id: str = "default") -> ToolFn:
     return query_entity_graph
 
 
+def create_list_todos_tool(
+    session_factory: sessionmaker[Session], *, user_id: str = "default"
+) -> ToolFn:
+    """Read-only tool: list the current user's to-do tasks.
+
+    Filters by status (pending/done/all) and optionally scopes to a plan.
+    Used by the agent to gauge existing plan load before proposing more.
+    """
+
+    def list_todos(status: str = "pending", plan_id: str = "") -> str:
+        from app.services import plan_service
+
+        normalized = status if status != "all" else None
+        with session_factory() as session:
+            tasks = plan_service.list_tasks(
+                session,
+                user_id=user_id,
+                plan_id=plan_id or None,
+                status=normalized,
+            )
+        if not tasks:
+            return "当前没有待办任务。"
+        lines = [f"- {t.title}（状态：{t.status}）" for t in tasks[:10]]
+        return f"当前待办（共 {len(tasks)} 条）：\n" + "\n".join(lines)
+
+    return list_todos
+
+
+def create_get_plan_progress_tool(
+    session_factory: sessionmaker[Session], *, user_id: str = "default"
+) -> ToolFn:
+    """Read-only tool: report a single plan's completion progress."""
+
+    def get_plan_progress(plan_id: str) -> str:
+        from app.services import plan_service
+
+        with session_factory() as session:
+            try:
+                plan = plan_service.get_plan(session, plan_id=plan_id, user_id=user_id)
+            except Exception as exc:
+                logger.warning("get_plan_progress failed for plan=%s: %s", plan_id, exc)
+                return f"查询计划失败：{exc}"
+            done = sum(1 for t in plan.tasks if t.status == "done")
+            total = len(plan.tasks)
+            title = plan.title
+        return f"计划「{title}」进度：{done}/{total} 完成。"
+
+    return get_plan_progress
+
+
 def build_tool_map(
     session_factory: sessionmaker[Session],
     *,
@@ -199,6 +249,9 @@ def build_tool_map(
         "get_user_address": create_address_tool(session_factory),
         "analyze_sentiment": create_sentiment_tool(llm),
         "query_entity_graph": create_entity_graph_tool(user_id=user_id),
+        # P2: 只读计划/任务工具
+        "list_todos": create_list_todos_tool(session_factory, user_id=user_id),
+        "get_plan_progress": create_get_plan_progress_tool(session_factory, user_id=user_id),
     }
 
 
@@ -250,6 +303,36 @@ def build_tool_specs() -> list[ToolSpec]:
                     "emotion": {"type": "string", "description": '情绪标签（如"低落"）'},
                     "max_depth": {"type": "integer", "description": "关系查询深度，默认2"},
                 },
+            },
+        ),
+        ToolSpec(
+            name="list_todos",
+            description="列出用户当前的待办任务（只读）。可用于了解用户已有的计划负荷，避免重复建议。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["pending", "done", "all"],
+                        "default": "pending",
+                        "description": "过滤任务状态",
+                    },
+                    "plan_id": {
+                        "type": "string",
+                        "description": "可选：限定某个计划内的 tasks",
+                    },
+                },
+            },
+        ),
+        ToolSpec(
+            name="get_plan_progress",
+            description="查询单个计划的执行进度（只读）。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "plan_id": {"type": "string", "description": "计划 ID"},
+                },
+                "required": ["plan_id"],
             },
         ),
     ]

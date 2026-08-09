@@ -46,6 +46,9 @@ class ChatIntent(StrEnum):
     ADVICE_SEEKING = "advice_seeking"
     CRISIS_SIGNAL = "crisis_signal"
     ENTITY_QUERY = "entity_query"
+    # P2 additions: plan exploration + task command
+    PLAN_EXPLORATION = "plan_exploration"
+    TASK_COMMAND = "task_command"
 
 
 class ChatIntentResult(BaseModel):
