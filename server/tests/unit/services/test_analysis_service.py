@@ -93,3 +93,123 @@ def test_delete_analysis_for_diary_clears_reply(db_session) -> None:
     assert entry.reply is None
     with pytest.raises(AnalysisNotFoundError):
         analysis_service.get_analysis(db_session, entry.id, user_id="default")
+
+
+# ── trigger_analysis_streaming (V3 P4 Task 3) ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_trigger_analysis_streaming_publishes_events(
+    db_session, stub_container
+):
+    """trigger_analysis_streaming 应发布 REPLY_START/TEXT_DELTA/REPLY_END。"""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-scene1-stream"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    async def mock_run_streaming(*, graph, state, workers=None):
+        for token in ["你", "好"]:
+            yield token
+
+    mock_graph = MagicMock()
+    mock_state = MagicMock()
+    with patch.object(
+        analysis_service, "_prepare_analysis_graph",
+        new_callable=AsyncMock, return_value=(mock_graph, mock_state),
+    ), patch(
+        "app.services.ai.multi_agent_executor.run_multi_agent_streaming",
+        side_effect=mock_run_streaming,
+    ), patch.object(
+        analysis_service, "_persist_analysis_streaming"
+    ):
+        await analysis_service.trigger_analysis_streaming(
+            db=db_session, container=stub_container,
+            diary_id=1, user_id="user-1", trace_id=trace_id,
+        )
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    await bus.unsubscribe(trace_id, queue)
+
+    types = [e.get("type") for e in events]
+    assert StreamingEventType.REPLY_START in types, f"Missing REPLY_START in {types}"
+    assert StreamingEventType.TEXT_END in types
+    assert StreamingEventType.REPLY_END in types
+    deltas = [e for e in events if e.get("type") == StreamingEventType.TEXT_DELTA]
+    delta_texts = "".join(d.get("text", "") for d in deltas)
+    assert "你" in delta_texts and "好" in delta_texts
+
+
+@pytest.mark.asyncio
+async def test_trigger_analysis_streaming_persists_analysis(
+    db_session, stub_container
+):
+    """流式结束后应调 _persist_analysis_streaming。"""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    trace_id = "test-scene1-persist"
+
+    async def mock_run_streaming(*, graph, state, workers=None):
+        yield "测试回复"
+
+    with patch.object(
+        analysis_service, "_prepare_analysis_graph",
+        new_callable=AsyncMock, return_value=(MagicMock(), MagicMock()),
+    ), patch(
+        "app.services.ai.multi_agent_executor.run_multi_agent_streaming",
+        side_effect=mock_run_streaming,
+    ), patch.object(
+        analysis_service, "_persist_analysis_streaming"
+    ) as mock_persist:
+        await analysis_service.trigger_analysis_streaming(
+            db=db_session, container=stub_container,
+            diary_id=1, user_id="user-1", trace_id=trace_id,
+        )
+        assert mock_persist.called
+        call_kwargs = mock_persist.call_args.kwargs
+        assert call_kwargs.get("reply_text") == "测试回复"
+
+
+@pytest.mark.asyncio
+async def test_trigger_analysis_streaming_guarantees_reply_end(
+    db_session, stub_container
+):
+    """LLM 失败时仍应发 REPLY_END(P1 终止保证)。"""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-scene1-fail"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    async def mock_run_streaming(*, graph, state, workers=None):
+        raise RuntimeError("LLM down")
+        yield  # 让它成为 async generator
+
+    with patch.object(
+        analysis_service, "_prepare_analysis_graph",
+        new_callable=AsyncMock, return_value=(MagicMock(), MagicMock()),
+    ), patch(
+        "app.services.ai.multi_agent_executor.run_multi_agent_streaming",
+        side_effect=mock_run_streaming,
+    ):
+        await analysis_service.trigger_analysis_streaming(
+            db=db_session, container=stub_container,
+            diary_id=1, user_id="user-1", trace_id=trace_id,
+        )
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    await bus.unsubscribe(trace_id, queue)
+
+    types = [e.get("type") for e in events]
+    assert StreamingEventType.REPLY_END in types, f"REPLY_END must be sent on failure: {types}"

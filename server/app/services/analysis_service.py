@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from datetime import UTC, datetime
@@ -22,8 +23,11 @@ from app.shared.pipeline_trace import (
 from app.shared.trace_persistence import persist_trace, publish_trace_complete_sync
 
 if TYPE_CHECKING:
+    from app.domain.agents.graph import MultiAgentGraph
+    from app.domain.agents.state import MultiAgentState
     from app.services.container import ServiceContainer
 from app.shared.errors import (
+    AIServiceUnavailableError,
     AnalysisNotFoundError,
     AnalysisUnchangedError,
     DiaryAlreadyExistsError,
@@ -477,3 +481,256 @@ def rerun_analysis(
         container=container,
         style_fragment=style_fragment,
     )
+
+
+# ── V3 P4 Task 3: streaming analysis (Scene-1) ─────────────────────────
+
+
+async def _prepare_analysis_graph(
+    db: Session,
+    container: ServiceContainer,
+    diary_id: int,
+    user_id: str,
+) -> tuple[MultiAgentGraph, MultiAgentState]:
+    """Build the multi-agent ``graph`` + initial ``state`` for diary analysis.
+
+    Extracted from the graph/state setup that ``create_analysis`` reaches via
+    ``ExecutionPlanner.execute -> run_multi_agent``. Kept as a standalone
+    helper so the streaming path (``trigger_analysis_streaming``) can build
+    the same inputs without going through the sync planner, and so future
+    refactors can collapse ``create_analysis`` onto this helper without
+    duplicating the wiring.
+
+    Mirrors :func:`run_multi_agent` for everything that happens *before*
+    ``graph.invoke``: diary lookup, episodic context load, long-term profile
+    hydration, working-memory seeding, and initial state construction. The
+    post-``invoke`` working-memory sync stays in :func:`run_multi_agent`
+    because it needs the final state, which the streaming path materialises
+    lazily via :meth:`MultiAgentGraph.invoke_streaming`.
+    """
+    from app.services.ai.multi_agent_executor import _load_episodic_context
+
+    entry = (
+        db.query(DiaryEntryRow)
+        .filter(DiaryEntryRow.id == diary_id, DiaryEntryRow.user_id == user_id)
+        .first()
+    )
+    if entry is None:
+        raise DiaryNotFoundError(diary_id=diary_id)
+
+    content_text = entry.content or ""
+
+    # Release the DB connection back to the pool before any long-running LLM
+    # call. The session stays usable (re-acquires a connection on next query,
+    # e.g. in _persist_analysis_streaming).
+    db.commit()
+
+    graph = container.build_multi_agent_graph(user_id=user_id)
+    if graph is None:
+        # No LLM configured — degrade the same way the sync planner does.
+        raise AIServiceUnavailableError("Multi-agent graph unavailable (no LLM configured)")
+
+    episodic = getattr(container, "episodic_memory", None)
+    long_term = getattr(container, "long_term_memory", None)
+    working_memory = getattr(container, "working_memory", None)
+
+    episodic_context = _load_episodic_context(episodic, query=content_text)
+    long_term_profile: dict[str, Any] = {}
+    if long_term is not None:
+        try:
+            long_term_profile = long_term.get_profile("default").model_dump()
+        except Exception as exc:
+            logger.warning("Long-term memory load failed: %s", exc)
+
+    if working_memory is not None:
+        from app.domain.memory.types import UserProfile
+
+        working_memory.load_context(
+            str(diary_id),
+            UserProfile.model_validate(long_term_profile) if long_term_profile else UserProfile(),
+        )
+        ctx = working_memory.context
+        if ctx is not None:
+            working_memory.update_context(
+                ctx,
+                {"diary_content": content_text, "long_term_profile": long_term_profile},
+            )
+
+    state: MultiAgentState = {
+        "diary_id": str(diary_id),
+        "diary_content": content_text,
+        "style_fragment": "",
+        "intent": "",
+        "tier": "",
+        "token_budget": 0,
+        "activated_agents": [],
+        "activated_skills": [],
+        "episodic_context": episodic_context,
+        "long_term_profile": long_term_profile,
+        "compressed_history": "",
+        "retrieval_context": "",
+        "empathy_response": "",
+        "insight_response": "",
+        "final_response": "",
+        "total_tokens_used": 0,
+        "agent_mode": "multi_agent",
+        "cache_hit_tokens": 0,
+        "cache_miss_tokens": 0,
+        "output_tokens": 0,
+        "errors": [],
+    }
+    return graph, state
+
+
+def _persist_analysis_streaming(
+    db: Session,
+    *,
+    diary_id: int,
+    user_id: str,
+    reply_text: str,
+    token_cost: int,
+) -> None:
+    """Persist a streaming analysis result to ``AnalysisRow`` (best-effort).
+
+    Streaming-mode counterpart of :func:`_persist_analysis`. Unlike the sync
+    path, the worker outputs / tier / token breakdown are not surfaced to the
+    caller (the streaming API only yields reply tokens), so we record the
+    reply on the diary entry, write an ``AnalysisRow`` with an estimated
+    token cost (real tokenizer is deferred to P5), and mark ``agent_mode``
+    as ``streaming`` for observability.
+
+    Uses upsert semantics: an existing analysis for this diary is replaced
+    first, matching :func:`trigger_analysis`'s contract.
+    """
+    entry = (
+        db.query(DiaryEntryRow)
+        .filter(DiaryEntryRow.id == diary_id, DiaryEntryRow.user_id == user_id)
+        .first()
+    )
+    if entry is None:
+        logger.warning(
+            "Streaming persist skipped: diary_id=%s not found for user_id=%s",
+            diary_id,
+            user_id,
+        )
+        return
+
+    existing = db.query(AnalysisRow).filter(AnalysisRow.diary_id == diary_id).first()
+    if existing is not None:
+        db.delete(existing)
+        db.flush()
+
+    analysis = AnalysisRow(
+        diary_id=entry.id,
+        created_at=datetime.now(UTC),
+        token_cost=token_cost,
+        cache_hit_tokens=0,
+        cache_miss_tokens=0,
+        output_tokens=0,
+        log="[Streaming] agent_mode=streaming",
+        diary_length=len(entry.content or ""),
+        agent_mode="streaming",
+        execution_tier="streaming",
+        activated_agents="",
+    )
+    db.add(analysis)
+    entry.reply = reply_text
+    db.commit()
+    db.refresh(analysis)
+    logger.info(
+        "Streaming analysis persisted: diary_id=%d analysis_id=%d tokens=%d",
+        diary_id,
+        analysis.id,
+        token_cost,
+    )
+
+
+# Streaming fallback shown to the user when the LLM/graph fails mid-stream.
+# Half-width punctuation avoids RUF001 (ambiguous unicode) on app/services/**.
+_STREAMING_FALLBACK_FEEDBACK = "抱歉, 分析暂时不可用, 请稍后重试。"
+
+
+async def trigger_analysis_streaming(
+    db: Session,
+    container: ServiceContainer,
+    *,
+    diary_id: int,
+    user_id: str,
+    trace_id: str,
+) -> None:
+    """Scene-1 streaming analysis with P1 terminating guarantee.
+
+    Pipeline:
+        ``_prepare_analysis_graph`` -> ``run_multi_agent_streaming`` ->
+        publish SSE events -> ``_persist_analysis_streaming``.
+
+    The ``try``/``except``/``finally`` structure guarantees that a
+    ``REPLY_END`` event is **always** published (P1 terminating-reply
+    contract) — on normal completion, on LLM failure, on user cancel, and as
+    an ultimate fallback in ``finally``. Persistence also runs in the
+    ``finally`` block so the ``AnalysisRow`` is written even if the frontend
+    disconnects mid-stream.
+    """
+    from app.services.ai.multi_agent_executor import run_multi_agent_streaming
+    from app.shared.streaming_events import (
+        publish_reply_end,
+        publish_reply_start,
+        publish_text_delta,
+        publish_text_end,
+    )
+
+    reply_started = False
+    reply_end_sent = False
+    final_reply_text = ""
+    estimated_tokens = 0
+
+    try:
+        graph, state = await _prepare_analysis_graph(db, container, diary_id, user_id)
+
+        await publish_reply_start(trace_id, intent="scene1_streaming")
+        reply_started = True
+
+        async for token in run_multi_agent_streaming(graph=graph, state=state):
+            if isinstance(token, str) and token:
+                final_reply_text += token
+                await publish_text_delta(trace_id, token)
+
+        estimated_tokens = max(1, len(final_reply_text) // 3)
+        await publish_text_end(trace_id)
+        await publish_reply_end(trace_id)
+        reply_end_sent = True
+
+    except asyncio.CancelledError:
+        # User-initiated abort — clean shutdown, no fallback text needed.
+        if reply_started and not reply_end_sent:
+            with contextlib.suppress(Exception):
+                await publish_reply_end(trace_id, error="cancelled")
+            reply_end_sent = True
+        raise
+    except Exception as exc:
+        logger.exception("Scene-1 streaming failed: %s", exc)
+        if not reply_started:
+            with contextlib.suppress(Exception):
+                await publish_reply_start(trace_id, intent="error")
+            reply_started = True
+        with contextlib.suppress(Exception):
+            await publish_text_delta(trace_id, _STREAMING_FALLBACK_FEEDBACK)
+            final_reply_text = _STREAMING_FALLBACK_FEEDBACK
+        with contextlib.suppress(Exception):
+            await publish_reply_end(trace_id, error=str(exc))
+        reply_end_sent = True
+    finally:
+        # Persist (guaranteed write even if the frontend disconnects).
+        if final_reply_text:
+            with contextlib.suppress(Exception):
+                _persist_analysis_streaming(
+                    db,
+                    diary_id=diary_id,
+                    user_id=user_id,
+                    reply_text=final_reply_text,
+                    token_cost=estimated_tokens,
+                )
+        # Ultimate fallback: guarantee REPLY_END.
+        if trace_id and reply_started and not reply_end_sent:
+            with contextlib.suppress(Exception):
+                await publish_reply_end(trace_id, error="finalized")
