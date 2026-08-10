@@ -32,6 +32,8 @@ class EpisodicEntry(BaseModel):
     mood_score: float = Field(default=0.5, ge=0.0, le=1.0)
     emotions: list[str] = Field(default_factory=list)
     event_date: str | None = None  # ISO date string (YYYY-MM-DD)
+    # ── V3 P4: vector for retrieval (lazy-computed by EpisodicMemory) ──
+    embedding: list[float] | None = None
 
     @model_validator(mode="before")
     @classmethod
