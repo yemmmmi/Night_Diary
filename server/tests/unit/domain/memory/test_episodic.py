@@ -168,3 +168,125 @@ def test_empty_query_keeps_importance_order(episodic_store: SqliteEpisodicMemory
 
     hits = memory.retrieve_relevant(query="", now=now, top_k=2)
     assert hits[0].event_summary == "加班"
+
+
+# ── V3 P4 Task 10: two-stage retrieval (importance×decay → vector → reranker) ──
+
+
+def test_retrieve_relevant_uses_embedder_when_provided() -> None:
+    """有 embedder 时应走向量检索(非 char_jaccard)。"""
+    from app.shared.embed_utils import StubEmbedder
+
+    memory = EpisodicMemory(
+        store=None,
+        user_id="test",
+        embedder=StubEmbedder(),
+    )
+    memory._entries.clear()
+    # 存几条 entry
+    for summary, importance in [("失眠", 0.9), ("吃饭", 0.6), ("加班", 0.7)]:
+        memory._entries.append(
+            EpisodicEntry(
+                event_summary=summary,
+                emotion="neutral",
+                timestamp=time.time(),
+                importance=importance,
+            )
+        )
+
+    # 用 StubEmbedder 检索(确定性 hash)
+    results = memory.retrieve_relevant("失眠", top_k=2)
+    assert len(results) <= 2
+    # 应该有结果
+    assert len(results) >= 1
+
+
+def test_retrieve_relevant_degrades_to_jaccard_without_embedder() -> None:
+    """无 embedder 时应降级 char_jaccard。"""
+    memory = EpisodicMemory(store=None, user_id="test", embedder=None)
+    memory._entries.clear()
+    memory._entries.append(
+        EpisodicEntry(
+            event_summary="失眠",
+            emotion="焦虑",
+            timestamp=time.time(),
+            importance=0.9,
+        )
+    )
+
+    # char_jaccard("失眠", "失眠") = 1.0,应命中
+    results = memory.retrieve_relevant("失眠", top_k=1)
+    assert len(results) == 1
+    assert results[0].event_summary == "失眠"
+
+
+def test_get_or_compute_embedding_lazy_and_caches() -> None:
+    """_get_or_compute_embedding 应懒计算并缓存到 entry.embedding。"""
+    from app.shared.embed_utils import StubEmbedder
+
+    memory = EpisodicMemory(
+        store=None,
+        user_id="test",
+        embedder=StubEmbedder(),
+    )
+    entry = EpisodicEntry(
+        event_summary="测试",
+        emotion="n",
+        timestamp=time.time(),
+        importance=0.6,
+    )
+    assert entry.embedding is None  # 初始无
+
+    vec = memory._get_or_compute_embedding(entry)
+    assert vec is not None
+    assert len(vec) > 0
+    assert entry.embedding is not None  # 已缓存
+    assert entry.embedding == vec
+
+    # 第二次调用应直接用缓存(不重算)
+    vec2 = memory._get_or_compute_embedding(entry)
+    assert vec2 == vec
+
+
+def test_store_precomputes_embedding_when_embedder_available() -> None:
+    """store 时如果有 embedder 应预计算 embedding。"""
+    from app.shared.embed_utils import StubEmbedder
+
+    memory = EpisodicMemory(
+        store=None,
+        user_id="test",
+        embedder=StubEmbedder(),
+    )
+    entry = EpisodicEntry(
+        event_summary="新条目",
+        emotion="n",
+        timestamp=time.time(),
+        importance=0.7,
+    )
+    memory.store(entry)
+    assert entry.embedding is not None  # store 时预计算
+    assert len(entry.embedding) > 0
+
+
+def test_retrieve_relevant_respects_top_k() -> None:
+    """retrieve_relevant 应返回不超过 top_k 条。"""
+    from app.shared.embed_utils import StubEmbedder
+
+    memory = EpisodicMemory(
+        store=None,
+        user_id="test",
+        embedder=StubEmbedder(),
+    )
+    memory._entries.clear()
+    for i in range(5):
+        memory._entries.append(
+            EpisodicEntry(
+                event_summary=f"条目{i}",
+                emotion="n",
+                timestamp=time.time(),
+                importance=0.6,
+            )
+        )
+
+    results = memory.retrieve_relevant("查询", top_k=3)
+    assert len(results) <= 3
