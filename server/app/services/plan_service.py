@@ -147,9 +147,15 @@ def get_task(db: Session, *, task_id: str, user_id: str) -> TaskRow:
 
 
 def update_task_status(
-    db: Session, *, task_id: str, user_id: str, status: str
+    db: Session,
+    *,
+    task_id: str,
+    user_id: str,
+    status: str,
+    container: Any | None = None,
 ) -> TaskRow:
     row = get_task(db, task_id=task_id, user_id=user_id)
+    old_status = row.status
     row.status = status
     if status == "done":
         row.completed_at = datetime.utcnow()
@@ -157,7 +163,48 @@ def update_task_status(
         row.completed_at = None
     db.commit()
     db.refresh(row)
+
+    if (
+        container is not None
+        and old_status != status
+        and status in ("done", "skipped")
+    ):
+        _persist_task_memory(db, row, container, user_id)
+
     return row
+
+
+def _persist_task_memory(
+    db: Session, task: TaskRow, container: Any, user_id: str
+) -> None:
+    """将任务状态变更写入 episodic memory (best-effort, 失败不阻塞).
+
+    ``ServiceContainer`` does not expose a ``memory_gateway`` attribute, so we
+    construct one via :meth:`MemoryGateway.from_container`. The caller (API
+    layer) is responsible for calling ``container.ensure_memory`` first so the
+    underlying ``episodic_memory`` / ``long_term_memory`` layers are loaded;
+    otherwise ``persist_atom`` silently no-ops (returns ``False``).
+    """
+    from app.services.memory_gateway import MemoryGateway
+    from app.services.normalizer import ContentNormalizer
+
+    try:
+        plan_title = None
+        if task.plan_id:
+            plan = db.get(PlanRow, task.plan_id)
+            plan_title = plan.title if plan else None
+
+        atom = ContentNormalizer.from_task(
+            task_title=task.title,
+            task_note=task.note,
+            plan_title=plan_title,
+            status=task.status,
+            user_id=user_id,
+        )
+        gateway = MemoryGateway.from_container(container)
+        gateway.persist_atom(atom)
+    except Exception as exc:
+        logger.warning("Task memory persist failed (non-fatal): %s", exc)
 
 
 def update_task(

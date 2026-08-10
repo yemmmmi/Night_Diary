@@ -129,3 +129,40 @@ def test_fallback_direct_call_uses_intent_template(
     agent = EmpathyAgent(fake_llm, knowledge_store)
     result = agent.fallback("habit_tracking")
     assert "习惯" in result["empathy_response"]
+
+
+# ----- run_streaming (V3 P3) -----
+
+
+async def test_run_streaming_yields_safety_filtered_reply(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """run_streaming yields the (guarded) reply — non-crisis content passes through."""
+    agent = EmpathyAgent(fake_llm, knowledge_store)
+    tokens = [
+        token
+        async for token in agent.run_streaming(
+            {"diary_content": "今天工作很顺利，心情不错。", "intent": "pure_record"}
+        )
+    ]
+    # The guard buffers emotional_vent then flushes; joined tokens equal the reply.
+    assert "".join(tokens) == fake_llm.reply
+    assert fake_llm.calls  # astream received a prompt
+
+
+async def test_run_streaming_builds_same_prompt_as_run(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """run and run_streaming must produce an identical prompt via _build_prompt."""
+    agent = EmpathyAgent(fake_llm, knowledge_store)
+    state = {"diary_content": "今天有点累。", "intent": "emotional_support"}
+
+    await agent.run(state)
+    run_prompt = fake_llm.calls[-1]
+    fake_llm.calls.clear()
+
+    [token async for token in agent.run_streaming(state)]
+
+    assert fake_llm.calls[-1] == run_prompt

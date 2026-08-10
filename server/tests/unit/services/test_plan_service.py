@@ -90,3 +90,94 @@ def test_get_plan_not_found_raises(db):
     from app.shared.errors import NotFoundError
     with pytest.raises(NotFoundError):
         plan_service.get_plan(db, plan_id="nonexistent", user_id="user-1")
+
+
+# ── Task 2: episodic memory write-back on status change ──────────────
+
+
+def test_update_task_status_done_triggers_memory_persist(db, monkeypatch):
+    """update_task_status 标记 done 时应触发记忆回写。"""
+    from unittest.mock import MagicMock
+
+    from app.services import plan_service
+    from app.services.memory_gateway import MemoryGateway
+
+    task = plan_service.create_task(db, user_id="user-1", title="测试任务")
+
+    # ServiceContainer 没有 memory_gateway 属性; 生产路径走
+    # MemoryGateway.from_container(container), 故在单元测试里 patch 该入口
+    # 注入一个 mock gateway 来断言 persist_atom 调用.
+    mock_gateway = MagicMock()
+    monkeypatch.setattr(
+        MemoryGateway,
+        "from_container",
+        staticmethod(lambda container: mock_gateway),
+    )
+
+    plan_service.update_task_status(
+        db, task_id=task.id, user_id="user-1", status="done",
+        container=MagicMock(),
+    )
+
+    assert mock_gateway.persist_atom.called
+    call_args = mock_gateway.persist_atom.call_args
+    atom = call_args[0][0]  # 第一个位置参数是 atom
+    assert atom.source == "task"
+    assert atom.importance >= 0.6
+
+
+def test_update_task_status_without_container_no_persist(db):
+    """container=None 时不触发记忆回写（向后兼容）。"""
+    from app.services import plan_service
+
+    task = plan_service.create_task(db, user_id="user-1", title="测试")
+    plan_service.update_task_status(
+        db, task_id=task.id, user_id="user-1", status="done",
+    )
+    # 只要不抛异常就算通过
+
+
+def test_update_task_status_same_status_no_persist(db, monkeypatch):
+    """状态未变更时不触发记忆回写。"""
+    from unittest.mock import MagicMock
+
+    from app.services import plan_service
+    from app.services.memory_gateway import MemoryGateway
+
+    task = plan_service.create_task(db, user_id="user-1", title="测试")
+    mock_gateway = MagicMock()
+    monkeypatch.setattr(
+        MemoryGateway,
+        "from_container",
+        staticmethod(lambda container: mock_gateway),
+    )
+
+    plan_service.update_task_status(
+        db, task_id=task.id, user_id="user-1", status="pending",
+        container=MagicMock(),
+    )
+    assert not mock_gateway.persist_atom.called
+
+
+def test_persist_task_memory_failure_does_not_block(db, monkeypatch):
+    """记忆回写失败不影响任务状态变更。"""
+    from unittest.mock import MagicMock
+
+    from app.services import plan_service
+    from app.services.memory_gateway import MemoryGateway
+
+    task = plan_service.create_task(db, user_id="user-1", title="测试")
+    mock_gateway = MagicMock()
+    mock_gateway.persist_atom.side_effect = RuntimeError("DB down")
+    monkeypatch.setattr(
+        MemoryGateway,
+        "from_container",
+        staticmethod(lambda container: mock_gateway),
+    )
+
+    result = plan_service.update_task_status(
+        db, task_id=task.id, user_id="user-1", status="done",
+        container=MagicMock(),
+    )
+    assert result.status == "done"
+    assert result.completed_at is not None

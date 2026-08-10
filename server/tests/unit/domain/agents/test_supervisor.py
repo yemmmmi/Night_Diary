@@ -257,3 +257,77 @@ async def test_synthesize_fallback_when_all_empty() -> None:
     update = await supervisor.synthesize({"errors": ["worker 'empathy' failed"]})
     assert update["final_response"]  # non-empty safe fallback
     assert update["agent_mode"] == "multi_agent"
+
+
+# ----- synthesize_streaming (V3 P3) -----
+
+
+class _StreamWorker:
+    """Minimal worker exposing ``run_streaming`` for supervisor streaming tests."""
+
+    def __init__(self, tokens: list[str]) -> None:
+        self._tokens = tokens
+        self.streaming_called = False
+
+    async def run_streaming(self, state: Any) -> Any:
+        self.streaming_called = True
+        for token in self._tokens:
+            yield token
+
+
+async def test_synthesize_streaming_single_worker_streams_tokens() -> None:
+    """A single content-worker route streams via worker.run_streaming."""
+    supervisor, _, _ = _make_supervisor()
+    worker = _StreamWorker(["你", "好", "，", "世", "界"])
+    state = {"empathy_response": "old output"}
+
+    tokens = [
+        token
+        async for token in supervisor.synthesize_streaming(
+            state, workers={"empathy": worker}, trace_id="t1"
+        )
+    ]
+
+    assert tokens == ["你", "好", "，", "世", "界"]
+    assert worker.streaming_called
+
+
+async def test_synthesize_streaming_single_worker_without_run_streaming_yields_existing() -> None:
+    """A single-worker route without a streaming worker emits the existing output."""
+    supervisor, _, _ = _make_supervisor()
+    state = {"empathy_response": "已有共情输出"}
+
+    tokens = [
+        token
+        async for token in supervisor.synthesize_streaming(
+            state, workers={"empathy": object()}
+        )
+    ]
+
+    assert tokens == ["已有共情输出"]
+
+
+async def test_synthesize_streaming_multi_worker_degrades_to_synthesize(
+    fake_llm: Any,
+) -> None:
+    """A multi content-worker route (RETROSPECTIVE_REVIEW) degrades to synthesize."""
+    supervisor, _, _ = _make_supervisor(llm=fake_llm)
+    streaming_worker = _StreamWorker(["不应", "出现"])
+    state = {
+        "intent": IntentCategory.RETROSPECTIVE_REVIEW.value,
+        "token_budget": 1500,
+        "empathy_response": "我理解你的感受。",
+        "insight_response": "你最近的拖延可能与压力有关。",
+    }
+
+    tokens = [
+        token
+        async for token in supervisor.synthesize_streaming(
+            state, workers={"empathy": streaming_worker, "insight": object()}
+        )
+    ]
+
+    # Degrade path: synthesize() with 2 content outputs + llm → fake_llm.reply.
+    assert tokens == [fake_llm.reply]
+    assert not streaming_worker.streaming_called
+    assert fake_llm.calls  # the synthesis LLM was actually invoked

@@ -27,6 +27,7 @@ from app.shared.streaming_events import (
     publish_reply_end,
     publish_reply_start,
     publish_text_delta,
+    publish_text_end,
 )
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,13 @@ class PlannerAgent:
 
     async def _emit_plan_proposal(self, inp: PlannerInput, completeness: Any) -> None:
         """Generate a plan proposal via LLM and publish it as protocol block."""
+        # P3: 先流式发过渡语，降低用户等待感
+        transition = self._build_transition_text(completeness)
+        if transition:
+            await publish_text_delta(inp.trace_id, transition)
+            await publish_text_end(inp.trace_id)
+
+        # 然后调 ainvoke 生成 JSON（协议块原子性，保持一次性渲染）
         prompt = _PLAN_PROPOSAL_PROMPT.format(
             what=completeness.what or inp.user_input,
             how=completeness.how or "（用户未指定，请提供建议）",
@@ -152,6 +160,17 @@ class PlannerAgent:
             data=proposal_data,
         )
         await publish_reply_end(inp.trace_id)
+
+    def _build_transition_text(self, completeness: Any) -> str:
+        """Generate natural transition text to reduce perceived wait.
+
+        Published as TEXT_DELTA *before* the (atomic) JSON ainvoke call so
+        the user gets immediate feedback that the agent is working on a
+        proposal, rather than staring at a blank buffer while the LLM
+        latency accrues.
+        """
+        what = getattr(completeness, "what", None) or "你的目标"
+        return f"基于你提到的「{what}」, 结合你的历史记录, 我整理了一个建议:\n\n"
 
     @staticmethod
     def _strip_code_fence(text: str) -> str:

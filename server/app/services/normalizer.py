@@ -174,6 +174,42 @@ class ContentNormalizer:
             return atom
 
     @staticmethod
+    def from_task(
+        task_title: str,
+        task_note: str | None,
+        plan_title: str | None,
+        status: str,
+        *,
+        user_id: str = "default",
+    ) -> UnifiedMemoryAtom:
+        """Convert a task status change to a UnifiedMemoryAtom.
+
+        ``importance`` is pinned to 0.6 so the atom clears the four-dimension
+        gate's emotional_significance check: task completion is emotionally
+        neutral (mood_score=0.5), which fails abs(mood_score-0.5)>=0.15, so it
+        must rely on the importance>=0.4 floor. ``task_note`` is intentionally
+        dropped because UnifiedMemoryAtom has no raw-content field (mirroring
+        ``from_conversation``).
+        """
+        action = "完成了" if status == "done" else "跳过了"
+        plan_ctx = f"（计划「{plan_title}」）" if plan_title else ""
+        event_summary = f"{action}任务「{task_title}」{plan_ctx}"[:120]
+
+        tags: list[str] = ["task", status]
+        if plan_title:
+            tags.append(plan_title)
+
+        return UnifiedMemoryAtom(
+            source="task",
+            event_summary=event_summary,
+            emotion="neutral",
+            mood_score=0.5,
+            tags=tags,
+            importance=0.6,
+            user_id=user_id,
+        )
+
+    @staticmethod
     def from_reply(
         reply_text: str,
         *,

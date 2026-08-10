@@ -208,7 +208,7 @@ def test_split_into_chunks_newline_also_splits() -> None:
 async def test_generate_reply_streaming_crisis_publishes_single_chunk(
     db_session,
 ) -> None:
-    """Crisis detection result is published via SSE as a single TEXT_DELTA (not chunked)."""
+    """Crisis detection result is published via SSE as a single TEXT_DELTA."""
     from app.shared.streaming_events import StreamingEventType
     from app.shared.trace_event_bus import get_event_bus
 
@@ -217,14 +217,13 @@ async def test_generate_reply_streaming_crisis_publishes_single_chunk(
     queue = await bus.subscribe(trace_id)
 
     container = MagicMock()
-    crisis_result = ChatReplyResult(
-        reply_text="安全模板：请联系心理热线。",
-        retrieved_diary_ids=[],
-        retrieved_memory_ids=[],
-        is_crisis=True,
-    )
+    mock_ctx = MagicMock()
+    mock_ctx.is_crisis = True
+    mock_ctx.safe_response = "安全模板：请联系心理热线。"
 
-    with patch.object(conversation_ai_service, "generate_reply", return_value=crisis_result):
+    with patch.object(
+        conversation_ai_service, "_prepare_reply_context", return_value=mock_ctx
+    ):
         await conversation_ai_service.generate_reply_streaming(
             db_session,
             container,
@@ -258,10 +257,10 @@ async def test_generate_reply_streaming_crisis_publishes_single_chunk(
     await bus.unsubscribe(trace_id, queue)
 
 
-async def test_generate_reply_streaming_non_crisis_publishes_multiple_chunks(
+async def test_generate_reply_streaming_non_crisis_delegates_to_astream(
     db_session,
 ) -> None:
-    """非危机结果应通过 SSE 分段发布 TEXT_DELTA。"""
+    """非危机路径应委托给 run_conversation_loop_streaming 并发布 TEXT_DELTA。"""
     from app.shared.streaming_events import StreamingEventType
     from app.shared.trace_event_bus import get_event_bus
 
@@ -270,16 +269,41 @@ async def test_generate_reply_streaming_non_crisis_publishes_multiple_chunks(
     queue = await bus.subscribe(trace_id)
 
     container = MagicMock()
-    reply_text = "你好。今天天气不错。要一起散步吗？"
-    normal_result = ChatReplyResult(
-        reply_text=reply_text,
-        retrieved_diary_ids=[],
-        retrieved_memory_ids=[],
-        is_crisis=False,
-        token_info={"total_tokens_used": 42},
-    )
+    reply_tokens = ["你好。", "今天天气不错。", "要一起散步吗？"]
 
-    with patch.object(conversation_ai_service, "generate_reply", return_value=normal_result):
+    mock_ctx = MagicMock()
+    mock_ctx.is_crisis = False
+    mock_ctx.pinned_diaries_text = ""
+    mock_ctx.retrieved_diaries_text = ""
+    mock_ctx.episodic_text = ""
+    mock_ctx.memory_ids = []
+    mock_ctx.tools = None
+    mock_ctx.crisis_guard = None
+    mock_ctx.intent_result = None
+
+    async def mock_stream(**kwargs):
+        """Mimic run_conversation_loop_streaming: publish events + yield tokens."""
+        from app.shared.streaming_events import (
+            publish_reply_end,
+            publish_reply_start,
+            publish_text_delta,
+            publish_text_end,
+        )
+
+        tid = kwargs.get("trace_id", "")
+        await publish_reply_start(tid, intent="casual_chat")
+        for token in reply_tokens:
+            await publish_text_delta(tid, token)
+            yield token
+        await publish_text_end(tid)
+        await publish_reply_end(tid, usage={"total_tokens_used": 42})
+
+    with patch.object(
+        conversation_ai_service, "_prepare_reply_context", return_value=mock_ctx
+    ), patch(
+        "app.services.ai.conversation_loop.run_conversation_loop_streaming",
+        side_effect=mock_stream,
+    ):
         await conversation_ai_service.generate_reply_streaming(
             db_session,
             container,
@@ -300,10 +324,10 @@ async def test_generate_reply_streaming_non_crisis_publishes_multiple_chunks(
     assert types[-2] == StreamingEventType.TEXT_END
     assert types[-1] == StreamingEventType.REPLY_END
     delta_events = [e for e in events if e["type"] == StreamingEventType.TEXT_DELTA]
-    assert len(delta_events) == 3  # three sentences
+    assert len(delta_events) == 3  # three tokens
     # Reassembled text matches the original reply.
     reassembled = "".join(e["text"] for e in delta_events)
-    assert reassembled == reply_text
+    assert reassembled == "".join(reply_tokens)
     # REPLY_END should carry the token usage info.
     reply_end_event = events[-1]
     assert reply_end_event["usage"]["total_tokens_used"] == 42
@@ -323,14 +347,13 @@ async def test_generate_reply_streaming_no_trace_id_publishes_nothing(
     queue = await bus.subscribe(trace_id_unused)
 
     container = MagicMock()
-    normal_result = ChatReplyResult(
-        reply_text="hello",
-        retrieved_diary_ids=[],
-        retrieved_memory_ids=[],
-    )
+    mock_ctx = MagicMock()
+    mock_ctx.is_crisis = False
 
-    with patch.object(conversation_ai_service, "generate_reply", return_value=normal_result):
-        # Empty trace_id → early return after generate_reply.
+    with patch.object(
+        conversation_ai_service, "_prepare_reply_context", return_value=mock_ctx
+    ):
+        # Empty trace_id → early return after _prepare_reply_context.
         await conversation_ai_service.generate_reply_streaming(
             db_session,
             container,
@@ -350,20 +373,20 @@ async def test_generate_reply_streaming_no_trace_id_publishes_nothing(
 # ── P1 Task 3: _terminating_reply guarantee tests ─────────────────────
 
 
-async def test_streaming_emits_reply_end_on_generate_reply_failure() -> None:
-    """generate_reply 抛异常时，generate_reply_streaming 必须发出 REPLY_END。"""
+async def test_streaming_emits_reply_end_on_prepare_context_failure() -> None:
+    """_prepare_reply_context 抛异常时，generate_reply_streaming 必须发出 REPLY_END。"""
     from app.shared.streaming_events import StreamingEventType
     from app.shared.trace_event_bus import get_event_bus
 
-    trace_id = "test-trace-llm-failure"
+    trace_id = "test-trace-ctx-failure"
     bus = get_event_bus()
     queue = await bus.subscribe(trace_id)
 
     try:
         with patch.object(
             conversation_ai_service,
-            "generate_reply",
-            side_effect=RuntimeError("LLM crashed"),
+            "_prepare_reply_context",
+            side_effect=RuntimeError("Context prep crashed"),
         ):
             # Should NOT raise — the exception is caught by the try/finally.
             await conversation_ai_service.generate_reply_streaming(
@@ -387,7 +410,7 @@ async def test_streaming_emits_reply_end_on_generate_reply_failure() -> None:
             f"Expected REPLY_END event, got events: {[e.get('type') for e in events]}"
         )
         assert reply_ends[-1]["error"] is not None
-        assert "LLM crashed" in reply_ends[-1]["error"]
+        assert "Context prep crashed" in reply_ends[-1]["error"]
     finally:
         await bus.unsubscribe(trace_id, queue)
 
@@ -402,17 +425,35 @@ async def test_streaming_emits_reply_end_on_cancel() -> None:
     queue = await bus.subscribe(trace_id)
 
     try:
-        # A long reply yields many chunks → the streaming loop has many await
-        # points (asyncio.sleep per chunk), giving us a window to cancel the
-        # task mid-stream. 1000 chars / chunk_size 20 = 50 chunks ≈ 1s.
-        long_text = "字" * 1000
-        mock_result = MagicMock()
-        mock_result.is_crisis = False
-        mock_result.reply_text = long_text
-        mock_result.token_info = {"total_tokens_used": 10}
+        mock_ctx = MagicMock()
+        mock_ctx.is_crisis = False
+        mock_ctx.pinned_diaries_text = ""
+        mock_ctx.retrieved_diaries_text = ""
+        mock_ctx.episodic_text = ""
+        mock_ctx.memory_ids = []
+        mock_ctx.tools = None
+        mock_ctx.crisis_guard = None
+        mock_ctx.intent_result = None
+
+        async def slow_stream(**kwargs):
+            """Mimic run_conversation_loop_streaming with delays for cancellation window."""
+            from app.shared.streaming_events import (
+                publish_reply_start,
+                publish_text_delta,
+            )
+
+            tid = kwargs.get("trace_id", "")
+            await publish_reply_start(tid, intent="casual_chat")
+            for _ in range(50):
+                await publish_text_delta(tid, "字")
+                yield "字"
+                await asyncio.sleep(0.05)
 
         with patch.object(
-            conversation_ai_service, "generate_reply", return_value=mock_result
+            conversation_ai_service, "_prepare_reply_context", return_value=mock_ctx
+        ), patch(
+            "app.services.ai.conversation_loop.run_conversation_loop_streaming",
+            side_effect=slow_stream,
         ):
             task = asyncio.create_task(
                 conversation_ai_service.generate_reply_streaming(
@@ -453,13 +494,36 @@ async def test_streaming_normal_path_single_reply_end() -> None:
     queue = await bus.subscribe(trace_id)
 
     try:
-        mock_result = MagicMock()
-        mock_result.is_crisis = False
-        mock_result.reply_text = "你好呀"
-        mock_result.token_info = {"total_tokens_used": 10}
+        mock_ctx = MagicMock()
+        mock_ctx.is_crisis = False
+        mock_ctx.pinned_diaries_text = ""
+        mock_ctx.retrieved_diaries_text = ""
+        mock_ctx.episodic_text = ""
+        mock_ctx.memory_ids = []
+        mock_ctx.tools = None
+        mock_ctx.crisis_guard = None
+        mock_ctx.intent_result = None
+
+        async def mock_stream(**kwargs):
+            from app.shared.streaming_events import (
+                publish_reply_end,
+                publish_reply_start,
+                publish_text_delta,
+                publish_text_end,
+            )
+
+            tid = kwargs.get("trace_id", "")
+            await publish_reply_start(tid, intent="casual_chat")
+            await publish_text_delta(tid, "你好呀")
+            yield "你好呀"
+            await publish_text_end(tid)
+            await publish_reply_end(tid)
 
         with patch.object(
-            conversation_ai_service, "generate_reply", return_value=mock_result
+            conversation_ai_service, "_prepare_reply_context", return_value=mock_ctx
+        ), patch(
+            "app.services.ai.conversation_loop.run_conversation_loop_streaming",
+            side_effect=mock_stream,
         ):
             await conversation_ai_service.generate_reply_streaming(
                 db=MagicMock(),
@@ -481,3 +545,109 @@ async def test_streaming_normal_path_single_reply_end() -> None:
         )
     finally:
         await bus.unsubscribe(trace_id, queue)
+
+
+# ── P3 Task 7: _prepare_reply_context extraction + real astream ──────
+
+
+def test_prepare_reply_context_detects_crisis(stub_container, db_session) -> None:
+    """_prepare_reply_context 对危机输入应返回 is_crisis=True。"""
+    from app.services.conversation_ai_service import _prepare_reply_context
+
+    ctx = _prepare_reply_context(
+        db_session,
+        stub_container,
+        conversation_id="conv-crisis",
+        content="我不想活了",
+        diary_ids=[],
+        user_id="user-1",
+        auto_retrieve=False,
+        crisis_guard=None,
+        trace_id=None,
+    )
+    assert ctx.is_crisis is True
+    assert ctx.safe_response is not None
+
+
+def test_prepare_reply_context_safe_input(stub_container, db_session) -> None:
+    """_prepare_reply_context 对安全输入应返回 is_crisis=False。"""
+    from app.services.conversation_ai_service import _prepare_reply_context
+
+    ctx = _prepare_reply_context(
+        db_session,
+        stub_container,
+        conversation_id="conv-safe",
+        content="你好",
+        diary_ids=[],
+        user_id="user-1",
+        auto_retrieve=False,
+        crisis_guard=None,
+        trace_id="trace-1",
+    )
+    assert ctx.is_crisis is False
+    assert ctx.conversation_id == "conv-safe"
+
+
+async def test_generate_reply_streaming_uses_real_astream(
+    stub_container, db_session
+) -> None:
+    """generate_reply_streaming 应走真实 astream（不再走模拟分块）。"""
+    from app.services import conversation_ai_service as svc
+    from app.services.conversation_ai_service import generate_reply_streaming
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-real-stream"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    mock_ctx = MagicMock()
+    mock_ctx.is_crisis = False
+    mock_ctx.intent_result = None
+    mock_ctx.pinned_diaries_text = ""
+    mock_ctx.retrieved_diaries_text = ""
+    mock_ctx.episodic_text = ""
+    mock_ctx.memory_ids = []
+    mock_ctx.tools = None
+    mock_ctx.crisis_guard = None
+    mock_ctx.content = "你好"
+
+    async def mock_stream(**kwargs):
+        from app.shared.streaming_events import (
+            publish_reply_end,
+            publish_reply_start,
+            publish_text_delta,
+            publish_text_end,
+        )
+
+        tid = kwargs.get("trace_id", "")
+        await publish_reply_start(tid, intent="casual_chat")
+        for token in ["你", "好", "呀"]:
+            await publish_text_delta(tid, token)
+            yield token
+        await publish_text_end(tid)
+        await publish_reply_end(tid)
+
+    with patch.object(
+        svc, "_prepare_reply_context", return_value=mock_ctx
+    ), patch(
+        "app.services.ai.conversation_loop.run_conversation_loop_streaming",
+        side_effect=mock_stream,
+    ):
+        await generate_reply_streaming(
+            db=db_session,
+            container=stub_container,
+            conversation_id="conv-1",
+            content="你好",
+            diary_ids=[],
+            user_id="user-1",
+            trace_id=trace_id,
+        )
+
+    events: list[dict] = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    await bus.unsubscribe(trace_id, queue)
+
+    deltas = [e for e in events if e.get("type") == StreamingEventType.TEXT_DELTA]
+    assert len(deltas) >= 1

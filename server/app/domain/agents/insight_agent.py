@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from app.domain.agents.context_compressor import memory_context_from_state
@@ -26,7 +27,9 @@ from app.domain.agents.prompts import (
 from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.knowledge.store import DomainKnowledgeStore
 from app.domain.memory.types import EmotionBaseline
+from app.shared.crisis_guard import CrisisGuard
 from app.shared.llm import LLMClient, message_text
+from app.shared.streaming_safety import StreamingSafetyGuard
 from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
 logger = logging.getLogger(__name__)
@@ -65,6 +68,66 @@ class InsightAgent:
         style_fragment: str | None = None,
     ) -> dict[str, Any]:
         """Produce ``insight_response`` (+ token usage) for the current diary."""
+        prompt = self._build_prompt(state, style_fragment=style_fragment)
+
+        started = time.perf_counter()
+        try:
+            response = await self._llm.ainvoke(prompt)
+        except Exception as exc:
+            logger.error("insight.llm_failed: %s", exc)
+            self._record_trace(prompt, "", started, str(exc), usage=None)
+            return self.fallback()
+
+        reply = message_text(response).strip()
+        usage = extract_token_usage(response)
+        self._record_trace(prompt, reply, started, None, usage=usage)
+
+        # report_type / deviation are recomputed for the log line only (cheap,
+        # CPU-only checks); the prompt itself was built once in _build_prompt.
+        report_type = self._detect_report_type(state.get("diary_content", ""))
+        deviation = self._detect_emotion_deviation(
+            state.get("long_term_profile", {}) or {},
+            state.get("episodic_context", []) or [],
+        )
+        logger.info(
+            "insight.done report=%s deviation=%s len=%d tokens=%d",
+            report_type or "none",
+            "yes" if deviation else "no",
+            len(reply),
+            usage["total_tokens_used"],
+        )
+        return {"insight_response": reply, **usage}
+
+    async def run_streaming(
+        self,
+        state: MultiAgentState,
+        *,
+        style_fragment: str | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Streaming variant — yield tokens from ``astream`` with safety filtering.
+
+        Shares :meth:`_build_prompt` with :meth:`run`. ``retrospective_query`` is
+        a low-risk intent, so the guard streams tokens directly without buffering
+        (analytical replies rarely carry mid-stream crisis signals).
+        """
+        prompt = self._build_prompt(state, style_fragment=style_fragment)
+        guard = StreamingSafetyGuard(CrisisGuard())
+
+        async def _raw_stream() -> AsyncGenerator[str, None]:
+            async for token in self._llm.astream(prompt):
+                yield token
+
+        async for item in guard.filter_stream(_raw_stream(), intent="retrospective_query"):
+            if isinstance(item, str):
+                yield item
+
+    def _build_prompt(
+        self,
+        state: MultiAgentState,
+        *,
+        style_fragment: str | None = None,
+    ) -> str:
+        """Build the full LLM prompt — shared by :meth:`run` and :meth:`run_streaming`."""
         diary_content = state.get("diary_content", "")
         retrieval_context = state.get("retrieval_context", "")
         episodic = state.get("episodic_context", []) or []
@@ -91,28 +154,7 @@ class InsightAgent:
             domain_knowledge=domain_knowledge,
             deviation=deviation,
         )
-        prompt = f"{system_prompt}\n\n{user_message}"
-
-        started = time.perf_counter()
-        try:
-            response = await self._llm.ainvoke(prompt)
-        except Exception as exc:
-            logger.error("insight.llm_failed: %s", exc)
-            self._record_trace(prompt, "", started, str(exc), usage=None)
-            return self.fallback()
-
-        reply = message_text(response).strip()
-        usage = extract_token_usage(response)
-        self._record_trace(prompt, reply, started, None, usage=usage)
-
-        logger.info(
-            "insight.done report=%s deviation=%s len=%d tokens=%d",
-            report_type or "none",
-            "yes" if deviation else "no",
-            len(reply),
-            usage["total_tokens_used"],
-        )
-        return {"insight_response": reply, **usage}
+        return f"{system_prompt}\n\n{user_message}"
 
     def fallback(self) -> dict[str, Any]:
         """Safe, LLM-free reply used when the model is unreachable."""
