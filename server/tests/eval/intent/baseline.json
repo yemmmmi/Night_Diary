@@ -2,21 +2,21 @@
   "_placeholder": false,
   "_note": "Seeded by EVAL_UPDATE_BASELINE=1 make eval-intent. Scalar metrics only; per_class_* and confusion_matrix are reported in stdout but not persisted here.",
   "baseline_a": {
-    "accuracy": 0.87,
-    "macro_f1": 0.867,
-    "weighted_f1": 0.8677,
-    "rule_short_circuit_rate": 0.26,
-    "llm_layer_accuracy": 0.8311,
-    "avg_latency_ms": 2504.3604,
-    "avg_tokens_per_call": 321.43
+    "accuracy": 0.696,
+    "macro_f1": 0.6968,
+    "weighted_f1": 0.7012,
+    "rule_short_circuit_rate": 0.304,
+    "llm_layer_accuracy": 0.5747,
+    "avg_latency_ms": 0.0247,
+    "avg_tokens_per_call": 175.0
   },
   "treatment_b": {
-    "accuracy": 0.995,
-    "macro_f1": 0.995,
-    "weighted_f1": 0.995,
-    "rule_short_circuit_rate": 0.26,
+    "accuracy": 0.992,
+    "macro_f1": 0.9919,
+    "weighted_f1": 0.992,
+    "rule_short_circuit_rate": 0.304,
     "llm_layer_accuracy": 1.0,
-    "avg_latency_ms": 0.0593,
+    "avg_latency_ms": 0.0435,
     "avg_tokens_per_call": 112.0
   }
 }

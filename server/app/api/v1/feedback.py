@@ -24,7 +24,6 @@ def submit_feedback(
     container: ContainerDep,
     user: CurrentUserDep,
 ) -> FeedbackResponse:
-    thompson = feedback_service.build_thompson_sampler(container.style_preference_store)
     row = feedback_service.submit_feedback(
         db,
         user_id=str(user.id),
@@ -32,7 +31,6 @@ def submit_feedback(
         feedback_type=body.feedback_type,
         reason=body.reason,
         response_style=body.response_style,
-        thompson=thompson,
     )
     return feedback_to_response(row)
 
@@ -50,7 +48,6 @@ def submit_conversation_feedback(
     user: CurrentUserDep,
 ) -> FeedbackResponse:
     """Submit feedback for a conversation reply (scene 2)."""
-    thompson = feedback_service.build_thompson_sampler(container.style_preference_store)
     row = feedback_service.submit_conversation_feedback(
         db,
         user_id=str(user.id),
@@ -58,6 +55,5 @@ def submit_conversation_feedback(
         feedback_type=body.feedback_type,
         reason=body.reason,
         response_style=body.response_style,
-        thompson=thompson,
     )
     return feedback_to_response(row)

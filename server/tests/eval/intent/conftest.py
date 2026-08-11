@@ -1,6 +1,6 @@
 """Fixtures for the chat-intent classification eval (事项3 PR-B).
 
-Two LLM-layer strategies are exercised against the same 200-case annotated
+Two LLM-layer strategies are exercised against the same annotated
 dataset, both on top of the *identical* rule layer
 (:class:`~app.domain.agents.chat_intent_classifier.ChatIntentClassifier`):
 

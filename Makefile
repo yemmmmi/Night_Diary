@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval eval-rag eval-tool eval-skill eval-intent e2e smoke
+.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval eval-rag eval-episodic eval-tool eval-skill eval-intent eval-plan e2e smoke
 
 PY ?= python
 NPM ?= npm
@@ -36,6 +36,13 @@ eval:
 eval-rag:
 	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/rag/ -v -s -m eval
 
+# Offline episodic memory retrieval eval (V3 P5): jaccard vs vector vs vector+reranker.
+# Stub mode (no sentence-transformers) runs jaccard + StubEmbedder vector branches;
+# real mode (BGE) is what validates P4 vectorization ROI. Seed baseline:
+# EVAL_UPDATE_BASELINE=1 make eval-episodic
+eval-episodic:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/episodic/ -v -s -m eval
+
 # Tool call accuracy eval (B-tool). Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-tool
 eval-tool:
 	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/tool_call/ -v -s -m eval
@@ -47,6 +54,13 @@ eval-skill:
 # Intent classification eval (fine-tune A/B). Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-intent
 eval-intent:
 	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/intent/ -v -s -m eval
+
+# Plan proposal quality eval (V3 P5 / Task 4-5): LLM-as-Judge over PlannerAgent
+# proposals across 4 dimensions (actionability / gentleness / context_faithfulness /
+# safety). Stub mode (no LLM_API_KEY) validates wiring; real mode does meaningful
+# scoring. Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-plan
+eval-plan:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/plan/ -v -s -m eval
 
 test-web:
 	$(NPM) run test

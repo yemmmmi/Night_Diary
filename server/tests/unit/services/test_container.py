@@ -51,23 +51,6 @@ def test_multi_agent_graph_has_context_compressor(container: ServiceContainer) -
         assert graph is not None
 
 
-def test_prompt_tuner_instantiated(container: ServiceContainer) -> None:
-    """Container must have a non-None prompt_tuner after build_multi_agent_graph."""
-    container.build_multi_agent_graph()
-    assert container.prompt_tuner is not None
-
-
-def test_prompt_tuner_builds_style_fragment(container: ServiceContainer) -> None:
-    """prompt_tuner.build_dynamic_prompt should return a non-empty style fragment."""
-    container.build_multi_agent_graph()
-    fragment = container.prompt_tuner.build_dynamic_prompt(
-        agent_type="empathy",
-        diary_word_count=100,
-    )
-    assert fragment
-    assert "风格" in fragment or "回应" in fragment
-
-
 # ---------------------------------------------------------------------------
 # V3 P4 Task 12: embedder + reranker injection into EpisodicMemory
 # ---------------------------------------------------------------------------

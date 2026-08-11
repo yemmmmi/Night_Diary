@@ -1,8 +1,8 @@
 """Chat-intent classification eval: Baseline A vs Treatment B (事项3 PR-B).
 
-Runs each of the 200 annotated cases through both LLM-layer strategies on top
+Runs each annotated case through both LLM-layer strategies on top
 of the shared rule layer, computes the metric block (accuracy / macro_f1 /
-weighted_f1 / per-class P/R/F1 / 6x6 confusion matrix / rule short-circuit
+weighted_f1 / per-class P/R/F1 / NxN confusion matrix / rule short-circuit
 rate / llm-layer accuracy / avg latency / avg tokens), prints an A/B
 comparison table + per-class P/R/F1 + per-category accuracy + failure samples,
 and guards against regression vs a recorded ``baseline.json``.
@@ -264,12 +264,21 @@ _EXPECTED_GOLD_INTENTS = {
     "advice_seeking",
     "crisis_signal",
     "entity_query",
+    # P2 additions (PlannerAgent trigger intents)
+    "plan_exploration",
+    "task_command",
 }
+
+#: The dataset is expected to hold this many annotated cases. Update when the
+#: corpus is deliberately expanded (e.g. adding cases for a new intent).
+EXPECTED_CASE_COUNT = 250
 
 
 def test_dataset_integrity(eval_cases: list[dict[str, Any]]) -> None:
-    """The dataset must be 200 cases, 6 gold intents, unique ids, well-formed."""
-    assert len(eval_cases) == 200, f"expected 200 cases, got {len(eval_cases)}"
+    """The dataset must be N cases, 8 gold intents, unique ids, well-formed."""
+    assert len(eval_cases) == EXPECTED_CASE_COUNT, (
+        f"expected {EXPECTED_CASE_COUNT} cases, got {len(eval_cases)}"
+    )
 
     seen: set[str] = set()
     for c in eval_cases:
@@ -330,11 +339,12 @@ def test_baseline_a_runs(eval_report: dict[str, Any]) -> None:
     assert 0.0 <= m["llm_layer_accuracy"] <= 1.0
     assert m["avg_latency_ms"] >= 0.0
     assert m["avg_tokens_per_call"] >= 0.0
-    # confusion matrix is 6x6 and its total == n_cases
+    # confusion matrix is NxN (N == len(INTENT_LABELS)) and its total == n_cases
     cm = m["confusion_matrix"]
-    assert len(cm) == 6 and all(len(row) == 6 for row in cm)
+    n_labels = len(INTENT_LABELS)
+    assert len(cm) == n_labels and all(len(row) == n_labels for row in cm)
     assert sum(sum(row) for row in cm) == eval_report["n_cases"]
-    # per-class dicts cover all 6 labels
+    # per-class dicts cover all labels
     for key in ("per_class_precision", "per_class_recall", "per_class_f1"):
         assert set(m[key]) == set(INTENT_LABELS)
 
@@ -421,8 +431,10 @@ def test_stub_baseline_a_echoes_rule_layer(
     )
 
 
-def test_no_regression_vs_baseline(eval_report: dict[str, Any]) -> None:
+def test_no_regression_vs_baseline(eval_report: dict[str, Any], real_mode: bool) -> None:
     """Soft per-strategy check: fail only on a real drop/rise vs the baseline."""
+    if not real_mode:
+        pytest.skip("regression vs baseline only checked in real mode (LLM_API_KEY set)")
     baseline = _load_baseline()
     if not baseline or baseline.get("_placeholder"):
         pytest.skip(

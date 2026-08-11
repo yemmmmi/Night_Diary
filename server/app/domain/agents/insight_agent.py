@@ -7,7 +7,7 @@ Migrated from V1 ``agents/insight_agent.py``. V2 changes:
   :class:`~app.shared.tracing.LLMCallTracer`. No ``SessionLocal()`` /
   ``ChatOpenAI()`` inside the agent.
 * ``run`` is async (awaits ``ainvoke``); ``fallback`` is synchronous.
-* PromptTuner stays in B-9; ``run`` accepts an optional ``style_fragment``.
+* ``run`` accepts an optional ``style_fragment`` passed by the caller.
 * Emotion-baseline comparison reuses :class:`~app.domain.memory.types.EmotionBaseline`.
 """
 

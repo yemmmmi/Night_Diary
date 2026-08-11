@@ -1128,10 +1128,10 @@
     "case_id": "ic126",
     "text": "想养成新习惯，该如何调整，已经没办法了",
     "gold_intent": "advice_seeking",
-    "rule_confidence": 0.5,
-    "rule_short_circuits": false,
-    "category": "boundary_advice_seeking_rule_casual_chat",
-    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=advice_seeking, 考验 LLM 层纠偏"
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "boundary_advice_seeking_rule_plan_exploration",
+    "notes": "P2 漂移修正: 文本含\"想养成\"(P2 plan 关键词)，规则层现短路为 plan_exploration(0.92)，gold=advice_seeking 不变，考验 LLM 层纠偏"
   },
   {
     "case_id": "ic127",
@@ -1798,5 +1798,455 @@
     "rule_short_circuits": true,
     "category": "clear_crisis_signal",
     "notes": "规则层短路, confidence=0.98, 命中 crisis_signal 关键词"
+  },
+  {
+    "case_id": "p001",
+    "text": "我想做个计划",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p002",
+    "text": "帮我规划一下下周的工作",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p003",
+    "text": "我想计划一下这个月的目标",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p004",
+    "text": "帮我安排一下明天的日程",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p005",
+    "text": "想养成早起的习惯，不知道从哪入手",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p006",
+    "text": "想开始学一门新语言，给我点方向",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p007",
+    "text": "想坚持每天运动半小时",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p008",
+    "text": "想戒掉熬夜的毛病",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p009",
+    "text": "想改掉拖延的习惯",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p010",
+    "text": "帮我规划一下减肥方案",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p011",
+    "text": "能给我一些关于职业规划的建议吗",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_plan_exploration",
+    "notes": "规则层短路, confidence=0.92, 命中 plan_exploration 关键词"
+  },
+  {
+    "case_id": "p012",
+    "text": "怎么安排明天的学习时间",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p013",
+    "text": "下一步该怎么做呢",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p014",
+    "text": "我想设定一个目标，但不知道从哪开始",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p015",
+    "text": "给我一些行动建议",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p016",
+    "text": "我该怎么制定一个长期计划",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p017",
+    "text": "有没有什么办法能让我更有执行力",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p018",
+    "text": "帮我列个这周要做的清单",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p019",
+    "text": "我想给自己定个三个月的小目标",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p020",
+    "text": "有什么好办法能养成读书习惯",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p021",
+    "text": "请帮我设计一个学习路线",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p022",
+    "text": "怎么才能把今年的目标落地",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p023",
+    "text": "能不能帮我规划一下职业发展",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.88,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_advice_seeking",
+    "notes": "规则层低置信: 规则层判为 advice_seeking(0.88), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p024",
+    "text": "我该怎么规划未来，有什么好的建议吗",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.88,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_advice_seeking",
+    "notes": "规则层低置信: 规则层判为 advice_seeking(0.88), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "p025",
+    "text": "帮我理一理接下来想做的事",
+    "gold_intent": "plan_exploration",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_plan_exploration_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=plan_exploration, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t001",
+    "text": "提醒我下午三点给客户打电话",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t002",
+    "text": "帮我把明天的会议加到待办里",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t003",
+    "text": "加个待办，周末陪孩子去公园",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t004",
+    "text": "记一下待办，下周二要交报告",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t005",
+    "text": "提醒我吃药",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t006",
+    "text": "那件事我做完了",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t007",
+    "text": "之前的任务我已经完成了",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t008",
+    "text": "帮我把这个标记完成",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t009",
+    "text": "提醒我明天早上九点开会",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t010",
+    "text": "把这个加到待办",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t011",
+    "text": "提醒我每周复盘一次",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t012",
+    "text": "上次说的那件事，我做完了",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.92,
+    "rule_short_circuits": true,
+    "category": "clear_task_command",
+    "notes": "规则层短路, confidence=0.92, 命中 task_command 关键词"
+  },
+  {
+    "case_id": "t013",
+    "text": "帮我记一下明天开会",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t014",
+    "text": "别忘了明天买牛奶",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t015",
+    "text": "添加一个任务，周五前交方案",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t016",
+    "text": "帮我创建一个待办",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t017",
+    "text": "记住这件事，周三要跟进",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t018",
+    "text": "明天记得去取快递",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t019",
+    "text": "帮我设个提醒，晚上八点跑步",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t020",
+    "text": "把这件事加进我的清单",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t021",
+    "text": "请记下我下周要还书",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t022",
+    "text": "帮我做个备忘，月底缴费",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.5,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.50), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t023",
+    "text": "我要新建一个待办事项",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t024",
+    "text": "提醒一下我妈妈生日",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.7,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_casual_chat",
+    "notes": "规则层低置信: 规则层判为 casual_chat(0.70), gold=task_command, 考验 LLM 层纠偏"
+  },
+  {
+    "case_id": "t025",
+    "text": "能不能帮我把这件事记下来",
+    "gold_intent": "task_command",
+    "rule_confidence": 0.88,
+    "rule_short_circuits": false,
+    "category": "boundary_task_command_rule_advice_seeking",
+    "notes": "规则层低置信: 规则层判为 advice_seeking(0.88), gold=task_command, 考验 LLM 层纠偏"
   }
 ]

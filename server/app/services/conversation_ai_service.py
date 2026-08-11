@@ -757,33 +757,6 @@ def generate_reply(
             loop_result.stop_reason,
         )
 
-        # ── Implicit style feedback (P2-6) ──
-        # Extract style signals from user input and feed to Thompson Sampling
-        try:
-            from app.domain.feedback.implicit_style import (
-                apply_implicit_signals,
-                extract_implicit_style_signals,
-            )
-
-            current_style = session.profile_style or "empathetic"
-            signals = extract_implicit_style_signals(content, current_style=current_style)
-            if signals:
-                thompson = getattr(container, "style_preference_store", None)
-                if thompson is not None:
-                    from app.domain.feedback.thompson_sampling import ThompsonSampling
-
-                    sampler = ThompsonSampling(store=thompson)
-                    applied = apply_implicit_signals(sampler, signals, user_id=user_id)
-                    if applied:
-                        logger.debug(
-                            "Implicit style signals: conversation=%s applied=%d/%d",
-                            conversation_id,
-                            applied,
-                            len(signals),
-                        )
-        except Exception as exc:
-            logger.debug("Implicit style signal extraction failed (best-effort): %s", exc)
-
         # ── Entity extraction sidecar (P2-7) ──
         _entity_span = None
         with trace_span("S10b_entity", "实体提取") as _entity_span:

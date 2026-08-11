@@ -12,6 +12,7 @@ from typing import Any
 from app.domain.agents.state import extract_token_usage
 from app.shared.llm import LLMClient, message_text
 from app.shared.pipeline_trace import get_trace
+from app.shared.token_utils import estimate_tokens
 from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
 logger = logging.getLogger(__name__)
@@ -131,10 +132,12 @@ class TracingLLMClient:
         class _Msg:
             def __init__(self, content: str) -> None:
                 self.content = content
-                # Estimate tokens (rough: ~3 chars/token for mixed CJK+Latin).
-                # Better than zeros — usage stats have a reference value.
-                est_prompt = max(1, len(prompt) // 3)
-                est_completion = max(1, len(content) // 3)
+                # Estimate tokens via the shared estimator (BGE tokenizer when
+                # available, char-coefficient fallback otherwise). Both
+                # directions use max(1, …) so usage stats always have a
+                # reference value even for very short payloads.
+                est_prompt = max(1, estimate_tokens(prompt))
+                est_completion = max(1, estimate_tokens(content))
                 self.response_metadata = {
                     "token_usage": {
                         "prompt_tokens": est_prompt,

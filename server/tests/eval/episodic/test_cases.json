@@ -1,0 +1,122 @@
+[
+  {
+    "query_id": "eq01",
+    "query": "失眠",
+    "category": "keyword",
+    "relevant_entry_ids": ["e01"]
+  },
+  {
+    "query_id": "eq02",
+    "query": "加班",
+    "category": "keyword",
+    "relevant_entry_ids": ["e04"]
+  },
+  {
+    "query_id": "eq03",
+    "query": "升职",
+    "category": "keyword",
+    "relevant_entry_ids": ["e06"]
+  },
+  {
+    "query_id": "eq04",
+    "query": "减肥",
+    "category": "keyword",
+    "relevant_entry_ids": ["e23"]
+  },
+  {
+    "query_id": "eq05",
+    "query": "考试压力",
+    "category": "keyword",
+    "relevant_entry_ids": ["e27"]
+  },
+  {
+    "query_id": "eq06",
+    "query": "整夜翻来覆去",
+    "category": "semantic",
+    "relevant_entry_ids": ["e01"]
+  },
+  {
+    "query_id": "eq07",
+    "query": "工作负荷太重",
+    "category": "semantic",
+    "relevant_entry_ids": ["e04"]
+  },
+  {
+    "query_id": "eq08",
+    "query": "和朋友闹矛盾",
+    "category": "semantic",
+    "relevant_entry_ids": ["e09"]
+  },
+  {
+    "query_id": "eq09",
+    "query": "得到老板赏识",
+    "category": "semantic",
+    "relevant_entry_ids": ["e06"]
+  },
+  {
+    "query_id": "eq10",
+    "query": "一大早起来运动",
+    "category": "semantic",
+    "relevant_entry_ids": ["e19"]
+  },
+  {
+    "query_id": "eq11",
+    "query": "最近很焦虑",
+    "category": "emotion",
+    "relevant_entry_ids": ["e01", "e04", "e08", "e18", "e27"]
+  },
+  {
+    "query_id": "eq12",
+    "query": "感觉压力大",
+    "category": "emotion",
+    "relevant_entry_ids": ["e03", "e04", "e05", "e07", "e08"]
+  },
+  {
+    "query_id": "eq13",
+    "query": "心情低落难过",
+    "category": "emotion",
+    "relevant_entry_ids": ["e15", "e17", "e34"]
+  },
+  {
+    "query_id": "eq14",
+    "query": "感到开心快乐",
+    "category": "emotion",
+    "relevant_entry_ids": ["e06", "e10", "e14"]
+  },
+  {
+    "query_id": "eq15",
+    "query": "觉得很孤独",
+    "category": "emotion",
+    "relevant_entry_ids": ["e16"]
+  },
+  {
+    "query_id": "eq16",
+    "query": "最近怎么样",
+    "category": "time",
+    "relevant_entry_ids": ["e03", "e08", "e17", "e18", "e25"]
+  },
+  {
+    "query_id": "eq17",
+    "query": "最近心情如何",
+    "category": "time",
+    "relevant_entry_ids": ["e08", "e17", "e18"]
+  },
+  {
+    "query_id": "eq18",
+    "query": "最近有什么开心事",
+    "category": "time",
+    "relevant_entry_ids": ["e06", "e10", "e14"]
+  },
+  {
+    "query_id": "eq19",
+    "query": "最近压力大的事",
+    "category": "time",
+    "relevant_entry_ids": ["e03", "e04", "e07", "e08"]
+  },
+  {
+    "query_id": "eq20",
+    "query": "今天发生了什么",
+    "category": "time",
+    "relevant_entry_ids": ["e03", "e08", "e17", "e18", "e25"]
+  }
+]

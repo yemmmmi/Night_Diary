@@ -20,6 +20,7 @@ from app.shared.pipeline_trace import (
     set_trace,
     trace_span,
 )
+from app.shared.token_utils import estimate_tokens
 from app.shared.trace_persistence import persist_trace, publish_trace_complete_sync
 
 if TYPE_CHECKING:
@@ -695,7 +696,7 @@ async def trigger_analysis_streaming(
                 final_reply_text += token
                 await publish_text_delta(trace_id, token)
 
-        estimated_tokens = max(1, len(final_reply_text) // 3)
+        estimated_tokens = estimate_tokens(final_reply_text)
         await publish_text_end(trace_id)
         await publish_reply_end(trace_id)
         reply_end_sent = True

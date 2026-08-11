@@ -12,12 +12,13 @@ The eval compares two LLM-layer strategies on top of the *same* rule layer:
 Metric glossary
 ---------------
 - accuracy                 : overall exact-match accuracy over all cases.
-- macro_f1                 : macro-averaged F1 across the 6 intent classes.
-- weighted_f1              : support-weighted F1 across the 6 intent classes.
+- macro_f1                 : macro-averaged F1 across the intent classes.
+- weighted_f1              : support-weighted F1 across the intent classes.
 - per_class_precision      : {intent: P} per class.
 - per_class_recall         : {intent: R} per class.
 - per_class_f1             : {intent: F1} per class.
-- confusion_matrix         : 6x6 count matrix, rows = gold, cols = predicted.
+- confusion_matrix         : NxN count matrix (rows = gold, cols = predicted),
+                             where N == len(INTENT_LABELS).
 - rule_short_circuit_rate  : fraction of cases the rule layer short-circuited
                              (confidence > 0.9). A property of the rule layer,
                              identical for A and B.
@@ -37,7 +38,9 @@ from typing import Any
 from app.domain.agents.types import ChatIntent
 
 #: Fixed label order used everywhere (rows/cols of the confusion matrix,
-#: keys of the per-class dicts). Kept in sync with ``ChatIntent``.
+#: keys of the per-class dicts). Kept in sync with ``ChatIntent``. The six
+#: original intents keep their positions; the P2 additions (plan_exploration,
+#: task_command) are appended so existing matrix rows/cols stay stable.
 INTENT_LABELS: tuple[str, ...] = (
     ChatIntent.CASUAL_CHAT.value,
     ChatIntent.EMOTIONAL_VENT.value,
@@ -45,6 +48,8 @@ INTENT_LABELS: tuple[str, ...] = (
     ChatIntent.ADVICE_SEEKING.value,
     ChatIntent.CRISIS_SIGNAL.value,
     ChatIntent.ENTITY_QUERY.value,
+    ChatIntent.PLAN_EXPLORATION.value,
+    ChatIntent.TASK_COMMAND.value,
 )
 
 #: Scalar (non-dict) metric keys — the ones a baseline round-trips and the
