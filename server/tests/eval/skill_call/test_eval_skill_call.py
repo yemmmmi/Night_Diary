@@ -406,8 +406,10 @@ def test_progressive_disclosure_rounds(eval_report: dict[str, Any]) -> None:
     assert prog_rounds >= 0.0
 
 
-def test_no_regression_vs_baseline(eval_report: dict[str, Any]) -> None:
+def test_no_regression_vs_baseline(eval_report: dict[str, Any], real_mode: bool) -> None:
     """Soft per-strategy check: fail only on a real drop below the recorded value."""
+    if not real_mode:
+        pytest.skip("regression vs baseline only checked in real mode (LLM_API_KEY set)")
     baseline = _load_baseline()
     if not baseline or baseline.get("_placeholder"):
         pytest.skip(
