@@ -6,6 +6,7 @@ import FeedbackButtons from '@/features/analysis/FeedbackButtons.vue'
 import AITypingIndicator from '@/shared/components/AITypingIndicator.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { useSettingsStore } from '@/stores/settings'
+import { useAnalysisStore } from '@/stores/analysis'
 import type { AnalysisRecord } from '@/shared/api/analysis'
 import type { DiaryEntry } from '@/shared/api/diary'
 import { diarySummary } from '@/shared/utils/diaryFormat'
@@ -20,17 +21,39 @@ const props = defineProps<{
 
 const settings = useSettingsStore()
 
+// 从 store 取流式 composable（store 持有单例，组件直接消费 replyText/status）。
+const analysisStore = useAnalysisStore()
+const streamingReply = analysisStore.streamingReply
+
 defineEmits<{
   trigger: []
 }>()
 
 const showTokenDetail = ref(false)
 
+// === 流式渲染 ===
+// 流式期间（status === 'streaming'）以及 REPLY_END 后到完整记录刷新前
+// （triggering 仍为 true），用 streamingReply.replyText 展示打字机文本。
+// 注意：通过 store 代理访问时，Pinia 已自动解包 Ref，所以不需要 .value。
+const streamingText = computed(() => streamingReply.replyText)
+const isStreaming = computed(
+  () => streamingReply.status === 'streaming',
+)
+const showStreamingLetter = computed(
+  () => Boolean(streamingText.value) && Boolean(props.triggering),
+)
+
 const aiText = computed(
   () => props.analysis?.reply?.trim() || props.entry.reply?.trim() || '',
 )
 
-const hasAnalysis = computed(() => Boolean(aiText.value) && !props.triggering && !props.loading)
+const hasAnalysis = computed(
+  () =>
+    Boolean(aiText.value) &&
+    !props.triggering &&
+    !props.loading &&
+    !showStreamingLetter.value,
+)
 
 const canFeedback = computed(() => Boolean(props.analysis?.id))
 
@@ -76,12 +99,33 @@ const referencedMemoryCount = computed(() => props.analysis?.referenced_memory_c
       </p>
     </GlassPanel>
 
-    <section v-if="triggering || loading" class="analysis-panel__waiting">
+    <section v-if="(triggering || loading) && !showStreamingLetter" class="analysis-panel__waiting">
       <AITypingIndicator label="正在读你写下的字…" />
     </section>
 
+    <!-- 流式中的打字机渲染：SSE 推送的文本逐字累积 -->
     <Transition name="letter-in">
-      <GlassPanel v-if="hasAnalysis && !triggering" elevated class="analysis-panel__letter">
+      <GlassPanel
+        v-if="showStreamingLetter"
+        elevated
+        class="analysis-panel__letter analysis-panel__letter--streaming"
+      >
+        <div class="analysis-panel__letter-head">
+          <PhEnvelopeSimple :size="20" weight="duotone" class="analysis-panel__letter-icon" />
+          <div>
+            <p class="analysis-panel__letter-title">{{ settings.replierName ? `${settings.replierName}的回信` : '回信' }}</p>
+            <p v-if="isStreaming" class="analysis-panel__letter-meta">正在写回信…</p>
+          </div>
+        </div>
+
+        <p class="analysis-panel__letter-body font-diary">
+          {{ streamingText }}<span v-if="isStreaming" class="analysis-panel__cursor">|</span>
+        </p>
+      </GlassPanel>
+    </Transition>
+
+    <Transition name="letter-in">
+      <GlassPanel v-if="hasAnalysis && !triggering && !showStreamingLetter" elevated class="analysis-panel__letter">
         <div class="analysis-panel__letter-head">
           <PhEnvelopeSimple :size="20" weight="duotone" class="analysis-panel__letter-icon" />
           <div>
@@ -175,6 +219,29 @@ const referencedMemoryCount = computed(() => props.analysis?.referenced_memory_c
 
 .analysis-panel__letter {
   border-left: 3px solid var(--color-accent);
+}
+
+.analysis-panel__letter--streaming {
+  border-left-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+}
+
+.analysis-panel__cursor {
+  display: inline-block;
+  margin-left: 0.125rem;
+  color: var(--color-accent);
+  font-weight: 100;
+  animation: analysis-panel-cursor-blink 1s step-end infinite;
+}
+
+@keyframes analysis-panel-cursor-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .analysis-panel__letter-head {

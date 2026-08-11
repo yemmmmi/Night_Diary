@@ -66,3 +66,82 @@ def test_prompt_tuner_builds_style_fragment(container: ServiceContainer) -> None
     )
     assert fragment
     assert "风格" in fragment or "回应" in fragment
+
+
+# ---------------------------------------------------------------------------
+# V3 P4 Task 12: embedder + reranker injection into EpisodicMemory
+# ---------------------------------------------------------------------------
+
+
+def _make_core_container(tmp_path) -> ServiceContainer:
+    """Build a *core-only* container (no AI stack / memory layers yet).
+
+    Uses ``create_core`` so ``episodic_memory`` starts as ``None``, letting
+    tests exercise ``_ensure_memory_layers_locked`` in isolation.
+    """
+    settings = Settings(
+        data_dir=str(tmp_path / "data"),
+        llm_api_key="sk-test",
+        llm_base_url="https://api.example.com/v1",
+        llm_model="test-model",
+        model_key_secret="test-model-secret-min-16-chars!!",
+    )
+    return ServiceContainer.create_core(settings)
+
+
+def test_ensure_memory_layers_injects_embedder_and_reranker(tmp_path) -> None:
+    """_ensure_memory_layers_locked should inject embedder + reranker into EpisodicMemory."""
+    from unittest.mock import MagicMock, patch
+
+    container = _make_core_container(tmp_path)
+
+    with patch.object(container, "_build_embedder") as mock_embed, \
+            patch.object(container, "_get_reranker") as mock_rerank:
+        mock_embed.return_value = MagicMock(name="embedder")
+        mock_rerank.return_value = MagicMock(name="reranker")
+
+        container._ensure_memory_layers_locked(user_id="user-1")
+        memory = container.episodic_memory
+
+        assert memory is not None
+        # EpisodicMemory should have been injected with both deps
+        assert memory._embedder is not None
+        assert memory._reranker is not None
+        mock_embed.assert_called_once()
+        mock_rerank.assert_called_once()
+
+
+def test_build_embedder_is_singleton(tmp_path) -> None:
+    """_build_embedder must return the same instance on repeated calls.
+
+    The embedding model is expensive to load (~100 MB); the container must
+    cache a single instance rather than rebuilding per call.
+    """
+    container = _make_core_container(tmp_path)
+
+    embedder1 = container._build_embedder()
+    embedder2 = container._build_embedder()
+
+    assert embedder1 is embedder2
+
+
+def test_reranker_shared_between_rag_and_episodic(tmp_path) -> None:
+    """RAG retrieval and episodic memory must share the same reranker instance.
+
+    ``_get_reranker`` caches the cross-encoder so it loads at most once per
+    container lifetime, then reuses it for both ``HybridRetriever`` and
+    ``EpisodicMemory`` Stage-3 reranking.
+    """
+    from unittest.mock import MagicMock, patch
+
+    container = _make_core_container(tmp_path)
+
+    sentinel = MagicMock(name="reranker")
+    with patch.object(container, "_build_reranker", return_value=sentinel) as mock_build:
+        r1 = container._get_reranker()
+        r2 = container._get_reranker()
+
+        assert r1 is sentinel
+        assert r2 is sentinel
+        # Underlying _build_reranker called exactly once (singleton cache)
+        assert mock_build.call_count == 1

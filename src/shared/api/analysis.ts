@@ -53,3 +53,31 @@ export async function getAnalysis(diaryId: number): Promise<AnalysisRecord> {
   const { data } = await client.get<AnalysisRecord>(`/api/v1/analysis/${diaryId}`)
   return data
 }
+
+export interface StreamingTriggerResponse {
+  streaming: boolean
+  trace_id: string
+}
+
+/**
+ * Trigger a streaming analysis for the given diary entry.
+ *
+ * The backend responds with `{ streaming, trace_id }`. When `streaming` is
+ * `true`, the SSE event stream can be consumed via the shared trace endpoint
+ * (`GET /api/v1/dev/traces/{trace_id}/stream`). When `streaming` is `false`,
+ * the caller must fall back to the synchronous `triggerAnalysis` path.
+ *
+ * An optional replier payload is forwarded so that the streaming trigger
+ * honours the same replier preset / persona selection as the sync path.
+ */
+export async function triggerAnalysisStreaming(
+  diaryId: number,
+  payload?: AnalysisTriggerPayload,
+): Promise<StreamingTriggerResponse> {
+  const client = await getHttpClient()
+  const { data } = await client.post<StreamingTriggerResponse>(
+    `/api/v1/analysis/${diaryId}/stream`,
+    payload ?? {},
+  )
+  return data
+}

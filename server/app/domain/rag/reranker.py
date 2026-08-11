@@ -7,6 +7,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from app.domain.memory.types import EpisodicEntry
 from app.domain.rag.types import RetrievalResult
 
 logger = logging.getLogger(__name__)
@@ -111,3 +112,51 @@ class Reranker:
     def fallback(self, candidates: list[RetrievalResult]) -> list[RetrievalResult]:
         """Return original fused candidates truncated to ``top_k``, no rerank score."""
         return candidates[: self.top_k]
+
+    def rerank_episodic(
+        self, query: str, entries: list[EpisodicEntry]
+    ) -> list[EpisodicEntry]:
+        """Rerank episodic entries by query relevance using the cross-encoder.
+
+        Mirrors :meth:`rerank` but accepts ``EpisodicEntry`` instead of
+        ``RetrievalResult``. Uses ``event_summary`` + ``tags`` as the
+        cross-encoder content (short summaries need tag disambiguation).
+        Returns entries sorted by relevance (most relevant first), without
+        ``top_k`` truncation — the caller (Stage 3 of ``retrieve_relevant``)
+        already narrows the candidate pool.
+
+        Falls back to the original order when the model is unavailable or
+        scoring raises; never propagates exceptions.
+        """
+        if not entries:
+            return []
+
+        model = self._load_model()
+        if model is None:
+            return list(entries)
+
+        pairs = [(query, self._entry_to_text(entry)) for entry in entries]
+        try:
+            raw_scores = model.predict(pairs)
+            score_values = [float(s) for s in raw_scores]
+        except Exception as exc:
+            logger.warning("Reranker episodic predict failed; degrading: %s", exc)
+            return list(entries)
+
+        pair_count = min(len(entries), len(score_values))
+        ranked = sorted(
+            range(pair_count), key=lambda i: score_values[i], reverse=True
+        )
+        return [entries[i] for i in ranked]
+
+    @staticmethod
+    def _entry_to_text(entry: EpisodicEntry) -> str:
+        """Convert an ``EpisodicEntry`` to text for cross-encoder input.
+
+        Uses ``event_summary`` + ``tags`` (tags help disambiguate short
+        summaries, e.g. "失眠" + ["睡眠", "健康"]).
+        """
+        text = entry.event_summary
+        if entry.tags:
+            text += " " + " ".join(entry.tags)
+        return text

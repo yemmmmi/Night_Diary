@@ -31,7 +31,17 @@ const devStore = useDevStore()
 const showDeleteConfirm = ref(false)
 
 const hasAiReply = computed(() =>
-  Boolean(props.analysis?.reply?.trim() || props.entry.reply?.trim()),
+  Boolean(
+    props.analysis?.reply?.trim() ||
+      props.entry.reply?.trim() ||
+      analysisStore.streamingReply.replyText.trim(),
+  ),
+)
+
+// 流式期间隐藏「获取回信 / 重新生成」按钮，避免重复触发。
+// 通过 store 代理访问时，Pinia 已自动解包 Ref，所以不需要 .value。
+const isStreamingReply = computed(
+  () => analysisStore.streamingReply.status === 'streaming',
 )
 
 const showTriggerButton = computed(
@@ -39,11 +49,16 @@ const showTriggerButton = computed(
     !hasAiReply.value &&
     !props.loading &&
     !props.triggering &&
+    !isStreamingReply.value &&
     diaryStatus(props.entry) !== 'draft',
 )
 
 const showManageActions = computed(
-  () => hasAiReply.value && !props.triggering && !props.loading,
+  () =>
+    hasAiReply.value &&
+    !props.triggering &&
+    !props.loading &&
+    !isStreamingReply.value,
 )
 
 async function onTrigger() {
@@ -51,7 +66,9 @@ async function onTrigger() {
     devStore.setActiveTrace(crypto.randomUUID())
   }
   try {
-    await analysisStore.triggerForDiary(props.diaryId)
+    // 优先走流式；后端 streaming_enabled=false 或流式端点报错时，
+    // triggerForDiaryStreaming 内部会自动回退到同步 triggerForDiary。
+    await analysisStore.triggerForDiaryStreaming(props.diaryId)
     emit('refreshed')
   } catch (e) {
     if (settings.developerMode) {

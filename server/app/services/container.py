@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from app.domain.rag.reranker import Reranker
     from app.domain.rag.retriever import HybridRetriever
     from app.services.ai.router import ExecutionPlanner
+    from app.shared.embed_utils import Embedder
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,10 @@ class ServiceContainer:
     _chat_skill_registry: Any | None = field(default=None, repr=False)
     _conversation_graph: Any | None = field(default=None, repr=False)
     prompt_tuner: PromptTuner | None = field(default=None, repr=False)
+    # ── V3 P4: singleton caches for embedder + reranker (shared across users) ──
+    _embedder: Embedder | None = field(default=None, repr=False)
+    _reranker_cache: Reranker | None = field(default=None, repr=False)
+    _reranker_resolved: bool = field(default=False, repr=False)
     _ai_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @classmethod
@@ -131,6 +136,12 @@ class ServiceContainer:
 
         Must be called while holding ``self._ai_lock``. Idempotent — once
         initialised, subsequent calls are no-ops (the first ``user_id`` wins).
+
+        V3 P4: injects a singleton :class:`BgeEmbedder` (vector retrieval)
+        and the shared :class:`Reranker` (cross-encoder reranking) into
+        :class:`EpisodicMemory`, enabling two-stage vector retrieval + optional
+        Stage-3 rerank. Both deps degrade gracefully when ``None`` (model
+        unavailable) — ``EpisodicMemory`` falls back to char-Jaccard similarity.
         """
         if self.episodic_memory is not None:
             return
@@ -140,7 +151,14 @@ class ServiceContainer:
         from app.domain.memory.working import WorkingMemory
 
         episodic_store = SqliteEpisodicMemoryStore(self.session_factory)
-        episodic = EpisodicMemory(store=episodic_store, user_id=user_id)
+        embedder = self._build_embedder()
+        reranker = self._get_reranker()
+        episodic = EpisodicMemory(
+            store=episodic_store,
+            user_id=user_id,
+            embedder=embedder,
+            reranker=reranker,
+        )
         try:
             episodic.load()
         except Exception as exc:
@@ -198,7 +216,7 @@ class ServiceContainer:
             self._ensure_card_collection_locked()
             knowledge_store = DomainKnowledgeStore(settings=cfg)
             bm25 = BM25Index()
-            reranker = self._build_reranker(cfg)
+            reranker = self._get_reranker()
             retriever = HybridRetriever(
                 collection_manager=diary_collection,
                 bm25_index=bm25,
@@ -212,6 +230,43 @@ class ServiceContainer:
             self.bm25_index = bm25
             self.retriever = retriever
             logger.info("AI stack ready (RAG + memory + agents)")
+
+    def _build_embedder(self) -> Embedder:
+        """Lazy-build :class:`BgeEmbedder` as a process-wide singleton.
+
+        The embedding model (~100 MB download + resident memory) is expensive
+        to load, so a single instance is cached on the container and shared by
+        every :class:`EpisodicMemory`. Construction itself is cheap — the
+        ``sentence-transformers`` model loads lazily on the first ``embed``
+        call (see :class:`app.shared.embed_utils.BgeEmbedder`), so building
+        eagerly during container init never triggers a network download.
+        """
+        if self._embedder is None:
+            from app.shared.embed_utils import BgeEmbedder
+
+            self._embedder = BgeEmbedder()
+        return self._embedder
+
+    def _get_reranker(self) -> Reranker | None:
+        """Return the cached reranker, building it on first access.
+
+        The cross-encoder is shared between RAG hybrid retrieval
+        (:class:`HybridRetriever`) and episodic memory Stage-3 reranking
+        (:meth:`Reranker.rerank_episodic`). Cached so the model loads at most
+        once per container lifetime.
+
+        Returns ``None`` when the model is unavailable (graceful degradation);
+        callers must handle ``None`` — both ``HybridRetriever`` and
+        ``EpisodicMemory`` skip reranking when the reranker is ``None``.
+
+        The ``_reranker_resolved`` flag distinguishes "built but None" (model
+        unavailable) from "not yet built", preventing repeated expensive load
+        attempts on every call.
+        """
+        if not self._reranker_resolved:
+            self._reranker_cache = self._build_reranker(self.settings)
+            self._reranker_resolved = True
+        return self._reranker_cache
 
     @staticmethod
     def _build_reranker(cfg: Settings) -> Reranker | None:

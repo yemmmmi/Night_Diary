@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, cast, get_origin, get_type_hints
 
 from app.domain.agents.context_compressor import ContextCompressor, prepare_compressed_history
@@ -107,6 +107,20 @@ class MultiAgentGraph:
         self._compressor = context_compressor
 
     async def invoke(self, state: MultiAgentState) -> MultiAgentState:
+        state = await self._classify_and_dispatch(state)
+        state = await self._synthesize(state)
+        return state
+
+    async def _classify_and_dispatch(
+        self, state: MultiAgentState
+    ) -> MultiAgentState:
+        """Run classify + phased worker fan-out and return the merged state.
+
+        This is the shared front-half of both :meth:`invoke` (non-streaming)
+        and :meth:`invoke_streaming`. It prepares compressed history, classifies
+        intent, and runs the activated workers in dependency order, leaving
+        synthesis (streaming or not) to the caller.
+        """
         merged: dict[str, Any] = dict(state)
         _merge(merged, prepare_compressed_history(merged, self._compressor))
 
@@ -164,6 +178,11 @@ class MultiAgentGraph:
                 else:
                     _merge(merged, result)
 
+        return cast(MultiAgentState, merged)
+
+    async def _synthesize(self, state: MultiAgentState) -> MultiAgentState:
+        """Merge worker outputs into the final reply (non-streaming synthesis)."""
+        merged: dict[str, Any] = dict(state)
         with trace_span(
             "S5_synthesize",
             "回复合成",
@@ -176,6 +195,43 @@ class MultiAgentGraph:
                 )
         _merge(merged, synth_update)
         return cast(MultiAgentState, merged)
+
+    async def invoke_streaming(
+        self,
+        state: MultiAgentState,
+        *,
+        workers: dict[str, Any] | None = None,
+    ) -> tuple[MultiAgentState, AsyncGenerator[str, None]]:
+        """Streaming variant: classify + dispatch, then stream the synthesis.
+
+        Mirrors :meth:`invoke` for the front-half (shared
+        :meth:`_classify_and_dispatch`) but, instead of running the blocking
+        :meth:`_synthesize`, hands the dispatched state to
+        :meth:`SupervisorAgent.synthesize_streaming` so the caller can
+        consume the reply token-by-token.
+
+        Args:
+            state: the incoming diary-turn state.
+            workers: optional mapping of worker name (e.g. ``"empathy"``) to the
+                streaming-capable agent instance exposing ``run_streaming``. The
+                graph itself only stores worker *callables* (it does not own the
+                agent objects), so the caller — which built the agents — passes
+                them in here. When omitted (or a worker is absent), the
+                supervisor degrades to emitting the already-computed output in a
+                single chunk, so the caller always receives a complete reply.
+
+        Returns:
+            ``(final_state, token_stream)``. ``final_state`` has the workers'
+            outputs populated by the dispatch phase (intent, tier,
+            ``activated_agents``, per-worker responses, token/error channels);
+            ``token_stream`` is an async generator of reply tokens to be
+            consumed by the caller. The state is returned *before* synthesis
+            because the single-worker streaming path streams straight from the
+            worker and never materializes a merged ``final_response``.
+        """
+        state = await self._classify_and_dispatch(state)
+        token_stream = self._supervisor.synthesize_streaming(state, workers=workers)
+        return state, token_stream
 
     async def _run_safe(self, name: str, state: MultiAgentState) -> dict[str, Any]:
         runner = self._workers[name]
