@@ -40,6 +40,11 @@ jobs:
       - name: Pytest
         run: pytest -q
 
+      - name: Eval regression gate (stub mode)
+        run: pytest tests/eval/intent/ tests/eval/skill_call/ tests/eval/tool_call/ tests/eval/rag/ tests/eval/episodic/ tests/eval/plan/ -m eval -q
+        env:
+          APP_ENV: test
+
   web:
     name: Web (Node)
     runs-on: ubuntu-latest
