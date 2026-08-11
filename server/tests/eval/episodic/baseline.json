@@ -1,0 +1,13 @@
+{
+  "jaccard": {
+    "recall@5": 0.4983,
+    "mrr": 0.5417,
+    "ndcg@5": 0.4911
+  },
+  "vector": {
+    "recall@5": 0.2317,
+    "mrr": 0.2625,
+    "ndcg@5": 0.222
+  },
+  "_placeholder": true
+}

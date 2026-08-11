@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval eval-rag eval-tool eval-skill eval-intent e2e smoke
+.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval eval-rag eval-episodic eval-tool eval-skill eval-intent e2e smoke
 
 PY ?= python
 NPM ?= npm
@@ -35,6 +35,13 @@ eval:
 # Seed/refresh the baseline with: EVAL_UPDATE_BASELINE=1 make eval-rag
 eval-rag:
 	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/rag/ -v -s -m eval
+
+# Offline episodic memory retrieval eval (V3 P5): jaccard vs vector vs vector+reranker.
+# Stub mode (no sentence-transformers) runs jaccard + StubEmbedder vector branches;
+# real mode (BGE) is what validates P4 vectorization ROI. Seed baseline:
+# EVAL_UPDATE_BASELINE=1 make eval-episodic
+eval-episodic:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/episodic/ -v -s -m eval
 
 # Tool call accuracy eval (B-tool). Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-tool
 eval-tool:
