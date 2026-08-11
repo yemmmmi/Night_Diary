@@ -351,6 +351,24 @@ def get_dev_stats(db: DbDep) -> dict[str, Any]:
     }
 
 
+@router.get("/stats/performance")
+def get_performance_stats_endpoint(
+    db: DbDep,
+    scenario: str | None = Query(None, description="Filter traces by scenario"),
+    limit: int = Query(100, ge=1, le=500, description="Max traces to analyse"),
+) -> dict[str, Any]:
+    """Performance stats: p50/p95 latency, token cost, bottleneck spans.
+
+    Goes beyond the plain average in ``/dev/stats`` by computing
+    percentile-based latency (trace-level and per-agent), total and
+    per-agent token consumption, error rates, and the top-3 bottleneck
+    span stages identified from the ``trace_json`` span trees.
+    """
+    from app.services.performance_stats_service import get_performance_stats
+
+    return get_performance_stats(db, scenario=scenario, limit=limit)
+
+
 # ── Middleware status ────────────────────────────────────────────────────
 
 
