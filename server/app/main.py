@@ -12,7 +12,7 @@ import faulthandler
 import logging
 import os
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 # Enable faulthandler to capture native crash tracebacks
@@ -96,8 +96,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.bootstrap_ai_done = False
 
     core_task = asyncio.create_task(asyncio.to_thread(_bootstrap_core_sync, app))
+
+    async def _warmup_after_core() -> None:
+        """Background model warmup after core bootstrap (non-blocking).
+
+        Awaits core bootstrap, then preloads the embedder + reranker in a
+        worker thread so the first AI request doesn't pay the 3-8s cold-start
+        penalty. Best-effort: any failure is logged and swallowed — it must
+        never block startup, ``/ready``, or request handling.
+        """
+        try:
+            await core_task
+            container = app.state.container
+            if container is not None:
+                await asyncio.to_thread(container.warmup_models)
+        except Exception as exc:
+            logger.warning("Model warmup failed: %s", exc)
+
+    # Hold a strong reference (RUF006) so the fire-and-forget task isn't
+    # garbage-collected before it finishes preloading the models.
+    warmup_task = asyncio.create_task(_warmup_after_core())
     yield
     await core_task
+    # Best-effort: cancel any still-running warmup so a slow first-time model
+    # download never blocks shutdown; swallow the resulting CancelledError.
+    warmup_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await warmup_task
 
 
 def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
