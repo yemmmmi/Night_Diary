@@ -11,6 +11,7 @@ A process-level registry (:func:`get_or_create`) caches active sessions by
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -272,18 +273,43 @@ class SessionContext:
             logger.debug("Episodic overflow failed (best-effort): %s", exc)
 
 
-# ── Process-level session registry ──────────────────────────────────────
+# ── Process-level session registry (LRU) ───────────────────────────────
+#
+# ``_sessions`` is an LRU cache: an :class:`~collections.OrderedDict` ordered
+# from least-recently-used (front) to most-recently-used (back). When the cache
+# exceeds :data:`MAX_SESSIONS`, the LRU entry is evicted. Evicted entries can
+# still be restored from the L2 Redis snapshot on the next access, so no extra
+# resource cleanup is required here.
 
-_sessions: dict[str, SessionContext] = {}
+#: Maximum number of sessions held in L1 memory before LRU eviction kicks in.
+MAX_SESSIONS = 32
+
+_sessions: OrderedDict[str, SessionContext] = OrderedDict()
 
 #: Redis key prefix for session snapshots.
 _SESSION_KEY_PREFIX = "session:"
 #: TTL for session snapshots (30 minutes).
 _SESSION_TTL_SECONDS = 1800
 
+#: L1 cache hit counter (for observability via :func:`get_session_cache_stats`).
+_hits = 0
+#: L1 cache miss counter (L2 restore or create-new paths).
+_misses = 0
+
 
 def _session_key(conversation_id: str) -> str:
     return f"{_SESSION_KEY_PREFIX}{conversation_id}"
+
+
+def _evict_lru_if_needed() -> None:
+    """Evict the least-recently-used session when the cache is over capacity."""
+    while len(_sessions) > MAX_SESSIONS:
+        evicted_id, _ = _sessions.popitem(last=False)
+        logger.debug(
+            "SessionContext LRU evicted (size>%d): conversation=%s",
+            MAX_SESSIONS,
+            evicted_id,
+        )
 
 
 def get_or_create_session(
@@ -297,11 +323,22 @@ def get_or_create_session(
     Lookup order: L1 memory → L2 Redis → create new.
     When *container* is provided and the session is new, the long-term profile
     is loaded eagerly so it's cached for the session lifetime.
+
+    The L1 cache is LRU: a hit promotes the entry to the most-recently-used
+    position, and inserting a new entry evicts the least-recently-used one when
+    the cache exceeds :data:`MAX_SESSIONS`.
     """
-    # L1: in-memory
+    global _hits, _misses
+
+    # L1: in-memory (hit → promote to MRU end)
     ctx = _sessions.get(conversation_id)
     if ctx is not None:
+        _hits += 1
+        _sessions.move_to_end(conversation_id)
         return ctx
+
+    # Anything beyond here is a miss (L2 restore or create-new).
+    _misses += 1
 
     # L2: Redis
     from app.infrastructure.redis_client import cache_get, cache_set
@@ -310,6 +347,7 @@ def get_or_create_session(
     if snapshot is not None:
         ctx = SessionContext.from_snapshot(snapshot)
         _sessions[conversation_id] = ctx  # promote to L1
+        _evict_lru_if_needed()
         logger.debug("SessionContext restored from Redis: conversation=%s", conversation_id)
         return ctx
 
@@ -326,6 +364,7 @@ def get_or_create_session(
             logger.warning("SessionContext profile load failed: %s", exc)
 
     _sessions[conversation_id] = ctx  # L1
+    _evict_lru_if_needed()
     cache_set(
         _session_key(conversation_id), ctx.to_snapshot(), ttl_seconds=_SESSION_TTL_SECONDS
     )  # L2
@@ -346,11 +385,33 @@ def get_active_session_count() -> int:
     return len(_sessions)
 
 
+def get_session_cache_stats() -> dict[str, int | float]:
+    """Return L1 cache observability counters.
+
+    Returns a dict with:
+
+    - ``hits``/``misses``: cumulative L1 hit and miss counts.
+    - ``size``: current number of sessions in L1 memory.
+    - ``maxsize``: the configured :data:`MAX_SESSIONS` cap.
+    - ``hit_rate``: ``hits / (hits + misses)``, or ``0.0`` when no traffic.
+    """
+    total = _hits + _misses
+    return {
+        "hits": _hits,
+        "misses": _misses,
+        "size": len(_sessions),
+        "maxsize": MAX_SESSIONS,
+        "hit_rate": _hits / total if total > 0 else 0.0,
+    }
+
+
 __all__ = [
     "MAX_HISTORY_TOKENS",
+    "MAX_SESSIONS",
     "SessionContext",
     "UsageAccumulator",
     "clear_session",
     "get_active_session_count",
     "get_or_create_session",
+    "get_session_cache_stats",
 ]
