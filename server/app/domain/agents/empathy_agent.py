@@ -10,8 +10,8 @@ Migrated from V1 ``agents/empathy_agent.py``. V2 changes:
 * No ``SessionLocal()`` / ``ChatOpenAI()`` / ``os.getenv`` inside the agent.
 * ``run`` is async (awaits ``ainvoke``) so it joins the B-9 parallel fan-out;
   ``fallback`` is synchronous and never touches the LLM.
-* PromptTuner is *not* wired here (B-9 concern); instead ``run`` accepts an
-  optional ``style_fragment`` the Supervisor can pass per request.
+* ``run`` accepts an optional ``style_fragment`` the Supervisor can pass per
+  request; otherwise the agent derives style from the user profile.
 """
 
 from __future__ import annotations

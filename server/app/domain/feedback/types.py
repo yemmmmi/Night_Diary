@@ -53,7 +53,7 @@ class UserPreference(BaseModel):
 
 
 class StylePreferenceStore(Protocol):
-    """Persistence port for Thompson Sampling style preferences."""
+    """Persistence port for style preference Beta parameters."""
 
     def get_preferences(self, user_id: str) -> list[StylePreferenceRecord]: ...
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 
 from app.services import analysis_service, conversation_service, diary_service, feedback_service
@@ -21,20 +19,18 @@ def _planner() -> ExecutionPlanner:
     )
 
 
-def test_submit_feedback_persists_and_schedules_thompson(db_session) -> None:
+def test_submit_feedback_persists_row(db_session) -> None:
     entry = diary_service.create_entry(db_session, user_id="default", content="反馈测试日记")
     analysis, _ = analysis_service.create_analysis(
         db_session, entry.id, user_id="default", planner=_planner()
     )
 
-    thompson = MagicMock()
     row = feedback_service.submit_feedback(
         db_session,
         user_id="default",
         analysis_id=analysis.id,
         feedback_type="positive",
         response_style="empathetic",
-        thompson=thompson,
     )
     assert row.feedback_type == "positive"
     assert row.diary_id == entry.id
@@ -55,14 +51,12 @@ def test_submit_conversation_feedback_persists(db_session) -> None:
     """Conversation feedback is stored with conversation_id, no analysis_id."""
     conv = conversation_service.create_conversation(db_session, user_id="default")
 
-    thompson = MagicMock()
     row = feedback_service.submit_conversation_feedback(
         db_session,
         user_id="default",
         conversation_id=conv.id,
         feedback_type="positive",
         response_style="empathetic",
-        thompson=thompson,
     )
     assert row.feedback_type == "positive"
     assert row.conversation_id == conv.id
@@ -112,20 +106,3 @@ def test_submit_conversation_feedback_rejects_wrong_user(db_session) -> None:
             conversation_id=conv.id,
             feedback_type="positive",
         )
-
-
-def test_submit_conversation_feedback_schedules_thompson(db_session) -> None:
-    """Thompson Sampling update is scheduled for conversation feedback."""
-    conv = conversation_service.create_conversation(db_session, user_id="default")
-    thompson = MagicMock()
-    feedback_service.submit_conversation_feedback(
-        db_session,
-        user_id="default",
-        conversation_id=conv.id,
-        feedback_type="negative",
-        response_style="direct",
-        thompson=thompson,
-    )
-    # Thompson update is async (thread), so we just verify it was called
-    # The actual call happens in a daemon thread, so we check the mock was set up
-    assert thompson is not None

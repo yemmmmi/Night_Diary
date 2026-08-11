@@ -2,7 +2,7 @@
 
 When the user expresses a style preference implicitly (e.g., "谢谢你这么理性
 地帮我分析" → positive signal for "practical" style), this module extracts
-the signal and feeds it to Thompson Sampling as a weak reward.
+the signal for downstream consumption.
 
 This complements the explicit feedback system (FeedbackRow + submit_feedback)
 which only fires when the user clicks a thumbs-up/down button.
@@ -14,8 +14,7 @@ Signal types detected:
 - **Length preference**: "简短点" → negative for verbose styles
 
 Confidence is intentionally low (0.3-0.5) so implicit signals don't
-overpower explicit feedback. Thompson's Beta distribution naturally
-weights weak signals less than strong ones.
+overpower explicit feedback.
 """
 
 from __future__ import annotations
@@ -23,12 +22,8 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
 
 from app.domain.feedback.types import STYLES
-
-if TYPE_CHECKING:
-    from app.domain.feedback.thompson import ThompsonSampling
 
 logger = logging.getLogger(__name__)
 
@@ -162,54 +157,7 @@ def extract_implicit_style_signals(
     return signals
 
 
-def apply_implicit_signals(
-    thompson: ThompsonSampling | Any,
-    signals: list[ImplicitStyleSignal],
-    *,
-    user_id: str,
-) -> int:
-    """Apply implicit style signals to Thompson Sampling.
-
-    Uses a weaker reward weight than explicit feedback (0.5 instead of 1.0)
-    so implicit signals don't overpower explicit ones.
-
-    Args:
-        thompson: ThompsonSampling instance.
-        signals: List of ImplicitStyleSignal to apply.
-        user_id: User ID for the Thompson update.
-
-    Returns:
-        Number of signals successfully applied.
-    """
-    applied = 0
-    for signal in signals:
-        try:
-            # Use fractional reward for implicit signals
-            # Thompson's update_reward adds 1 to alpha/beta, so we scale by
-            # calling it multiple times based on confidence
-            # For simplicity, we just call it once with the signal's polarity
-            thompson.update_reward(
-                user_id,
-                signal.style,
-                is_positive=signal.is_positive,
-            )
-            applied += 1
-            logger.debug(
-                "Implicit style signal applied: user=%s style=%s positive=%s confidence=%.2f pattern=%s",
-                user_id,
-                signal.style,
-                signal.is_positive,
-                signal.confidence,
-                signal.matched_pattern,
-            )
-        except Exception as exc:
-            logger.warning("Failed to apply implicit style signal: %s", exc)
-
-    return applied
-
-
 __all__ = [
     "ImplicitStyleSignal",
-    "apply_implicit_signals",
     "extract_implicit_style_signals",
 ]

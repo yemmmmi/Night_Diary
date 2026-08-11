@@ -33,7 +33,6 @@ from app.shared.tracing_llm import TracingLLMClient
 if TYPE_CHECKING:
     from app.domain.agents.chat_intent_classifier import ChatIntentClassifier
     from app.domain.agents.graph import MultiAgentGraph
-    from app.domain.feedback.prompt_tuner import PromptTuner
     from app.domain.knowledge.store import DomainKnowledgeStore
     from app.domain.memory.episodic import EpisodicMemory
     from app.domain.memory.long_term import LongTermMemory
@@ -73,7 +72,6 @@ class ServiceContainer:
     _chat_intent_classifier: ChatIntentClassifier | None = field(default=None, repr=False)
     _chat_skill_registry: Any | None = field(default=None, repr=False)
     _conversation_graph: Any | None = field(default=None, repr=False)
-    prompt_tuner: PromptTuner | None = field(default=None, repr=False)
     # ── V3 P4: singleton caches for embedder + reranker (shared across users) ──
     _embedder: Embedder | None = field(default=None, repr=False)
     _reranker_cache: Reranker | None = field(default=None, repr=False)
@@ -397,8 +395,6 @@ class ServiceContainer:
         from app.domain.agents.intent_classifier import IntentClassifier
         from app.domain.agents.retrieval_agent import RetrievalAgent
         from app.domain.agents.supervisor import SupervisorAgent
-        from app.domain.feedback.prompt_tuner import PromptTuner
-        from app.domain.feedback.thompson_sampling import ThompsonSampling
         from app.domain.skills.registry import create_diary_registry
 
         llm = self._llm_for_tier("heavy", agent_name="supervisor")
@@ -415,10 +411,6 @@ class ServiceContainer:
             llm_tracer=self.llm_tracer,
         )
         context_compressor = ContextCompressor(llm=llm)
-        prompt_tuner = PromptTuner(
-            store=self.style_preference_store,
-            thompson=ThompsonSampling(store=self.style_preference_store),
-        )
         graph = create_multi_agent_graph(
             supervisor,
             EmpathyAgent(
@@ -435,10 +427,8 @@ class ServiceContainer:
                 tracer=self.llm_tracer,
             ),
             context_compressor=context_compressor,
-            prompt_tuner=prompt_tuner,
         )
         self._multi_agent_graph = graph
-        self.prompt_tuner = prompt_tuner
         return graph
 
     def build_execution_planner(self, *, user_id: str = "default") -> ExecutionPlanner:

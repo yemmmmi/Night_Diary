@@ -1,38 +1,17 @@
-"""Feedback submission with async Thompson Sampling update."""
+"""Feedback submission for diary analysis and conversation replies."""
 
 from __future__ import annotations
 
 import logging
-import threading
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.domain.feedback.thompson_sampling import ThompsonSampling
-from app.domain.feedback.types import StylePreferenceStore
 from app.infrastructure.models.feedback_record import FeedbackRow
 from app.services.analysis_service import get_analysis_by_id
 from app.shared.errors import ValidationError
 
 logger = logging.getLogger(__name__)
-
-
-def _schedule_thompson_update(
-    thompson: ThompsonSampling,
-    *,
-    user_id: str,
-    style: str,
-    is_positive: bool,
-) -> None:
-    """Fire-and-forget reward update so the API response is not blocked."""
-
-    def _run() -> None:
-        try:
-            thompson.update_reward(user_id, style, is_positive=is_positive)
-        except Exception as exc:
-            logger.warning("Thompson Sampling async update failed: %s", exc)
-
-    threading.Thread(target=_run, daemon=True).start()
 
 
 def submit_feedback(
@@ -43,7 +22,6 @@ def submit_feedback(
     feedback_type: str,
     reason: str | None = None,
     response_style: str = "empathetic",
-    thompson: ThompsonSampling | None = None,
 ) -> FeedbackRow:
     if feedback_type not in ("positive", "negative"):
         raise ValidationError("feedback_type 必须是 positive 或 negative")
@@ -65,14 +43,6 @@ def submit_feedback(
     db.commit()
     db.refresh(row)
 
-    if thompson is not None:
-        _schedule_thompson_update(
-            thompson,
-            user_id=user_id,
-            style=response_style,
-            is_positive=feedback_type == "positive",
-        )
-
     return row
 
 
@@ -84,7 +54,6 @@ def submit_conversation_feedback(
     feedback_type: str,
     reason: str | None = None,
     response_style: str = "empathetic",
-    thompson: ThompsonSampling | None = None,
 ) -> FeedbackRow:
     """Submit feedback for a conversation reply (scene 2).
 
@@ -122,16 +91,4 @@ def submit_conversation_feedback(
     db.commit()
     db.refresh(row)
 
-    if thompson is not None:
-        _schedule_thompson_update(
-            thompson,
-            user_id=user_id,
-            style=response_style,
-            is_positive=feedback_type == "positive",
-        )
-
     return row
-
-
-def build_thompson_sampler(store: StylePreferenceStore | None) -> ThompsonSampling:
-    return ThompsonSampling(store=store)
