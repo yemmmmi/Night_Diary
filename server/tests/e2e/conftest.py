@@ -44,8 +44,10 @@ def e2e_client(tmp_path) -> TestClient:
         llm_base_url="https://api.example.com/v1",
         llm_model="test-model",
         model_key_secret="test-model-secret-min-16-chars!!",
+        database_url_env="",
     )
     os.environ["DATA_DIR"] = settings.data_dir
+    os.environ["DATABASE_URL"] = ""  # force SQLite fallback for test isolation
     get_settings.cache_clear()
     app = create_app(settings)
     with TestClient(app) as client:
