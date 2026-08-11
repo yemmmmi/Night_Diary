@@ -29,9 +29,10 @@ from app.domain.agents.state import extract_token_usage
 from .rubric import EvalRubric
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
-_SCORE_FIELD = re.compile(
-    r'"(?P<key>empathy|context_faithfulness|relevance|safety)"\s*:\s*(?P<val>\d+(?:\.\d+)?)'
-)
+# Fallback score-field regex is built per-judge from ``rubric.keys`` (see
+# ``_parse_scores_fallback``) so the malformed-JSON recovery honors whatever
+# rubric is configured — including non-default ones (e.g. the plan rubric's
+# ``actionability`` / ``gentleness`` dimensions).
 
 
 class JudgeLLM(Protocol):
@@ -161,8 +162,14 @@ class LLMJudge:
 
     def _parse_scores_fallback(self, content: str) -> dict[str, float]:
         """Recover numeric dimension scores when the judge JSON is slightly malformed."""
+        # Build the alternation from this judge's rubric keys so the fallback
+        # works for any configured rubric (default companion rubric *and* the
+        # plan rubric). Keys are regex-escaped to stay safe if one ever
+        # contained meta-characters.
+        keys_pattern = "|".join(re.escape(k) for k in self._rubric.keys)
+        score_field = re.compile(rf'"(?P<key>{keys_pattern})"\s*:\s*(?P<val>\d+(?:\.\d+)?)')
         scores: dict[str, float] = {}
-        for found in _SCORE_FIELD.finditer(content):
+        for found in score_field.finditer(content):
             key = found.group("key")
             if key in self._rubric.keys:
                 scores[key] = _clamp_score(found.group("val"))

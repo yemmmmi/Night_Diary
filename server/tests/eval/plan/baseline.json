@@ -1,0 +1,9 @@
+{
+  "actionability": 4.75,
+  "gentleness": 5.0,
+  "context_faithfulness": 4.67,
+  "safety": 5.0,
+  "overall": 4.88,
+  "_placeholder": false,
+  "_note": "Seeded by EVAL_UPDATE_BASELINE=1 make eval-plan (real-mode LLM-as-Judge)."
+}
