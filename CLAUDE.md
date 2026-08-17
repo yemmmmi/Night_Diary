@@ -131,11 +131,12 @@ make smoke        # 性能冒烟检查
 
 ## 当前状态
 
-✅ V2（Web 多用户架构 + 基础设施 + Agent 架构优化 P1–P3）全部完成。▶ **V3 施工中**。
+✅ V2（Web 多用户架构 + 基础设施 + Agent 架构优化 P1–P3）全部完成。✅ **V3（清洗 + P0–P7）全部完成**。
 
-- 后端测试：550+ 通过
+- 后端测试：790+ 通过（`tests/unit` + `tests/e2e`）
 - Web 端可用：Docker Compose 编排（MySQL + Redis + Neo4j + Nginx）
 - Agent 架构：InputPreprocessor / SlotExtractor / HybridEntityExtractor / LangGraph StateGraph / OrchestratorProtocol / Citation 系统 / MCP 集成 / 统一反馈通道
+- V3 关键成果：SSE 流式 + 三道流式安全防线、容错体系（TaskRegistry / ReplyEnd 保证）、结构化协议块、任务规划域（Task/Plan + PlannerAgent）、记忆向量化 + Reranker、评估闭环、性能优化（LRU 缓存 / 预热 / 异步写）、中间件管道（`app/shared/middleware/`：Safety / Finalize）
 - 后端架构文档：`docs/backend-architecture.md`
 
 ## V3 定位与路线图
@@ -144,8 +145,8 @@ V3 将夜记从「日记记录」升级为**记录 + 规划双轮**的个人生�
 新增任务规划域（Task/Plan 模型、PlannerAgent、PlanScene），采用「提案-确认」写路径
 （Agent 只读提案，用户确认后落库）。
 
-阶段顺序：**清洗（▶ 当前）→ P0 流式基础与流式安全 → P1 容错体系 → P2 结构化协议块 →
-P3 任务规划域 → P4 记忆升级 → P5 评估闭环 → P6 性能优化 →（可选 P7 中间件）**
+阶段顺序：**清洗 → P0 流式基础与流式安全 → P1 容错体系 → P2 结构化协议块 →
+P3 任务规划域 → P4 记忆升级 → P5 评估闭环 → P6 性能优化 → P7 中间件（可选，已完成）**
 
 - 当前阶段指针：`.cursor/rules/current_phase.mdc`
 - 分阶段验收与 eval 闸门：`.cursor/rules/execution-plan.mdc`
