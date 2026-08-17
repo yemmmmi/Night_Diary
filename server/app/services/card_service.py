@@ -33,6 +33,28 @@ logger = logging.getLogger(__name__)
 RECENT_CARDS_DAYS = 30
 RECENT_CARDS_LIMIT = 50
 
+#: Card day boundary is Beijing time (UTC+8) — matches digest_service.
+_BEIJING_OFFSET = timedelta(hours=8)
+
+
+def _card_digest_day(row: MemoryCardRow) -> date:
+    """The digest day for a card: its Beijing-time creation date."""
+    created = row.created_at or datetime.now(UTC)
+    return (created + _BEIJING_OFFSET).date()
+
+
+def _refresh_day_digest(db: Session, row: MemoryCardRow, *, user_id: str) -> None:
+    """V3 tree-hole: re-aggregate the day's digest card section (zero LLM).
+
+    Never triggers an LLM call and never touches the digest's diary section —
+    a quick 记一笔 must not make the user wait.
+    """
+    from app.services.digest_service import refresh_cards_section
+
+    with contextlib.suppress(Exception):
+        refresh_cards_section(db, user_id=user_id, day=_card_digest_day(row))
+        db.commit()
+
 
 # ── helpers ────────────────────────────────────────────────────────────
 
@@ -124,6 +146,8 @@ def create_card(
         row.emotion,
         row.card_type,
     )
+    # V3 tree-hole: refresh the day's digest card section (zero LLM).
+    _refresh_day_digest(db, row, user_id=user_id)
     return row
 
 
@@ -206,14 +230,23 @@ def update_card(
     db.commit()
     db.refresh(row)
     logger.info("Card updated: card_id=%s", card_id)
+    # V3 tree-hole: re-aggregate the day's digest card section (zero LLM).
+    _refresh_day_digest(db, row, user_id=user_id)
     return row
 
 
 def delete_card(db: Session, card_id: str, *, user_id: str) -> None:
     row = get_card(db, card_id, user_id=user_id)
+    day = _card_digest_day(row)
     db.delete(row)
     db.commit()
     logger.info("Card deleted: card_id=%s", card_id)
+    # V3 tree-hole: re-aggregate the day's digest card section (zero LLM).
+    from app.services.digest_service import refresh_cards_section
+
+    with contextlib.suppress(Exception):
+        refresh_cards_section(db, user_id=user_id, day=day)
+        db.commit()
 
 
 # ── Card → Episodic bridge ─────────────────────────────────────────────

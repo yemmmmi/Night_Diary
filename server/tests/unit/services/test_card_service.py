@@ -5,6 +5,78 @@ from __future__ import annotations
 from app.services import card_service
 
 
+# ── V3 tree-hole: card writes refresh the day digest (zero LLM) ─────────
+
+
+def test_create_card_refreshes_day_digest(db_session) -> None:
+    """卡片创建后，当日 digest 的 cards 段自动聚合。"""
+    from app.services.digest_service import get_digest
+
+    row = card_service.create_card(
+        db_session,
+        user_id="default",
+        emotion="焦虑",
+        emotions=["焦虑", "疲惫"],
+        event_summary="加班到很晚",
+        tags=["加班"],
+        mood_score=0.3,
+    )
+
+    digest = get_digest(db_session, user_id="default", day=row.created_at.date())
+    assert digest is not None
+    assert digest.digest_type == "basic"
+    assert digest.source == "card"
+    assert len(digest.cards) == 1
+    assert digest.cards[0].emotion == "焦虑"
+    assert digest.cards[0].summary == "加班到很晚"
+    assert digest.cards[0].tags == ["加班"]
+
+
+def test_update_card_re_aggregates_day_digest(db_session) -> None:
+    """卡片编辑后，当日 digest 的 cards 段反映最新内容。"""
+    from app.services.digest_service import get_digest
+
+    row = card_service.create_card(
+        db_session,
+        user_id="default",
+        emotion="焦虑",
+        event_summary="加班到很晚",
+        tags=["加班"],
+    )
+    card_service.update_card(
+        db_session,
+        row.card_id,
+        user_id="default",
+        emotion="平静",
+        event_summary="其实也没那么糟",
+        tags=["加班", "想通"],
+    )
+
+    digest = get_digest(db_session, user_id="default", day=row.created_at.date())
+    assert digest is not None
+    assert len(digest.cards) == 1
+    assert digest.cards[0].emotion == "平静"
+    assert digest.cards[0].summary == "其实也没那么糟"
+    assert digest.cards[0].tags == ["加班", "想通"]
+
+
+def test_delete_card_removes_from_day_digest(db_session) -> None:
+    """卡片删除后，当日 digest 的 cards 段不再包含该卡。"""
+    from app.services.digest_service import get_digest
+
+    row = card_service.create_card(
+        db_session,
+        user_id="default",
+        emotion="焦虑",
+        event_summary="加班到很晚",
+    )
+    card_service.delete_card(db_session, row.card_id, user_id="default")
+
+    digest = get_digest(db_session, user_id="default", day=row.created_at.date())
+    assert digest is not None
+    assert digest.cards == []
+
+
 def test_create_card_stores_multiple_emotions(db_session) -> None:
     row = card_service.create_card(
         db_session,
