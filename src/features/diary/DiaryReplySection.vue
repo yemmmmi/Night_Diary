@@ -129,7 +129,7 @@ async function onDeleteConfirm() {
           >
             {{ triggering ? '分析中…' : '获取回信' }}
           </GameButton>
-          <p class="diary-reply__hint">会认真读你的日记，给你回信</p>
+          <p class="diary-reply__hint">记下此刻的心情，回你一句短话</p>
         </div>
 
         <div v-if="showManageActions" class="diary-reply__actions diary-reply__actions--row">

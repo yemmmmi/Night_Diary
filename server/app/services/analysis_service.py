@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import contextlib
 import logging
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from datetime import UTC, date, datetime
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
 
 from app.infrastructure.models.analysis import AnalysisRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.infrastructure.task_queue import enqueue_task
-from app.services import diary_service
-from app.services.ai.router import ExecutionPlanner
+from app.services.ai.router import AnalysisResult, ExecutionPlanner
 from app.shared.pipeline_trace import (
     PipelineTrace,
     reset_trace,
@@ -25,11 +25,9 @@ from app.shared.token_utils import estimate_tokens
 from app.shared.trace_persistence import persist_trace, publish_trace_complete_sync
 
 if TYPE_CHECKING:
-    from app.domain.agents.graph import MultiAgentGraph
-    from app.domain.agents.state import MultiAgentState
     from app.services.container import ServiceContainer
+    from app.shared.digest import DiaryDigest
 from app.shared.errors import (
-    AIServiceUnavailableError,
     AnalysisNotFoundError,
     AnalysisUnchangedError,
     DiaryAlreadyExistsError,
@@ -53,20 +51,6 @@ def _episodic_user_id(container: ServiceContainer) -> str:
 _DIARY_EPISODIC_IMPORTANCE = 0.6
 
 
-def _build_context(
-    db: Session, entry: DiaryEntryRow, recent_entries: list[DiaryEntryRow], *, user_id: str
-) -> dict[str, str]:
-    return {
-        "current_content": entry.content or "",
-        "tags_context": diary_service.format_emotion_context(db, entry, user_id=user_id),
-        "history_summary": diary_service.format_history_summary(
-            recent_entries,
-            exclude_id=entry.id,
-        ),
-        "weather_info": entry.weather or "未获取天气信息",
-    }
-
-
 def _persist_analysis(
     db: Session,
     *,
@@ -85,6 +69,7 @@ def _persist_analysis(
         agent_mode=result.agent_mode,
         execution_tier=result.execution_tier,
         activated_agents=result.activated_agents,
+        intent=getattr(result, "intent", "") or None,
     )
     db.add(analysis)
     entry.reply = result.reply
@@ -93,10 +78,181 @@ def _persist_analysis(
     return analysis
 
 
+# ── V3 tree-hole: scene-1 daily path ────────────────────────────────────
+# The daily reply is a brief "tree-hole" acknowledgment (1-3 sentences) plus
+# a structured day digest; deep conversation belongs to scene 2. The legacy
+# multi-agent graph stays for weekly reports (weekly_service reuses
+# ExecutionPlanner directly).
+
+
+def _entry_day(entry: DiaryEntryRow) -> date:
+    """The digest day for an entry: diary date, else creation date."""
+    if entry.date is not None:
+        return entry.date
+    if entry.created_at is not None and hasattr(entry.created_at, "date"):
+        return entry.created_at.date()
+    return datetime.now(UTC).date()
+
+
+def _day_card_digests(db: Session, user_id: str, day: date) -> list[Any]:
+    """Aggregate the day's cards into digest ``cards`` entries (zero LLM)."""
+    from app.services.digest_service import cards_to_digest, load_day_cards
+
+    return cards_to_digest(load_day_cards(db, user_id=user_id, day=day))
+
+
+def _treehole_llm(planner: ExecutionPlanner | None, container: Any) -> Any:
+    """Resolve the LLM for the tree-hole call (planner first, then container)."""
+    if planner is not None:
+        llm = planner.llm_for_tier("light")
+        if llm is not None:
+            return llm
+    if container is not None:
+        resolver = getattr(container, "_llm_for_tier", None)
+        if callable(resolver):
+            try:
+                return resolver("light", agent_name="treehole")
+            except Exception as exc:
+                logger.warning("treehole llm resolve failed: %s", exc)
+    return None
+
+
+def _treehole_tracer(container: Any) -> Any:
+    return getattr(container, "llm_tracer", None)
+
+
+def _run_async_sync(coro: Any) -> Any:
+    """Run a coroutine from a sync context (mirrors run_multi_agent)."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        if loop.is_closed():
+            raise RuntimeError
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
+
+
+def _run_treehole_analysis(
+    db: Session,
+    planner: ExecutionPlanner,
+    container: Any,
+    entry: DiaryEntryRow,
+    content_text: str,
+    *,
+    user_id: str,
+) -> tuple[AnalysisResult, DiaryDigest]:
+    """Run the scene-1 tree-hole path (sync wrapper for the sync callers).
+
+    Returns ``(AnalysisResult, DiaryDigest)``. Crisis diaries short-circuit
+    to the safe template before any LLM call; LLM failure degrades to rules.
+    """
+    from app.services.ai.treehole import (
+        classify_intent,
+        detect_crisis,
+        fallback_treehole,
+        run_treehole,
+    )
+
+    day = _entry_day(entry)
+    cards = _day_card_digests(db, user_id, day)
+
+    async def _inner() -> tuple[AnalysisResult, DiaryDigest]:
+        intent_result = await classify_intent(content_text, tracer=_treehole_tracer(container))
+        intent = intent_result.intent_category
+        confidence = float(intent_result.confidence)
+
+        if detect_crisis(content_text):
+            from app.shared.crisis_guard import get_crisis_guard
+
+            safe = get_crisis_guard().safe_response
+            outcome = fallback_treehole(
+                content=content_text,
+                day=day,
+                intent="crisis_signal",
+                confidence=1.0,
+                diary_tags=[],
+                cards=cards,
+                emotion_label="crisis",
+                emotion_score=-1.0,
+                mood=0.0,
+            )
+            result = AnalysisResult(
+                reply=safe,
+                token_cost=0,
+                cache_hit_tokens=0,
+                cache_miss_tokens=0,
+                output_tokens=0,
+                thk_log="[Tree-hole] crisis short-circuit (safe template)",
+                agent_mode="treehole-crisis",
+                execution_tier="crisis",
+                activated_agents="",
+                referenced_memory_count=0,
+                intent="crisis_signal",
+            )
+            return result, outcome.digest
+
+        llm = _treehole_llm(planner, container)
+        tags = [t.name for t in entry.tags if t.name] if entry.tags else []
+        if llm is None:
+            outcome = fallback_treehole(
+                content=content_text,
+                day=day,
+                intent=intent,
+                confidence=confidence,
+                diary_tags=tags,
+                cards=cards,
+            )
+        else:
+            outcome = await run_treehole(
+                content=content_text,
+                day=day,
+                llm=llm,
+                tracer=_treehole_tracer(container),
+                intent_result=intent_result,
+                diary_tags=tags,
+                cards=cards,
+                model=getattr(llm, "model", ""),
+            )
+        result = AnalysisResult(
+            reply=outcome.reply,
+            token_cost=outcome.token_cost,
+            cache_hit_tokens=0,
+            cache_miss_tokens=0,
+            output_tokens=0,
+            thk_log=outcome.log,
+            agent_mode="treehole",
+            execution_tier="treehole",
+            activated_agents="",
+            referenced_memory_count=0,
+            intent=outcome.intent or intent,
+        )
+        return result, outcome.digest
+
+    return cast(tuple[AnalysisResult, "DiaryDigest"], _run_async_sync(_inner()))
+
+
+def _persist_digest_for_analysis(
+    db: Session,
+    container: Any,
+    *,
+    entry: DiaryEntryRow,
+    digest: DiaryDigest,
+    user_id: str,
+) -> None:
+    """Upsert the day digest (staged in the same transaction as the analysis)."""
+    from app.services.digest_service import upsert_digest
+
+    upsert_digest(db, user_id=user_id, day=_entry_day(entry), digest=digest)
+
+
 def _sync_diary_to_memory(
     entry: DiaryEntryRow,
     reply: str,
     container: ServiceContainer,
+    digest: Any | None = None,
 ) -> None:
     """Persist a diary-derived event into episodic memory via MemoryGateway.
 
@@ -125,6 +281,7 @@ def _sync_diary_to_memory(
         entry,
         reply=reply,
         user_id=_episodic_user_id(container),
+        digest=digest,
     )
 
     try:
@@ -188,9 +345,6 @@ def create_analysis(
     if existing is not None:
         raise DiaryAlreadyExistsError()
 
-    recent_entries = diary_service.get_recent_entries(db, user_id=user_id)
-    context = _build_context(db, entry, recent_entries, user_id=user_id)
-
     # Extract plain data before committing — ORM attributes expire on commit
     # (expire_on_commit=True), so we capture the content string now to avoid
     # a lazy reload during the LLM call below.
@@ -202,32 +356,32 @@ def create_analysis(
     db.commit()
 
     with trace_span(
-        "S2_routing",
-        "路由决策",
+        "S2_treehole",
+        "树洞分析与摘要提取",
         input_snapshot={"diary_id": diary_id, "content_len": len(content_text)},
     ) as span:
-        result = planner.execute(
-            diary_id=diary_id,
-            context=context,
-            content=content_text,
-            style_fragment=style_fragment,
+        result, digest = _run_treehole_analysis(
+            db, planner, container, entry, content_text, user_id=user_id
         )
         if span:
-            span.set_output({"tier": result.execution_tier, "agent_mode": result.agent_mode})
+            span.set_output({"intent": result.intent, "agent_mode": result.agent_mode})
     with trace_span(
         "S6_persist",
         "持久化分析结果",
         input_snapshot={"diary_id": diary_id},
     ) as span:
+        # Stage the day digest in the same transaction as the analysis row
+        # (the commit inside _persist_analysis flushes both).
+        _persist_digest_for_analysis(db, container, entry=entry, digest=digest, user_id=user_id)
         analysis = _persist_analysis(db, entry=entry, result=result)
         if span:
             span.set_output({"analysis_id": analysis.id})
     logger.info(
-        "分析创建成功: diary_id=%d analysis_id=%d tokens=%d tier=%s",
+        "分析创建成功: diary_id=%d analysis_id=%d tokens=%d mode=%s",
         diary_id,
         analysis.id,
         analysis.token_cost or 0,
-        analysis.execution_tier,
+        analysis.agent_mode,
     )
     # Best-effort: sync diary event into episodic memory + trigger profile promotion.
     if container is not None:
@@ -236,7 +390,7 @@ def create_analysis(
             "记忆同步",
             input_snapshot={"diary_id": diary_id},
         ) as span:
-            _sync_diary_to_memory(entry, result.reply, container)
+            _sync_diary_to_memory(entry, result.reply, container, digest=digest)
             if span:
                 # Memory write is dispatched fire-and-forget via enqueue_task,
                 # so this span now records only the scheduling latency (µs),
@@ -297,20 +451,14 @@ def update_analysis(
     if existing.diary_length is not None and existing.diary_length == current_length:
         raise AnalysisUnchangedError()
 
-    recent_entries = diary_service.get_recent_entries(db, user_id=user_id)
-    context = _build_context(db, entry, recent_entries, user_id=user_id)
-
     # Extract plain data before committing — ORM attributes expire on commit.
     content_text = entry.content or ""
 
     # Release the DB connection before the long-running LLM call.
     db.commit()
 
-    result = planner.execute(
-        diary_id=diary_id,
-        context=context,
-        content=content_text,
-        style_fragment=style_fragment,
+    result, digest = _run_treehole_analysis(
+        db, planner, container, entry, content_text, user_id=user_id
     )
 
     existing.created_at = datetime.now(UTC)
@@ -323,14 +471,16 @@ def update_analysis(
     existing.agent_mode = result.agent_mode
     existing.execution_tier = result.execution_tier
     existing.activated_agents = result.activated_agents
+    existing.intent = result.intent or None
     entry.reply = result.reply
 
+    _persist_digest_for_analysis(db, container, entry=entry, digest=digest, user_id=user_id)
     db.commit()
     db.refresh(existing)
     logger.info("分析更新成功: diary_id=%d analysis_id=%d", diary_id, existing.id)
     # Best-effort: sync updated diary event into episodic memory + trigger promotion.
     if container is not None:
-        _sync_diary_to_memory(entry, result.reply, container)
+        _sync_diary_to_memory(entry, result.reply, container, digest=digest)
     return existing, result.referenced_memory_count
 
 
@@ -489,102 +639,6 @@ def rerun_analysis(
 # ── V3 P4 Task 3: streaming analysis (Scene-1) ─────────────────────────
 
 
-async def _prepare_analysis_graph(
-    db: Session,
-    container: ServiceContainer,
-    diary_id: int,
-    user_id: str,
-) -> tuple[MultiAgentGraph, MultiAgentState]:
-    """Build the multi-agent ``graph`` + initial ``state`` for diary analysis.
-
-    Extracted from the graph/state setup that ``create_analysis`` reaches via
-    ``ExecutionPlanner.execute -> run_multi_agent``. Kept as a standalone
-    helper so the streaming path (``trigger_analysis_streaming``) can build
-    the same inputs without going through the sync planner, and so future
-    refactors can collapse ``create_analysis`` onto this helper without
-    duplicating the wiring.
-
-    Mirrors :func:`run_multi_agent` for everything that happens *before*
-    ``graph.invoke``: diary lookup, episodic context load, long-term profile
-    hydration, working-memory seeding, and initial state construction. The
-    post-``invoke`` working-memory sync stays in :func:`run_multi_agent`
-    because it needs the final state, which the streaming path materialises
-    lazily via :meth:`MultiAgentGraph.invoke_streaming`.
-    """
-    from app.services.ai.multi_agent_executor import _load_episodic_context
-
-    entry = (
-        db.query(DiaryEntryRow)
-        .filter(DiaryEntryRow.id == diary_id, DiaryEntryRow.user_id == user_id)
-        .first()
-    )
-    if entry is None:
-        raise DiaryNotFoundError(diary_id=diary_id)
-
-    content_text = entry.content or ""
-
-    # Release the DB connection back to the pool before any long-running LLM
-    # call. The session stays usable (re-acquires a connection on next query,
-    # e.g. in _persist_analysis_streaming).
-    db.commit()
-
-    graph = container.build_multi_agent_graph(user_id=user_id)
-    if graph is None:
-        # No LLM configured — degrade the same way the sync planner does.
-        raise AIServiceUnavailableError("Multi-agent graph unavailable (no LLM configured)")
-
-    episodic = getattr(container, "episodic_memory", None)
-    long_term = getattr(container, "long_term_memory", None)
-    working_memory = getattr(container, "working_memory", None)
-
-    episodic_context = _load_episodic_context(episodic, query=content_text)
-    long_term_profile: dict[str, Any] = {}
-    if long_term is not None:
-        try:
-            long_term_profile = long_term.get_profile("default").model_dump()
-        except Exception as exc:
-            logger.warning("Long-term memory load failed: %s", exc)
-
-    if working_memory is not None:
-        from app.domain.memory.types import UserProfile
-
-        working_memory.load_context(
-            str(diary_id),
-            UserProfile.model_validate(long_term_profile) if long_term_profile else UserProfile(),
-        )
-        ctx = working_memory.context
-        if ctx is not None:
-            working_memory.update_context(
-                ctx,
-                {"diary_content": content_text, "long_term_profile": long_term_profile},
-            )
-
-    state: MultiAgentState = {
-        "diary_id": str(diary_id),
-        "diary_content": content_text,
-        "style_fragment": "",
-        "intent": "",
-        "tier": "",
-        "token_budget": 0,
-        "activated_agents": [],
-        "activated_skills": [],
-        "episodic_context": episodic_context,
-        "long_term_profile": long_term_profile,
-        "compressed_history": "",
-        "retrieval_context": "",
-        "empathy_response": "",
-        "insight_response": "",
-        "final_response": "",
-        "total_tokens_used": 0,
-        "agent_mode": "multi_agent",
-        "cache_hit_tokens": 0,
-        "cache_miss_tokens": 0,
-        "output_tokens": 0,
-        "errors": [],
-    }
-    return graph, state
-
-
 def _persist_analysis_streaming(
     db: Session,
     *,
@@ -661,6 +715,7 @@ def _finalize_streaming_memory_write(
     user_id: str,
     reply_text: str,
     trace_id: str,
+    digest: Any | None = None,
 ) -> None:
     """V3 P7: run the FinalizeMiddleware write-back after a streaming analysis.
 
@@ -690,9 +745,28 @@ def _finalize_streaming_memory_write(
             reply_text=reply_text,
             container=container,
             always_persist=True,
-            extra={"entry": entry},
+            extra={"entry": entry, "digest": digest},
         )
     )
+
+def _split_reply_chunks(text: str, chunk_size: int = 12) -> list[str]:
+    """Split the short reply into chunks for SSE streaming (keeps punctuation)."""
+    import re
+
+    if not text:
+        return []
+    sentences = re.split(r"(?<=[。！？\n.!?])", text)
+    chunks: list[str] = []
+    for sent in sentences:
+        sent = sent.strip()
+        if not sent:
+            continue
+        while len(sent) > chunk_size:
+            chunks.append(sent[:chunk_size])
+            sent = sent[chunk_size:]
+        if sent:
+            chunks.append(sent)
+    return chunks
 
 
 async def trigger_analysis_streaming(
@@ -703,20 +777,24 @@ async def trigger_analysis_streaming(
     user_id: str,
     trace_id: str,
 ) -> None:
-    """Scene-1 streaming analysis with P1 terminating guarantee.
+    """Scene-1 tree-hole streaming with P1 terminating guarantee.
 
     Pipeline:
-        ``_prepare_analysis_graph`` -> ``run_multi_agent_streaming`` ->
-        publish SSE events -> ``_persist_analysis_streaming``.
+        classify (rule) -> crisis check -> single tree-hole LLM call ->
+        publish SSE chunks -> persist reply + day digest.
 
-    The ``try``/``except``/``finally`` structure guarantees that a
-    ``REPLY_END`` event is **always** published (P1 terminating-reply
-    contract) — on normal completion, on LLM failure, on user cancel, and as
-    an ultimate fallback in ``finally``. Persistence also runs in the
-    ``finally`` block so the ``AnalysisRow`` is written even if the frontend
-    disconnects mid-stream.
+    Crisis diaries short-circuit to the safe template (single chunk, never
+    streamed from the LLM). The ``try``/``except``/``finally`` structure
+    guarantees ``REPLY_END`` is **always** published; persistence + digest
+    upsert run in ``finally`` so data survives a frontend disconnect.
     """
-    from app.services.ai.multi_agent_executor import run_multi_agent_streaming
+    from app.services.ai.treehole import (
+        classify_intent,
+        detect_crisis,
+        fallback_treehole,
+        run_treehole,
+    )
+    from app.services.digest_service import upsert_digest
     from app.shared.streaming_events import (
         publish_reply_end,
         publish_reply_start,
@@ -728,19 +806,81 @@ async def trigger_analysis_streaming(
     reply_end_sent = False
     final_reply_text = ""
     estimated_tokens = 0
+    digest = None
+    day = None
 
     try:
-        graph, state = await _prepare_analysis_graph(db, container, diary_id, user_id)
+        entry = (
+            db.query(DiaryEntryRow)
+            .filter(DiaryEntryRow.id == diary_id, DiaryEntryRow.user_id == user_id)
+            .first()
+        )
+        if entry is None:
+            raise DiaryNotFoundError(diary_id=diary_id)
+        content_text = entry.content or ""
+        day = _entry_day(entry)
+        cards = _day_card_digests(db, user_id, day)
+        tags = [t.name for t in entry.tags if t.name] if entry.tags else []
 
-        await publish_reply_start(trace_id, intent="scene1_streaming")
+        intent_result = await classify_intent(content_text, tracer=_treehole_tracer(container))
+        intent = intent_result.intent_category
+
+        # ── Crisis path: safe template as a single chunk (never LLM) ──
+        if detect_crisis(content_text):
+            from app.shared.crisis_guard import get_crisis_guard
+
+            safe = get_crisis_guard().safe_response
+            await publish_reply_start(trace_id, intent="crisis_signal")
+            reply_started = True
+            await publish_text_delta(trace_id, safe)
+            final_reply_text = safe
+            await publish_text_end(trace_id)
+            await publish_reply_end(trace_id)
+            reply_end_sent = True
+            outcome = fallback_treehole(
+                content=content_text,
+                day=day,
+                intent="crisis_signal",
+                confidence=1.0,
+                diary_tags=[],
+                cards=cards,
+                emotion_label="crisis",
+                emotion_score=-1.0,
+                mood=0.0,
+            )
+            digest = outcome.digest
+            return
+
+        # ── Normal path: single tree-hole call, stream the short reply ──
+        llm = _treehole_llm(None, container)
+        if llm is None:
+            outcome = fallback_treehole(
+                content=content_text,
+                day=day,
+                intent=intent,
+                confidence=float(intent_result.confidence),
+                diary_tags=tags,
+                cards=cards,
+            )
+        else:
+            outcome = await run_treehole(
+                content=content_text,
+                day=day,
+                llm=llm,
+                tracer=_treehole_tracer(container),
+                intent_result=intent_result,
+                diary_tags=tags,
+                cards=cards,
+                model=getattr(llm, "model", ""),
+            )
+        digest = outcome.digest
+        estimated_tokens = outcome.token_cost or estimate_tokens(outcome.reply)
+
+        await publish_reply_start(trace_id, intent=intent)
         reply_started = True
-
-        async for token in run_multi_agent_streaming(graph=graph, state=state):
-            if isinstance(token, str) and token:
-                final_reply_text += token
-                await publish_text_delta(trace_id, token)
-
-        estimated_tokens = estimate_tokens(final_reply_text)
+        for chunk in _split_reply_chunks(outcome.reply):
+            final_reply_text += chunk
+            await publish_text_delta(trace_id, chunk)
         await publish_text_end(trace_id)
         await publish_reply_end(trace_id)
         reply_end_sent = True
@@ -775,9 +915,12 @@ async def trigger_analysis_streaming(
                     reply_text=final_reply_text,
                     token_cost=estimated_tokens,
                 )
-            # V3 P7: FinalizeMiddleware — episodic memory write-back the
-            # streaming path was previously missing (sync paths do it via
-            # _sync_diary_to_memory). Best-effort, fire-and-forget.
+            # V3 tree-hole: upsert the day digest (same transaction).
+            if digest is not None and day is not None:
+                with contextlib.suppress(Exception):
+                    upsert_digest(db, user_id=user_id, day=day, digest=digest)
+                    db.commit()
+            # V3 P7: FinalizeMiddleware — episodic memory write-back.
             with contextlib.suppress(Exception):
                 _finalize_streaming_memory_write(
                     db,
@@ -786,6 +929,7 @@ async def trigger_analysis_streaming(
                     user_id=user_id,
                     reply_text=final_reply_text,
                     trace_id=trace_id,
+                    digest=digest,
                 )
         # Ultimate fallback: guarantee REPLY_END.
         if trace_id and reply_started and not reply_end_sent:

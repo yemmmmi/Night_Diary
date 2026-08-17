@@ -101,13 +101,42 @@ def _retrieve_related_diary_ids(
     return diary_ids
 
 
+def _day_digest_block(db: Session, entry: Any, user_id: str) -> str:
+    """Render a diary's day-digest for scene-2 context ("" when no digest).
+
+    V3 tree-hole: scene 2 prefers the structured day digest (emotion /
+    topics / summary / temporal refs) over the raw diary excerpt so it can
+    understand a referenced day without reading the full content.
+    """
+    from app.services.digest_service import format_day_digest
+
+    day = None
+    if getattr(entry, "date", None) is not None:
+        day = entry.date
+    elif getattr(entry, "created_at", None) is not None:
+        day = entry.created_at.date()
+    if day is None:
+        return ""
+    return format_day_digest(db, user_id=user_id, day=day)
+
+
 def _format_retrieved_diaries(db: Session, diary_ids: list[int], *, user_id: str) -> str:
     if not diary_ids:
         return "（无）"
     entries = diary_service.get_entries_by_ids(db, diary_ids, user_id=user_id)
     if not entries:
         return "（无）"
-    return "\n\n".join(diary_service.format_diary_excerpt(entry) for entry in entries)
+
+    parts: list[str] = []
+    for entry in entries:
+        date_str = entry.date.isoformat() if entry.date else "未知"
+        digest_block = _day_digest_block(db, entry, user_id)
+        if digest_block:
+            parts.append(f"[日记 #{entry.id} · {date_str}]\n{digest_block}")
+        else:
+            # Pre-digest data: fall back to the full-text excerpt.
+            parts.append(diary_service.format_diary_excerpt(entry))
+    return "\n\n".join(parts)
 
 
 def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[str, list[str]]:

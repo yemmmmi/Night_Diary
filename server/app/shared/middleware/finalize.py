@@ -92,7 +92,10 @@ class FinalizeMiddleware(MiddlewareBase):
                 )
                 return None
             return ContentNormalizer.from_diary(
-                entry, reply=ctx.reply_text, user_id=ctx.user_id
+                entry,
+                reply=ctx.reply_text,
+                user_id=ctx.user_id,
+                digest=ctx.extra.get("digest"),
             )
 
         emotion_label = estimator.estimate(ctx.content).label
