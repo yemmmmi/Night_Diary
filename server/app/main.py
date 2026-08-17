@@ -91,6 +91,13 @@ def _bootstrap_ai_sync(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    from app.infrastructure.task_queue import reset_shutdown_state
+
+    # A fresh app instance accepts background tasks again (a previous
+    # instance in this process may have run begin_shutdown on exit).
+    with suppress(Exception):
+        reset_shutdown_state()
+
     app.state.container = None
     app.state.bootstrap_done = False
     app.state.bootstrap_ai_done = False
@@ -117,12 +124,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # garbage-collected before it finishes preloading the models.
     warmup_task = asyncio.create_task(_warmup_after_core())
     yield
+    # ── Graceful shutdown (robustness P0-1) ─────────────────────────────
+    # 1. Stop accepting new fire-and-forget background tasks.
+    # 2. Cancel in-flight streaming tasks (they emit REPLY_END in finally).
+    # 3. Let in-flight daemon-thread tasks (memory writes / entity
+    #    extraction) finish for a short grace window.
+    # All best-effort: failures never block shutdown.
+    from app.infrastructure.task_queue import begin_shutdown, drain
+    from app.shared.task_registry import get_task_registry
+
+    with suppress(Exception):
+        begin_shutdown()
+    with suppress(Exception):
+        await get_task_registry().cancel_all()
     await core_task
     # Best-effort: cancel any still-running warmup so a slow first-time model
     # download never blocks shutdown; swallow the resulting CancelledError.
     warmup_task.cancel()
     with suppress(asyncio.CancelledError):
         await warmup_task
+    with suppress(Exception):
+        drain(timeout_s=5.0)
 
 
 def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
