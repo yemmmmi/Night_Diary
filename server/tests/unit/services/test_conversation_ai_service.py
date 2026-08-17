@@ -709,3 +709,58 @@ async def test_generate_reply_streaming_crisis_still_short_circuits_with_pipelin
     # 危机审计写回：severe signal → FinalizeMiddleware 调度 persist_atom
     assert mock_enqueue.called
     assert mock_enqueue.call_args.args[0].__name__ == "persist_atom"
+
+
+# ── V3 tree-hole: scene-2 diary reference prefers the day digest ────────
+
+
+def test_format_retrieved_diaries_prefers_day_digest(db_session) -> None:
+    """置顶/检索日记：有 digest 用 digest 块，无 digest 回落全文摘录。"""
+    from datetime import date
+
+    from app.infrastructure.models.diary_entry import DiaryEntryRow
+    from app.services import diary_service
+    from app.services.conversation_ai_service import _format_retrieved_diaries
+    from app.services.digest_service import upsert_digest
+    from app.shared.digest import DiaryDigest, DiaryDigestPart
+
+    # 有 digest 的日记
+    digest_entry = DiaryEntryRow(
+        user_id="user-d", content="今天很焦虑，加班到很晚。", date=date(2026, 8, 12)
+    )
+    db_session.add(digest_entry)
+    db_session.commit()
+    db_session.refresh(digest_entry)
+
+    upsert_digest(
+        db_session,
+        user_id="user-d",
+        day=date(2026, 8, 12),
+        digest=DiaryDigest(
+            digest_type="basic",
+            date=date(2026, 8, 12),
+            source="llm",
+            diary=DiaryDigestPart(
+                intent="emotional_support",
+                emotion="焦虑",
+                topics=["加班"],
+                summary="加班到很晚，整体焦虑。",
+                temporal_refs=[],
+            ),
+        ),
+    )
+    db_session.commit()
+
+    # 无 digest 的旧日记
+    legacy_entry = diary_service.create_entry(
+        db_session, user_id="user-d", content="旧日记全文很长……"
+    )
+
+    text = _format_retrieved_diaries(
+        db_session, [digest_entry.id, legacy_entry.id], user_id="user-d"
+    )
+
+    assert "当日摘要" in text  # digest 块优先
+    assert "加班到很晚，整体焦虑" in text
+    assert "情绪：焦虑" in text
+    assert "旧日记全文很长" in text  # 无 digest → 回落全文摘录

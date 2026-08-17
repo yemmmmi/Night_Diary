@@ -51,3 +51,52 @@ def test_from_task_skipped_status():
         user_id="user-1",
     )
     assert "跳过了" in atom.event_summary
+
+
+# ── V3 tree-hole: from_diary digest alignment ───────────────────────────
+
+
+def test_from_diary_with_digest_uses_summary_and_topics():
+    """提供 digest 时 event_summary 用摘要、tags 并入话题。"""
+    from app.services.normalizer import ContentNormalizer
+    from app.shared.digest import DiaryDigest, DiaryDigestPart
+
+    entry = type(
+        "Entry",
+        (),
+        {
+            "id": 1,
+            "content": "今天很焦虑，加班到很晚，项目延期了。",
+            "tags": [],
+            "date": None,
+            "created_at": None,
+        },
+    )()
+    digest = DiaryDigest(
+        digest_type="complex",
+        diary=DiaryDigestPart(
+            intent="emotional_support",
+            emotion="焦虑",
+            topics=["加班", "项目延期"],
+            summary="加班到很晚，项目延期，整体焦虑。",
+        ),
+    )
+    atom = ContentNormalizer.from_diary(entry, user_id="u1", digest=digest)
+
+    assert "加班到很晚" in atom.event_summary
+    assert "项目延期" in atom.event_summary
+    assert "加班" in atom.tags and "项目延期" in atom.tags  # 话题并入 tags
+    assert atom.source == "diary"
+
+
+def test_from_diary_without_digest_falls_back_to_truncation():
+    """无 digest 时保持原行为：event_summary=正文截断。"""
+    from app.services.normalizer import ContentNormalizer
+
+    entry = type(
+        "Entry",
+        (),
+        {"id": 1, "content": "今天吃了火锅。", "tags": [], "date": None, "created_at": None},
+    )()
+    atom = ContentNormalizer.from_diary(entry, user_id="u1")
+    assert atom.event_summary == "今天吃了火锅。"

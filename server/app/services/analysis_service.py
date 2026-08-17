@@ -7,15 +7,14 @@ import concurrent.futures
 import contextlib
 import logging
 from datetime import UTC, date, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
 
 from app.infrastructure.models.analysis import AnalysisRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.infrastructure.task_queue import enqueue_task
-from app.services import diary_service
-from app.services.ai.router import ExecutionPlanner, AnalysisResult
+from app.services.ai.router import AnalysisResult, ExecutionPlanner
 from app.shared.pipeline_trace import (
     PipelineTrace,
     reset_trace,
@@ -27,9 +26,8 @@ from app.shared.trace_persistence import persist_trace, publish_trace_complete_s
 
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
-    from app.shared.digest import CardDigest, DiaryDigest
+    from app.shared.digest import DiaryDigest
 from app.shared.errors import (
-    AIServiceUnavailableError,
     AnalysisNotFoundError,
     AnalysisUnchangedError,
     DiaryAlreadyExistsError,
@@ -51,20 +49,6 @@ def _episodic_user_id(container: ServiceContainer) -> str:
 # the primary content of the product, so they default above the 0.5 store
 # threshold to ensure they are actually persisted (not filtered out).
 _DIARY_EPISODIC_IMPORTANCE = 0.6
-
-
-def _build_context(
-    db: Session, entry: DiaryEntryRow, recent_entries: list[DiaryEntryRow], *, user_id: str
-) -> dict[str, str]:
-    return {
-        "current_content": entry.content or "",
-        "tags_context": diary_service.format_emotion_context(db, entry, user_id=user_id),
-        "history_summary": diary_service.format_history_summary(
-            recent_entries,
-            exclude_id=entry.id,
-        ),
-        "weather_info": entry.weather or "未获取天气信息",
-    }
 
 
 def _persist_analysis(
@@ -159,7 +143,7 @@ def _run_treehole_analysis(
     content_text: str,
     *,
     user_id: str,
-) -> tuple[AnalysisResult, "DiaryDigest"]:
+) -> tuple[AnalysisResult, DiaryDigest]:
     """Run the scene-1 tree-hole path (sync wrapper for the sync callers).
 
     Returns ``(AnalysisResult, DiaryDigest)``. Crisis diaries short-circuit
@@ -171,7 +155,6 @@ def _run_treehole_analysis(
         fallback_treehole,
         run_treehole,
     )
-    from app.shared.digest import DiaryDigest
 
     day = _entry_day(entry)
     cards = _day_card_digests(db, user_id, day)
@@ -248,7 +231,7 @@ def _run_treehole_analysis(
         )
         return result, outcome.digest
 
-    return _run_async_sync(_inner())
+    return cast(tuple[AnalysisResult, "DiaryDigest"], _run_async_sync(_inner()))
 
 
 def _persist_digest_for_analysis(
@@ -256,7 +239,7 @@ def _persist_digest_for_analysis(
     container: Any,
     *,
     entry: DiaryEntryRow,
-    digest: "DiaryDigest",
+    digest: DiaryDigest,
     user_id: str,
 ) -> None:
     """Upsert the day digest (staged in the same transaction as the analysis)."""
@@ -269,6 +252,7 @@ def _sync_diary_to_memory(
     entry: DiaryEntryRow,
     reply: str,
     container: ServiceContainer,
+    digest: Any | None = None,
 ) -> None:
     """Persist a diary-derived event into episodic memory via MemoryGateway.
 
@@ -297,6 +281,7 @@ def _sync_diary_to_memory(
         entry,
         reply=reply,
         user_id=_episodic_user_id(container),
+        digest=digest,
     )
 
     try:
@@ -360,9 +345,6 @@ def create_analysis(
     if existing is not None:
         raise DiaryAlreadyExistsError()
 
-    recent_entries = diary_service.get_recent_entries(db, user_id=user_id)
-    context = _build_context(db, entry, recent_entries, user_id=user_id)
-
     # Extract plain data before committing — ORM attributes expire on commit
     # (expire_on_commit=True), so we capture the content string now to avoid
     # a lazy reload during the LLM call below.
@@ -408,7 +390,7 @@ def create_analysis(
             "记忆同步",
             input_snapshot={"diary_id": diary_id},
         ) as span:
-            _sync_diary_to_memory(entry, result.reply, container)
+            _sync_diary_to_memory(entry, result.reply, container, digest=digest)
             if span:
                 # Memory write is dispatched fire-and-forget via enqueue_task,
                 # so this span now records only the scheduling latency (µs),
@@ -469,9 +451,6 @@ def update_analysis(
     if existing.diary_length is not None and existing.diary_length == current_length:
         raise AnalysisUnchangedError()
 
-    recent_entries = diary_service.get_recent_entries(db, user_id=user_id)
-    context = _build_context(db, entry, recent_entries, user_id=user_id)
-
     # Extract plain data before committing — ORM attributes expire on commit.
     content_text = entry.content or ""
 
@@ -501,7 +480,7 @@ def update_analysis(
     logger.info("分析更新成功: diary_id=%d analysis_id=%d", diary_id, existing.id)
     # Best-effort: sync updated diary event into episodic memory + trigger promotion.
     if container is not None:
-        _sync_diary_to_memory(entry, result.reply, container)
+        _sync_diary_to_memory(entry, result.reply, container, digest=digest)
     return existing, result.referenced_memory_count
 
 
@@ -736,6 +715,7 @@ def _finalize_streaming_memory_write(
     user_id: str,
     reply_text: str,
     trace_id: str,
+    digest: Any | None = None,
 ) -> None:
     """V3 P7: run the FinalizeMiddleware write-back after a streaming analysis.
 
@@ -765,10 +745,9 @@ def _finalize_streaming_memory_write(
             reply_text=reply_text,
             container=container,
             always_persist=True,
-            extra={"entry": entry},
+            extra={"entry": entry, "digest": digest},
         )
     )
-
 
 def _split_reply_chunks(text: str, chunk_size: int = 12) -> list[str]:
     """Split the short reply into chunks for SSE streaming (keeps punctuation)."""
@@ -950,6 +929,7 @@ async def trigger_analysis_streaming(
                     user_id=user_id,
                     reply_text=final_reply_text,
                     trace_id=trace_id,
+                    digest=digest,
                 )
         # Ultimate fallback: guarantee REPLY_END.
         if trace_id and reply_started and not reply_end_sent:

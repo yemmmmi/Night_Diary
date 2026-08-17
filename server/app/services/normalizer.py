@@ -23,7 +23,7 @@ Usage::
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from app.domain.memory.atom import UnifiedMemoryAtom
 from app.shared.emotion_estimator import get_emotion_estimator
@@ -58,12 +58,18 @@ class ContentNormalizer:
         *,
         reply: str = "",
         user_id: str = "default",
+        digest: Any | None = None,
     ) -> UnifiedMemoryAtom:
         """Convert a DiaryEntryRow to a UnifiedMemoryAtom.
 
         Diary entries are unstructured text, so emotion/mood_score are
         estimated via EmotionEstimator. Tags come from the diary's tag
         associations if available.
+
+        V3 tree-hole: when the day *digest* (``app/shared/digest``) is
+        provided, its one-sentence summary becomes the ``event_summary`` and
+        its topics enrich the tags — the digest is the single source of
+        truth for what the day was about (no drift between digest and atom).
         """
         with trace_span(
             "S1_normalize",
@@ -74,13 +80,22 @@ class ContentNormalizer:
             estimate = get_emotion_estimator().estimate(content)
             score = get_emotion_estimator().score(content)
 
-            event_summary = content.strip().replace("\n", " ")[:120]
-            if len(content.strip()) > 120:
+            digest_part = getattr(digest, "diary", None) if digest is not None else None
+            summary = (digest_part.summary if digest_part is not None else "") or ""
+            event_summary = summary.strip().replace("\n", " ")[:120] if summary else (
+                content.strip().replace("\n", " ")[:120]
+            )
+            if summary and len(summary.strip()) > 120 or not summary and len(content.strip()) > 120:
                 event_summary += "…"
 
             tags: list[str] = []
             if hasattr(entry, "tags") and entry.tags:
                 tags = [t.name for t in entry.tags if t.name]
+            if digest_part is not None and digest_part.topics:
+                for topic in digest_part.topics:
+                    if topic and topic not in tags:
+                        tags.append(topic)
+                tags = tags[:8]
 
             event_date = None
             # Prefer user-specified diary date over created_at timestamp.
