@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.services import card_service
 
-
 # ── V3 tree-hole: card writes refresh the day digest (zero LLM) ─────────
 
 
