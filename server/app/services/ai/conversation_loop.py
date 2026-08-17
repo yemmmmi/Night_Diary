@@ -40,6 +40,7 @@ from app.services.ai.tool_factory import ToolFn, specs_for_names
 from app.services.ai.utils import extract_token_usage, merge_token_info
 from app.shared.crisis_guard import CrisisGuard
 from app.shared.llm import LLMClient, message_text
+from app.shared.middleware import MiddlewareContext, MiddlewarePipeline
 from app.shared.pipeline_trace import trace_span
 from app.shared.streaming_events import (
     publish_reply_end,
@@ -590,11 +591,17 @@ async def run_conversation_loop_streaming(
     user_id: str = "default",
     intent_result: ChatIntentResult | None = None,
     trace_id: str = "",
+    middleware_pipeline: MiddlewarePipeline | None = None,
 ) -> AsyncGenerator[str | dict[str, Any], None]:
     """Streaming variant of :func:`run_conversation_loop` for V3 P0.
 
     Tool-call rounds remain non-streaming (``invoke``); only the final reply
     round uses ``astream`` wrapped by :class:`StreamingSafetyGuard`.
+
+    V3 P7: when *middleware_pipeline* is provided (and non-empty), its
+    ``on_system_prompt`` hook runs over the assembled system prompt before
+    the first LLM call (e.g. :class:`SafetyMiddleware` injects the shared
+    crisis-response instruction).
 
     Yields:
         ``str`` — safe text tokens to forward to the frontend.
@@ -623,6 +630,22 @@ async def run_conversation_loop_streaming(
 
     # Build the base prompt
     system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
+
+    # V3 P7: optional middleware pipeline — on_system_prompt hooks (e.g. the
+    # SafetyMiddleware crisis instruction) run before any LLM call. An empty
+    # pipeline is skipped entirely (zero overhead for simple scenes).
+    if middleware_pipeline is not None and not middleware_pipeline.is_empty:
+        system_prompt = middleware_pipeline.apply_system_prompt(
+            system_prompt,
+            MiddlewareContext(
+                scenario="conversation",
+                user_id=user_id,
+                content=content,
+                intent=intent,
+                trace_id=trace_id,
+                conversation_id=conversation_id,
+            ),
+        )
 
     chat_history = session.get_history()
     topics_text = "、".join(session.profile_topics) if session.profile_topics else "（暂无）"
