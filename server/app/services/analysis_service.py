@@ -653,6 +653,48 @@ def _persist_analysis_streaming(
 _STREAMING_FALLBACK_FEEDBACK = "抱歉, 分析暂时不可用, 请稍后重试。"
 
 
+def _finalize_streaming_memory_write(
+    db: Session,
+    container: ServiceContainer,
+    *,
+    diary_id: int,
+    user_id: str,
+    reply_text: str,
+    trace_id: str,
+) -> None:
+    """V3 P7: run the FinalizeMiddleware write-back after a streaming analysis.
+
+    Fixes the P7-discovered gap: the sync paths (``create_analysis`` /
+    ``update_analysis``) persist the diary event into episodic memory via
+    ``_sync_diary_to_memory``, but ``trigger_analysis_streaming`` never did.
+    The middleware hook unifies the write-back pattern with scene 2 and is
+    best-effort (failures are logged, never propagated).
+    """
+    from app.shared.middleware import MiddlewareContext, build_default_pipeline
+
+    entry = (
+        db.query(DiaryEntryRow)
+        .filter(DiaryEntryRow.id == diary_id, DiaryEntryRow.user_id == user_id)
+        .first()
+    )
+    if entry is None:
+        return
+
+    build_default_pipeline().run_on_reply(
+        MiddlewareContext(
+            scenario="diary_reply",
+            user_id=user_id,
+            content=entry.content or "",
+            trace_id=trace_id,
+            diary_id=str(diary_id),
+            reply_text=reply_text,
+            container=container,
+            always_persist=True,
+            extra={"entry": entry},
+        )
+    )
+
+
 async def trigger_analysis_streaming(
     db: Session,
     container: ServiceContainer,
@@ -732,6 +774,18 @@ async def trigger_analysis_streaming(
                     user_id=user_id,
                     reply_text=final_reply_text,
                     token_cost=estimated_tokens,
+                )
+            # V3 P7: FinalizeMiddleware — episodic memory write-back the
+            # streaming path was previously missing (sync paths do it via
+            # _sync_diary_to_memory). Best-effort, fire-and-forget.
+            with contextlib.suppress(Exception):
+                _finalize_streaming_memory_write(
+                    db,
+                    container,
+                    diary_id=diary_id,
+                    user_id=user_id,
+                    reply_text=final_reply_text,
+                    trace_id=trace_id,
                 )
         # Ultimate fallback: guarantee REPLY_END.
         if trace_id and reply_started and not reply_end_sent:

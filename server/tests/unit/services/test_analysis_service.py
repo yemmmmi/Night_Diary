@@ -213,3 +213,59 @@ async def test_trigger_analysis_streaming_guarantees_reply_end(
 
     types = [e.get("type") for e in events]
     assert StreamingEventType.REPLY_END in types, f"REPLY_END must be sent on failure: {types}"
+
+
+# ── V3 P7: streaming memory write-back (gap fix regression) ────────────
+
+
+@pytest.mark.asyncio
+async def test_trigger_analysis_streaming_dispatches_memory_write_back(db_session):
+    """V3 P7：流式分析完成后应调度 episodic 记忆写回（修复缺口回归）。
+
+    The sync paths (create_analysis / update_analysis) persist the diary
+    event into episodic memory via _sync_diary_to_memory; the streaming path
+    previously did not. FinalizeMiddleware must dispatch persist_atom.
+    """
+    from datetime import date
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from app.infrastructure.models.diary_entry import DiaryEntryRow
+
+    entry = DiaryEntryRow(
+        user_id="user-1",
+        content="今天加班很晚，有点焦虑",
+        date=date(2026, 8, 12),
+    )
+    db_session.add(entry)
+    db_session.commit()
+    db_session.refresh(entry)
+
+    async def mock_run_streaming(*, graph, state, workers=None):
+        yield "注意休息，别太累。"
+        yield "明天会好起来的。"
+
+    container = MagicMock()
+    container.episodic_memory = object()  # 非 None：记忆层可用
+    container.long_term_memory = None
+
+    with patch.object(
+        analysis_service, "_prepare_analysis_graph",
+        new_callable=AsyncMock, return_value=(MagicMock(), MagicMock()),
+    ), patch(
+        "app.services.ai.multi_agent_executor.run_multi_agent_streaming",
+        side_effect=mock_run_streaming,
+    ), patch.object(
+        analysis_service, "_persist_analysis_streaming"
+    ), patch(
+        "app.infrastructure.task_queue.enqueue_task"
+    ) as mock_enqueue:
+        await analysis_service.trigger_analysis_streaming(
+            db=db_session, container=container,
+            diary_id=entry.id, user_id="user-1", trace_id="test-scene1-writeback",
+        )
+
+    assert mock_enqueue.called
+    args = mock_enqueue.call_args.args
+    assert callable(args[0]) and args[0].__name__ == "persist_atom"
+    assert args[1].source == "diary"
+    assert "加班" in args[1].event_summary

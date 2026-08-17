@@ -22,6 +22,11 @@ from app.shared.crisis_guard import CrisisGuard, get_crisis_guard
 from app.shared.emotion_estimator import get_emotion_estimator
 from app.shared.errors import ValidationError
 from app.shared.llm import LLMClient, message_text
+from app.shared.middleware import (
+    MiddlewareContext,
+    MiddlewarePipeline,
+    build_default_pipeline,
+)
 from app.shared.pipeline_trace import (
     STATUS_DISPATCHED,
     PipelineTrace,
@@ -836,11 +841,18 @@ async def generate_reply_streaming(
     auto_retrieve: bool = True,
     crisis_guard: CrisisGuard | None = None,
     trace_id: str = "",
+    middleware_pipeline: MiddlewarePipeline | None = None,
 ) -> None:
     """Real streaming (P3): _prepare_reply_context -> run_conversation_loop_streaming -> post-write.
 
     Replaces P0 simulated streaming. The try/finally guarantees a
     ``REPLY_END`` event is always published (P1 terminating_reply).
+
+    V3 P7: *middleware_pipeline* (default: Safety + Finalize) is injected into
+    ``run_conversation_loop_streaming`` for ``on_system_prompt`` hooks and run
+    on reply completion for ``on_reply`` hooks (fire-and-forget episodic
+    write-back, including the crisis audit trail). Pass an empty pipeline to
+    opt out entirely.
 
     For the non-crisis path, ``run_conversation_loop_streaming`` publishes
     all SSE events (REPLY_START, TEXT_DELTA*, TEXT_END, REPLY_END)
@@ -854,6 +866,8 @@ async def generate_reply_streaming(
         publish_text_delta,
         publish_text_end,
     )
+
+    pipeline = middleware_pipeline if middleware_pipeline is not None else build_default_pipeline()
 
     reply_started = False
     reply_end_sent = False
@@ -884,6 +898,23 @@ async def generate_reply_streaming(
             await publish_text_end(trace_id)
             await publish_reply_end(trace_id)
             reply_end_sent = True
+
+            # V3 P7: crisis turns still run the Finalize hook — the severe
+            # signal forces an audit write-back (same semantics as the sync
+            # path, which persists on crisis via _maybe_persist_episodic).
+            with contextlib.suppress(Exception):
+                pipeline.run_on_reply(
+                    MiddlewareContext(
+                        scenario="conversation",
+                        user_id=user_id,
+                        content=content,
+                        intent="crisis_signal",
+                        trace_id=trace_id,
+                        conversation_id=conversation_id,
+                        reply_text=ctx.safe_response or "",
+                        container=container,
+                    )
+                )
             return
 
         # ── Non-crisis path: delegate to run_conversation_loop_streaming ──
@@ -907,6 +938,7 @@ async def generate_reply_streaming(
             user_id=user_id,
             intent_result=ctx.intent_result,
             trace_id=trace_id,
+            middleware_pipeline=pipeline,
         ):
             if isinstance(item, str):
                 final_reply_text += item
@@ -915,13 +947,24 @@ async def generate_reply_streaming(
         reply_end_sent = True
 
         # ── Stage 5: post-write (best-effort, non-fatal) ──
+        # V3 P7: FinalizeMiddleware.on_reply replaces the inline
+        # _maybe_persist_episodic call with the unified write-back.
         with contextlib.suppress(Exception):
-            _maybe_persist_episodic(
-                container,
-                content=content,
-                reply_text=final_reply_text,
-                conversation_id=conversation_id,
-                user_id=user_id,
+            pipeline.run_on_reply(
+                MiddlewareContext(
+                    scenario="conversation",
+                    user_id=user_id,
+                    content=content,
+                    intent=(
+                        ctx.intent_result.intent_category
+                        if getattr(ctx, "intent_result", None) is not None
+                        else ""
+                    ),
+                    trace_id=trace_id,
+                    conversation_id=conversation_id,
+                    reply_text=final_reply_text,
+                    container=container,
+                )
             )
 
     except asyncio.CancelledError:

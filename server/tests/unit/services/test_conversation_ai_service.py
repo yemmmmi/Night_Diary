@@ -651,3 +651,61 @@ async def test_generate_reply_streaming_uses_real_astream(
 
     deltas = [e for e in events if e.get("type") == StreamingEventType.TEXT_DELTA]
     assert len(deltas) >= 1
+
+
+# ── V3 P7: middleware pipeline regression ─────────────────────────────
+
+
+async def test_generate_reply_streaming_crisis_still_short_circuits_with_pipeline(
+    db_session,
+) -> None:
+    """P7 回归：接入默认中间件管道后，crisis intent 仍走安全模板短路。
+
+    The middleware must NOT bypass the crisis short-circuit: the safe
+    template is published as a single TEXT_DELTA with exactly one REPLY_END,
+    and the FinalizeMiddleware still schedules the severe-signal audit
+    write-back (persist_atom).
+    """
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    bus = get_event_bus()
+    trace_id = "test-p7-crisis"
+    queue = await bus.subscribe(trace_id)
+
+    container = MagicMock()
+    mock_ctx = MagicMock()
+    mock_ctx.is_crisis = True
+    mock_ctx.safe_response = "安全模板：请联系心理热线。"
+
+    with patch.object(
+        conversation_ai_service, "_prepare_reply_context", return_value=mock_ctx
+    ), patch("app.infrastructure.task_queue.enqueue_task") as mock_enqueue:
+        await conversation_ai_service.generate_reply_streaming(
+            db_session,
+            container,
+            conversation_id="conv-crisis-p7",
+            content="我不想活了",
+            diary_ids=[],
+            user_id="default",
+            trace_id=trace_id,
+        )
+
+    events: list[dict] = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    await bus.unsubscribe(trace_id, queue)
+
+    types = [e["type"] for e in events]
+    assert types == [
+        StreamingEventType.REPLY_START,
+        StreamingEventType.TEXT_DELTA,
+        StreamingEventType.TEXT_END,
+        StreamingEventType.REPLY_END,
+    ]
+    delta_events = [e for e in events if e["type"] == StreamingEventType.TEXT_DELTA]
+    assert len(delta_events) == 1
+    assert delta_events[0]["text"] == "安全模板：请联系心理热线。"
+    # 危机审计写回：severe signal → FinalizeMiddleware 调度 persist_atom
+    assert mock_enqueue.called
+    assert mock_enqueue.call_args.args[0].__name__ == "persist_atom"
