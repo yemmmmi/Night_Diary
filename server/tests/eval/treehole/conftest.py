@@ -103,9 +103,13 @@ def model_name() -> str:
 
 @pytest.fixture
 def treehole_llm(real_mode: bool) -> Any:
-    """Tree-hole extraction LLM (JSON mode in real runs)."""
+    """Tree-hole extraction LLM (JSON mode, low temperature, generous budget).
+
+    Pretty-printed JSON with Chinese text can exceed 800 tokens — a truncated
+    reply fails to parse and silently falls back to rules.
+    """
     if real_mode:
-        return gen._HttpLLM(temperature=0.4, max_tokens=800, json_mode=True)
+        return gen._HttpLLM(temperature=0.2, max_tokens=1500, json_mode=True)
     return _StubTreeHoleLLM()
 
 
