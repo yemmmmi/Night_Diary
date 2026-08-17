@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func
 
-from app.api.deps import DbDep
+from app.api.deps import ContainerDep, DbDep
 from app.infrastructure.models.pipeline_trace import PipelineTraceRow
 from app.shared.pipeline_trace import get_trace
 from app.shared.trace_event_bus import get_event_bus
@@ -381,3 +381,32 @@ def get_middleware_status() -> dict[str, Any]:
         "langgraph": _check_langgraph(),
         "rq": _check_rq(),
     }
+
+
+# ── Quality sentinel (robustness P1-4) ──────────────────────────────────
+
+
+@router.get("/stats/quality")
+def get_quality_stats_endpoint(
+    db: DbDep,
+    scenario: str | None = Query(None, description="Filter by scenario"),
+    hours: int = Query(720, ge=1, le=24 * 90, description="Lookback window (hours)"),
+) -> dict[str, Any]:
+    """Aggregate stored online quality scores (mean / p50 / p95 by scenario)."""
+    from app.services.quality_sentinel import get_quality_stats
+
+    return get_quality_stats(db, scenario=scenario, hours=hours)
+
+
+@router.post("/quality-scan")
+def trigger_quality_scan(
+    db: DbDep,
+    container: ContainerDep,
+    limit: int = Query(3, ge=1, le=20, description="Samples per scenario"),
+    scenario: str | None = Query(None, description="diary_reply | conversation"),
+) -> dict[str, Any]:
+    """Manually trigger a quality scan (samples + judges recent replies)."""
+    from app.services.quality_sentinel import run_quality_scan
+
+    scenarios = [scenario] if scenario else None
+    return run_quality_scan(db, container, scenarios=scenarios, limit=limit)

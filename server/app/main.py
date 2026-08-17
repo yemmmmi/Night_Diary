@@ -101,6 +101,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.container = None
     app.state.bootstrap_done = False
     app.state.bootstrap_ai_done = False
+    app.state.settings = app.state.settings if hasattr(app.state, "settings") else None
 
     core_task = asyncio.create_task(asyncio.to_thread(_bootstrap_core_sync, app))
 
@@ -123,6 +124,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Hold a strong reference (RUF006) so the fire-and-forget task isn't
     # garbage-collected before it finishes preloading the models.
     warmup_task = asyncio.create_task(_warmup_after_core())
+
+    # Robustness P1-4: opt-in online quality sentinel — samples + judges real
+    # replies on an interval. It reads the container from app.state each
+    # iteration (the container is bootstrapped in a background thread), and
+    # only acts when settings.quality_sentinel_enabled is true.
+    sentinel_task = None
+    try:
+        from app.services.quality_sentinel import run_quality_sentinel_loop
+
+        sentinel_task = run_quality_sentinel_loop(app)
+    except Exception as exc:
+        logger.warning("Quality sentinel not started: %s", exc)
     yield
     # ── Graceful shutdown (robustness P0-1) ─────────────────────────────
     # 1. Stop accepting new fire-and-forget background tasks.
@@ -137,6 +150,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         begin_shutdown()
     with suppress(Exception):
         await get_task_registry().cancel_all()
+    if sentinel_task is not None:
+        sentinel_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await sentinel_task
     await core_task
     # Best-effort: cancel any still-running warmup so a slow first-time model
     # download never blocks shutdown; swallow the resulting CancelledError.
@@ -158,6 +175,7 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
     _ensure_dirs(cfg)
 
     app = FastAPI(title=cfg.app_name, version="0.0.1", lifespan=lifespan)
+    app.state.settings = cfg
 
     # CORS: always allow loopback origins; extra origins come from config.
     import re as _re

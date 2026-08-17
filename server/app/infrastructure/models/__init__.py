@@ -9,5 +9,6 @@ Individual modules are also imported explicitly in ``database.init_db`` and
 from app.infrastructure.models.daily_digest import DailyDigestRow
 from app.infrastructure.models.pipeline_trace import PipelineTraceRow
 from app.infrastructure.models.plan import PlanRow, TaskRow
+from app.infrastructure.models.reply_quality import ReplyQualityRow
 
-__all__ = ["DailyDigestRow", "PipelineTraceRow", "PlanRow", "TaskRow"]
+__all__ = ["DailyDigestRow", "PipelineTraceRow", "PlanRow", "ReplyQualityRow", "TaskRow"]

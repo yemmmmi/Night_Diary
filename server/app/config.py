@@ -156,6 +156,25 @@ class Settings(BaseSettings):
         "falls back to synchronous full-response (V2 behavior).",
     )
 
+    # ---- 在线质量哨兵 (robustness P1-4) ----
+    quality_sentinel_enabled: bool = Field(
+        default=False,
+        description="Periodically sample real AI replies and grade them with a "
+        "judge LLM to detect quality drift. Disabled by default to avoid "
+        "surprise LLM costs; enable in production with a configured LLM.",
+    )
+    quality_sentinel_interval_s: int = Field(
+        default=1800,
+        ge=60,
+        description="Seconds between quality-sentinel sampling scans.",
+    )
+    quality_sentinel_sample_size: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        description="Number of recent replies sampled per quality scan.",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
