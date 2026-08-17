@@ -3,7 +3,7 @@
 夜记 V2 —— AI 心理陪伴日记系统（Web 端）。
 
 - **Web 端**：Docker Compose + MySQL + Redis + Neo4j，多用户 + JWT 认证
-- **V3 施工中**：记录 + 规划双轮定位，路线图见 [`CLAUDE.md`](./CLAUDE.md) 与 `.cursor/rules/current_phase.mdc`
+- **V3 已完成**：记录 + 规划双轮定位（P0–P7），路线图见 `.cursor/rules/current_phase.mdc`
 
 所有基础设施组件（Redis / Neo4j / MySQL / RQ / LangGraph）均实现优雅降级，不可用时自动回退。
 
@@ -159,8 +159,6 @@ docker compose -f docker-compose.yml up -d
 - 无硬编码密钥，所有 secret 走环境变量
 - 所有基础设施组件必须实现优雅降级
 - Memory 层操作必须包含 `user_id` 参数（多租户隔离）
-
-详见 [`CLAUDE.md`](./CLAUDE.md)。
 
 ## 数据存储
 
