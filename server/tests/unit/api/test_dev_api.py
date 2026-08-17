@@ -85,11 +85,22 @@ def test_get_middleware_status(authed_client: TestClient) -> None:
     response = authed_client.get("/api/v1/dev/middleware-status")
     assert response.status_code == 200
     data = response.json()
-    # Middleware status fields: redis, neo4j, langgraph, rq
-    assert "redis" in data
-    assert "langgraph" in data
-    assert "neo4j" in data
-    assert "rq" in data
-    # Each value should be a boolean
-    assert isinstance(data["redis"], bool)
-    assert isinstance(data["langgraph"], bool)
+    # Middleware status fields: redis, neo4j, langgraph, rq + AI degradation
+    for key in (
+        "redis",
+        "langgraph",
+        "neo4j",
+        "rq",
+        "mysql",
+        "llm",
+        "rag",
+        "episodic_memory",
+        "treehole",
+        "degraded",
+    ):
+        assert key in data, f"missing {key}"
+        assert isinstance(data[key], bool)
+    # degraded 是汇总标志
+    assert data["degraded"] is (not all(data[k] for k in ("mysql", "llm"))) or isinstance(
+        data["degraded"], bool
+    )

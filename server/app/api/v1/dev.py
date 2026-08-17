@@ -92,6 +92,38 @@ def _check_rq() -> bool:
         return False
 
 
+def _check_mysql(db: Any) -> bool:
+    """Return ``True`` if the primary DB answers a trivial query."""
+    try:
+        from sqlalchemy import text
+
+        db.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
+def _check_llm(container: Any) -> bool:
+    """Return ``True`` if a light-tier LLM is resolvable (tree-hole LLM path)."""
+    resolver = getattr(container, "_llm_for_tier", None)
+    if not callable(resolver):
+        return False
+    try:
+        return resolver("light", agent_name="health") is not None
+    except Exception:
+        return False
+
+
+def _check_rag(container: Any) -> bool:
+    """Return ``True`` if the hybrid retriever is available (RAG path)."""
+    return getattr(container, "retriever", None) is not None
+
+
+def _check_episodic(container: Any) -> bool:
+    """Return ``True`` if the episodic memory layer is available."""
+    return getattr(container, "episodic_memory", None) is not None
+
+
 # ── Trace list ───────────────────────────────────────────────────────────
 
 
@@ -373,14 +405,27 @@ def get_performance_stats_endpoint(
 
 
 @router.get("/middleware-status")
-def get_middleware_status() -> dict[str, Any]:
-    """Health-check for infrastructure middleware."""
-    return {
+def get_middleware_status(db: DbDep, container: ContainerDep) -> dict[str, Any]:
+    """Health-check for infrastructure middleware + AI degradation states.
+
+    ``degraded`` is the frontend banner flag: any critical (mysql / llm /
+    rag / episodic_memory) or graceful-fallback (redis / neo4j / langgraph
+    / rq) component unavailable. Components with graceful fallbacks still
+    serve requests; ``degraded`` just tells the UI to surface the state.
+    """
+    status = {
         "redis": _check_redis(),
         "neo4j": _check_neo4j(),
         "langgraph": _check_langgraph(),
         "rq": _check_rq(),
+        "mysql": _check_mysql(db),
+        "llm": _check_llm(container),
+        "rag": _check_rag(container),
+        "episodic_memory": _check_episodic(container),
+        "treehole": _check_llm(container),  # LLM 可用则走树洞 LLM 路径, 否则规则兜底
     }
+    status["degraded"] = not all(status.values())
+    return status
 
 
 # ── Quality sentinel (robustness P1-4) ──────────────────────────────────
