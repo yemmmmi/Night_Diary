@@ -9,7 +9,9 @@ reply + structured day digest — with the LLM-as-Judge:
 * **reply_brevity** — 回复简短（≤40 字）且自然
 
 Reuses the generation eval's LLM plumbing (real HTTP LLM with retries /
-deterministic stub / auth preflight) via ``pytest_plugins``.
+deterministic stub / auth preflight) by importing its classes and constants
+directly — ``pytest_plugins`` is NOT used because pytest 9 rejects it in a
+non-top-level conftest (the whole suite collects ``tests/eval/**`` on CI).
 """
 
 from __future__ import annotations
@@ -21,12 +23,14 @@ from typing import Any, ClassVar
 
 import pytest
 
-# Reuse the generation eval's LLM fixtures (real HttpLLM + stub + auth preflight).
-pytest_plugins = ["tests.eval.generation.conftest"]
-
-from tests.eval.generation.conftest import _HttpLLM, _Message, _usage_block  # noqa: E402
+# Importing the module triggers its dotenv load and exposes _HttpLLM /
+# _Message / _usage_block / _REAL_MODE / _MODEL / _is_auth_error.
+from tests.eval.generation import conftest as gen
 
 DATA_DIR = Path(__file__).parent
+
+_REAL_MODE = gen._REAL_MODE
+_MODEL = gen._MODEL
 
 
 class _StubTreeHoleLLM:
@@ -49,16 +53,16 @@ class _StubTreeHoleLLM:
         ensure_ascii=False,
     )
 
-    def invoke(self, prompt: str) -> _Message:
-        return _Message(content=self._JSON, response_metadata=_usage_block(150, 60))
+    def invoke(self, prompt: str) -> gen._Message:
+        return gen._Message(content=self._JSON, response_metadata=gen._usage_block(150, 60))
 
-    async def ainvoke(self, prompt: str) -> _Message:
+    async def ainvoke(self, prompt: str) -> gen._Message:
         return self.invoke(prompt)
 
 
 class _StubTreeHoleJudgeLLM:
     """Deterministic judge returning a fixed mid-high score for the tree-hole
-    dimensions (overrides the generation stub judge whose keys differ)."""
+    dimensions (the generation stub judge's keys differ)."""
 
     _KEYS: ClassVar[list[str]] = [
         "summary_faithfulness",
@@ -67,27 +71,49 @@ class _StubTreeHoleJudgeLLM:
         "reply_brevity",
     ]
 
-    def invoke(self, prompt: str) -> _Message:
+    def invoke(self, prompt: str) -> gen._Message:
         body = ", ".join(f'"{k}": 4' for k in self._KEYS)
-        return _Message(
+        return gen._Message(
             content=f'{{{body}, "rationale": "stub treehole judge"}}',
-            response_metadata=_usage_block(300, 48),
+            response_metadata=gen._usage_block(300, 48),
         )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _treehole_auth_preflight() -> None:
+    """Skip the tree-hole eval on a dead LLM key (mirrors generation eval)."""
+    if not _REAL_MODE:
+        return
+    try:
+        gen._HttpLLM(max_tokens=1, max_retries=1).invoke("ping")
+    except Exception as exc:
+        if gen._is_auth_error(exc):
+            pytest.skip(f"LLM auth failed (check LLM_API_KEY in server/.env): {exc}")
+
+
+@pytest.fixture(scope="session")
+def real_mode() -> bool:
+    return _REAL_MODE
+
+
+@pytest.fixture(scope="session")
+def model_name() -> str:
+    return _MODEL if _REAL_MODE else "stub"
 
 
 @pytest.fixture
 def treehole_llm(real_mode: bool) -> Any:
     """Tree-hole extraction LLM (JSON mode in real runs)."""
     if real_mode:
-        return _HttpLLM(temperature=0.4, max_tokens=800, json_mode=True)
+        return gen._HttpLLM(temperature=0.4, max_tokens=800, json_mode=True)
     return _StubTreeHoleLLM()
 
 
 @pytest.fixture
 def judge_llm(real_mode: bool) -> Any:
-    """Judge LLM with the tree-hole dimension keys (overrides generation's)."""
+    """Judge LLM with the tree-hole dimension keys."""
     if real_mode:
-        return _HttpLLM(temperature=0.0, max_tokens=2000, json_mode=True)
+        return gen._HttpLLM(temperature=0.0, max_tokens=2000, json_mode=True)
     return _StubTreeHoleJudgeLLM()
 
 

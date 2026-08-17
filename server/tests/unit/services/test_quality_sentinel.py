@@ -111,9 +111,17 @@ def test_get_quality_stats_aggregates(db_session):
 
 
 def test_get_quality_stats_filters_window(db_session):
+    """窗口过滤：把评分行改到 2 天前，24h 窗口内应查不到（确定性，避免时钟竞态）。"""
+    from datetime import timedelta
+
     _seed_diary_reply(db_session)
     run_quality_scan(db_session, _make_container(), scenarios=["diary_reply"], limit=5)
 
-    # 窗口 0 小时 → 无样本（created_at 是现在，超出 0 小时窗口）
-    stats = get_quality_stats(db_session, scenario="diary_reply", hours=0)
+    from app.infrastructure.models.reply_quality import ReplyQualityRow
+
+    for row in db_session.query(ReplyQualityRow).all():
+        row.created_at = datetime.now(UTC) - timedelta(days=2)
+    db_session.commit()
+
+    stats = get_quality_stats(db_session, scenario="diary_reply", hours=24)
     assert stats["total_samples"] == 0
