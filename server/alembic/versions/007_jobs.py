@@ -42,7 +42,7 @@ def upgrade() -> None:
             sa.Column("id", sa.String(length=32), nullable=False),
             sa.Column("user_id", sa.String(length=64), nullable=False),
             sa.Column("kind", sa.String(length=32), nullable=False),
-            sa.Column("payload_json", sa.Text(), nullable=False, server_default="{}"),
+            sa.Column("payload_json", sa.Text(), nullable=False),
             sa.Column("status", sa.String(length=16), nullable=False, server_default="pending"),
             sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("error", sa.Text(), nullable=True),

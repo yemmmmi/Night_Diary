@@ -172,7 +172,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     requeue_task.cancel()
     with suppress(asyncio.CancelledError):
         await requeue_task
-    await core_task
+    # Await the core bootstrap with a bounded timeout so a slow/stuck
+    # bootstrap thread can never block or cancel shutdown (the client portal
+    # may cancel this coroutine on disconnect / test teardown).
+    with suppress(asyncio.CancelledError, asyncio.TimeoutError):
+        await asyncio.wait_for(core_task, timeout=15.0)
     # Best-effort: cancel any still-running warmup so a slow first-time model
     # download never blocks shutdown; swallow the resulting CancelledError.
     warmup_task.cancel()

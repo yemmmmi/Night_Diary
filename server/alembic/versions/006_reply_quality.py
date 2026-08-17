@@ -43,7 +43,7 @@ def upgrade() -> None:
             sa.Column("user_id", sa.String(length=64), nullable=False),
             sa.Column("scenario", sa.String(length=32), nullable=False),
             sa.Column("ref_id", sa.String(length=64), nullable=False),
-            sa.Column("reply_text", sa.Text(), nullable=False, server_default=""),
+            sa.Column("reply_text", sa.Text(), nullable=False),
             sa.Column("scores_json", sa.Text(), nullable=True),
             sa.Column("overall", sa.Float(), nullable=True),
             sa.Column("judge_model", sa.String(length=64), nullable=True),
