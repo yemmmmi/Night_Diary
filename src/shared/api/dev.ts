@@ -40,6 +40,12 @@ export interface MiddlewareStatus {
   neo4j: boolean
   langgraph: boolean
   rq: boolean
+  mysql: boolean
+  llm: boolean
+  rag: boolean
+  episodic_memory: boolean
+  treehole: boolean
+  degraded: boolean
 }
 
 export async function listTraces(params?: {

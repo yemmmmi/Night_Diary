@@ -91,9 +91,17 @@ def _bootstrap_ai_sync(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    from app.infrastructure.task_queue import reset_shutdown_state
+
+    # A fresh app instance accepts background tasks again (a previous
+    # instance in this process may have run begin_shutdown on exit).
+    with suppress(Exception):
+        reset_shutdown_state()
+
     app.state.container = None
     app.state.bootstrap_done = False
     app.state.bootstrap_ai_done = False
+    app.state.settings = app.state.settings if hasattr(app.state, "settings") else None
 
     core_task = asyncio.create_task(asyncio.to_thread(_bootstrap_core_sync, app))
 
@@ -116,13 +124,66 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Hold a strong reference (RUF006) so the fire-and-forget task isn't
     # garbage-collected before it finishes preloading the models.
     warmup_task = asyncio.create_task(_warmup_after_core())
+
+    # Robustness P2-6: re-dispatch jobs left pending/running by a dead
+    # process (bounded retries). Best-effort, runs after core bootstrap.
+    async def _requeue_stale_jobs_after_core() -> None:
+        try:
+            await core_task
+            from app.services.job_service import requeue_stale_jobs
+
+            container = app.state.container
+            if container is not None:
+                requeue_stale_jobs(container)
+        except Exception as exc:
+            logger.warning("Stale job requeue failed (best-effort): %s", exc)
+
+    requeue_task = asyncio.create_task(_requeue_stale_jobs_after_core())
+
+    # Robustness P1-4: opt-in online quality sentinel — samples + judges real
+    # replies on an interval. It reads the container from app.state each
+    # iteration (the container is bootstrapped in a background thread), and
+    # only acts when settings.quality_sentinel_enabled is true.
+    sentinel_task = None
+    try:
+        from app.services.quality_sentinel import run_quality_sentinel_loop
+
+        sentinel_task = run_quality_sentinel_loop(app)
+    except Exception as exc:
+        logger.warning("Quality sentinel not started: %s", exc)
     yield
-    await core_task
+    # ── Graceful shutdown (robustness P0-1) ─────────────────────────────
+    # 1. Stop accepting new fire-and-forget background tasks.
+    # 2. Cancel in-flight streaming tasks (they emit REPLY_END in finally).
+    # 3. Let in-flight daemon-thread tasks (memory writes / entity
+    #    extraction) finish for a short grace window.
+    # All best-effort: failures never block shutdown.
+    from app.infrastructure.task_queue import begin_shutdown, drain
+    from app.shared.task_registry import get_task_registry
+
+    with suppress(Exception):
+        begin_shutdown()
+    with suppress(Exception):
+        await get_task_registry().cancel_all()
+    if sentinel_task is not None:
+        sentinel_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await sentinel_task
+    requeue_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await requeue_task
+    # Await the core bootstrap with a bounded timeout so a slow/stuck
+    # bootstrap thread can never block or cancel shutdown (the client portal
+    # may cancel this coroutine on disconnect / test teardown).
+    with suppress(asyncio.CancelledError, asyncio.TimeoutError):
+        await asyncio.wait_for(core_task, timeout=15.0)
     # Best-effort: cancel any still-running warmup so a slow first-time model
     # download never blocks shutdown; swallow the resulting CancelledError.
     warmup_task.cancel()
     with suppress(asyncio.CancelledError):
         await warmup_task
+    with suppress(Exception):
+        drain(timeout_s=5.0)
 
 
 def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
@@ -136,6 +197,7 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
     _ensure_dirs(cfg)
 
     app = FastAPI(title=cfg.app_name, version="0.0.1", lifespan=lifespan)
+    app.state.settings = cfg
 
     # CORS: always allow loopback origins; extra origins come from config.
     import re as _re

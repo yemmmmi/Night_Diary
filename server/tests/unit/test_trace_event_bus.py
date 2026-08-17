@@ -16,6 +16,11 @@ import pytest
 from app.shared.trace_event_bus import TraceEventBus
 
 
+def _strip_uuid(event: dict) -> dict:
+    """事件带 event_uuid (P2-7 去重), 断言时忽略该键。"""
+    return {k: v for k, v in event.items() if k != "event_uuid"}
+
+
 @pytest.mark.asyncio
 async def test_subscribe_and_publish() -> None:
     """订阅后发布事件能收到: a subscribed queue should receive the event."""
@@ -29,7 +34,7 @@ async def test_subscribe_and_publish() -> None:
     # put_nowait is synchronous, so the event is already enqueued.
     assert queue.qsize() == 1
     received = queue.get_nowait()
-    assert received == event
+    assert _strip_uuid(received) == event
 
 
 @pytest.mark.asyncio
@@ -73,7 +78,7 @@ async def test_queue_full_drops_event() -> None:
     await bus.publish(trace_id, second)
 
     assert queue.qsize() == 1
-    assert queue.get_nowait() == first
+    assert _strip_uuid(queue.get_nowait()) == first
 
 
 @pytest.mark.asyncio
@@ -90,8 +95,8 @@ async def test_multiple_subscribers() -> None:
 
     assert queue_a.qsize() == 1
     assert queue_b.qsize() == 1
-    assert queue_a.get_nowait() == event
-    assert queue_b.get_nowait() == event
+    assert _strip_uuid(queue_a.get_nowait()) == event
+    assert _strip_uuid(queue_b.get_nowait()) == event
 
 
 @pytest.mark.asyncio

@@ -19,6 +19,8 @@ from app.domain.agents.context_compressor import ContextCompressor
 from app.shared.token_utils import estimate_tokens
 
 if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
     from app.services.container import ServiceContainer
 
 logger = logging.getLogger(__name__)
@@ -93,6 +95,42 @@ class SessionContext:
             self.compressed_history = raw
 
         self._persist_to_l2()
+
+    def hydrate_from_db(self, db: Session) -> bool:
+        """Rebuild turn history from persisted ``chat_messages`` rows.
+
+        Restart recovery (robustness P1-3): when neither the L1 LRU cache nor
+        the L2 Redis snapshot has this session (e.g. process restart without
+        Redis), the conversation's message history is reloaded from the DB so
+        the multi-turn context survives. Returns ``True`` when messages were
+        loaded.
+        """
+        from app.infrastructure.models.conversation import ChatMessageRow
+
+        rows = (
+            db.query(ChatMessageRow)
+            .filter(ChatMessageRow.conversation_id == self.conversation_id)
+            .order_by(ChatMessageRow.created_at.asc())
+            .limit(60)
+            .all()
+        )
+        if not rows:
+            return False
+
+        self._turn_messages = [
+            {
+                "role": "user" if row.role == "user" else "assistant",
+                "content": row.content or "",
+            }
+            for row in rows
+        ][-40:]
+
+        raw = self._format_raw_history()
+        if estimate_tokens(raw) > MAX_HISTORY_TOKENS:
+            self._compress_history(raw)
+        else:
+            self.compressed_history = raw
+        return True
 
     def get_history(self) -> str:
         """Return the current compressed history (or raw if short enough)."""
@@ -353,6 +391,19 @@ def get_or_create_session(
 
     # Create new
     ctx = SessionContext(conversation_id=conversation_id)
+
+    # Restart recovery (P1-3): rebuild recent history from DB messages when
+    # neither L1 nor L2 has this session (e.g. restart without Redis).
+    if container is not None and getattr(container, "session_factory", None) is not None:
+        try:
+            with container.session_factory() as db:
+                if ctx.hydrate_from_db(db):
+                    logger.info(
+                        "SessionContext history restored from DB: conversation=%s",
+                        conversation_id,
+                    )
+        except Exception as exc:
+            logger.debug("SessionContext DB hydrate failed (best-effort): %s", exc)
 
     # Eagerly load profile snapshot for new sessions
     if container is not None and container.long_term_memory is not None:

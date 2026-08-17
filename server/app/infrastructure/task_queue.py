@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -75,9 +76,7 @@ def enqueue_task(
 
     # Threading fallback
     if callable(func):
-        thread = threading.Thread(target=_run_safe, args=(func, args, kwargs), daemon=True)
-        thread.start()
-        return thread.name
+        return _spawn(func, args, kwargs)
     elif isinstance(func, str):
         # Import the function by dotted path
         try:
@@ -85,12 +84,85 @@ def enqueue_task(
             if len(parts) == 2:
                 module = __import__(parts[0], fromlist=[parts[1]])
                 fn = getattr(module, parts[1])
-                thread = threading.Thread(target=_run_safe, args=(fn, args, kwargs), daemon=True)
-                thread.start()
-                return thread.name
+                return _spawn(fn, args, kwargs)
         except Exception as exc:
             logger.warning("Failed to import task function %s: %s", func, exc)
     return None
+
+
+# ── Graceful shutdown: track in-flight daemon threads ──────────────────
+#
+# The threading fallback runs fire-and-forget daemon threads. On process
+# shutdown these are normally killed mid-work (memory writes / entity
+# extraction can be lost). We track live threads and provide
+# :func:`begin_shutdown` / :func:`drain` so the app lifespan can stop
+# accepting new tasks and wait briefly for in-flight ones to finish.
+
+_threads_lock = threading.Lock()
+_active_threads: set[threading.Thread] = set()
+_shutting_down = False
+
+
+def begin_shutdown() -> None:
+    """Stop accepting new background tasks (in-flight ones keep running)."""
+    global _shutting_down
+    _shutting_down = True
+
+
+def reset_shutdown_state() -> None:
+    """Re-allow background tasks (called on app startup / hot-reload).
+
+    A fresh app instance must accept tasks even if a previous instance in
+    this process ran :func:`begin_shutdown` (tests, dev reload).
+    """
+    global _shutting_down
+    _shutting_down = False
+
+
+def _spawn(func: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> str | None:
+    """Start a tracked daemon thread running ``func`` safely."""
+    with _threads_lock:
+        if _shutting_down:
+            logger.info("Task queue shutting down; skipping %s", getattr(func, "__name__", func))
+            return None
+        thread = threading.Thread(
+            target=_thread_runner, args=(func, args, kwargs), daemon=True
+        )
+        _active_threads.add(thread)
+    thread.start()
+    return thread.name
+
+
+def _thread_runner(
+    func: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> None:
+    try:
+        _run_safe(func, args, kwargs)
+    finally:
+        with _threads_lock:
+            _active_threads.discard(threading.current_thread())
+
+
+def drain(timeout_s: float = 5.0) -> int:
+    """Wait up to ``timeout_s`` for in-flight daemon tasks; return remaining count.
+
+    Best-effort: tasks that ignore the deadline are abandoned (they are
+    daemon threads, so they never block process exit).
+    """
+    deadline = time.monotonic() + timeout_s
+    while True:
+        with _threads_lock:
+            alive = [t for t in _active_threads if t.is_alive()]
+        if not alive:
+            return 0
+        if time.monotonic() >= deadline:
+            return len(alive)
+        for t in alive:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return len([x for x in _active_threads if x.is_alive()])
+            t.join(timeout=min(0.2, remaining))
+    return 0
 
 
 def _run_safe(func: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:

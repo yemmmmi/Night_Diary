@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func
 
-from app.api.deps import DbDep
+from app.api.deps import ContainerDep, DbDep
 from app.infrastructure.models.pipeline_trace import PipelineTraceRow
 from app.shared.pipeline_trace import get_trace
 from app.shared.trace_event_bus import get_event_bus
@@ -90,6 +90,38 @@ def _check_rq() -> bool:
         return _redis_queue is not None
     except Exception:
         return False
+
+
+def _check_mysql(db: Any) -> bool:
+    """Return ``True`` if the primary DB answers a trivial query."""
+    try:
+        from sqlalchemy import text
+
+        db.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
+def _check_llm(container: Any) -> bool:
+    """Return ``True`` if a light-tier LLM is resolvable (tree-hole LLM path)."""
+    resolver = getattr(container, "_llm_for_tier", None)
+    if not callable(resolver):
+        return False
+    try:
+        return resolver("light", agent_name="health") is not None
+    except Exception:
+        return False
+
+
+def _check_rag(container: Any) -> bool:
+    """Return ``True`` if the hybrid retriever is available (RAG path)."""
+    return getattr(container, "retriever", None) is not None
+
+
+def _check_episodic(container: Any) -> bool:
+    """Return ``True`` if the episodic memory layer is available."""
+    return getattr(container, "episodic_memory", None) is not None
 
 
 # ── Trace list ───────────────────────────────────────────────────────────
@@ -373,11 +405,53 @@ def get_performance_stats_endpoint(
 
 
 @router.get("/middleware-status")
-def get_middleware_status() -> dict[str, Any]:
-    """Health-check for infrastructure middleware."""
-    return {
+def get_middleware_status(db: DbDep, container: ContainerDep) -> dict[str, Any]:
+    """Health-check for infrastructure middleware + AI degradation states.
+
+    ``degraded`` is the frontend banner flag: any critical (mysql / llm /
+    rag / episodic_memory) or graceful-fallback (redis / neo4j / langgraph
+    / rq) component unavailable. Components with graceful fallbacks still
+    serve requests; ``degraded`` just tells the UI to surface the state.
+    """
+    status = {
         "redis": _check_redis(),
         "neo4j": _check_neo4j(),
         "langgraph": _check_langgraph(),
         "rq": _check_rq(),
+        "mysql": _check_mysql(db),
+        "llm": _check_llm(container),
+        "rag": _check_rag(container),
+        "episodic_memory": _check_episodic(container),
+        "treehole": _check_llm(container),  # LLM 可用则走树洞 LLM 路径, 否则规则兜底
     }
+    status["degraded"] = not all(status.values())
+    return status
+
+
+# ── Quality sentinel (robustness P1-4) ──────────────────────────────────
+
+
+@router.get("/stats/quality")
+def get_quality_stats_endpoint(
+    db: DbDep,
+    scenario: str | None = Query(None, description="Filter by scenario"),
+    hours: int = Query(720, ge=1, le=24 * 90, description="Lookback window (hours)"),
+) -> dict[str, Any]:
+    """Aggregate stored online quality scores (mean / p50 / p95 by scenario)."""
+    from app.services.quality_sentinel import get_quality_stats
+
+    return get_quality_stats(db, scenario=scenario, hours=hours)
+
+
+@router.post("/quality-scan")
+def trigger_quality_scan(
+    db: DbDep,
+    container: ContainerDep,
+    limit: int = Query(3, ge=1, le=20, description="Samples per scenario"),
+    scenario: str | None = Query(None, description="diary_reply | conversation"),
+) -> dict[str, Any]:
+    """Manually trigger a quality scan (samples + judges recent replies)."""
+    from app.services.quality_sentinel import run_quality_scan
+
+    scenarios = [scenario] if scenario else None
+    return run_quality_scan(db, container, scenarios=scenarios, limit=limit)

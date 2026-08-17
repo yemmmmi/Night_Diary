@@ -281,6 +281,11 @@ def schedule_entity_extraction(
 
     Fire-and-forget: never blocks the reply, never raises.
 
+    Robustness P2-6: the task is recorded as a durable ``jobs`` row before
+    dispatch so a process crash/restart re-queues it instead of losing it.
+    When job recording is unavailable (degraded container) it falls back to
+    plain fire-and-forget dispatch.
+
     Args:
         conversation_id: Conversation ID (for chat) or diary ID string (for diary).
         source_label: "conversation" (default) or "diary" — controls source field.
@@ -291,6 +296,24 @@ def schedule_entity_extraction(
     session_factory = getattr(container, "session_factory", None)
     if session_factory is None:
         return
+
+    from app.services.job_service import enqueue_and_dispatch
+
+    job = enqueue_and_dispatch(
+        container,
+        kind="entity_extraction",
+        payload={
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "text": text,
+            "source_label": source_label,
+        },
+        user_id=user_id,
+    )
+    if job is not None:
+        return
+
+    # Fallback: plain fire-and-forget (job recording unavailable).
 
     enqueue_task(
         _run_extraction_sync,

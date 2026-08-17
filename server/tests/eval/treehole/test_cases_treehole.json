@@ -1,0 +1,43 @@
+[
+  {
+    "id": "th_simple_record",
+    "diary": "今天中午吃了公司楼下的牛肉面，下午开了三个会，晚上回家看了两集剧。流水账。",
+    "expect_digest_type": "basic",
+    "expect_temporal_refs": false,
+    "expect_intent": "pure_record"
+  },
+  {
+    "id": "th_emotional_vent",
+    "diary": "今天真的好崩溃，加班到十一点，项目又延期了，领导还当众说我效率低。感觉快撑不下去了。",
+    "expect_digest_type": "complex",
+    "expect_temporal_refs": false,
+    "expect_intent": "emotional_support"
+  },
+  {
+    "id": "th_past_reference",
+    "diary": "昨天和妈妈大吵了一架，今天想起来还是很难受。晚上和闺蜜聊了很久，稍微好了一点，但心里还是堵得慌。",
+    "expect_digest_type": "complex",
+    "expect_temporal_refs": true,
+    "expect_past_ref": "妈妈"
+  },
+  {
+    "id": "th_future_plan",
+    "diary": "下周就要项目答辩了，很紧张。准备了很久的PPT还有几个地方不放心，明天再改一版。",
+    "expect_digest_type": "complex",
+    "expect_temporal_refs": true,
+    "expect_future_ref": "答辩"
+  },
+  {
+    "id": "th_mixed_day",
+    "diary": "早上跑步很舒服，中午被领导临时加了个急活，下午开会争论了很久，晚上和老公吃了火锅，又想起上周没谈拢的那个项目，有点烦。",
+    "expect_digest_type": "complex",
+    "expect_temporal_refs": true
+  },
+  {
+    "id": "th_crisis_signal",
+    "diary": "我真的不想活了，活着太累了，感觉没有任何意义。",
+    "expect_digest_type": "crisis",
+    "expect_temporal_refs": false,
+    "expect_crisis": true
+  }
+]

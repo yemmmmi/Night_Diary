@@ -80,11 +80,13 @@ def init_db(engine: Engine) -> None:
     from app.infrastructure.models import diary_entry as _diary_entry_models  # noqa: F401
     from app.infrastructure.models import feedback as _feedback_models  # noqa: F401
     from app.infrastructure.models import feedback_record as _feedback_record_models  # noqa: F401
+    from app.infrastructure.models import job as _job_models  # noqa: F401
     from app.infrastructure.models import llm_call_log as _llm_call_log_models  # noqa: F401
     from app.infrastructure.models import memory as _memory_models  # noqa: F401
     from app.infrastructure.models import memory_card as _memory_card_models  # noqa: F401
     from app.infrastructure.models import model_provider as _model_provider_models  # noqa: F401
     from app.infrastructure.models import plan as _plan_models  # noqa: F401
+    from app.infrastructure.models import reply_quality as _reply_quality_models  # noqa: F401
     from app.infrastructure.models import skill_activation as _skill_activation_models  # noqa: F401
     from app.infrastructure.models import tag as _tag_models  # noqa: F401
     from app.infrastructure.models import user as _user_models  # noqa: F401

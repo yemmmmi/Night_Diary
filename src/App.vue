@@ -8,12 +8,24 @@ import PageTransition from '@/shared/components/PageTransition.vue'
 import ParticleBackground from '@/shared/components/ParticleBackground.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useBackend } from '@/shared/composables/useBackend'
+import { useMiddlewareStatus } from '@/shared/composables/useMiddlewareStatus'
 
 const route = useRoute()
 const settings = useSettingsStore()
 settings.load()
 const { ready, coreReady, loading, error, startupProgress, init } = useBackend()
+const { degraded: middlewareDegraded, start: startMiddlewarePolling } =
+  useMiddlewareStatus()
 const errorDismissed = ref(false)
+
+// 开发者模式开启后开始轮询中间件状态（降级横幅数据源）。
+watch(
+  () => settings.developerMode,
+  (dev) => {
+    if (dev) startMiddlewarePolling()
+  },
+  { immediate: true },
+)
 
 watch(error, () => {
   errorDismissed.value = false
@@ -66,6 +78,16 @@ const statusBanner = computed(() => {
     <div class="app-shell particle-layer">
       <p v-if="statusBanner" class="app-status-banner" role="status">
         {{ statusBanner }}
+      </p>
+
+      <!-- 降级状态提示（仅开发者模式，robustness P1-5） -->
+      <p
+        v-if="settings.developerMode && middlewareDegraded"
+        class="app-degraded-banner"
+        role="status"
+      >
+        ⚠️ 部分服务降级中：Redis / Neo4j / RQ / LangGraph / 记忆层不可用时自动回退，
+        MySQL / LLM 不可用时功能受限
       </p>
 
       <template v-if="isTabRoute">
@@ -138,6 +160,20 @@ const statusBanner = computed(() => {
   color: var(--color-text-secondary);
   background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-raised));
   border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+
+.app-degraded-banner {
+  position: sticky;
+  top: 2.25rem;
+  z-index: 2;
+  margin: 0 0 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  text-align: center;
+  color: var(--color-warning, #b45309);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 12%, var(--color-surface-raised));
+  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent);
 }
 
 .app-error-overlay {
