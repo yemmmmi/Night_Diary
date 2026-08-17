@@ -163,47 +163,90 @@ def _paragraph_count(content: str) -> int:
 
 
 _TREEHOLE_PROMPT = """你是「夜记」的树洞回应者。用户在日记里倒出了今天的心情。
-请用非常简短、温暖、口语化的一句话到三句话回应（不超过40字，不要分析、不要建议、不要问句轰炸），
-同时提取这篇日记的结构化摘要供后续对话快速理解。
+
+只输出一个 JSON 对象，禁止输出任何解释、说明、markdown 代码块或其他文字。
 
 日记内容：
 {content}
 
-请严格按以下 JSON 格式输出，不要输出其他内容：
-{{
-  "reply": "1-3 句简短回应",
-  "summary": "一句话概括这篇日记（20-60字）",
-  "topics": ["话题1", "话题2"],
-  "temporal_refs": [
-    {{"direction": "past", "date_hint": "昨天", "summary": "提及的非当天事件"}}
-  ],
-  "key_events": ["当天发生的具体事件"],
-  "emotional_shifts": ["情绪变化过程"],
-  "relationships": [{{"name": "人物", "relation": "关系", "sentiment": 0.0}}],
-  "conflicts": ["矛盾或冲突"],
-  "concerns": ["担忧或未解决的问题"]
-}}
+JSON 对象格式（严格按此结构）：
+{{"reply": "1-3句简短温暖回应(≤40字)", "summary": "一句话概括(20-60字)", "topics": ["话题"], "temporal_refs": [{{"direction": "past或future", "date_hint": "昨天/下周等日期提示", "summary": "非当天发生的事"}}], "key_events": ["当天发生的具体事件"], "emotional_shifts": ["情绪变化"], "relationships": [{{"name": "人物", "relation": "关系", "sentiment": 0.0}}], "conflicts": ["矛盾或冲突"], "concerns": ["担忧"]}}
 
-要求：
-- reply 简短（1-3 句，≤40 字），像朋友的回应，不机械
-- temporal_refs 记录**非当天**发生的事（过去回忆 direction=past，未来计划 direction=future），
-  当天发生的事放 key_events，不要混入 temporal_refs
-- 简单日记（流水账）key_events/emotional_shifts/conflicts/concerns 用空数组
-- 不要编造日记里没有的内容
-- 所有数组不存在时用空数组"""
+字段规则：
+- temporal_refs 只放非当天发生的事（过去=past，未来=future）；当天的事放 key_events
+- 简单日记的复杂字段（key_events/emotional_shifts/conflicts/concerns 等）用空数组
+- 不要编造日记里没有的内容"""
+
+#: Retry prompt — terse, JSON-only. Used when the full prompt's reply fails to
+#: parse (some fast LLMs occasionally explain instead of emitting JSON).
+_TREEHOLE_STRICT_PROMPT = """只输出一个 JSON 对象，不要任何解释或代码块。
+日记：{content}
+JSON 结构：{{"reply": "1-3句温暖回应", "summary": "一句话摘要", "topics": ["话题"], "temporal_refs": [{{"direction": "past或future", "date_hint": "日期提示", "summary": "非当天事件"}}], "key_events": ["当天事件"], "emotional_shifts": ["情绪变化"], "relationships": [{{"name": "人物", "relation": "关系", "sentiment": 0.0}}], "conflicts": ["冲突"], "concerns": ["担忧"]}}"""
 
 
 def _parse_treehole_json(text: str) -> dict[str, Any] | None:
+    """Parse the tree-hole LLM's JSON reply, tolerating surrounding prose.
+
+    Real LLMs (e.g. deepseek-v4-flash) sometimes wrap the JSON in
+    explanation or markdown fences despite ``json_mode``. Strategy:
+    1. strip markdown fences and try direct ``json.loads``;
+    2. fall back to extracting the first balanced ``{...}`` object.
+    """
     cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
         cleaned = re.sub(r"\s*```$", "", cleaned)
     try:
         data = json.loads(cleaned)
-        return data if isinstance(data, dict) else None
+        if isinstance(data, dict):
+            return data
     except (json.JSONDecodeError, ValueError, TypeError):
-        logger.warning("Tree-hole LLM JSON parse failed: %s", text[:200])
+        pass
+
+    extracted = _extract_first_json_object(text)
+    if extracted is not None:
+        return extracted
+
+    logger.warning("Tree-hole LLM JSON parse failed: %s", text[:200])
+    return None
+
+
+def _extract_first_json_object(text: str) -> dict[str, Any] | None:
+    """Extract the first balanced JSON object from arbitrary text.
+
+    Walks characters tracking string literals and brace depth so a JSON
+    object embedded in prose (or a stray trailing explanation) is recovered.
+    """
+    start = text.find("{")
+    if start == -1:
         return None
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                candidate = text[start : i + 1]
+                try:
+                    parsed = json.loads(candidate)
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    return None
+                return parsed if isinstance(parsed, dict) else None
+    return None
 
 
 def _clean_reply(reply: str) -> str:
@@ -368,6 +411,14 @@ async def run_treehole(
     try:
         response = await llm.ainvoke(prompt)
         text = message_text(response)
+        # Parse-failure retry: some fast LLMs occasionally explain instead of
+        # emitting JSON — one terse JSON-only retry materially reduces rule
+        # fallbacks in production.
+        data = _parse_treehole_json(text)
+        if data is None:
+            strict_prompt = _TREEHOLE_STRICT_PROMPT.format(content=content[:1500])
+            response = await llm.ainvoke(strict_prompt)
+            text = message_text(response)
     except Exception as exc:
         error = str(exc)
         logger.warning("Tree-hole LLM failed, falling back to rules: %s", exc)
