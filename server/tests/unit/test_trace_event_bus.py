@@ -17,7 +17,7 @@ from app.shared.trace_event_bus import TraceEventBus
 
 
 def _strip_uuid(event: dict) -> dict:
-    """事件带 event_uuid（P2-7 去重），断言时忽略该键。"""
+    """事件带 event_uuid (P2-7 去重), 断言时忽略该键。"""
     return {k: v for k, v in event.items() if k != "event_uuid"}
 
 

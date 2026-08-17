@@ -26,8 +26,8 @@ def _client(tmp_path) -> TestClient:
         model_key_secret="test-model-secret-min-16-chars!!",
     )
     reset_model_download_service()
-    # 用测试的 settings 初始化服务单例——服务默认用全局 get_settings()
-    # （默认 data_dir 可能含真实模型缓存导致 all_ready 误判），必须显式注入。
+    # 用测试的 settings 初始化服务单例——服务默认用全局 get_settings(),
+    # 默认 data_dir 可能含真实模型缓存导致 all_ready 误判, 必须显式注入。
     get_model_download_service(settings)
     get_settings.cache_clear()
     app = create_app(settings)
@@ -35,7 +35,7 @@ def _client(tmp_path) -> TestClient:
 
 
 def _wait_for_bootstrap(client: TestClient, timeout_s: float = 20.0) -> None:
-    """等待 core bootstrap 完成，避免 TestClient 退出与后台引导线程竞态。"""
+    """等待 core bootstrap 完成, 避免 TestClient 退出与后台引导线程竞态。"""
     import time
 
     deadline = time.monotonic() + timeout_s
