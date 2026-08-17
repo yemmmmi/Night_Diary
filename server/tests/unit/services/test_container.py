@@ -128,3 +128,32 @@ def test_reranker_shared_between_rag_and_episodic(tmp_path) -> None:
         assert r2 is sentinel
         # Underlying _build_reranker called exactly once (singleton cache)
         assert mock_build.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# V3 P6 Task 1: model warmup (eliminate first-request cold start)
+# ---------------------------------------------------------------------------
+
+
+def test_warmup_models_loads_embedder(tmp_path) -> None:
+    """warmup_models 应触发 embedder 模型加载。"""
+    from unittest.mock import MagicMock, patch
+
+    container = _make_core_container(tmp_path)
+    mock_embedder = MagicMock()
+    mock_embedder.embed = MagicMock(return_value=[0.1, 0.2])
+
+    with patch.object(container, "_build_embedder", return_value=mock_embedder), \
+            patch.object(container, "ensure_ai_stack"):
+        container.warmup_models()
+        assert mock_embedder.embed.called
+
+
+def test_warmup_models_silently_fails_on_error(tmp_path) -> None:
+    """warmup 失败应静默降级（只 warn 不 crash）。"""
+    from unittest.mock import patch
+
+    container = _make_core_container(tmp_path)
+    with patch.object(container, "ensure_ai_stack", side_effect=RuntimeError("boom")):
+        # 不应抛异常
+        container.warmup_models()

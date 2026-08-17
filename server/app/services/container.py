@@ -285,6 +285,42 @@ class ServiceContainer:
             logger.warning("Reranker init skipped (%s); degrading to no-rerank: %s", model_name, exc)
             return None
 
+    def warmup_models(self) -> None:
+        """Preload embedding + reranker models (best-effort, non-blocking on failure).
+
+        Triggered as a background task after core bootstrap so the first real
+        AI request doesn't pay the 3-8s cold-start penalty (model download +
+        ``sentence-transformers`` load). Each stage is independently wrapped:
+        any failure is logged as a warning and skipped — startup, ``/ready``,
+        and request handling are never blocked.
+        """
+        import time as _t
+
+        t0 = _t.perf_counter()
+        try:
+            self.ensure_ai_stack()
+            embedder = self._build_embedder()
+            embedder.embed("预热")
+            logger.info("Embedder warmed up in %.2fs", _t.perf_counter() - t0)
+        except Exception as exc:
+            logger.warning("Embedder warmup failed (non-fatal): %s", exc)
+        try:
+            reranker = self._get_reranker()
+            if reranker is not None:
+                from app.domain.memory.types import EpisodicEntry
+
+                dummy = EpisodicEntry(
+                    event_summary="预热",
+                    emotion="neutral",
+                    reply_insight="",
+                    timestamp=_t.time(),
+                    importance=0.6,
+                )
+                reranker.rerank_episodic("预热", [dummy])
+            logger.info("Reranker warmed up in %.2fs", _t.perf_counter() - t0)
+        except Exception as exc:
+            logger.warning("Reranker warmup failed (non-fatal): %s", exc)
+
     @classmethod
     def create(cls, settings: Settings | None = None) -> ServiceContainer:
         """Full container for tests and the production backend."""

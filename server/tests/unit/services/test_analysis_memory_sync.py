@@ -3,16 +3,39 @@
 Validates the P0 fix: diary analyses now write episodic entries and trigger
 long-term profile promotion, closing the data-flow gap where analyses were
 read by the multi-agent system but never written back.
+
+P6 note: ``_sync_diary_to_memory`` now dispatches ``persist_atom`` via
+``enqueue_task`` (fire-and-forget). In production the write runs on a daemon
+thread; here we monkeypatch ``enqueue_task`` to run the callable inline so
+the synchronous assertions below remain meaningful.
 """
 
 from __future__ import annotations
 
+import contextlib
 from unittest.mock import MagicMock
 
 import pytest
 
 from app.domain.memory.types import EpisodicEntry
 from app.services.analysis_service import _sync_diary_to_memory
+
+
+@pytest.fixture(autouse=True)
+def _sync_enqueue_task(monkeypatch):
+    """Run ``enqueue_task`` inline (mirroring ``_run_safe`` semantics).
+
+    Production dispatches the callable to a daemon thread; tests need the
+    write to complete before assertions run, so we invoke it synchronously
+    and swallow exceptions exactly like ``_run_safe`` does.
+    """
+
+    def _run_inline(func, *args, **kwargs):
+        with contextlib.suppress(Exception):
+            func(*args, **kwargs)  # mirror task_queue._run_safe: best-effort
+        return "test-inline"
+
+    monkeypatch.setattr("app.services.analysis_service.enqueue_task", _run_inline)
 
 
 class _FakeDiaryEntry:

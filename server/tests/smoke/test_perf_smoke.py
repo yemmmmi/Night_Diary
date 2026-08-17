@@ -17,7 +17,10 @@ def smoke_client(tmp_path) -> TestClient:
         data_dir=str(tmp_path / "data"),
         llm_api_key="sk-test",
         model_key_secret="test-model-secret-min-16-chars!!",
+        database_url_env="",
     )
+    import os as _os
+    _os.environ["DATABASE_URL"] = ""  # force SQLite fallback for test isolation
     app = create_app(settings)
     with TestClient(app) as client:
         deadline = time.monotonic() + 30.0

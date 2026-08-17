@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.infrastructure.models.analysis import AnalysisRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
+from app.infrastructure.task_queue import enqueue_task
 from app.services import diary_service
 from app.services.ai.router import ExecutionPlanner
 from app.shared.pipeline_trace import (
@@ -100,13 +101,17 @@ def _sync_diary_to_memory(
     """Persist a diary-derived event into episodic memory via MemoryGateway.
 
     Uses the :class:`ContentNormalizer` to produce a ``UnifiedMemoryAtom``
-    and then :meth:`MemoryGateway.persist_atom` for the unified write path.
+    and then schedules :meth:`MemoryGateway.persist_atom` via
+    :func:`enqueue_task` (fire-and-forget) for the unified write path.
     This ensures structured fields (tags, mood_score, emotions) survive the
     journey into episodic storage, where the long-term promoter can detect
     recurring topics via tags instead of raw text matching.
 
-    Failures are logged and swallowed — memory is a best-effort enhancement,
-    not a hard dependency of the analysis flow.
+    The write is dispatched off the request thread: ``persist_atom`` opens
+    its own DB session via the episodic store's ``session_factory`` and runs
+    to completion in a background worker. Failures are logged and swallowed
+    — memory is a best-effort enhancement, not a hard dependency of the
+    analysis flow.
     """
     from app.services.memory_gateway import MemoryGateway
     from app.services.normalizer import ContentNormalizer
@@ -123,21 +128,19 @@ def _sync_diary_to_memory(
     )
 
     try:
-        stored = gw.persist_atom(atom)
-        if stored:
-            logger.info(
-                "Diary synced to episodic memory: diary_id=%s emotion=%s tags=%s",
-                entry.id,
-                atom.emotion,
-                atom.tags,
-            )
-        else:
-            logger.debug(
-                "Episodic entry below threshold, not stored: diary_id=%s",
-                entry.id,
-            )
+        # Fire-and-forget: persist_atom opens its own session via the
+        # episodic store's session_factory (thread-safe), so dispatching it
+        # off the request thread eliminates 50-300ms of tail latency from
+        # episodic store + DB persist + long-term profile promotion.
+        enqueue_task(gw.persist_atom, atom)
+        logger.debug(
+            "Diary episodic write dispatched: diary_id=%s emotion=%s tags=%s",
+            entry.id,
+            atom.emotion,
+            atom.tags,
+        )
     except Exception as exc:
-        logger.warning("Failed to store episodic entry for diary_id=%s: %s", entry.id, exc)
+        logger.warning("Failed to dispatch episodic write for diary_id=%s: %s", entry.id, exc)
 
     # ── Entity extraction sidecar (best-effort, fire-and-forget) ──
     # Diary content is the richest source of entities (persons, places, topics).
@@ -210,9 +213,7 @@ def create_analysis(
             style_fragment=style_fragment,
         )
         if span:
-            span.set_output(
-                {"tier": result.execution_tier, "agent_mode": result.agent_mode}
-            )
+            span.set_output({"tier": result.execution_tier, "agent_mode": result.agent_mode})
     with trace_span(
         "S6_persist",
         "持久化分析结果",
@@ -237,7 +238,10 @@ def create_analysis(
         ) as span:
             _sync_diary_to_memory(entry, result.reply, container)
             if span:
-                span.set_output({"synced": True})
+                # Memory write is dispatched fire-and-forget via enqueue_task,
+                # so this span now records only the scheduling latency (µs),
+                # not the full episodic store + DB persist + promotion.
+                span.set_output({"dispatched": True})
     return analysis, result.referenced_memory_count
 
 
@@ -418,9 +422,7 @@ def trigger_analysis(
     trace: PipelineTrace | None = None
     token = None
     if trace_id:
-        trace = PipelineTrace(
-            trace_id=trace_id, scenario="diary_reply", user_id=user_id
-        )
+        trace = PipelineTrace(trace_id=trace_id, scenario="diary_reply", user_id=user_id)
         token = set_trace(trace)
     try:
         # Upsert: if an analysis already exists, remove it first so that

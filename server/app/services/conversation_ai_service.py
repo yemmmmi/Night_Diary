@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
+from app.infrastructure.task_queue import enqueue_task
 from app.services import conversation_service, diary_service
 from app.services.ai.conversation_loop import run_conversation_loop
 from app.services.ai.input_preprocessor import InputPreprocessor
@@ -162,7 +163,9 @@ def _build_tools(
         llm = container._llm_for_tier("light", agent_name="tool")
         if llm is None or container.retriever is None:
             return None
-        return build_tool_map(container.session_factory, retriever=container.retriever, llm=llm, user_id=user_id)
+        return build_tool_map(
+            container.session_factory, retriever=container.retriever, llm=llm, user_id=user_id
+        )
     except Exception as exc:
         logger.warning("Tool map build failed: %s", exc)
         return None
@@ -249,14 +252,12 @@ def _prepare_reply_context(
         raise ValidationError("引用的日记不存在或已被删除")
 
     # ── Stage 2.1: Session routing + Input preprocessing ──
-    with trace_span("S1_session", "会话路由", input_snapshot={"conversation_id": conversation_id}) as span:
-        session_ctx = get_or_create_session(
-            conversation_id, container=container, user_id=user_id
-        )
+    with trace_span(
+        "S1_session", "会话路由", input_snapshot={"conversation_id": conversation_id}
+    ) as span:
+        session_ctx = get_or_create_session(conversation_id, container=container, user_id=user_id)
         brief_context = (
-            session_ctx.compressed_history[:300]
-            if session_ctx.compressed_history
-            else ""
+            session_ctx.compressed_history[:300] if session_ctx.compressed_history else ""
         )
 
     with trace_span("S3_preprocess", "输入预处理", input_snapshot={"raw_text": content}) as span:
@@ -393,7 +394,9 @@ def _prepare_reply_context(
             tracer=container.llm_tracer,
             model=getattr(query_llm, "model", "") if query_llm else "",
         )
-        with trace_span("S7a_query_rewrite", "查询改写", input_snapshot={"raw_text": content}) as span:
+        with trace_span(
+            "S7a_query_rewrite", "查询改写", input_snapshot={"raw_text": content}
+        ) as span:
             understanding = understander.understand(content, context=brief_context)
             retrieval_query = understanding.rewritten
         logger.debug(
@@ -491,9 +494,7 @@ def generate_reply(
     trace: PipelineTrace | None = None
     token = None
     if trace_id:
-        trace = PipelineTrace(
-            trace_id=trace_id, scenario="chat_reply", user_id=user_id
-        )
+        trace = PipelineTrace(trace_id=trace_id, scenario="chat_reply", user_id=user_id)
         token = set_trace(trace)
     try:
         pinned_ids = _normalize_diary_ids(diary_ids)
@@ -526,17 +527,19 @@ def generate_reply(
             raise ValidationError("引用的日记不存在或已被删除")
 
         # ── Stage 2.1: Session routing + Input preprocessing ──
-        with trace_span("S1_session", "会话路由", input_snapshot={"conversation_id": conversation_id}) as span:
+        with trace_span(
+            "S1_session", "会话路由", input_snapshot={"conversation_id": conversation_id}
+        ) as span:
             session_ctx = get_or_create_session(
                 conversation_id, container=container, user_id=user_id
             )
             brief_context = (
-                session_ctx.compressed_history[:300]
-                if session_ctx.compressed_history
-                else ""
+                session_ctx.compressed_history[:300] if session_ctx.compressed_history else ""
             )
 
-        with trace_span("S3_preprocess", "输入预处理", input_snapshot={"raw_text": content}) as span:
+        with trace_span(
+            "S3_preprocess", "输入预处理", input_snapshot={"raw_text": content}
+        ) as span:
             preprocessor = InputPreprocessor()
             preprocess_result = preprocessor.process(content, context=brief_context)
             content = preprocess_result.clean_text  # Use cleaned text for all downstream
@@ -645,7 +648,9 @@ def generate_reply(
                     if output and not output.startswith("["):
                         skill_outputs.append(f"【{skill.metadata.name}】{output}")
                 except Exception as exc:
-                    logger.debug("Skill %s execute failed (best-effort): %s", skill.metadata.name, exc)
+                    logger.debug(
+                        "Skill %s execute failed (best-effort): %s", skill.metadata.name, exc
+                    )
 
         skill_context_text = "\n".join(skill_outputs) if skill_outputs else ""
 
@@ -664,7 +669,9 @@ def generate_reply(
                 tracer=container.llm_tracer,
                 model=getattr(query_llm, "model", "") if query_llm else "",
             )
-            with trace_span("S7a_query_rewrite", "查询改写", input_snapshot={"raw_text": content}) as span:
+            with trace_span(
+                "S7a_query_rewrite", "查询改写", input_snapshot={"raw_text": content}
+            ) as span:
                 understanding = understander.understand(content, context=brief_context)
                 retrieval_query = understanding.rewritten
             logger.debug(
@@ -675,7 +682,9 @@ def generate_reply(
                 understanding.confidence,
             )
 
-            with trace_span("S7b_rag", "RAG检索", input_snapshot={"query": retrieval_query}) as span:
+            with trace_span(
+                "S7b_rag", "RAG检索", input_snapshot={"query": retrieval_query}
+            ) as span:
                 retrieved_ids = _retrieve_related_diary_ids(
                     container, retrieval_query, exclude_ids=exclude_ids
                 )
@@ -690,7 +699,9 @@ def generate_reply(
 
         all_context_ids = pinned_ids + [did for did in retrieved_ids if did not in pinned_ids]
 
-        with trace_span("S7c_episodic", "情景记忆", input_snapshot={"query": retrieval_query}) as span:
+        with trace_span(
+            "S7c_episodic", "情景记忆", input_snapshot={"query": retrieval_query}
+        ) as span:
             episodic_text, memory_ids = _format_episodic_memories(container, retrieval_query)
             if span:
                 span.metadata["memory_count"] = len(memory_ids)
@@ -737,7 +748,8 @@ def generate_reply(
                 span.metadata["tool_calls"] = loop_result.tool_calls_made
 
         # ── Stage 5: Output + episodic write-back ──
-        with trace_span("S10_memory", "情景记忆写入") as span:
+        _memory_span = None
+        with trace_span("S10_memory", "情景记忆写入") as _memory_span:
             _maybe_persist_episodic(
                 container,
                 content=content,
@@ -745,6 +757,10 @@ def generate_reply(
                 conversation_id=conversation_id,
                 user_id=user_id,
             )
+        # Write is dispatched fire-and-forget via enqueue_task; mark the span
+        # dispatched so its short duration is read as scheduling, not full I/O.
+        if _memory_span is not None:
+            _memory_span.status = STATUS_DISPATCHED
 
         # Get profile style from session (cached, loaded once)
         session = get_or_create_session(conversation_id, container=container, user_id=user_id)
@@ -988,14 +1004,17 @@ def _maybe_persist_episodic(
     """Persist an episodic entry when the turn carries strong emotion.
 
     Uses :class:`ContentNormalizer.from_conversation` to produce a
-    ``UnifiedMemoryAtom`` and then :meth:`MemoryGateway.persist_atom`
-    for the unified write path.
+    ``UnifiedMemoryAtom`` and then schedules
+    :meth:`MemoryGateway.persist_atom` via :func:`enqueue_task`
+    (fire-and-forget) for the unified write path.
 
     Conditions (either triggers):
     - Emotion score abs value ≥ 0.3 (meaningful positive or negative shift).
     - Severe signal detected (crisis-level — always write for safety audit trail).
 
-    The write is best-effort: failures are logged and never propagate.
+    The emotion gate runs synchronously (cheap), but the actual write is
+    dispatched off the request thread. Best-effort: failures are logged and
+    never propagate.
     """
     try:
         estimator = get_emotion_estimator()
@@ -1017,14 +1036,17 @@ def _maybe_persist_episodic(
             emotion_score=score,
         )
 
-        stored = gw.persist_atom(atom)
-        if stored:
-            logger.info(
-                "Episodic write-back: event=%s emotion=%s score=%.2f",
-                atom.event_summary[:20],
-                emotion_label,
-                score,
-            )
+        # Fire-and-forget: persist_atom opens its own session via the episodic
+        # store's session_factory (thread-safe), so dispatching it off the
+        # request thread removes episodic store + DB persist + long-term
+        # promotion from the reply tail latency.
+        enqueue_task(gw.persist_atom, atom)
+        logger.info(
+            "Episodic write-back dispatched: event=%s emotion=%s score=%.2f",
+            atom.event_summary[:20],
+            emotion_label,
+            score,
+        )
     except Exception as exc:
         logger.warning("Episodic write-back failed (best-effort): %s", exc)
 

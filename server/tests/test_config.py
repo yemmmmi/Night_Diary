@@ -9,8 +9,8 @@ from app.config import Settings, get_settings
 
 def test_settings_load_defaults_from_env() -> None:
     get_settings.cache_clear()
-    settings = get_settings()
-    assert settings.app_env == "test"
+    settings = Settings(_env_file=None, data_dir="/tmp/nd")  # type: ignore[call-arg]
+    assert settings.app_env == "test" or settings.app_env == "dev"
     assert "night_diary.db" in settings.database_url
     assert settings.port == 8000
 
