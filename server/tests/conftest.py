@@ -23,7 +23,7 @@ os.environ.setdefault("DATA_DIR", "/tmp/night-diary-test")
 os.environ.setdefault("MODEL_KEY_SECRET", "test-model-secret-min-16-chars")
 
 if sys.platform == "win32":  # pragma: no cover - Windows-only hardening
-    import asyncio  # noqa: E402
+    import asyncio
 
     def _safe_proactor_transport_del(self: object) -> None:
         # The proactor socket handle is already freed by the loop teardown;
