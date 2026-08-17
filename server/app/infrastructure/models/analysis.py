@@ -35,6 +35,7 @@ class AnalysisRow(Base):
     agent_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     execution_tier: Mapped[str | None] = mapped_column(String(16), nullable=True)
     activated_agents: Mapped[str | None] = mapped_column(Text, nullable=True)
+    intent: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     diary_entry: Mapped[DiaryEntryRow] = relationship(
         "DiaryEntryRow",

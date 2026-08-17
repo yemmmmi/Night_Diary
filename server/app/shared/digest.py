@@ -28,7 +28,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 DigestType = Literal["basic", "complex"]
-DigestSource = Literal["card", "llm", "card+llm"]
+#: "card" 仅卡片日；"llm" 仅打字日记 LLM 提取；"card+llm" 混合日；"rule" 规则兜底。
+DigestSource = Literal["card", "llm", "card+llm", "rule"]
 TemporalDirection = Literal["past", "future"]
 
 

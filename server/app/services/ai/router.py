@@ -48,6 +48,8 @@ class AnalysisResult:
     execution_tier: str
     activated_agents: str
     referenced_memory_count: int = 0
+    #: Diary intent (4-class) when known — persisted to AnalysisRow.intent.
+    intent: str = ""
 
 
 class ExecutionPlanner:
@@ -211,6 +213,7 @@ class ExecutionPlanner:
                     execution_tier=run.tier,
                     activated_agents=activated_agents,
                     referenced_memory_count=run.referenced_memory_count,
+                    intent=run.intent,
                 )
 
             if decision.mode == ExecutionMode.AGENT and self._session_factory is not None:
@@ -257,10 +260,15 @@ class ExecutionPlanner:
                 activated_agents="",
             )
 
-    def _resolve_llm(self, tier: str) -> LLMClient:
+    def llm_for_tier(self, tier: str) -> LLMClient | None:
+        """Return the LLM for ``tier`` (fallback: ``default``, then any)."""
         llm = self._llm_by_tier.get(tier) or self._llm_by_tier.get("default")
         if llm is None and self._llm_by_tier:
             llm = next(iter(self._llm_by_tier.values()))
+        return llm
+
+    def _resolve_llm(self, tier: str) -> LLMClient:
+        llm = self.llm_for_tier(tier)
         if llm is None:
             raise AIServiceUnavailableError(f"未配置 tier={tier} 的 LLM 模型")
         return llm
