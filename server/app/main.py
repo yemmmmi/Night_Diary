@@ -125,6 +125,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # garbage-collected before it finishes preloading the models.
     warmup_task = asyncio.create_task(_warmup_after_core())
 
+    # Robustness P2-6: re-dispatch jobs left pending/running by a dead
+    # process (bounded retries). Best-effort, runs after core bootstrap.
+    async def _requeue_stale_jobs_after_core() -> None:
+        try:
+            await core_task
+            from app.services.job_service import requeue_stale_jobs
+
+            container = app.state.container
+            if container is not None:
+                requeue_stale_jobs(container)
+        except Exception as exc:
+            logger.warning("Stale job requeue failed (best-effort): %s", exc)
+
+    requeue_task = asyncio.create_task(_requeue_stale_jobs_after_core())
+
     # Robustness P1-4: opt-in online quality sentinel — samples + judges real
     # replies on an interval. It reads the container from app.state each
     # iteration (the container is bootstrapped in a background thread), and
@@ -154,6 +169,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         sentinel_task.cancel()
         with suppress(asyncio.CancelledError):
             await sentinel_task
+    requeue_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await requeue_task
     await core_task
     # Best-effort: cancel any still-running warmup so a slow first-time model
     # download never blocks shutdown; swallow the resulting CancelledError.
