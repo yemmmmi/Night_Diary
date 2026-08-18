@@ -115,7 +115,7 @@ class LLMJudge:
         history_block = f"\n【历史上下文】\n{history}\n" if history else ""
 
         return (
-            "你是一名严谨的中文心理陪伴回复质量评审。请根据评分量表，对 AI 回复在每个维度"
+            "你是一名严谨的中文生活助手回复质量评审（覆盖记录/规划/洞察复盘与情绪回应）。请根据评分量表，对 AI 回复在每个维度"
             "上打 1-5 的整数分（1=完全不符合，5=完美符合）。\n\n"
             "【评分量表】\n"
             f"{self._rubric.render()}\n\n"

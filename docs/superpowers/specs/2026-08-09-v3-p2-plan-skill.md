@@ -544,5 +544,7 @@ P2 合并前必须通过现有 eval 基线（RAG + generation），确保新增�
 | PlannerAgent 的多轮澄清让用户觉得啰嗦 | 第 3 轮强制收口；prompt 约束反问语气温柔 |
 | 协议块 segments 模型改动大，破坏 P0/P1 的 replyText | 保留 replyText ref 兼容历史消息渲染；流式期间用 segments |
 | 计划功能引入"压力感"违反心理陪伴定位 | UI 弱化逾期、避免红色告警、PlannerAgent prompt 禁施压措辞 |
+
+> 🏷️ **更正中（见 2026-08-18-v3x-mode-system-design.md）**：本行"心理陪伴"为历史定位残留。项目现定位为**个人生活记录 / 规划 / 洞察复盘**，"不施压"自此是全产品全局底线（而非陪伴产品的专属特性），此处设计结论仍成立。
 | LLM 生成无来源引用的泛泛建议 | prompt 强制 source_refs；无数据时诚实说明 |
 | task_command 误触发（"完成了"在非待办语境） | 关键词匹配 + 上下文校验（检查是否已有相关 task） |

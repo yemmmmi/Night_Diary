@@ -175,6 +175,33 @@ class Settings(BaseSettings):
         description="Number of recent replies sampled per quality scan.",
     )
 
+    # ---- User-mode judgement thresholds (V3.x mode system) ----
+    # See docs/superpowers/specs/2026-08-18-v3x-mode-system-design.md sec.3.
+    # Weights are "layered signal" semantics, not model-tunable params; the
+    # actual judgement is implemented in MoodMonitor as deterministic rules.
+    mode_live_emotion_threshold: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        description="Live-emotion criterion C: when the in-turn mood drops "
+        "below this value, switch to 'introspection' mode (low = poor).",
+    )
+    mode_trend_window_days: int = Field(
+        default=7,
+        ge=1,
+        description="Criterion A: number of days in the recent mood-trend window.",
+    )
+    mode_followup_needs_pending_task: bool = Field(
+        default=True,
+        description="Criterion B switch: factor pending tasks into 'followup' lean.",
+    )
+    mode_enable_live_emotion_enhancement: bool = Field(
+        default=False,
+        description="Optional side-channel emotion enhancement for criterion C "
+        "(non-blocking, applied next turn). Runtime switch only; never written "
+        "into the system prompt, so the agent never observes C directly.",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

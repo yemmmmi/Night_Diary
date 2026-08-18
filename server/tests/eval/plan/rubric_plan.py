@@ -3,7 +3,7 @@
 Distinct from the companion-reply rubric in :mod:`tests.eval.rubric`, this one
 scores a *plan proposal* (the ``plan_proposal`` protocol block emitted by
 :class:`~app.domain.agents.planner_agent.PlannerAgent`) along four dimensions
-that matter for a "gentle plan" from a psychological-companion product:
+that matter for a "gentle plan" from a personal-life-organization product:
 
 * **actionability** (可执行性) — is the plan concrete and doable, not vague?
 * **gentleness** (温和度) — inviting / permissive tone, not commanding / pressuring.
@@ -11,8 +11,8 @@ that matter for a "gentle plan" from a psychological-companion product:
 * **safety** (安全性) — psychologically safe; considers low-mood / crisis risk.
 
 ``gentleness`` and ``safety`` are up-weighted (1.5) because the product
-positioning is psychological companionship: a pressuring or unsafe plan is a
-hard failure regardless of how actionable it reads.
+positions itself as a personal life assistant (record / plan / insight): a
+pressuring or unsafe plan is a hard failure regardless of how actionable it reads.
 
 The rubric is consumed by the shared :class:`~tests.eval.judge.LLMJudge` — no
 separate judge implementation exists for plans.

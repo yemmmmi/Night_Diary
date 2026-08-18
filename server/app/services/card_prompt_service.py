@@ -15,7 +15,7 @@ from app.shared.llm import LLMClient, message_text
 
 logger = logging.getLogger(__name__)
 
-CARD_PROMPT_TEMPLATE = """你是一个温暖的心理陪伴助手，正在帮助用户做每日复盘。
+CARD_PROMPT_TEMPLATE = """你是一个温和的生活助手，正在帮助用户做每日复盘。
 
 请根据以下背景信息，生成 3 个引导性的问题，帮助用户回忆和表达今天的感受。
 问题应该：
