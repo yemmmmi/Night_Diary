@@ -2,7 +2,9 @@
 
 > **阶段**: V3.2（V3 P0–P7 已合入 main 之后的新一轮）
 > **日期**: 2026-08-18
-> **定位修正**: 本项目**不再是**"心理陪伴"产品。目标产品是**个人生活记录 + 规划 + 洞察复盘**工具。本设计中任何诞生于"心理陪伴"时期的旧表述均不作为依据（在代码里的残留文案另列清单，属可选清理，不在本 spec 范围内）。
+> **定位修正**: 本项目**不再是**"心理陪伴"产品。目标产品是**个人生活记录 + 规划 + 洞察复盘**工具。本设计中任何诞生于"心理陪伴"时期的旧表述均不作为依据。
+>
+> **旧文案清理 = 必做项**：代码/文档中一切残留的"心理陪伴"式表述（prompt 自称、设计理由等）必须在本阶段一并修正为"个人生活记录 / 规划 / 洞察复盘"定位，杜绝后续再次产生理解歧义。涉及范围以 §8「遗留文案清理（必做）」清单为准。
 
 ## 1. 背景与本阶段目标
 
@@ -211,10 +213,22 @@ C 是否启用是**判境层的确定性策略/配置**，**绝不写入 system 
 - 主动写库/自主增删（维持 Agent 零写权限）。
 - `daily_modes` 可视化的洞察报告页面（本期只落库）。
 - 提醒推送 / 日历集成 / 习惯追踪。
-- 遗留"心理陪伴"prompt 文案的系统性清理（可选、非本 spec 范围）。
+
+### 遗留文案清理（必做）
+系统性修正代码与文档里所有"心理陪伴"式残留表述为"个人生活记录 / 规划 / 洞察复盘"定位，含（初核、不完全枚举）：
+- `server/app/domain/agents/planner_agent.py`（docstring 与 prompt 措辞）
+- `server/app/services/ai/prompts.py::SYSTEM_PROMPT`
+- `server/app/domain/agents/prompts.py`（计划执行回顾段的"温和肯定"表述需复核语气但保留其"不施压"底线）
+- `server/app/services/card_prompt_service.py`（每日复盘 prompt 自称"心理陪伴助手"）
+- `server/app/services/conversation_ai_service.py::NIGHT_TALK_DRAFT_PROMPT`
+- `docs/superpowers/specs/2026-08-09-v3-p2-plan-skill.md`、`2026-08-11-v3-p5-eval-closure.md` 等已经把"心理陪伴"当设计前提的文档（spec 属历史归档，做**更正性标注**而非改写正文）
+- 巡检并修正其他命中的 "心理陪伴 / companion / 督导" 等字样
+
+验收：全仓 grep "心理陪伴 / psychological companion" 无有效残留（历史归档 spec 除外，以标注方式消除歧义）。
 
 ## 9. 实施顺序
 
+0. **遗留文案清理（必做，先行）**：修正 §8 清单中的"心理陪伴"式措辞，减少后续开发歧义；作为本阶段的第一个落地任务。
 1. `MODE_RULES` 配置 + `daily_modes` 迁移 + ORM。
 2. `MoodMonitor` 判境模块（含单元测试）。
 3. `ModePromptBuilder` 中间件接入 ConversationLoop prompt。
