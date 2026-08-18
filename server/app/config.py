@@ -175,6 +175,31 @@ class Settings(BaseSettings):
         description="Number of recent replies sampled per quality scan.",
     )
 
+    # ---- 用户模式判境阈值 (V3.x 模式体系) ----
+    # 见 docs/superpowers/specs/2026-08-18-v3x-mode-system-design.md §3。
+    # 判据权重的语义为"规则分层信号"，非模型可调参数；实际判定逻辑
+    # 由 MoodMonitor 实现为确定性分层规则（见 §3.3/§3.4）。
+    mode_live_emotion_threshold: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        description="C 判据：当轮情绪跌破该值时切『内视』（0~1，越低越差）。",
+    )
+    mode_trend_window_days: int = Field(
+        default=7,
+        ge=1,
+        description="A 判据：近期情绪趋势统计的天数窗口。",
+    )
+    mode_followup_needs_pending_task: bool = Field(
+        default=True,
+        description="B 判据开关：仅有计划张力时判定是否偏『跟进』。",
+    )
+    mode_enable_live_emotion_enhancement: bool = Field(
+        default=False,
+        description="C 判据的旁路情感分析增强（可选，不阻塞主回复链路）。"
+        "此为运行侧开关，绝不写入 system prompt，Agent 不感知 C 的存在。",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

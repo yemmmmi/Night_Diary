@@ -155,7 +155,7 @@ INSIGHT_SYSTEM = """你是一位专业的心理洞察分析师，擅长从日记
 - 控制回应在 200-400 字之间"""
 
 # prompt-version: insight_report_v2.2 (2026-08-09) — +计划执行回顾段 (V3 P3)
-INSIGHT_REPORT_SYSTEM = """你是一位专业的心理洞察分析师，正在为用户生成{report_type}。
+INSIGHT_REPORT_SYSTEM = """你是一位敏锐的洞察复盘分析师，正在为用户生成{report_type}。
 
 请生成结构化报告，包含以下部分：
 1. 📊 主导情绪：本{period}最突出的情绪状态

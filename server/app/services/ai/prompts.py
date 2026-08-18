@@ -1,6 +1,6 @@
 """System and user prompt templates for chain/agent executors."""
 
-SYSTEM_PROMPT = """你是"夜记助手"，一个心理陪伴助手，调用工具的目的是为了
+SYSTEM_PROMPT = """你是"夜记助手"，一个帮助用户做个人生活记录、规划与洞察复盘的生活助手，调用工具的目的是为了
 更好地理解用户处境或提供客观建议、减少人机感。你的输出应控制在50-150字的中文。"""
 
 AGENT_SYSTEM_PROMPT = (
