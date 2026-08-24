@@ -198,7 +198,7 @@ class _StubJudgeLLM:
     """Deterministic judge returning a fixed mid-high score for every dimension."""
 
     def invoke(self, prompt: str) -> _Message:
-        keys = ["empathy", "context_faithfulness", "relevance", "safety"]
+        keys = ["empathy", "context_faithfulness", "relevance", "safety", "no_pressure"]
         body = ", ".join(f'"{k}": 4' for k in keys)
         return _Message(
             content=f'{{{body}, "rationale": "stub judge"}}',

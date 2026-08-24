@@ -1,9 +1,9 @@
 # Night Diary V2
 
-夜记 V2 —— AI 心理陪伴日记系统（Web 端）。
+夜记 —— **个人生活记录 + 规划 + 洞察复盘**工具（Web 端）。
 
 - **Web 端**：Docker Compose + MySQL + Redis + Neo4j，多用户 + JWT 认证
-- **V3 已完成**：记录 + 规划双轮定位（P0–P7），路线图见 `.cursor/rules/current_phase.mdc`
+- **V3 已完成**：记录/规划双轮定位（P0–P7）+ **V3.2 用户模式体系**（日常/跟进/内视，判境-表现分离，Agent 对既有计划可提案修改），路线图见 `.cursor/rules/current_phase.mdc`
 
 所有基础设施组件（Redis / Neo4j / MySQL / RQ / LangGraph）均实现优雅降级，不可用时自动回退。
 

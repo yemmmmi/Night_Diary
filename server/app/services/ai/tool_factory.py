@@ -235,6 +235,38 @@ def create_get_plan_progress_tool(
     return get_plan_progress
 
 
+def create_get_plan_detail_tool(
+    session_factory: sessionmaker[Session], *, user_id: str = "default"
+) -> ToolFn:
+    """Read-only tool (V3.2): return a plan's full structure incl. task ids.
+
+    Complements ``list_todos`` / ``get_plan_progress`` so an agent can reason
+    about **modifying an existing plan/task** (adjust / archive / clean) without
+    ever gaining write access — writes still happen through the proposal-confirm path.
+    """
+
+    def get_plan_detail(plan_id: str) -> str:
+        from app.services import plan_service
+
+        with session_factory() as session:
+            try:
+                plan = plan_service.get_plan(session, plan_id=plan_id, user_id=user_id)
+            except Exception as exc:
+                logger.warning("get_plan_detail failed for plan=%s: %s", plan_id, exc)
+                return f"查询计划失败：{exc}"
+            lines = [f"计划[{plan.id}]《{plan.title}》（状态：{plan.status}）"]
+            if plan.motivation:
+                lines.append(f"动机：{plan.motivation}")
+            for t in plan.tasks:
+                due = t.due_date.isoformat() if t.due_date else "-"
+                lines.append(
+                    f"  - task[{t.id}]《{t.title}》 状态={t.status} 截止={due}"
+                )
+        return "\n".join(lines)
+
+    return get_plan_detail
+
+
 def build_tool_map(
     session_factory: sessionmaker[Session],
     *,
@@ -252,6 +284,8 @@ def build_tool_map(
         # P2: 只读计划/任务工具
         "list_todos": create_list_todos_tool(session_factory, user_id=user_id),
         "get_plan_progress": create_get_plan_progress_tool(session_factory, user_id=user_id),
+        # V3.2 只读计划详情 供修改既有计划任务提案参考
+        "get_plan_detail": create_get_plan_detail_tool(session_factory, user_id=user_id),
     }
 
 
@@ -327,6 +361,17 @@ def build_tool_specs() -> list[ToolSpec]:
         ToolSpec(
             name="get_plan_progress",
             description="查询单个计划的执行进度（只读）。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "plan_id": {"type": "string", "description": "计划 ID"},
+                },
+                "required": ["plan_id"],
+            },
+        ),
+        ToolSpec(
+            name="get_plan_detail",
+            description="查询某个计划的完整结构（含各任务ID/状态/截止日期，只读）。用于对既有计划/任务提出调整、归档或清理提案的参考。",
             parameters={
                 "type": "object",
                 "properties": {
