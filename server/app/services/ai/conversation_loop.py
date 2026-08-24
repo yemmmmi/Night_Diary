@@ -644,6 +644,10 @@ async def run_conversation_loop_streaming(
                 intent=intent,
                 trace_id=trace_id,
                 conversation_id=conversation_id,
+                # Request-scoped session for presentation middlewares such as
+                # ModePromptBuilder (reads daily_modes + plan state). Kept in
+                # ``extra`` so unrelated middlewares never depend on a specific key.
+                extra={"db": db},
             ),
         )
 
