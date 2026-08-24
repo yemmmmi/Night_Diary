@@ -14,6 +14,7 @@ from app.api.v1 import (
     export,
     feedback,
     memory,
+    mode,
     model_download,
     models,
     plan,
@@ -39,3 +40,4 @@ api_router.include_router(export.router)
 api_router.include_router(dev.router)
 api_router.include_router(plan.router)
 api_router.include_router(plan.tasks_router)
+api_router.include_router(mode.router)

@@ -25,7 +25,7 @@ import contextlib
 import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from app.domain.agents.types import ChatIntentResult
@@ -634,6 +634,12 @@ async def run_conversation_loop_streaming(
     # V3 P7: optional middleware pipeline — on_system_prompt hooks (e.g. the
     # SafetyMiddleware crisis instruction) run before any LLM call. An empty
     # pipeline is skipped entirely (zero overhead for simple scenes).
+    #
+    # V3.x: compute the user-mode once and share it through the context so
+    # ModePromptBuilder does not re-read daily_modes, and surface the resulting
+    # mode to the frontend as a ``mode_state`` protocol block (badge update +
+    # one-time gentle notice).
+    current_mode: str | None = None
     if middleware_pipeline is not None and not middleware_pipeline.is_empty:
         system_prompt = middleware_pipeline.apply_system_prompt(
             system_prompt,
@@ -644,12 +650,32 @@ async def run_conversation_loop_streaming(
                 intent=intent,
                 trace_id=trace_id,
                 conversation_id=conversation_id,
-                # Request-scoped session for presentation middlewares such as
-                # ModePromptBuilder (reads daily_modes + plan state). Kept in
-                # ``extra`` so unrelated middlewares never depend on a specific key.
-                extra={"db": db},
+                # Request-scoped session + precomputed mode for presentation
+                # middlewares such as ModePromptBuilder. Kept in ``extra`` so
+                # unrelated middlewares never depend on a specific key.
+                extra={"db": db, "current_mode": current_mode},
             ),
         )
+        # Best-effort mode for the mode_state event.
+        try:
+            if current_mode is None:
+                from app.services.ai.mood_monitor import MoodMonitor
+
+                mode_val = MoodMonitor().effective_mode(
+                    db, user_id=user_id, day=date.today()
+                )
+                current_mode = mode_val
+        except Exception:
+            current_mode = None
+        if current_mode is not None and trace_id:
+            from app.shared.streaming_events import publish_protocol_block
+
+            await publish_protocol_block(
+                trace_id,
+                block_type="mode_state",
+                block_id=f"mode-{user_id}-{date.today().isoformat()}",
+                data={"mode": current_mode, "light_notice": False},
+            )
 
     chat_history = session.get_history()
     topics_text = "、".join(session.profile_topics) if session.profile_topics else "（暂无）"

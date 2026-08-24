@@ -84,7 +84,14 @@ class ModePromptBuilder(MiddlewareBase):
         return None
 
     def _resolve_mode(self, db: Session | None, ctx: MiddlewareContext) -> str | None:
-        """Current mode for (user, today); None when mode subsystem unavailable."""
+        """Current mode for (user, today); None when mode subsystem unavailable.
+
+        Prefers a caller-supplied ``ctx.extra["current_mode"]`` (avoids a second
+        DB read when the loop already computed it); otherwise reads ``daily_modes``.
+        """
+        provided = ctx.extra.get("current_mode")
+        if isinstance(provided, str) and provided in MODE.ALL:
+            return provided
         if db is None:
             return None
         try:
