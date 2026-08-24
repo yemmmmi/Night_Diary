@@ -142,6 +142,24 @@ class Settings(BaseSettings):
         description="Sentence-transformers model name for vector embeddings.",
     )
 
+    # ---- Embedding via cloud API (OpenAI-compatible, e.g. Qwen/DashScope) ----
+    # When ``embedding_api_key`` is set, ``build_embedding_function`` prefers the
+    # OpenAI-compatible ``/embeddings`` endpoint over the local sentence-transformers
+    # model, avoiding heavy local ML deps/model downloads (which are often painful on
+    # constrained networks).
+    embedding_api_key: str = Field(
+        default="",
+        description="API key for an OpenAI-compatible embedding endpoint.",
+    )
+    embedding_base_url: str = Field(
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        description="Base URL of the OpenAI-compatible embedding endpoint.",
+    )
+    embedding_model: str = Field(
+        default="text-embedding-v3",
+        description="Model name used at the embedding endpoint.",
+    )
+
     # ---- HuggingFace (first-run model download) ----
     hf_endpoint: str = Field(
         default="https://hf-mirror.com",
@@ -190,6 +208,13 @@ class Settings(BaseSettings):
         default=7,
         ge=1,
         description="Criterion A: number of days in the recent mood-trend window.",
+    )
+    mode_mood_low_threshold: float = Field(
+        default=0.40,
+        ge=0.0,
+        le=1.0,
+        description="Criterion A: composite mood below this value counts as 'low' "
+        "and leans the day toward 'introspection'. Followup also requires mood NOT low.",
     )
     mode_followup_needs_pending_task: bool = Field(
         default=True,
