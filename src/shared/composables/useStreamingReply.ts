@@ -13,6 +13,8 @@ const PROTOCOL_BLOCK_EVENT = 'protocol_block'
 
 export type StreamingReplyStatus = 'idle' | 'streaming' | 'done' | 'retracted'
 
+export type StreamMode = 'daily' | 'followup' | 'introspection'
+
 /**
  * RenderSegment
  *
@@ -48,6 +50,10 @@ export interface StreamingReplyReturn {
   status: Ref<StreamingReplyStatus>
   citations: Ref<Array<Record<string, unknown>>>
   segments: Ref<RenderSegment[]>
+  /** Latest mode announced via a ``mode_state`` protocol block (V3.x). */
+  currentMode: Ref<StreamMode | null>
+  /** One-time gentle notice trigger when the mode was auto-changed. */
+  modeNotice: Ref<boolean>
   connect: (sseUrl: string) => void
   disconnect: () => void
   reset: () => void
@@ -84,6 +90,8 @@ export function useStreamingReply(): StreamingReplyReturn {
   const status = ref<StreamingReplyStatus>('idle')
   const citations = ref<Array<Record<string, unknown>>>([])
   const segments = ref<RenderSegment[]>([])
+  const currentMode = ref<StreamMode | null>(null)
+  const modeNotice = ref(false)
 
   let eventSource: EventSource | null = null
   let pendingTokens = ''
@@ -145,6 +153,8 @@ export function useStreamingReply(): StreamingReplyReturn {
     citations.value = []
     segments.value = []
     currentTextBuffer = ''
+    currentMode.value = null
+    modeNotice.value = false
     status.value = 'streaming'
 
     eventSource = new EventSource(sseUrl)
@@ -225,6 +235,22 @@ export function useStreamingReply(): StreamingReplyReturn {
             block_id: string
             data: Record<string, unknown>
           }
+        }
+        // ``mode_state`` is a state signal (header badge / one-time notice),
+        // not a persistent chat bubble segment — handle it apart.
+        if (payload.block.block_type === 'mode_state') {
+          const mode = payload.block.data?.mode as StreamMode | undefined
+          if (mode === 'daily' || mode === 'followup' || mode === 'introspection') {
+            const changed = currentMode.value !== null && currentMode.value !== mode
+            currentMode.value = mode
+            // Show a gentle one-time notice only on an auto-change (dedup: the
+            // backend sets light_notice=true only on the first auto switch).
+            if (payload.block.data?.light_notice === true || changed) {
+              modeNotice.value = true
+            }
+          }
+          resetWatchdog()
+          return
         }
         // 先 flush 文本 buffer 为一个 text segment
         if (currentTextBuffer) {
@@ -318,6 +344,8 @@ export function useStreamingReply(): StreamingReplyReturn {
     citations.value = []
     segments.value = []
     currentTextBuffer = ''
+    currentMode.value = null
+    modeNotice.value = false
   }
 
   onUnmounted(() => {
@@ -329,6 +357,8 @@ export function useStreamingReply(): StreamingReplyReturn {
     status,
     citations,
     segments,
+    currentMode,
+    modeNotice,
     connect,
     disconnect,
     reset,

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from app.shared.middleware.base import MiddlewareBase, MiddlewareContext, MiddlewarePipeline
 from app.shared.middleware.finalize import FinalizeMiddleware
+from app.shared.middleware.mode import ModePromptBuilder
 from app.shared.middleware.safety import SafetyMiddleware
 
 __all__ = [
@@ -20,13 +21,20 @@ __all__ = [
     "MiddlewarePipeline",
     "SafetyMiddleware",
     "FinalizeMiddleware",
+    "ModePromptBuilder",
 ]
 
 
 def build_default_pipeline() -> MiddlewarePipeline:
-    """Default production pipeline: Safety (prompt injection) + Finalize (write-back).
+    """Default production pipeline: Safety + Mode + Finalize.
 
-    Callers that want zero overhead pass an empty ``MiddlewarePipeline()``
+    Calls that want zero overhead pass an empty ``MiddlewarePipeline()``
     instead (optional injection — simple scenes skip middleware entirely).
+
+    Order note: ``ModePromptBuilder`` injects the mode tone + plan-state blocks
+    into the system prompt; ``SafetyMiddleware`` is idempotent and must still
+    guarantee the crisis-response block is present regardless of ordering.
     """
-    return MiddlewarePipeline([SafetyMiddleware(), FinalizeMiddleware()])
+    return MiddlewarePipeline(
+        [SafetyMiddleware(), ModePromptBuilder(), FinalizeMiddleware()]
+    )
