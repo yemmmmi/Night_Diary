@@ -256,9 +256,9 @@ def test_finalize_diary_without_entry_returns_none_atom():
 # ── build_default_pipeline ────────────────────────────────────────────
 
 
-def test_build_default_pipeline_contains_safety_and_finalize():
-    """默认管道含 Safety + Finalize 两个中间件。"""
+def test_build_default_pipeline_contains_expected_middlewares():
+    """默认管道含 Safety + Mode + Finalize 三个中间件。"""
     pipeline = build_default_pipeline()
     assert pipeline.is_empty is False
     names = [mw.name for mw in pipeline._middlewares]  # type: ignore[attr-defined]
-    assert names == ["safety", "finalize"]
+    assert names == ["safety", "mode", "finalize"]
