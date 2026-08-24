@@ -17,6 +17,7 @@ import ReferencePanel from '@/features/chat/ReferencePanel.vue'
 import OutputPanel from '@/features/chat/OutputPanel.vue'
 import AITypingIndicator from '@/shared/components/AITypingIndicator.vue'
 import DevPipelinePanel from '@/features/dev/DevPipelinePanel.vue'
+import ModeBadge from '@/features/mode/ModeBadge.vue'
 
 defineOptions({ name: 'ChatScene' })
 
@@ -34,6 +35,7 @@ const cardGenerating = ref(false)
 const diaryCatalog = ref<DiaryEntry[]>([])
 const referenceCards = ref<MemoryCard[]>([])
 const episodicMemories = ref<string[]>([])
+const modeBadge = ref<InstanceType<typeof ModeBadge> | null>(null)
 
 function toReferenceItem(entry: DiaryEntry): DiaryReferenceItem {
   return {
@@ -214,6 +216,7 @@ const messageTimeline = computed(() => {
 
 onMounted(async () => {
   await Promise.all([chatStore.loadConversations(), loadReferenceData()])
+  modeBadge.value?.load()
   applyRouteDiaryPin()
 })
 
@@ -250,6 +253,7 @@ watch(
 
     <!-- Center: messages + input -->
     <section class="chat-scene__main">
+      <ModeBadge ref="modeBadge" class="chat-scene__mode" />
       <!-- Empty state -->
       <div v-if="!chatStore.activeConversationId" class="chat-scene__empty">
         <p class="chat-scene__empty-title">{{ chatCopy.emptyTitle(settings.nickname) }}</p>
