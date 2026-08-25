@@ -47,7 +47,7 @@ const entriesOnSelectedDate = computed(() => {
 })
 
 const routeDiaryId = computed(() => {
-  const raw = route.params.diaryId
+  const raw = route.query.diary
   const parsed = Number(raw)
   return Number.isFinite(parsed) ? parsed : null
 })
@@ -102,14 +102,14 @@ function selectEntry(entry: DiaryEntry) {
   selectedEntry.value = entry
   selectedDate.value = entry.date
   void loadAnalysisForEntry(entry)
-  router.replace({ name: 'review-detail', params: { diaryId: entry.id } })
+  router.replace({ path: '/review', query: { diary: String(entry.id) } })
 }
 
 function closeDetail() {
   selectedEntry.value = null
   selectedDate.value = null
   analysisStore.clear()
-  router.replace({ name: 'review' })
+  router.replace({ path: '/review' })
 }
 
 function exportMarkdown() {
@@ -142,10 +142,10 @@ function selectDate(iso: string) {
   selectedEntry.value = matches[0] ?? null
   if (selectedEntry.value) {
     void loadAnalysisForEntry(selectedEntry.value)
-    router.replace({ name: 'review-detail', params: { diaryId: selectedEntry.value.id } })
+    router.replace({ path: '/review', query: { diary: String(selectedEntry.value.id) } })
   } else {
     analysisStore.clear()
-    router.replace({ name: 'review' })
+    router.replace({ path: '/review' })
   }
 }
 
