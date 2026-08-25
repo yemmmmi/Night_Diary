@@ -2,6 +2,8 @@ import { getHttpClient } from '@/shared/api/http'
 
 import type { SourceRef } from './plan'
 
+export type { SourceRef } from './plan'
+
 export interface PlanExecutionSummary {
   plan_id: string
   title: string

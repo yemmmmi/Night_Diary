@@ -19,4 +19,8 @@ export const timelineCopy = {
   dayDrawerTitle: (label: string, day: number) => `${label} ${day}日`,
   taskSummary: (total: number, done: number) => `今日 ${total} 项 · 已完成 ${done}`,
   taskSectionDone: '都完成了，慢慢来',
+  noLetterThisWeek: '这一周没有留下周信',
+  planSectionTitle: '这一周的计划',
+  fromDiary: (date?: string) => (date ? `来自 ${date} 的日记` : '来自日记'),
+  aiSuggested: 'AI 建议',
 } as const
