@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+
 from fastapi import APIRouter, Query, Response, status
 
 from app.api.deps import ContainerDep, CurrentUserDep, DbDep
@@ -18,8 +20,17 @@ def list_entries(
     user: CurrentUserDep,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
+    date_from: datetime.date | None = Query(default=None),
+    date_to: datetime.date | None = Query(default=None),
 ) -> list[DiaryResponse]:
-    rows = diary_service.list_entries(db, user_id=str(user.id), skip=skip, limit=limit)
+    rows = diary_service.list_entries(
+        db,
+        user_id=str(user.id),
+        skip=skip,
+        limit=limit,
+        date_from=date_from,
+        date_to=date_to,
+    )
     return [diary_to_response(row) for row in rows]
 
 

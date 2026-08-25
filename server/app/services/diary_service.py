@@ -96,11 +96,16 @@ def list_entries(
     user_id: str,
     skip: int = 0,
     limit: int = 20,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> list[DiaryEntryRow]:
+    query = db.query(DiaryEntryRow).filter(DiaryEntryRow.user_id == user_id)
+    if date_from is not None:
+        query = query.filter(DiaryEntryRow.date >= date_from)
+    if date_to is not None:
+        query = query.filter(DiaryEntryRow.date <= date_to)
     return (
-        db.query(DiaryEntryRow)
-        .filter(DiaryEntryRow.user_id == user_id)
-        .order_by(desc(DiaryEntryRow.created_at))
+        query.order_by(desc(DiaryEntryRow.created_at))
         .offset(skip)
         .limit(limit)
         .all()
