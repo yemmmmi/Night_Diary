@@ -91,8 +91,7 @@ export const appRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/review',
-    name: 'review',
-    component: () => import('@/pages/ReviewScene.vue'),
+    redirect: { path: '/memory' },
   },
   {
     path: '/review/:diaryId',
