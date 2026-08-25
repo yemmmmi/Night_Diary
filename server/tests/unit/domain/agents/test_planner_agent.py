@@ -224,3 +224,170 @@ async def test_planner_emits_transition_text_before_proposal():
     assert "基于" in transition_text or "整理" in transition_text, (
         f"Transition text should contain guidance word, got: {transition_text}"
     )
+
+
+# ── V3.2: 修改既有计划/任务提案 ────────────────────────────────
+
+
+def _drain_blocks(queue):
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    return events
+
+
+@pytest.mark.asyncio
+async def test_planner_emits_plan_modify_when_existing():
+    """有 current_plans_text 且用户指向修改既有计划 -> 发 plan_modify (adjust)。"""
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-plan-modify-adjust"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content=(
+        '{"operation":"adjust","target":{"type":"plan","id":"abcd1234",'
+        '"title":"早睡计划"},"changes":{"due_date":"2026-09-01"},"reason":"下周再调整"}'
+    )))
+
+    planner = PlannerAgent(llm=mock_llm)
+    inp = PlannerInput(
+        user_input="把早睡计划的截止日期改一下",
+        prior_context="",
+        trace_id=trace_id,
+        user_id="user-1",
+        conversation_id="conv-1",
+        current_plans_text="- 计划[abcd1234]：《早睡计划》（未完成任务：11点前睡）",
+    )
+
+    with patch("app.domain.agents.planner_agent.CrisisGuard") as mock_crisis_cls:
+        mock_crisis_cls.return_value.detect.return_value = False
+        await planner.run(inp)
+
+    events = _drain_blocks(queue)
+    await bus.unsubscribe(trace_id, queue)
+
+    blocks = [e for e in events if e.get("type") == StreamingEventType.PROTOCOL_BLOCK]
+    modify = [b for b in blocks if b["block"]["block_type"] == "plan_modify"]
+    assert len(modify) == 1, f"expected 1 plan_modify, got blocks={blocks}"
+    data = modify[0]["block"]["data"]
+    assert data["operation"] == "adjust"
+    assert data["status"] == "awaiting_confirmation"
+    assert data["target"]["title"] == "早睡计划"
+
+
+@pytest.mark.asyncio
+async def test_plan_modify_is_zero_write():
+    """修改提案必须只读草案：responses 里绝无写库动作，状态恒为 awaiting_confirmation。"""
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-plan-modify-zw"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content=(
+        '{"operation":"clean","target":{"type":"task","id":"t99",'
+        '"title":"旧任务"},"changes":{},"reason":"不再需要"}'
+    )))
+
+    planner = PlannerAgent(llm=mock_llm)
+    inp = PlannerInput(
+        user_input="帮我把旧任务清掉吧",
+        prior_context="",
+        trace_id=trace_id,
+        user_id="user-1",
+        conversation_id="conv-1",
+        current_plans_text="- 计划[abcd1234]：《早睡计划》（未完成任务：11点前睡、旧任务）",
+    )
+
+    with patch("app.domain.agents.planner_agent.CrisisGuard") as mock_crisis_cls:
+        mock_crisis_cls.return_value.detect.return_value = False
+        await planner.run(inp)
+
+    events = _drain_blocks(queue)
+    await bus.unsubscribe(trace_id, queue)
+
+    blocks = [e for e in events if e.get("type") == StreamingEventType.PROTOCOL_BLOCK]
+    modify = [b for b in blocks if b["block"]["block_type"] == "plan_modify"]
+    assert len(modify) == 1
+    # 零写权限：发出的是草案而非执行结果
+    assert modify[0]["block"]["data"]["status"] == "awaiting_confirmation"
+
+
+@pytest.mark.asyncio
+async def test_plan_modify_falls_back_to_new_proposal():
+    """LSM 判定为 none（用户其实想新建）-> 回落 plan_proposal。"""
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-plan-modify-none"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content=(
+        '{"operation":"none"}'
+    )))
+
+    planner = PlannerAgent(llm=mock_llm)
+    inp = PlannerInput(
+        user_input="把计划调整成全早点睡",  # 含 adjust 分支信号，但 LS 判定 wanted none -> 回落新建
+        prior_context="",
+        trace_id=trace_id,
+        user_id="user-1",
+        conversation_id="conv-1",
+        current_plans_text="- 计划[abcd1234]：《早睡计划》",
+    )
+
+    with patch("app.domain.agents.planner_agent.CrisisGuard") as mock_crisis_cls:
+        mock_crisis_cls.return_value.detect.return_value = False
+        await planner.run(inp)
+
+    events = _drain_blocks(queue)
+    await bus.unsubscribe(trace_id, queue)
+
+    blocks = [e for e in events if e.get("type") == StreamingEventType.PROTOCOL_BLOCK]
+    types = [b["block"]["block_type"] for b in blocks]
+    # operation=none -> 打车回到 plan_proposal / clarification，绝不应出现 plan_modify
+    assert "plan_modify" not in types
+
+
+@pytest.mark.asyncio
+async def test_plan_modify_no_current_plans_still_new():
+    """没有 current_plans_text（默认规划）-> 即便带修改词，也不走 modify 分支（保持向后兼容）。"""
+    from app.shared.streaming_events import StreamingEventType
+    from app.shared.trace_event_bus import get_event_bus
+
+    trace_id = "test-plan-modify-no-context"
+    bus = get_event_bus()
+    queue = await bus.subscribe(trace_id)
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content=(
+        '{"title":"早睡计划","motivation":"x","tasks":[]}'
+    )))
+
+    planner = PlannerAgent(llm=mock_llm)
+    inp = PlannerInput(
+        user_input="把早睡计划的截止日期改一下",  # 含 modify 词，但无 current_plans_text
+        prior_context="",
+        trace_id=trace_id,
+        user_id="user-1",
+        conversation_id="conv-1",
+        current_plans_text="",
+    )
+
+    with patch("app.domain.agents.planner_agent.CrisisGuard") as mock_crisis_cls:
+        mock_crisis_cls.return_value.detect.return_value = False
+        await planner.run(inp)
+
+    events = _drain_blocks(queue)
+    await bus.unsubscribe(trace_id, queue)
+
+    blocks = [e for e in events if e.get("type") == StreamingEventType.PROTOCOL_BLOCK]
+    types = [b["block"]["block_type"] for b in blocks]
+    assert "plan_modify" not in types

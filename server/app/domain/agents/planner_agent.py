@@ -1,4 +1,4 @@
-"""PlannerAgent — multi-turn plan exploration skill (V3 P2).
+"""PlannerAgent — multi-turn plan exploration skill (V3 P2, extended in V3.2).
 
 Triggered by the ``plan_exploration`` intent in ConversationLoop. Handles:
 
@@ -6,10 +6,13 @@ Triggered by the ``plan_exploration`` intent in ConversationLoop. Handles:
 2. Information completeness assessment (what / how)
 3. Multi-turn clarification (emit clarification_request protocol block)
 4. Plan proposal generation (emit plan_proposal protocol block with source refs)
+5. **Existing-plan modification proposal** (V3.2): when the user asks to adjust /
+   archive / clean an *existing* plan or task, emit a ``plan_modify`` protocol
+   block describing the proposed change (instead of a brand-new plan proposal).
 
-The agent has ZERO write permissions — it never creates tasks/plans
-directly. All writes happen via the user accepting a proposal in the
-frontend, which calls the REST API.
+The agent has ZERO write permissions — it never creates/modifies/archives/closes
+tasks or plans directly. All writes happen via the user accepting a proposal in the
+frontend, which calls the REST API (proposal-confirm path, unchanged).
 """
 
 from __future__ import annotations
@@ -46,6 +49,61 @@ _PLAN_PROPOSAL_PROMPT = """你是一个温和的生活规划助手。基于用�
 
 请生成 JSON："""
 
+# V3.2: 对"既有计划/任务提修改"的信号词。命中这些即优先产出
+# ``plan_modify`` 提案（adjust/archive/clean），而不是新建 plan_proposal。
+_PLAN_MODIFY_KEYWORDS = (
+    "改一下",
+    "调整",
+    "改成",
+    "修改",
+    "去掉",
+    "删掉",
+    "删除",
+    "清掉",
+    "清理",
+    "不做了",
+    "放弃",
+    "暂停",
+    "归档",
+    "收起来",
+    "这个计划",
+    "这个任务",
+    "这条",
+    "现有计划",
+    "之前的计划",
+    "上周那个",
+    "简化",
+    "精简",
+    "换一种",
+)
+
+
+def _looks_like_modify(user_input: str) -> bool:
+    """Heuristic: does the user refer to an existing plan/task to change it?"""
+    return any(kw in user_input for kw in _PLAN_MODIFY_KEYWORDS)
+
+
+_PLAN_MODIFY_PROMPT = """你是用户的并列生活助手，协助记录、规划与复盘。用户希望对**已有的某个计划或任务**进行调整，而不是新建。请基于提供的当前计划/任务清单，生成一个「修改提案」。
+
+操作类型（operation）：
+- "adjust"：调整某个计划或任务的字段（如标题、备注、截止日期）。
+- "archive"：归档/收起的某个计划或任务（使其不再活跃）。
+- "clean"：清理/删掉某个已不需要的计划或任务。
+
+约束：
+1. 只能针对"当前计划清单"里真实存在的计划/任务（target 必须引用其 id 与 title）。
+2. 每次最多改动 1 个目标，明确给出 changes（要改成什么新值，如 title/new_due_date）。
+3. 禁止使用"必须""应该""一定要"等施压措辞；用温和建议的口吻。
+4. 只是提案，实际改动由用户在前端确认后落库（你零写权限）。
+5. 输出严格 JSON，格式：{{"operation": str, "target": {{"type": "plan"|"task", "id": str, "title": str}}, "changes": {{}}, "reason": str}}
+
+当前计划清单（来自用户账户，只读参考）：
+{current_plans}
+
+用户原话：{user_input}
+
+如果用户其实是想**新建**一个从未有过的计划，请不要进入此模板，返回 {{"operation": "none"}}。请生成 JSON："""
+
 
 @dataclass
 class PlannerInput:
@@ -57,6 +115,7 @@ class PlannerInput:
     user_id: str
     conversation_id: str
     source_refs: list[dict[str, Any]] | None = None  # RAG 检索的相关日记/记忆
+    current_plans_text: str = ""  # 只读的当前计划/任务清单文本（V3.2 modify 用）
 
 
 class PlannerAgent:
@@ -76,7 +135,9 @@ class PlannerAgent:
         Publishes to TraceEventBus:
         - crisis: TEXT_DELTA(safe_response) only
         - incomplete (missing what): clarification_request PROTOCOL_BLOCK
-        - complete (has what): plan_proposal PROTOCOL_BLOCK
+        - complete (has what) AND user refers to an existing plan/task:
+          plan_modify PROTOCOL_BLOCK (adjust/archive/clean)
+        - complete (has what) and building new: plan_proposal PROTOCOL_BLOCK
         Always publishes REPLY_START and REPLY_END.
         """
         await publish_reply_start(inp.trace_id, intent="plan_exploration")
@@ -85,6 +146,12 @@ class PlannerAgent:
         if self._crisis.detect(inp.user_input) or self._crisis.detect(inp.prior_context):
             await publish_text_delta(inp.trace_id, self._crisis.safe_response)
             await publish_reply_end(inp.trace_id)
+            return
+
+        # V3.2: 只有提供了"当前计划清单"且用户话语指向修改既有计划时才走 modify 分支。
+        # 否则退回新建提案流程（保持向后兼容）。
+        if inp.current_plans_text.strip() and _looks_like_modify(inp.user_input):
+            await self._emit_plan_modify(inp)
             return
 
         completeness = assess_plan_completeness(inp.user_input, inp.prior_context)
@@ -158,6 +225,89 @@ class PlannerAgent:
             block_type="plan_proposal",
             block_id=f"proposal-{inp.trace_id}",
             data=proposal_data,
+        )
+        await publish_reply_end(inp.trace_id)
+
+    async def _emit_plan_modify(self, inp: PlannerInput) -> None:
+        """Generate an existing-plan modification proposal (V3.2).
+
+        Prompts the LLM for a ``plan_modify`` JSON (operation / target /
+        changes / reason), validates the target is within the supplied
+        ``current_plans_text`` (defensive), and publishes it as a
+        ``plan_modify`` PROTOCOL_BLOCK with ``status=awaiting_confirmation``.
+        The Agent never writes anything — the user confirms in the frontend,
+        which calls the REST API.
+        """
+        prompt = _PLAN_MODIFY_PROMPT.format(
+            current_plans=inp.current_plans_text[:2000],
+            user_input=inp.user_input[:500],
+        )
+
+        try:
+            response = await self._llm.ainvoke(prompt)
+            raw = message_text(response).strip()
+            cleaned = self._strip_code_fence(raw)
+            data = json.loads(cleaned)
+        except (json.JSONDecodeError, Exception) as exc:
+            logger.warning("Plan modify LLM/parse failed: %s", exc)
+            data = {}
+
+        operation = data.get("operation")
+        if not operation or operation == "none":
+            # LLM 判断这不属于"修改既有计划" → 回退到常规对话/新建提案流程。
+            completeness = assess_plan_completeness(inp.user_input, inp.prior_context)
+            if completeness.is_complete:
+                await self._emit_plan_proposal(inp, completeness)
+            else:
+                question = "你想达成什么目标呢？可以告诉我你想养成什么习惯，或者想完成什么事。"
+                await publish_protocol_block(
+                    inp.trace_id,
+                    block_type="clarification_request",
+                    block_id=f"clarify-{inp.trace_id}",
+                    data={
+                        "question": question,
+                        "missing_fields": completeness.missing_fields,
+                        "context": completeness.context,
+                    },
+                )
+                await publish_reply_end(inp.trace_id)
+            return
+
+        target = data.get("target") or {}
+        # 防御：target 必须落在提供的清单里（防止幻觉出不存在的 id/title）。
+        target_desc = f"{target.get('title', '')}".strip()
+        if not target_desc or (target_desc and target_desc not in inp.current_plans_text):
+            logger.warning(
+                "Plan modify target not found in current plans; falling back. target=%s",
+                target,
+            )
+            completeness = assess_plan_completeness(inp.user_input, inp.prior_context)
+            if completeness.is_complete:
+                await self._emit_plan_proposal(inp, completeness)
+            else:
+                await publish_text_delta(
+                    inp.trace_id, "我没找到你说的那条计划，可以再说具体一点吗？"
+                )
+                await publish_reply_end(inp.trace_id)
+            return
+
+        modify_data = {
+            "operation": operation,
+            "target": {
+                "type": target.get("type", "plan"),
+                "id": target.get("id", ""),
+                "title": target.get("title", ""),
+            },
+            "changes": data.get("changes", {}),
+            "reason": data.get("reason", ""),
+            "status": "awaiting_confirmation",
+        }
+
+        await publish_protocol_block(
+            inp.trace_id,
+            block_type="plan_modify",
+            block_id=f"modify-{inp.trace_id}",
+            data=modify_data,
         )
         await publish_reply_end(inp.trace_id)
 

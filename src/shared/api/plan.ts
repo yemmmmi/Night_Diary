@@ -65,6 +65,35 @@ export async function updateTaskStatus(
   return data
 }
 
+/** 通用任务字段更新（V3.2 adjust 提案确认用；title/note/due_date 均可选）。 */
+export async function updateTask(
+  taskId: string,
+  changes: Partial<Pick<TaskItem, 'title' | 'note' | 'due_date'>>,
+): Promise<TaskItem> {
+  const client = await getHttpClient()
+  const { data } = await client.patch<TaskItem>(`/api/v1/tasks/${taskId}`, changes)
+  return data
+}
+
+/** 计划字段更新（adjust / archive 确认用；title/motivation/status 可选）。 */
+export async function updatePlan(
+  planId: string,
+  changes: Partial<Pick<PlanItem, 'title' | 'motivation' | 'status'>>,
+): Promise<PlanItem> {
+  const client = await getHttpClient()
+  const { data } = await client.patch<PlanItem>(`/api/v1/plans/${planId}`, changes)
+  return data
+}
+
+/** 归档任务：任务无 archived 态，映射为 skipped（V3.2）。 */
+export async function archiveTask(taskId: string): Promise<TaskItem> {
+  const client = await getHttpClient()
+  const { data } = await client.patch<TaskItem>(`/api/v1/tasks/${taskId}`, {
+    status: 'skipped',
+  })
+  return data
+}
+
 export async function deleteTask(taskId: string): Promise<void> {
   const client = await getHttpClient()
   await client.delete(`/api/v1/tasks/${taskId}`)

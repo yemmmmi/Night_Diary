@@ -5,6 +5,7 @@ import type { ChatMessage } from '@/shared/api/conversation'
 import { chatCopy } from '@/shared/copy/chat'
 import type { RenderSegment } from '@/shared/composables/useStreamingReply'
 import PlanProposalCard from './PlanProposalCard.vue'
+import PlanModifyCard from './PlanModifyCard.vue'
 import ClarificationCard from './ClarificationCard.vue'
 
 const props = defineProps<{
@@ -37,6 +38,10 @@ const hasSegments = computed(
           v-else-if="seg.kind === 'protocol_block' && seg.blockType === 'plan_proposal'"
           :proposal="seg.data as any"
           :conversation-id="conversationId"
+        />
+        <PlanModifyCard
+          v-else-if="seg.kind === 'protocol_block' && seg.blockType === 'plan_modify'"
+          :proposal="seg.data as any"
         />
         <ClarificationCard
           v-else-if="

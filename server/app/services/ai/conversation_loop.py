@@ -281,6 +281,37 @@ def _set_plan_context(session: Any, context: str) -> None:
     _plan_exploration_contexts[conv_id] = context
 
 
+def _current_plans_text(db: Session, user_id: str) -> str:
+    """Serialize the user's active plans + pending tasks as read-only text.
+
+    Fed to PlannerAgent so it can propose modifications (adjust/archive/clean)
+    against plans that actually exist — without ever granting write access to the
+    agent. Best-effort: returns empty string on any failure so a degraded
+    look-up never breaks the reply flow.
+    """
+    try:
+        from app.services import plan_service
+
+        plans = plan_service.list_plans(db, user_id=user_id, status="active")
+        if not plans:
+            return ""
+        today_titles = {t.title for t in plan_service.get_today_tasks(db, user_id=user_id)}
+        lines = []
+        for p in plans[:10]:
+            pending = [t for t in p.tasks if t.status == "pending"]
+            line = f"- 计划[{p.id[:8]}]：《{p.title}》"
+            if pending:
+                task_desc = "、".join(t.title for t in pending[:5])
+                line += f"（未完成任务：{task_desc}）"
+            elif p.title in today_titles:
+                line += "（今天有待办）"
+            lines.append(line)
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning("current_plans_text failed (non-fatal): %s", exc)
+        return ""
+
+
 def _run_planner_sync(planner: Any, inp: Any) -> None:
     """Bridge async ``PlannerAgent.run`` into the synchronous legacy loop.
 
@@ -432,6 +463,7 @@ def run_conversation_loop(
                 trace_id="",  # legacy loop has no trace_id (streaming only)
                 user_id=user_id,
                 conversation_id=conversation_id,
+                current_plans_text=_current_plans_text(db, user_id),
             )
             try:
                 _run_planner_sync(planner, planner_inp)
@@ -721,6 +753,7 @@ async def run_conversation_loop_streaming(
             trace_id=trace_id,
             user_id=user_id,
             conversation_id=conversation_id,
+            current_plans_text=_current_plans_text(db, user_id),
         )
         await planner.run(planner_inp)
         _set_plan_context(session, f"{prior_context}\n{content}".strip())

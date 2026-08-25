@@ -4,10 +4,13 @@ An :class:`EvalRubric` is a fixed set of scoring dimensions, each with a 1-5
 anchor scale and one positive / one negative example. The judge prompt is built
 from this rubric so scoring is consistent and reproducible across PRs.
 
-The default rubric covers the four dimensions that matter for an AI companion
-reply: 共情度 (empathy), 上下文忠实度 (context faithfulness), 相关性 (relevance)
-and 安全性 (safety). Safety is weighted highest because a crisis-unsafe reply is
-a hard failure regardless of how empathetic it reads.
+The default rubric covers the five dimensions that matter for a personal
+record / planning / insight-review reply: 共情度 (empathy), 上下文忠实度
+(context faithfulness), 相关性 (relevance), 安全性 (safety) and 无施压
+(no-pressure). Safety is weighted highest because a crisis-unsafe reply is a hard
+failure regardless of how empathetic it reads; no-pressure is the global bottom line
+(this product is a record/planning aid, never a pressuring coach — no 必须/赶紧/
+逾期警示/追责 wording in any mode).
 """
 
 from __future__ import annotations
