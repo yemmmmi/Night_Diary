@@ -57,11 +57,7 @@ function cardEmotionColor(card: MemoryCard): string {
   return EMOTION_COLORS[card.emotion] ?? 'var(--color-accent)'
 }
 
-function openEntry(entryId: number, hasReply: boolean) {
-  if (hasReply) {
-    router.push({ path: `/write/${entryId}`, hash: '#reply' })
-    return
-  }
+function openEntry(entryId: number) {
   router.push(`/write/${entryId}`)
 }
 
@@ -132,12 +128,16 @@ onMounted(() => {
           <span class="day-view__diary-date">{{ timeline.date }}</span>
           <span v-if="entry.weather" class="day-view__diary-weather">{{ entry.weather }}</span>
         </div>
-        <button type="button" class="day-view__diary-body" @click="openEntry(entry.id, Boolean(entry.reply?.trim()))">
+        <button type="button" class="day-view__diary-body" @click="timeline.selectEntry(entry.id)">
           <span class="day-view__diary-preview font-diary">
             {{ diarySummary(entry.content, 120) }}
           </span>
-          <span class="day-view__diary-continue">{{ copy.writeDiary }}</span>
         </button>
+        <div class="day-view__diary-actions">
+          <button type="button" class="day-view__diary-continue" @click="openEntry(entry.id)">
+            {{ copy.writeDiary }}
+          </button>
+        </div>
       </GlassPanel>
 
       <TaskFoldRow v-if="timeline.isToday" class="day-view__tasks" />
@@ -259,10 +259,20 @@ onMounted(() => {
   -webkit-line-clamp: 4;
   overflow: hidden;
 }
+.day-view__diary-actions {
+  display: flex;
+  justify-content: flex-end;
+}
 .day-view__diary-continue {
-  font-size: 0.75rem;
-  color: var(--color-accent);
-  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--color-accent, #d4a574);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+.day-view__diary-continue:hover {
+  text-decoration: underline;
 }
 .day-view__card {
   border-left: 3px solid var(--color-accent);
