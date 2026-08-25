@@ -2,7 +2,6 @@
 import type { DiaryEntry } from '@/shared/api/diary'
 import type { MemoryCard } from '@/shared/api/card'
 import EmotionChips from '@/features/card/EmotionChips.vue'
-import { homeSceneCopy as copy } from '@/shared/copy/homeScene'
 import { cardCopy } from '@/shared/copy/card'
 import {
   diaryStatus,
@@ -108,7 +107,7 @@ function onDiaryClick(entry: DiaryEntry) {
           </template>
         </button>
 
-        <p v-if="items.length === 0" class="day-drawer__empty">{{ copy.emptyDesc }}</p>
+        <p v-if="items.length === 0" class="day-drawer__empty">夜记会认真听你说，并在你需要的时候给你回信</p>
       </div>
     </aside>
   </div>

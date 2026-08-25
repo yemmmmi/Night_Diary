@@ -5,9 +5,8 @@ import { useRoute, useRouter } from 'vue-router'
 defineProps<{ frameless?: boolean }>()
 import {
   PhNotebook,
-  PhCalendarCheck,
+  PhMapTrifold,
   PhBrain,
-  PhClockCounterClockwise,
   PhChatsCircle,
   PhCpu,
   PhGear,
@@ -27,12 +26,11 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { key: 'diary', label: '\u65e5\u8bb0', icon: PhNotebook, routeName: 'home' },
-  { key: 'weekly', label: '\u5468\u8bb0', icon: PhCalendarCheck, routeName: 'weekly' },
-  { key: 'memory', label: '\u8bb0\u5fc6\u5e93', icon: PhBrain, routeName: 'memory' },
-  { key: 'review', label: '\u56de\u987e', icon: PhClockCounterClockwise, routeName: 'review' },
-  { key: 'chat', label: '\u4f1a\u8bdd', icon: PhChatsCircle, routeName: 'chat' },
-  { key: 'models', label: '\u6a21\u578b', icon: PhCpu, routeName: 'models' },
+  { key: 'diary', label: '日记', icon: PhNotebook, routeName: 'home' },
+  { key: 'plan', label: '计划', icon: PhMapTrifold, routeName: 'plan' },
+  { key: 'memory', label: '记忆库', icon: PhBrain, routeName: 'memory' },
+  { key: 'chat', label: '会话', icon: PhChatsCircle, routeName: 'chat' },
+  { key: 'models', label: '模型', icon: PhCpu, routeName: 'models' },
 ]
 
 const activeKey = computed(() => {

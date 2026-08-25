@@ -56,7 +56,7 @@ function goToCards() {
 }
 
 function goToDiary(diaryId: string) {
-  router.push({ name: 'review-detail', params: { diaryId } })
+  router.push(`/write/${diaryId}`)
 }
 
 function onAskDelete(entryId: string) {

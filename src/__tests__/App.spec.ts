@@ -4,7 +4,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
 import App from '../App.vue'
-import HomeScene from '../pages/HomeScene.vue'
+import TimelineScene from '../pages/TimelineScene.vue'
 
 vi.mock('@/shared/api/diary', () => ({
   listDiaryEntries: vi.fn().mockResolvedValue([{ id: 1 }]),
@@ -49,8 +49,8 @@ describe('App', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', component: HomeScene },
-        { path: '/settings', component: HomeScene },
+        { path: '/', name: 'home', component: TimelineScene },
+        { path: '/settings', name: 'settings', component: TimelineScene },
       ],
     })
     const wrapper = mount(App, {
@@ -58,7 +58,6 @@ describe('App', () => {
     })
     await router.isReady()
     await flushPromises()
-    expect(wrapper.text()).toContain('写日记')
-    expect(wrapper.text()).toContain('夜记')
+    expect(wrapper.text()).toContain('记一笔')
   })
 })

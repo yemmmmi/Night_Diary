@@ -37,22 +37,14 @@ function dismissError() {
 
 const subtleParticles = computed(() => route.path.startsWith('/write'))
 
-const tabRouteNames = new Set([
-  'home',
-  'weekly',
-  'memory',
-  'review',
-  'review-detail',
-  'chat',
-  'models',
-])
+const tabRouteNames = new Set(['home', 'plan', 'memory', 'chat', 'models'])
 
 const isTabRoute = computed(() => {
   const name = route.name as string | null
   return name != null && tabRouteNames.has(name)
 })
 
-const tabViewNames = ['HomeScene', 'WeeklyScene', 'MemoryScene', 'ReviewScene', 'ChatScene', 'ModelsScene']
+const tabViewNames = ['TimelineScene', 'PlanScene', 'MemoryScene', 'ChatScene', 'ModelsScene']
 
 const statusBanner = computed(() => {
   if (error.value) return null

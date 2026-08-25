@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory, type RouteMeta } from 'vue-router'
+import { createRouter, createWebHashHistory, type RouteMeta, type RouteRecordRaw } from 'vue-router'
 
 import { listDiaryEntries } from '@/shared/api/diary'
 import { waitForCoreReady } from '@/shared/composables/useBackend'
@@ -17,98 +17,99 @@ declare module 'vue-router' {
 // 确保 RouteMeta 类型增强被引用，避免被 tree-shake 移除
 export type AppRouteMeta = RouteMeta
 
+export const appRoutes: RouteRecordRaw[] = [
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/pages/LoginScene.vue'),
+    meta: { public: true, skipOnboarding: true },
+  },
+  {
+    path: '/',
+    name: 'home',
+    component: () => import('@/pages/TimelineScene.vue'),
+  },
+  {
+    path: '/write',
+    name: 'write-new',
+    component: () => import('@/pages/DiaryScene.vue'),
+  },
+  {
+    path: '/write/:id',
+    name: 'write-edit',
+    component: () => import('@/pages/DiaryScene.vue'),
+  },
+  {
+    path: '/onboarding',
+    name: 'onboarding',
+    component: () => import('@/pages/OnboardingScene.vue'),
+    meta: { skipOnboarding: true },
+  },
+  {
+    path: '/settings',
+    name: 'settings',
+    component: SettingsScene,
+    meta: { skipOnboarding: true },
+  },
+  {
+    path: '/settings/llm',
+    redirect: { name: 'models' },
+  },
+  {
+    path: '/settings/backup',
+    redirect: { path: '/settings', hash: '#backup' },
+  },
+  {
+    path: '/analysis/:diaryId',
+    name: 'analysis',
+    component: () => import('@/pages/AnalysisScene.vue'),
+  },
+  {
+    path: '/weekly',
+    name: 'weekly',
+    component: () => import('@/pages/WeeklyScene.vue'),
+  },
+  {
+    path: '/memory',
+    name: 'memory',
+    component: () => import('@/pages/MemoryScene.vue'),
+  },
+  {
+    path: '/chat',
+    name: 'chat',
+    component: () => import('@/pages/ChatScene.vue'),
+  },
+  {
+    path: '/plan',
+    name: 'plan',
+    component: () => import('@/features/plan/PlanScene.vue'),
+  },
+  {
+    path: '/models',
+    name: 'models',
+    component: () => import('@/pages/ModelsScene.vue'),
+    meta: { skipOnboarding: true },
+  },
+  {
+    path: '/review',
+    name: 'review',
+    component: () => import('@/pages/ReviewScene.vue'),
+  },
+  {
+    path: '/review/:diaryId',
+    redirect: (to) => ({ path: `/write/${to.params.diaryId}` }),
+  },
+  {
+    path: '/dev',
+    name: 'dev',
+    component: () => import('@/pages/DevScene.vue'),
+    meta: { skipOnboarding: true },
+  },
+]
+
 const router = createRouter({
   history: createWebHashHistory(),
-  routes: [
-    {
-      path: '/login',
-      name: 'login',
-      component: () => import('@/pages/LoginScene.vue'),
-      meta: { public: true, skipOnboarding: true },
-    },
-    {
-      path: '/',
-      name: 'home',
-      component: () => import('@/pages/HomeScene.vue'),
-    },
-    {
-      path: '/write',
-      name: 'write-new',
-      component: () => import('@/pages/DiaryScene.vue'),
-    },
-    {
-      path: '/write/:id',
-      name: 'write-edit',
-      component: () => import('@/pages/DiaryScene.vue'),
-    },
-    {
-      path: '/onboarding',
-      name: 'onboarding',
-      component: () => import('@/pages/OnboardingScene.vue'),
-      meta: { skipOnboarding: true },
-    },
-    {
-      path: '/settings',
-      name: 'settings',
-      component: SettingsScene,
-      meta: { skipOnboarding: true },
-    },
-    {
-      path: '/settings/llm',
-      redirect: { name: 'models' },
-    },
-    {
-      path: '/settings/backup',
-      redirect: { path: '/settings', hash: '#backup' },
-    },
-    {
-      path: '/analysis/:diaryId',
-      name: 'analysis',
-      component: () => import('@/pages/AnalysisScene.vue'),
-    },
-    {
-      path: '/weekly',
-      name: 'weekly',
-      component: () => import('@/pages/WeeklyScene.vue'),
-    },
-    {
-      path: '/memory',
-      name: 'memory',
-      component: () => import('@/pages/MemoryScene.vue'),
-    },
-    {
-      path: '/chat',
-      name: 'chat',
-      component: () => import('@/pages/ChatScene.vue'),
-    },
-    {
-      path: '/plan',
-      name: 'plan',
-      component: () => import('@/features/plan/PlanScene.vue'),
-    },
-    {
-      path: '/models',
-      name: 'models',
-      component: () => import('@/pages/ModelsScene.vue'),
-      meta: { skipOnboarding: true },
-    },
-    {
-      path: '/review',
-      name: 'review',
-      component: () => import('@/pages/ReviewScene.vue'),
-    },
-    {
-      path: '/review/:diaryId',
-      name: 'review-detail',
-      component: () => import('@/pages/ReviewScene.vue'),
-    },
-    {
-      path: '/dev',
-      name: 'dev',
-      component: () => import('@/pages/DevScene.vue'),
-      meta: { skipOnboarding: true },
-    },
-  ],
+  routes: appRoutes,
 })
 
 router.beforeEach(async (to) => {
