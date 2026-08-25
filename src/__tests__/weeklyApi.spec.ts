@@ -2,7 +2,8 @@ import axios from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
-import { deleteWeekly, generateWeekly, getLatestWeekly, listWeekly } from '@/shared/api/weekly'
+import { getMoodTrends } from '@/shared/api/card'
+import { generateWeekly, listWeekly } from '@/shared/api/weekly'
 import { resetHttpClient } from '@/shared/api/http'
 
 vi.mock('axios', () => {
@@ -26,6 +27,24 @@ const sampleReport = {
   token_cost: 800,
   execution_tier: 'medium',
   created_at: '2026-06-14T20:00:00',
+  plan_executions: [],
+  week_tasks: [],
+}
+
+const structuredReport = {
+  ...sampleReport,
+  plan_executions: [
+    {
+      plan_id: 'p1',
+      title: '早睡挑战',
+      done: 1,
+      total: 2,
+      source_refs: [{ type: 'diary', id: 1, date: '2026-08-24', snippet: '最近总是熬夜' }],
+    },
+  ],
+  week_tasks: [
+    { task_id: 't1', title: '周末散步', status: 'done', source: 'agent', due_date: null },
+  ],
 }
 
 describe('weekly API', () => {
@@ -57,20 +76,22 @@ describe('weekly API', () => {
     expect(result).toHaveLength(1)
   })
 
-  it('fetches the latest weekly report', async () => {
+  it('passes date range to mood trends', async () => {
     vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post, delete: del }) as never)
-    get.mockResolvedValue({ data: sampleReport })
+    get.mockResolvedValue({ data: [] })
 
-    const result = await getLatestWeekly()
-    expect(get).toHaveBeenCalledWith('/api/v1/weekly/latest')
-    expect(result.id).toBe(1)
+    await getMoodTrends({ date_from: '2026-08-24', date_to: '2026-08-30' })
+    expect(get).toHaveBeenCalledWith('/api/v1/cards/stats/mood-trends', {
+      params: { date_from: '2026-08-24', date_to: '2026-08-30' },
+    })
   })
 
-  it('deletes a weekly report', async () => {
+  it('returns structured plan execution fields on reports', async () => {
     vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post, delete: del }) as never)
-    del.mockResolvedValue({ data: undefined })
+    get.mockResolvedValue({ data: [structuredReport] })
 
-    await deleteWeekly(1)
-    expect(del).toHaveBeenCalledWith('/api/v1/weekly/1')
+    const result = await listWeekly({ limit: 52 })
+    expect(result[0].plan_executions[0].title).toBe('早睡挑战')
+    expect(result[0].week_tasks[0].status).toBe('done')
   })
 })

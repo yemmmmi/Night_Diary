@@ -83,10 +83,16 @@ export interface MoodTrendPoint {
   card_count: number
 }
 
-export async function getMoodTrends(days: number = 30): Promise<MoodTrendPoint[]> {
+export interface MoodTrendParams {
+  days?: number
+  date_from?: string
+  date_to?: string
+}
+
+export async function getMoodTrends(params: MoodTrendParams = {}): Promise<MoodTrendPoint[]> {
   const client = await getHttpClient()
   const { data } = await client.get<MoodTrendPoint[]>('/api/v1/cards/stats/mood-trends', {
-    params: { days },
+    params,
   })
   return data
 }

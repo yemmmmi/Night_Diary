@@ -20,6 +20,9 @@ vi.mock('@/shared/api/card', () => ({
   listCards: vi.fn(async () => []),
   getMoodTrends: vi.fn(async () => []),
 }))
+vi.mock('@/shared/api/plan', () => ({
+  listTasks: vi.fn(async () => []),
+}))
 
 import { useTimelineStore } from '@/stores/timeline'
 import { listDiaryEntries as mockedList } from '@/shared/api/diary'
@@ -87,5 +90,34 @@ describe('timeline store', () => {
     expect(store.selectedEntry?.id).toBe(1)
     store.selectEntry(null)
     expect(store.selectedEntry).toBeNull()
+  })
+
+  it('week view also loads tasks and mood trend', async () => {
+    const { listTasks } = await import('@/shared/api/plan')
+    const { getMoodTrends } = await import('@/shared/api/card')
+    vi.mocked(listTasks).mockResolvedValue([
+      {
+        id: 't1',
+        plan_id: null,
+        title: '散步',
+        note: null,
+        due_date: '2026-08-26',
+        status: 'done',
+        source: 'manual',
+        completed_at: null,
+      },
+    ] as never)
+    vi.mocked(getMoodTrends).mockResolvedValue([
+      { date: '2026-08-25', avg_mood: 0.6, card_count: 1 },
+    ])
+
+    const store = useTimelineStore()
+    await store.setDate('2026-08-25')
+    await store.setView('week')
+
+    expect(listTasks).toHaveBeenCalledWith({ date_from: '2026-08-24', date_to: '2026-08-30' })
+    expect(getMoodTrends).toHaveBeenCalledWith({ date_from: '2026-08-24', date_to: '2026-08-30' })
+    expect(store.tasks).toHaveLength(1)
+    expect(store.moodTrend).toHaveLength(1)
   })
 })
