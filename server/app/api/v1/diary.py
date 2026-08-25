@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import datetime
+from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
 
@@ -20,8 +21,8 @@ def list_entries(
     user: CurrentUserDep,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    date_from: datetime.date | None = Query(default=None),
-    date_to: datetime.date | None = Query(default=None),
+    date_from: Annotated[date | None, Query()] = None,
+    date_to: Annotated[date | None, Query()] = None,
 ) -> list[DiaryResponse]:
     rows = diary_service.list_entries(
         db,

@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, date, datetime, time, timedelta
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -143,9 +143,9 @@ def _plans_in_week(
     return {"active_plans": active_plans, "week_tasks": week_tasks}
 
 
-def _plan_executions_snapshot(plans_data: PlansInWeek) -> list[dict]:
+def _plan_executions_snapshot(plans_data: PlansInWeek) -> list[dict[str, Any]]:
     """Structured plan execution summary for the weekly response."""
-    items: list[dict] = []
+    items: list[dict[str, Any]] = []
     for plan in plans_data.get("active_plans", []):
         done = sum(1 for t in plan.tasks if t.status == "done")
         items.append(
@@ -160,9 +160,9 @@ def _plan_executions_snapshot(plans_data: PlansInWeek) -> list[dict]:
     return items
 
 
-def _week_tasks_snapshot(plans_data: PlansInWeek) -> list[dict]:
+def _week_tasks_snapshot(plans_data: PlansInWeek) -> list[dict[str, Any]]:
     """Standalone (plan_id=None) task snapshots; plan tasks are aggregated above."""
-    items: list[dict] = []
+    items: list[dict[str, Any]] = []
     for task in plans_data.get("week_tasks", []):
         if task.plan_id is None:
             items.append(

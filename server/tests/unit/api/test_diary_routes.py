@@ -85,7 +85,7 @@ def test_list_entries_filters_by_date_range(authed_client: TestClient) -> None:
 
 
 def test_list_entries_excludes_future_dated_entries_before_date_to(authed_client: TestClient) -> None:
-    """无日期日记默认落在今天；早于今天的历史上界应排除它（与运行日期无关）."""
+    """无日期日记默认落在今天。早于今天的历史上界应排除它。"""
     authed_client.post("/api/v1/diary/entries", json={"content": "无日期日记"})
 
     listing = authed_client.get(
