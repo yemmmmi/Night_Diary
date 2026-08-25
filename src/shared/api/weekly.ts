@@ -1,5 +1,23 @@
 import { getHttpClient } from '@/shared/api/http'
 
+import type { SourceRef } from './plan'
+
+export interface PlanExecutionSummary {
+  plan_id: string
+  title: string
+  done: number
+  total: number
+  source_refs: SourceRef[]
+}
+
+export interface WeekTaskItem {
+  task_id: string
+  title: string
+  status: 'pending' | 'done' | 'skipped'
+  source: 'manual' | 'agent'
+  due_date: string | null
+}
+
 export interface WeeklyReport {
   id: number
   period_start: string
@@ -11,6 +29,8 @@ export interface WeeklyReport {
   token_cost: number | null
   execution_tier: string | null
   created_at: string
+  plan_executions: PlanExecutionSummary[]
+  week_tasks: WeekTaskItem[]
 }
 
 export async function generateWeekly(): Promise<WeeklyReport> {
