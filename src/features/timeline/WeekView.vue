@@ -5,6 +5,8 @@ import { PhCaretLeft, PhCaretRight } from '@phosphor-icons/vue'
 
 import DayDetailDrawer from '@/features/home/DayDetailDrawer.vue'
 import EmotionChips from '@/features/card/EmotionChips.vue'
+import WeekMoodChart from '@/features/timeline/WeekMoodChart.vue'
+import WeeklyLetterCard from '@/features/timeline/WeeklyLetterCard.vue'
 import { timelineCopy as copy } from '@/shared/copy/timeline'
 import { cardCopy } from '@/shared/copy/card'
 import { useTimelineStore } from '@/stores/timeline'
@@ -61,6 +63,20 @@ function cardEmotionColor(card: MemoryCard): string {
 const weekLabel = computed(() =>
   formatWeekRangeLabel(timeline.weekStart, timeline.weekEnd),
 )
+
+const weekStats = computed(() => {
+  const cards = cardStore.cards.filter((c) => {
+    const d = c.created_at.slice(0, 10)
+    return d >= timeline.weekStartIso && d <= timeline.weekEndIso
+  })
+  const done = timeline.tasks.filter((t) => t.status === 'done').length
+  return {
+    diary: timeline.entries.length,
+    card: cards.length,
+    taskDone: done,
+    taskTotal: timeline.tasks.length,
+  }
+})
 
 const weekColumns = computed(() => {
   const { dayColumns } = groupEntriesForWeek(
@@ -183,6 +199,13 @@ function createForDate(isoDate: string | null) {
       </button>
     </div>
 
+    <div class="week-view__overview">
+      <WeekMoodChart :points="timeline.moodTrend" />
+      <p class="week-view__stats">
+        {{ copy.weekOverview(weekStats.diary, weekStats.card, weekStats.taskDone, weekStats.taskTotal) }}
+      </p>
+    </div>
+
     <div class="week-view__kanban" :class="{ 'is-loading': timeline.loading }">
       <div
         v-for="column in weekColumns"
@@ -264,6 +287,8 @@ function createForDate(isoDate: string | null) {
       </div>
     </div>
 
+    <WeeklyLetterCard :week-start-iso="timeline.weekStartIso" />
+
     <Teleport to="body">
       <DayDetailDrawer
         v-if="dayDrawer"
@@ -307,6 +332,18 @@ function createForDate(isoDate: string | null) {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-text-primary);
+}
+.week-view__overview {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+}
+.week-view__stats {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 .week-view__kanban.is-loading {
   opacity: 0.65;

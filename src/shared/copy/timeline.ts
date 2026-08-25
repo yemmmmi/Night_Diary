@@ -23,4 +23,6 @@ export const timelineCopy = {
   planSectionTitle: '这一周的计划',
   fromDiary: (date?: string) => (date ? `来自 ${date} 的日记` : '来自日记'),
   aiSuggested: 'AI 建议',
+  weekOverview: (diary: number, card: number, done: number, total: number) =>
+    `${diary} 篇日记 · ${card} 张卡片 · 任务 ${done}/${total}`,
 } as const
