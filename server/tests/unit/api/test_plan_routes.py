@@ -255,3 +255,21 @@ def test_user_isolation(api_client: TestClient) -> None:
     # Bob 直接请求 Alice 的 plan id -> 404 (越权视为不存在)。
     direct = api_client.get(f"/api/v1/plans/{plan_id}", headers=bob_headers)
     assert direct.status_code == 404
+
+
+def test_list_tasks_filters_by_due_date_range(authed_client: TestClient) -> None:
+    authed_client.post("/api/v1/tasks", json={"title": "周内任务", "due_date": "2026-08-26"})
+    authed_client.post("/api/v1/tasks", json={"title": "下周任务", "due_date": "2026-09-02"})
+    authed_client.post("/api/v1/tasks", json={"title": "无期限任务"})
+
+    listing = authed_client.get(
+        "/api/v1/tasks",
+        params={"date_from": "2026-08-25", "date_to": "2026-08-31"},
+    )
+    assert listing.status_code == 200
+    titles = [t["title"] for t in listing.json()]
+    assert titles == ["周内任务"]
+
+    open_ended = authed_client.get("/api/v1/tasks", params={"date_to": "2026-08-25"})
+    assert open_ended.status_code == 200
+    assert [t["title"] for t in open_ended.json()] == []

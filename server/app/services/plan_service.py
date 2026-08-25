@@ -129,12 +129,18 @@ def list_tasks(
     user_id: str,
     plan_id: str | None = None,
     status: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> list[TaskRow]:
     stmt = select(TaskRow).where(TaskRow.user_id == user_id)
     if plan_id:
         stmt = stmt.where(TaskRow.plan_id == plan_id)
     if status:
         stmt = stmt.where(TaskRow.status == status)
+    if date_from is not None:
+        stmt = stmt.where(TaskRow.due_date >= date_from)
+    if date_to is not None:
+        stmt = stmt.where(TaskRow.due_date <= date_to)
     stmt = stmt.order_by(TaskRow.created_at.desc())
     return list(db.scalars(stmt))
 
