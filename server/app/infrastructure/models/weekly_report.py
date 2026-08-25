@@ -32,6 +32,8 @@ class WeeklyReportRow(Base):
     token_cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
     execution_tier: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    plan_executions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    week_tasks_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def __repr__(self) -> str:
         return (
