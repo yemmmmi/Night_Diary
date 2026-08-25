@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import pytest
 
+from app.api.mappers import weekly_to_response
 from app.services import card_service, diary_service, plan_service, weekly_service
 from app.services.ai.router import ExecutionPlanner
 from app.shared.errors import (
@@ -193,3 +195,65 @@ def test_build_weekly_content_without_plans_skips_section() -> None:
         start, end, [], [], plans_data={"active_plans": [], "week_tasks": []}
     )
     assert "【本周计划执行】" not in content
+
+
+# ── PR-1: structured plan-execution snapshot ─────────────────────────
+
+
+def test_create_weekly_report_persists_plan_struct(db_session) -> None:
+    """生成周报时把计划执行快照写入结构化 JSON 列，并能被 mapper 还原."""
+    plan = plan_service.create_plan(
+        db_session,
+        user_id="default",
+        title="早睡挑战",
+        source_refs=[{"type": "diary", "id": 1, "date": "2026-08-24", "snippet": "最近总是熬夜"}],
+    )
+    plan_service.create_task(db_session, user_id="default", plan_id=plan.id, title="11点前睡")
+    plan_service.create_task(db_session, user_id="default", plan_id=None, title="周末散步")
+    _seed_week(db_session)
+
+    row = weekly_service.create_weekly_report(
+        db_session, user_id="default", planner=_planner()
+    )
+
+    execs = json.loads(row.plan_executions_json)
+    assert len(execs) == 1
+    assert execs[0]["plan_id"] == plan.id
+    assert execs[0]["title"] == "早睡挑战"
+    assert execs[0]["total"] == 1
+    assert execs[0]["done"] == 0
+    assert execs[0]["source_refs"][0]["type"] == "diary"
+
+    tasks = json.loads(row.week_tasks_json)
+    assert [t["title"] for t in tasks] == ["周末散步"]
+    assert tasks[0]["status"] == "pending"
+    assert tasks[0]["source"] == "manual"
+
+    response = weekly_to_response(row)
+    assert response.plan_executions[0].title == "早睡挑战"
+    assert response.plan_executions[0].source_refs[0].date == "2026-08-24"
+    assert response.week_tasks[0].task_id == tasks[0]["task_id"]
+
+
+def test_weekly_to_response_defaults_for_legacy_rows(db_session) -> None:
+    """旧周报行（JSON 列为 NULL）映射后结构化字段为空数组而非报错."""
+    from datetime import UTC, datetime
+
+    from app.infrastructure.models.weekly_report import WeeklyReportRow
+
+    row = WeeklyReportRow(
+        user_id="default",
+        period_start=date(2026, 8, 17),
+        period_end=date(2026, 8, 23),
+        content="旧周报",
+        diary_count=1,
+        card_count=0,
+        created_at=datetime.now(UTC),
+    )
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+
+    response = weekly_to_response(row)
+    assert response.plan_executions == []
+    assert response.week_tasks == []

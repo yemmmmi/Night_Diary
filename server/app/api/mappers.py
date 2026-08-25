@@ -97,7 +97,20 @@ def card_to_response(row: Any) -> dict[str, Any]:
 
 
 def weekly_to_response(row: WeeklyReportRow) -> WeeklyReportResponse:
-    return WeeklyReportResponse.model_validate(row)
+    return WeeklyReportResponse(
+        id=row.id,
+        period_start=row.period_start,
+        period_end=row.period_end,
+        content=row.content,
+        diary_count=row.diary_count,
+        card_count=row.card_count,
+        avg_mood=row.avg_mood,
+        token_cost=row.token_cost,
+        execution_tier=row.execution_tier,
+        created_at=row.created_at,
+        plan_executions=json.loads(row.plan_executions_json or "[]"),
+        week_tasks=json.loads(row.week_tasks_json or "[]"),
+    )
 
 
 def conversation_to_response(row: ConversationRow) -> ConversationResponse:

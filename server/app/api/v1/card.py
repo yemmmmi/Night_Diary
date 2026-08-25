@@ -8,9 +8,10 @@ the business logic, including Card->Episodic and Card->Diary flows.
 from __future__ import annotations
 
 import contextlib
-from typing import Any
+from datetime import date
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.api.deps import ContainerDep, CurrentUserDep, DbDep
 from app.api.mappers import card_to_response
@@ -191,8 +192,22 @@ def mood_trends(
     db: DbDep,
     user: CurrentUserDep,
     days: int = Query(30, ge=7, le=365),
+    date_from: Annotated[date | None, Query()] = None,
+    date_to: Annotated[date | None, Query()] = None,
 ) -> list[dict[str, Any]]:
-    return card_service.get_mood_trends(db, user_id=str(user.id), days=days)
+    """按天聚合心情均值。date_from 与 date_to 需成对出现。成对时优先于 days。"""
+    if (date_from is None) != (date_to is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="date_from and date_to must be provided together",
+        )
+    return card_service.get_mood_trends(
+        db,
+        user_id=str(user.id),
+        days=days,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 # -- Guided prompt ----------------------------------------------------------

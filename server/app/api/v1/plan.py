@@ -9,6 +9,8 @@ links back to the originating conversation for audit).
 from __future__ import annotations
 
 import json
+from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
@@ -141,9 +143,16 @@ def list_tasks(
     user: CurrentUserDep,
     plan_id: str | None = Query(default=None),
     task_status: str | None = Query(default=None, alias="status"),
+    date_from: Annotated[date | None, Query()] = None,
+    date_to: Annotated[date | None, Query()] = None,
 ) -> list[TaskResponse]:
     tasks = plan_service.list_tasks(
-        db, user_id=str(user.id), plan_id=plan_id, status=task_status
+        db,
+        user_id=str(user.id),
+        plan_id=plan_id,
+        status=task_status,
+        date_from=date_from,
+        date_to=date_to,
     )
     return [_task_to_response(t) for t in tasks]
 

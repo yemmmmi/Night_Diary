@@ -62,3 +62,34 @@ def test_get_missing_diary_returns_app_error_shape(authed_client: TestClient) ->
     response = authed_client.get("/api/v1/diary/entries/9999")
     assert response.status_code == 404
     assert "detail" in response.json()
+
+
+def test_list_entries_filters_by_date_range(authed_client: TestClient) -> None:
+    authed_client.post("/api/v1/diary/entries", json={"content": "周一的日记", "date": "2026-08-24"})
+    authed_client.post("/api/v1/diary/entries", json={"content": "周二的日记", "date": "2026-08-25"})
+    authed_client.post("/api/v1/diary/entries", json={"content": "九月的一天", "date": "2026-09-01"})
+
+    both = authed_client.get(
+        "/api/v1/diary/entries",
+        params={"date_from": "2026-08-24", "date_to": "2026-08-25"},
+    )
+    assert both.status_code == 200
+    dates = sorted(e["date"] for e in both.json())
+    assert dates == ["2026-08-24", "2026-08-25"]
+
+    from_only = authed_client.get(
+        "/api/v1/diary/entries", params={"date_from": "2026-08-26"}
+    )
+    assert from_only.status_code == 200
+    assert [e["date"] for e in from_only.json()] == ["2026-09-01"]
+
+
+def test_list_entries_excludes_future_dated_entries_before_date_to(authed_client: TestClient) -> None:
+    """无日期日记默认落在今天。早于今天的历史上界应排除它。"""
+    authed_client.post("/api/v1/diary/entries", json={"content": "无日期日记"})
+
+    listing = authed_client.get(
+        "/api/v1/diary/entries", params={"date_to": "2020-12-31"}
+    )
+    assert listing.status_code == 200
+    assert listing.json() == []

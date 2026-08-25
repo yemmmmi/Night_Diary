@@ -12,9 +12,10 @@ Two flows mirror ``analysis_service``:
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, date, datetime, time, timedelta
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -140,6 +141,40 @@ def _plans_in_week(
             week_tasks.append(t)
 
     return {"active_plans": active_plans, "week_tasks": week_tasks}
+
+
+def _plan_executions_snapshot(plans_data: PlansInWeek) -> list[dict[str, Any]]:
+    """Structured plan execution summary for the weekly response."""
+    items: list[dict[str, Any]] = []
+    for plan in plans_data.get("active_plans", []):
+        done = sum(1 for t in plan.tasks if t.status == "done")
+        items.append(
+            {
+                "plan_id": plan.id,
+                "title": plan.title,
+                "done": done,
+                "total": len(plan.tasks),
+                "source_refs": json.loads(plan.source_refs_json or "[]"),
+            }
+        )
+    return items
+
+
+def _week_tasks_snapshot(plans_data: PlansInWeek) -> list[dict[str, Any]]:
+    """Standalone (plan_id=None) task snapshots; plan tasks are aggregated above."""
+    items: list[dict[str, Any]] = []
+    for task in plans_data.get("week_tasks", []):
+        if task.plan_id is None:
+            items.append(
+                {
+                    "task_id": task.id,
+                    "title": task.title,
+                    "status": task.status,
+                    "source": task.source,
+                    "due_date": task.due_date.isoformat() if task.due_date else None,
+                }
+            )
+    return items
 
 
 def _build_weekly_content(
@@ -288,6 +323,12 @@ def create_weekly_report(
         token_cost=result.token_cost,
         execution_tier=result.execution_tier,
         created_at=datetime.now(UTC),
+        plan_executions_json=json.dumps(
+            _plan_executions_snapshot(plans_data), ensure_ascii=False
+        ),
+        week_tasks_json=json.dumps(
+            _week_tasks_snapshot(plans_data), ensure_ascii=False
+        ),
     )
     db.add(row)
     db.commit()

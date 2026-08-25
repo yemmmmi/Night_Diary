@@ -13,7 +13,7 @@ import contextlib
 import json
 import logging
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import desc
@@ -505,15 +505,26 @@ def get_mood_trends(
     *,
     user_id: str,
     days: int = 30,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> list[dict[str, Any]]:
     """Get daily average mood scores for trend chart.
 
     Returns a list of {date, avg_mood, card_count} sorted by date ascending.
+    When ``date_from``/``date_to`` are both given, the window is fixed to that
+    inclusive range (overrides ``days``); otherwise the window is the last
+    ``days`` days ending today.
     """
-    from sqlalchemy import func, text
+    from sqlalchemy import func
 
-    cutoff = datetime.now(UTC).date()
-    start = cutoff - timedelta(days=days - 1)
+    if date_from is not None and date_to is not None:
+        start, end = date_from, date_to
+    else:
+        end = datetime.now(UTC).date()
+        start = end - timedelta(days=days - 1)
+
+    start_dt = datetime.combine(start, time.min)
+    end_dt = datetime.combine(end, time.max)
 
     rows = (
         db.query(
@@ -522,12 +533,12 @@ def get_mood_trends(
             func.count(MemoryCardRow.card_id).label("card_count"),
         )
         .filter(MemoryCardRow.user_id == user_id)
-        .filter(MemoryCardRow.created_at >= text(f"'{start.isoformat()}'"))
+        .filter(MemoryCardRow.created_at >= start_dt)
+        .filter(MemoryCardRow.created_at <= end_dt)
         .group_by(func.date(MemoryCardRow.created_at))
         .order_by(func.date(MemoryCardRow.created_at).asc())
         .all()
     )
-
     return [
         {
             "date": str(row.day),

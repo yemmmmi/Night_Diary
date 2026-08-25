@@ -217,6 +217,35 @@ class CardExpandRequest(BaseModel):
 # ── Weekly Report ──────────────────────────────────────────────────────
 
 
+class SourceRef(BaseModel):
+    """A citation backing a plan's motivation (diary/memory/episodic)."""
+
+    type: str = Field(description="diary | episodic | memory")
+    id: str | int
+    date: str | None = None
+    snippet: str | None = None
+
+
+class PlanExecutionSummary(BaseModel):
+    """Snapshot of one plan's execution within a weekly report period."""
+
+    plan_id: str
+    title: str
+    done: int
+    total: int
+    source_refs: list[SourceRef] = Field(default_factory=list)
+
+
+class WeekTaskItem(BaseModel):
+    """Snapshot of one standalone task with in-week activity."""
+
+    task_id: str
+    title: str
+    status: str  # pending | done | skipped
+    source: str  # manual | agent
+    due_date: datetime.date | None = None
+
+
 class WeeklyReportResponse(BaseModel):
     id: int
     period_start: datetime.date
@@ -228,6 +257,8 @@ class WeeklyReportResponse(BaseModel):
     token_cost: int | None
     execution_tier: str | None
     created_at: datetime.datetime
+    plan_executions: list[PlanExecutionSummary] = Field(default_factory=list)
+    week_tasks: list[WeekTaskItem] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -348,15 +379,6 @@ class SendMessageResponse(BaseModel):
 
 
 # ── Plan / Task (V3 P2) ──────────────────────────────────────────────
-
-
-class SourceRef(BaseModel):
-    """A citation backing a plan's motivation (diary/memory/episodic)."""
-
-    type: str = Field(description="diary | episodic | memory")
-    id: str | int
-    date: str | None = None
-    snippet: str | None = None
 
 
 class TaskCreateRequest(BaseModel):
