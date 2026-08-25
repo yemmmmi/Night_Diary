@@ -60,7 +60,14 @@ export const memoryCopy = {
   // Cards section
   cardsTitle: '记忆卡片',
   cardsDesc: '卡片是最轻量的记忆原子，保存后会沉淀进上面的情节记忆。',
-  goToCards: '管理记忆卡片',
+  cardsSearchPlaceholder: '搜索记忆卡片……',
+  cardsSearch: '搜索',
+  cardsSearching: '搜索中……',
+  cardsSearchEmpty: '没有找到匹配的记忆卡片',
+  cardsEmpty: '还没有记忆卡片',
+  cardsEmptyHint: '在日记页点击「记一笔」创建你的第一张卡片',
+  cardsExpandToDiary: '展开为日记',
+  cardsDelete: '删除',
 
   loadError: '加载记忆库失败',
 } as const
