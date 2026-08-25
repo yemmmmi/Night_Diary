@@ -14,4 +14,17 @@ describe('legacy route redirects', () => {
     expect(router.currentRoute.value.name).toBe('write-edit')
     expect(router.currentRoute.value.params.id).toBe('123')
   })
+
+  it('redirects /review to the memory scene', async () => {
+    const router = buildRouter()
+    await router.push('/review')
+    expect(router.currentRoute.value.name).toBe('memory')
+  })
+
+  it('redirects /weekly to the timeline week view', async () => {
+    const router = buildRouter()
+    await router.push('/weekly')
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(router.currentRoute.value.query.view).toBe('week')
+  })
 })
