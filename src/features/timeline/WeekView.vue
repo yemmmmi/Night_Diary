@@ -130,12 +130,8 @@ const weekColumns = computed(() => {
   return days as WeekColumn[]
 })
 
-function openEntry(entry: DiaryEntry, scrollToReply = false) {
-  if (scrollToReply && entry.reply?.trim()) {
-    router.push({ path: `/write/${entry.id}`, hash: '#reply' })
-    return
-  }
-  router.push(`/write/${entry.id}`)
+function openEntry(entry: DiaryEntry) {
+  timeline.selectEntry(entry.id)
 }
 
 function openCard(card: MemoryCard) {
@@ -166,9 +162,9 @@ function closeDayDrawer() {
   dayDrawer.value = null
 }
 
-function onDrawerOpenDiary(entry: DiaryEntry, scrollToReply?: boolean) {
+function onDrawerOpenDiary(entry: DiaryEntry) {
   closeDayDrawer()
-  openEntry(entry, scrollToReply)
+  openEntry(entry)
 }
 
 function onDrawerOpenCard(card: MemoryCard) {
@@ -230,7 +226,7 @@ function createForDate(isoDate: string | null) {
             type="button"
             class="kanban-card"
             :class="{ 'kanban-card--replied': diaryStatus(item.entry) === 'reply' }"
-            @click="openEntry(item.entry, diaryStatus(item.entry) === 'reply')"
+            @click="openEntry(item.entry)"
           >
             <span class="kanban-card__summary">{{
               diarySummary(item.entry.content, 28, item.linkedCard?.event_summary)

@@ -7,6 +7,8 @@ defineOptions({ name: 'TimelineScene' })
 
 import DayView from '@/features/timeline/DayView.vue'
 import WeekView from '@/features/timeline/WeekView.vue'
+import MonthView from '@/features/timeline/MonthView.vue'
+import DetailPanel from '@/features/timeline/DetailPanel.vue'
 import MemoryCardInput from '@/features/card/MemoryCardInput.vue'
 import EmotionChips from '@/features/card/EmotionChips.vue'
 import GameButton from '@/shared/components/GameButton.vue'
@@ -15,7 +17,14 @@ import { cardCopy } from '@/shared/copy/card'
 import { useTimelineStore } from '@/stores/timeline'
 import { useCardStore } from '@/stores/card'
 import { buildTimelineQuery, parseTimelineQuery } from '@/shared/utils/timelineQuery'
+import type { TimelineView } from '@/shared/utils/timelineQuery'
 import { toIsoDate } from '@/shared/utils/diaryFormat'
+
+const viewLabels: Record<TimelineView, string> = {
+  day: copy.viewDay,
+  week: copy.viewWeek,
+  month: copy.viewMonth,
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -64,7 +73,7 @@ onActivated(() => {
     <header class="timeline-scene__header">
       <div class="timeline-scene__switcher" role="tablist">
         <button
-          v-for="v in (['day', 'week'] as const)"
+          v-for="v in (['day', 'week', 'month'] as const)"
           :key="v"
           type="button"
           role="tab"
@@ -73,7 +82,7 @@ onActivated(() => {
           :aria-selected="timeline.view === v"
           @click="timeline.setView(v)"
         >
-          {{ v === 'day' ? copy.viewDay : copy.viewWeek }}
+          {{ viewLabels[v] }}
         </button>
       </div>
       <div class="timeline-scene__actions">
@@ -92,8 +101,16 @@ onActivated(() => {
       <GameButton variant="ghost" @click="timeline.load()">{{ copy.retry }}</GameButton>
     </div>
 
-    <DayView v-if="timeline.view === 'day'" />
-    <WeekView v-else-if="timeline.view === 'week'" />
+    <div class="timeline-scene__layout" :class="{ 'has-detail': timeline.selectedEntry }">
+      <div class="timeline-scene__main">
+        <DayView v-if="timeline.view === 'day'" />
+        <WeekView v-else-if="timeline.view === 'week'" />
+        <MonthView v-else />
+      </div>
+      <aside v-if="timeline.selectedEntry" class="timeline-scene__detail">
+        <DetailPanel />
+      </aside>
+    </div>
 
     <Teleport to="body">
       <Transition name="card-drawer">
@@ -204,6 +221,37 @@ onActivated(() => {
   background: color-mix(in srgb, var(--color-danger) 8%, var(--color-bg-elevated));
   font-size: 0.8125rem;
   color: var(--color-danger);
+}
+.timeline-scene__layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.timeline-scene__detail {
+  min-width: 0;
+}
+@media (min-width: 64rem) {
+  .timeline-scene__layout.has-detail {
+    grid-template-columns: 1fr min(20rem, 34%);
+  }
+  .timeline-scene__detail {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+  }
+}
+@media (max-width: 63.99rem) {
+  .timeline-scene__detail {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    overflow-y: auto;
+    padding: 4.5rem 1rem 1.5rem;
+    background: color-mix(in srgb, var(--color-bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+  }
 }
 </style>
 

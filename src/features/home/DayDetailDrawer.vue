@@ -17,7 +17,7 @@ defineProps<{
 
 const emit = defineEmits<{
   close: []
-  openDiary: [entry: DiaryEntry, scrollToReply?: boolean]
+  openDiary: [entry: DiaryEntry]
   openCard: [card: MemoryCard]
 }>()
 
@@ -41,11 +41,6 @@ function statusClass(status: ReturnType<typeof diaryStatus>) {
 function cardEmotionColor(card: MemoryCard): string {
   return EMOTION_COLORS[card.emotion] ?? 'var(--color-accent)'
 }
-
-function onDiaryClick(entry: DiaryEntry) {
-  const scrollToReply = Boolean(entry.reply?.trim())
-  emit('openDiary', entry, scrollToReply)
-}
 </script>
 
 <template>
@@ -64,7 +59,7 @@ function onDiaryClick(entry: DiaryEntry) {
           class="day-drawer__item"
           :class="{ 'day-drawer__item--card': item.kind === 'card' }"
           :style="item.kind === 'card' ? { borderLeftColor: cardEmotionColor(item.card) } : undefined"
-          @click="item.kind === 'diary' ? onDiaryClick(item.entry) : emit('openCard', item.card)"
+          @click="item.kind === 'diary' ? emit('openDiary', item.entry) : emit('openCard', item.card)"
         >
           <template v-if="item.kind === 'diary'">
             <span class="day-drawer__summary">{{
