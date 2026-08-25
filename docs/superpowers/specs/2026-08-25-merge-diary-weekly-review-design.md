@@ -196,7 +196,7 @@ class WeeklyReportResponse(BaseModel):
 | `GET /api/v1/diary/entries` | 新增可选 `date_from`、`date_to` 查询参数 | 周/月视图按范围拉取，替代全量分页拉取后前端过滤 |
 | `GET /api/v1/weekly` 及 latest | 响应新增 `plan_executions`、`week_tasks` 可选字段 | 见 5.5；生成侧 `weekly_service` 填充 |
 | `GET /api/v1/plans` + `GET /api/v1/tasks` | 周视图任务来源；若现有接口不支持日期过滤，实现时选择加参数或前端过滤 | 择一，倾向加 `date_from/date_to` 保持一致性 |
-| `GET /api/v1/cards/stats/mood-trends` | 无变化 | 周视图心情曲线数据源 |
+| `GET /api/v1/cards/stats/mood-trends` | 新增可选 `date_from`、`date_to` 查询参数（与现有 `days` 互斥，同时传以日期区间为准） | 现接口仅支持 `days` 相对范围（默认 30），翻看历史周时无法取对的时间窗；周视图按周区间取数 |
 | `POST/PATCH /api/v1/tasks/:id` | 无变化 | 周信/时间轴/计划三处勾选共用 |
 
 ## 9. 错误处理与空态
@@ -224,6 +224,7 @@ class WeeklyReportResponse(BaseModel):
 ### 后端（pytest）
 
 - `entries` 接口 `date_from/date_to` 边界（含/不含端点、跨月）
+- `mood-trends` 接口 `date_from/date_to` 与 `days` 的互斥优先级、区间聚合正确性
 - `weekly` 响应结构化字段填充正确性（有计划/无计划/混合）
 - 旧数据兼容：无 `plan_executions` 时响应字段为空数组而非报错
 
