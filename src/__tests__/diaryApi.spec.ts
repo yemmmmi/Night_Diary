@@ -45,6 +45,16 @@ describe('diary API', () => {
     expect(entries[0].content).toBe('测试日记')
   })
 
+  it('passes date range params through', async () => {
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post }) as never)
+    get.mockResolvedValue({ data: [] })
+
+    await listDiaryEntries({ date_from: '2026-08-24', date_to: '2026-08-30' })
+    expect(get).toHaveBeenCalledWith('/api/v1/diary/entries', {
+      params: { date_from: '2026-08-24', date_to: '2026-08-30' },
+    })
+  })
+
   it('creates a diary entry', async () => {
     vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post }) as never)
     post.mockResolvedValue({

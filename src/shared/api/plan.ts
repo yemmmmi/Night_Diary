@@ -54,6 +54,19 @@ export async function getTodayTasks(): Promise<TaskItem[]> {
   return data
 }
 
+export interface ListTasksParams {
+  plan_id?: string
+  status?: string
+  date_from?: string
+  date_to?: string
+}
+
+export async function listTasks(params: ListTasksParams = {}): Promise<TaskItem[]> {
+  const client = await getHttpClient()
+  const { data } = await client.get<TaskItem[]>('/api/v1/tasks', { params })
+  return data
+}
+
 export async function updateTaskStatus(
   taskId: string,
   status: 'pending' | 'done' | 'skipped',

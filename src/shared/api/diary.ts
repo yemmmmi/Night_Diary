@@ -24,6 +24,8 @@ export interface DiaryUpdatePayload {
 export interface ListDiaryParams {
   skip?: number
   limit?: number
+  date_from?: string
+  date_to?: string
 }
 
 export async function listDiaryEntries(params: ListDiaryParams = {}): Promise<DiaryEntry[]> {
