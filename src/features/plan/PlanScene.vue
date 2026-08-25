@@ -1,17 +1,18 @@
 <template>
   <div class="plan-scene">
-    <h2>我的计划</h2>
+    <h2>{{ planCopy.title }}</h2>
 
     <section class="today-section">
-      <h3>今日待办</h3>
+      <h3>{{ planCopy.todayTitle }}</h3>
       <div v-if="planStore.todayTasks.length === 0" class="empty">
-        今天没有待办，享受当下吧
+        {{ planCopy.todayEmpty }}
       </div>
       <div v-else>
         <div
           v-for="task in planStore.todayTasks"
           :key="task.id"
           class="task-row"
+          :class="{ 'is-overdue': isOverdue(task.due_date, task.status) }"
         >
           <input
             type="checkbox"
@@ -26,18 +27,19 @@
     </section>
 
     <section class="plans-section">
-      <h3>计划</h3>
+      <h3>{{ planCopy.plansTitle }}</h3>
       <div v-if="planStore.plans.length === 0" class="empty">
-        还没有计划，可以在对话中让 AI 帮你规划
+        {{ planCopy.plansEmpty }}
       </div>
       <div v-else class="plan-list">
         <div v-for="plan in planStore.plans" :key="plan.id" class="plan-card">
           <div class="plan-header">
             <span class="plan-title">{{ plan.title }}</span>
-            <span v-if="plan.source === 'agent'" class="badge-agent">AI 建议</span>
-            <button class="btn-del" @click="planStore.removePlan(plan.id)">删除</button>
+            <span v-if="plan.source === 'agent'" class="badge-agent">{{ planCopy.aiBadge }}</span>
+            <button class="btn-del" @click="planStore.removePlan(plan.id)">{{ planCopy.delete }}</button>
           </div>
           <p v-if="plan.motivation" class="plan-motivation">{{ plan.motivation }}</p>
+          <PlanRefsBlock :refs="plan.source_refs" />
           <div class="plan-progress">
             {{ plan.tasks.filter((t) => t.status === 'done').length }}/{{
               plan.tasks.length
@@ -60,12 +62,22 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+
+import PlanRefsBlock from '@/features/plan/PlanRefsBlock.vue'
+import { planCopy } from '@/shared/copy/plan'
 import { usePlanStore } from '@/stores/plan'
+import { toIsoDate } from '@/shared/utils/diaryFormat'
 
 defineOptions({ name: 'PlanScene' })
 
 const planStore = usePlanStore()
+
+const todayIso = computed(() => toIsoDate(new Date()))
+
+function isOverdue(dueDate: string | null, status: string): boolean {
+  return Boolean(dueDate) && dueDate! < todayIso.value && status !== 'done'
+}
 
 onMounted(() => {
   planStore.loadPlans()
@@ -104,6 +116,14 @@ h3 {
   padding: 8px 0;
   border-bottom: 1px solid var(--color-border, #f4f4f5);
   font-size: 14px;
+}
+
+.task-row.is-overdue {
+  opacity: 0.65;
+}
+
+.task-row.is-overdue .due {
+  color: var(--color-text-secondary, #a1a1aa);
 }
 
 .done {
