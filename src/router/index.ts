@@ -66,8 +66,7 @@ export const appRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/weekly',
-    name: 'weekly',
-    component: () => import('@/pages/WeeklyScene.vue'),
+    redirect: { path: '/', query: { view: 'week' } },
   },
   {
     path: '/memory',

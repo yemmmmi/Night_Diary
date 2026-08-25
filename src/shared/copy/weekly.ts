@@ -1,25 +1,13 @@
-/** Centralized copy for the weekly report ("周记") scene. */
+/** Centralized copy for the weekly report ("周记") letter card. */
 
 export const weeklyCopy = {
-  title: '周记',
-  back: '返回',
-  subtitle: '夜记会回顾你这一周的日记与记忆卡片，写一封周回信',
   generate: '生成本周周记',
   generating: '正在回顾这一周……',
   regenerate: '重新生成本周',
-  delete: '删除',
-  empty: '还没有周记',
   emptyHint: '这一周记录了日记或记忆卡片后，就能生成一封周回信',
   letterTitle: '本周的信',
   expand: '展开全文',
   collapse: '收起',
-  historyTitle: '历史周记',
   diaryCount: (n: number) => `${n} 篇日记`,
   cardCount: (n: number) => `${n} 张卡片`,
-  loadError: '加载周记失败',
-  generateError: '生成周记失败',
-  deleteConfirm: '确定删除这篇周记吗？',
-  deleteConfirmDesc: '删除后可重新生成，日记与卡片不受影响',
-  cancel: '取消',
-  confirmDelete: '确认删除',
 } as const

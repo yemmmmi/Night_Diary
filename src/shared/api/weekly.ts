@@ -52,14 +52,3 @@ export async function listWeekly(params: { skip?: number; limit?: number } = {})
   const { data } = await client.get<WeeklyReport[]>('/api/v1/weekly', { params })
   return data
 }
-
-export async function getLatestWeekly(): Promise<WeeklyReport> {
-  const client = await getHttpClient()
-  const { data } = await client.get<WeeklyReport>('/api/v1/weekly/latest')
-  return data
-}
-
-export async function deleteWeekly(reportId: number): Promise<void> {
-  const client = await getHttpClient()
-  await client.delete(`/api/v1/weekly/${reportId}`)
-}

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
 import { getMoodTrends } from '@/shared/api/card'
-import { deleteWeekly, generateWeekly, getLatestWeekly, listWeekly } from '@/shared/api/weekly'
+import { generateWeekly, listWeekly } from '@/shared/api/weekly'
 import { resetHttpClient } from '@/shared/api/http'
 
 vi.mock('axios', () => {
@@ -27,6 +27,8 @@ const sampleReport = {
   token_cost: 800,
   execution_tier: 'medium',
   created_at: '2026-06-14T20:00:00',
+  plan_executions: [],
+  week_tasks: [],
 }
 
 const structuredReport = {
@@ -72,23 +74,6 @@ describe('weekly API', () => {
     const result = await listWeekly({ limit: 52 })
     expect(get).toHaveBeenCalledWith('/api/v1/weekly', { params: { limit: 52 } })
     expect(result).toHaveLength(1)
-  })
-
-  it('fetches the latest weekly report', async () => {
-    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post, delete: del }) as never)
-    get.mockResolvedValue({ data: sampleReport })
-
-    const result = await getLatestWeekly()
-    expect(get).toHaveBeenCalledWith('/api/v1/weekly/latest')
-    expect(result.id).toBe(1)
-  })
-
-  it('deletes a weekly report', async () => {
-    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get, post, delete: del }) as never)
-    del.mockResolvedValue({ data: undefined })
-
-    await deleteWeekly(1)
-    expect(del).toHaveBeenCalledWith('/api/v1/weekly/1')
   })
 
   it('passes date range to mood trends', async () => {
