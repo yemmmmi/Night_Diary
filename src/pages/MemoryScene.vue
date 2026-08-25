@@ -5,13 +5,12 @@ import {
   PhBrain,
   PhStack,
   PhCards,
-  PhArrowRight,
   PhSparkle,
-  PhNotePencil,
   PhChartLineUp,
 } from '@phosphor-icons/vue'
 
 import GlassPanel from '@/shared/components/GlassPanel.vue'
+import CardsSection from '@/features/memory/CardsSection.vue'
 import EpisodicEntryCard from '@/features/memory/EpisodicEntryCard.vue'
 import MoodTrendChart from '@/features/memory/MoodTrendChart.vue'
 import { memoryCopy as copy } from '@/shared/copy/memory'
@@ -49,10 +48,6 @@ function formatTime(ts: number): string {
 
 function entrySourceLabel(entry: EpisodicEntry): string {
   return entry.source === 'card' ? copy.sourceCard : copy.sourceDiary
-}
-
-function goToCards() {
-  router.push({ path: '/review', query: { mode: 'cards' } })
 }
 
 function goToDiary(diaryId: string) {
@@ -235,20 +230,14 @@ onActivated(() => {
       </div>
     </section>
 
-    <!-- ── Cards management entry ───────────────────────────────── -->
+    <!-- ── Cards management ─────────────────────────────────────── -->
     <section class="memory-scene__section">
       <h2 class="memory-scene__section-title">
         <PhCards :size="16" weight="duotone" />
         {{ copy.cardsTitle }}
       </h2>
       <p class="memory-scene__section-desc">{{ copy.cardsDesc }}</p>
-      <GlassPanel class="memory-cards-link" @click="goToCards">
-        <div class="memory-cards-link__body">
-          <PhNotePencil :size="22" weight="duotone" />
-          <span>{{ copy.goToCards }}</span>
-        </div>
-        <PhArrowRight :size="18" />
-      </GlassPanel>
+      <CardsSection />
     </section>
   </main>
 
@@ -532,27 +521,5 @@ onActivated(() => {
   color: var(--color-text-secondary);
   max-width: 24rem;
   margin: 0 auto;
-}
-
-/* ── Cards link ─────────────────────────────────────────────── */
-.memory-cards-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  transition: border-color var(--motion-duration, 220ms) var(--motion-ease, ease);
-}
-
-.memory-cards-link:hover {
-  border-color: var(--color-accent);
-}
-
-.memory-cards-link__body {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
 }
 </style>

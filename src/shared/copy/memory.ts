@@ -60,7 +60,6 @@ export const memoryCopy = {
   // Cards section
   cardsTitle: '记忆卡片',
   cardsDesc: '卡片是最轻量的记忆原子，保存后会沉淀进上面的情节记忆。',
-  goToCards: '管理记忆卡片',
   cardsSearchPlaceholder: '搜索记忆卡片……',
   cardsSearch: '搜索',
   cardsSearching: '搜索中……',
