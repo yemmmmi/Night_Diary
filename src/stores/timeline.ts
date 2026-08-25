@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
+import { getMoodTrends, type MoodTrendPoint } from '@/shared/api/card'
 import { listDiaryEntries, type DiaryEntry } from '@/shared/api/diary'
+import { listTasks, type TaskItem } from '@/shared/api/plan'
 import { formatApiError } from '@/shared/utils/apiError'
 import {
   endOfWeekSunday,
@@ -19,6 +21,8 @@ export const useTimelineStore = defineStore('timeline', () => {
   const error = ref<string | null>(null)
 
   const entries = ref<DiaryEntry[]>([])
+  const tasks = ref<TaskItem[]>([])
+  const moodTrend = ref<MoodTrendPoint[]>([])
   const selectedEntryId = ref<number | null>(null)
 
   // ── Getters ───────────────────────────────────────────────────
@@ -51,7 +55,20 @@ export const useTimelineStore = defineStore('timeline', () => {
     error.value = null
     const { from, to } = range.value
     try {
-      entries.value = await listDiaryEntries({ date_from: from, date_to: to, limit: 100 })
+      if (view.value === 'week') {
+        const [entryRows, taskRows, trendRows] = await Promise.all([
+          listDiaryEntries({ date_from: from, date_to: to, limit: 100 }),
+          listTasks({ date_from: from, date_to: to }),
+          getMoodTrends({ date_from: from, date_to: to }).catch(() => []),
+        ])
+        entries.value = entryRows
+        tasks.value = taskRows
+        moodTrend.value = trendRows
+      } else {
+        entries.value = await listDiaryEntries({ date_from: from, date_to: to, limit: 100 })
+        tasks.value = []
+        moodTrend.value = []
+      }
     } catch (err) {
       error.value = formatApiError(err, '加载日记失败')
     } finally {
@@ -99,6 +116,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     loading,
     error,
     entries,
+    tasks,
+    moodTrend,
     selectedEntryId,
     todayIso,
     isToday,
