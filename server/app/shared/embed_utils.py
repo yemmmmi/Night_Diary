@@ -1,7 +1,8 @@
 """Embedding utilities for episodic memory vectorization (V3 P4).
 
-Provides ``Embedder`` base class + :class:`BgeEmbedder` (production,
-``bge-small-zh-v1.5``) + :class:`StubEmbedder` (deterministic, for unit tests).
+Provides ``Embedder`` base class + :class:`BgeEmbedder` (local,
+``bge-small-zh-v1.5``) + :class:`ApiEmbedder` (cloud, OpenAI-compatible
+endpoint) + :class:`StubEmbedder` (deterministic, for unit tests).
 
 Design notes
 ------------
@@ -69,6 +70,35 @@ class BgeEmbedder(Embedder):
         vec = self._model.encode([text], normalize_embeddings=True)
         result: list[float] = vec[0].tolist()
         return result
+
+
+class ApiEmbedder(Embedder):
+    """Cloud-API embedder backed by an OpenAI-compatible ``/embeddings`` endpoint.
+
+    Single-text counterpart of
+    :class:`app.shared.embeddings.OpenAICompatibleEmbeddingFunction`: the
+    container selects it when ``embedding_api_key`` is configured so episodic
+    vector search works without the heavy ``sentence-transformers`` runtime
+    (mirrors the cloud-first rule of ``build_embedding_function``). The client
+    is lazy-constructed on the first ``embed`` call; vectors come back in the
+    API's native scale (not L2-normalized), which is safe because episodic
+    memory scores with cosine similarity.
+    """
+
+    def __init__(self, *, api_key: str, base_url: str, model: str) -> None:
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
+        self._client: Any | None = None
+
+    def embed(self, text: str) -> list[float]:
+        if self._client is None:
+            from openai import OpenAI
+
+            self._client = OpenAI(api_key=self._api_key, base_url=self._base_url)
+        resp = self._client.embeddings.create(model=self._model, input=[text])
+        vector: list[float] = resp.data[0].embedding
+        return vector
 
 
 class StubEmbedder(Embedder):

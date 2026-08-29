@@ -230,19 +230,28 @@ class ServiceContainer:
             logger.info("AI stack ready (RAG + memory + agents)")
 
     def _build_embedder(self) -> Embedder:
-        """Lazy-build :class:`BgeEmbedder` as a process-wide singleton.
+        """Build the episodic-memory embedder as a process-wide singleton.
 
-        The embedding model (~100 MB download + resident memory) is expensive
-        to load, so a single instance is cached on the container and shared by
-        every :class:`EpisodicMemory`. Construction itself is cheap — the
-        ``sentence-transformers`` model loads lazily on the first ``embed``
-        call (see :class:`app.shared.embed_utils.BgeEmbedder`), so building
-        eagerly during container init never triggers a network download.
+        Cloud-first, mirroring :func:`app.shared.embeddings.build_embedding_function`:
+        when ``embedding_api_key`` is configured, episodic vector search calls the
+        same OpenAI-compatible ``/embeddings`` endpoint instead of a local model
+        (no ``sentence-transformers`` runtime needed). Without a key it falls
+        back to the local :class:`BgeEmbedder` (requires the ``[eval]`` extra;
+        the model loads lazily on the first ``embed`` call).
         """
         if self._embedder is None:
-            from app.shared.embed_utils import BgeEmbedder
+            if self.settings.embedding_api_key:
+                from app.shared.embed_utils import ApiEmbedder
 
-            self._embedder = BgeEmbedder()
+                self._embedder = ApiEmbedder(
+                    api_key=self.settings.embedding_api_key,
+                    base_url=self.settings.embedding_base_url,
+                    model=self.settings.embedding_model,
+                )
+            else:
+                from app.shared.embed_utils import BgeEmbedder
+
+                self._embedder = BgeEmbedder()
         return self._embedder
 
     def _get_reranker(self) -> Reranker | None:
@@ -274,7 +283,21 @@ class ServiceContainer:
         falls back to the base ``BAAI/bge-reranker-base`` if the fine-tuned
         directory is absent. Any load failure is caught and logged — the
         retriever still works without reranking (RRF-fused order is returned).
+
+        Returns ``None`` immediately (single info log, no load attempt) when
+        ``sentence-transformers`` is not installed — the ``[eval]`` extra is
+        optional at runtime, and the reranker is a pure local-model feature
+        with no cloud equivalent.
         """
+        import importlib.util
+
+        if importlib.util.find_spec("sentence_transformers") is None:
+            logger.info(
+                "sentence-transformers not installed; cross-encoder reranking "
+                "disabled (install the [eval] extra and model weights to enable)"
+            )
+            return None
+
         fine_tuned = Path(cfg.models_dir) / "reranker-night-diary"
         model_name = str(fine_tuned) if fine_tuned.exists() else "BAAI/bge-reranker-base"
         from app.domain.rag.reranker import Reranker
@@ -306,7 +329,9 @@ class ServiceContainer:
             logger.warning("Embedder warmup failed (non-fatal): %s", exc)
         try:
             reranker = self._get_reranker()
-            if reranker is not None:
+            if reranker is None:
+                logger.info("Reranker unavailable; skipping reranker warmup")
+            else:
                 from app.domain.memory.types import EpisodicEntry
 
                 dummy = EpisodicEntry(
@@ -317,7 +342,7 @@ class ServiceContainer:
                     importance=0.6,
                 )
                 reranker.rerank_episodic("预热", [dummy])
-            logger.info("Reranker warmed up in %.2fs", _t.perf_counter() - t0)
+                logger.info("Reranker warmed up in %.2fs", _t.perf_counter() - t0)
         except Exception as exc:
             logger.warning("Reranker warmup failed (non-fatal): %s", exc)
 
