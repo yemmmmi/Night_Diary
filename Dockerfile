@@ -8,7 +8,7 @@ RUN npm ci
 
 # Copy source and build
 COPY . .
-RUN npm run build
+RUN NODE_OPTIONS=--max-old-space-size=2048 npm run build
 
 # --- Production stage ---
 FROM nginx:alpine

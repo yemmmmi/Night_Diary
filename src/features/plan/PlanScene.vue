@@ -1,13 +1,52 @@
+<script setup lang="ts">
+import { computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+
+import PlanRefsBlock from '@/features/plan/PlanRefsBlock.vue'
+import GameButton from '@/shared/components/GameButton.vue'
+import GlassPanel from '@/shared/components/GlassPanel.vue'
+import { planCopy } from '@/shared/copy/plan'
+import { usePlanStore } from '@/stores/plan'
+import { toIsoDate } from '@/shared/utils/diaryFormat'
+
+defineOptions({ name: 'PlanScene' })
+
+const router = useRouter()
+const planStore = usePlanStore()
+
+const todayIso = computed(() => toIsoDate(new Date()))
+
+function isOverdue(dueDate: string | null, status: string): boolean {
+  return Boolean(dueDate) && dueDate! < todayIso.value && status !== 'done'
+}
+
+function goToChat() {
+  router.push('/chat')
+}
+
+onMounted(() => {
+  planStore.loadPlans()
+  planStore.loadTodayTasks()
+})
+</script>
+
 <template>
   <div class="plan-scene">
-    <h2>{{ planCopy.title }}</h2>
+    <h2 class="plan-scene__title">{{ planCopy.title }}</h2>
 
-    <section class="today-section">
-      <h3>{{ planCopy.todayTitle }}</h3>
-      <div v-if="planStore.todayTasks.length === 0" class="empty">
-        {{ planCopy.todayEmpty }}
-      </div>
-      <div v-else>
+    <section class="plan-scene__section">
+      <h3 class="plan-scene__section-title">{{ planCopy.todayTitle }}</h3>
+      <GlassPanel v-if="planStore.todayTasks.length === 0" class="plan-scene__empty" padding>
+        <div class="plan-scene__empty-icon" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+            <circle cx="20" cy="20" r="16" stroke="currentColor" stroke-width="2" opacity="0.3" />
+            <path d="M14 20l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.5" />
+          </svg>
+        </div>
+        <p class="plan-scene__empty-text">{{ planCopy.todayEmpty }}</p>
+        <GameButton variant="secondary" @click="goToChat">{{ planCopy.todayEmptyCta }}</GameButton>
+      </GlassPanel>
+      <div v-else class="plan-scene__tasks">
         <div
           v-for="task in planStore.todayTasks"
           :key="task.id"
@@ -26,13 +65,26 @@
       </div>
     </section>
 
-    <section class="plans-section">
-      <h3>{{ planCopy.plansTitle }}</h3>
-      <div v-if="planStore.plans.length === 0" class="empty">
-        {{ planCopy.plansEmpty }}
-      </div>
+    <section class="plan-scene__section">
+      <h3 class="plan-scene__section-title">{{ planCopy.plansTitle }}</h3>
+      <GlassPanel v-if="planStore.plans.length === 0" class="plan-scene__empty" padding>
+        <div class="plan-scene__empty-icon" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+            <rect x="8" y="8" width="24" height="24" rx="4" stroke="currentColor" stroke-width="2" opacity="0.3" />
+            <path d="M8 16h24M16 8v24" stroke="currentColor" stroke-width="2" opacity="0.3" />
+            <circle cx="20" cy="22" r="4" stroke="currentColor" stroke-width="2" opacity="0.5" />
+          </svg>
+        </div>
+        <p class="plan-scene__empty-text">{{ planCopy.plansEmpty }}</p>
+        <GameButton variant="primary" @click="goToChat">{{ planCopy.plansEmptyCta }}</GameButton>
+      </GlassPanel>
       <div v-else class="plan-list">
-        <div v-for="plan in planStore.plans" :key="plan.id" class="plan-card">
+        <GlassPanel
+          v-for="plan in planStore.plans"
+          :key="plan.id"
+          class="plan-card"
+          padding
+        >
           <div class="plan-header">
             <span class="plan-title">{{ plan.title }}</span>
             <span v-if="plan.source === 'agent'" class="badge-agent">{{ planCopy.aiBadge }}</span>
@@ -55,67 +107,84 @@
               <span :class="{ done: task.status === 'done' }">{{ task.title }}</span>
             </li>
           </ul>
-        </div>
+        </GlassPanel>
       </div>
     </section>
   </div>
 </template>
 
-<script setup lang="ts">
-import { computed, onMounted } from 'vue'
-
-import PlanRefsBlock from '@/features/plan/PlanRefsBlock.vue'
-import { planCopy } from '@/shared/copy/plan'
-import { usePlanStore } from '@/stores/plan'
-import { toIsoDate } from '@/shared/utils/diaryFormat'
-
-defineOptions({ name: 'PlanScene' })
-
-const planStore = usePlanStore()
-
-const todayIso = computed(() => toIsoDate(new Date()))
-
-function isOverdue(dueDate: string | null, status: string): boolean {
-  return Boolean(dueDate) && dueDate! < todayIso.value && status !== 'done'
-}
-
-onMounted(() => {
-  planStore.loadPlans()
-  planStore.loadTodayTasks()
-})
-</script>
-
 <style scoped>
 .plan-scene {
-  padding: 20px;
-  max-width: 800px;
+  padding: 1.25rem 1rem 1.5rem;
+  max-width: 48rem;
   margin: 0 auto;
   color: var(--color-text-primary);
 }
 
-h2 {
-  margin-bottom: 20px;
+.plan-scene__title {
+  font-family: var(--font-ui);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 1.5rem;
 }
 
-h3 {
-  font-size: 16px;
-  color: var(--color-text-secondary, #52525b);
-  margin: 20px 0 12px;
+.plan-scene__section {
+  margin-bottom: 2rem;
 }
 
-.empty {
-  color: var(--color-text-secondary, #a1a1aa);
-  font-size: 14px;
-  padding: 16px 0;
+.plan-scene__section-title {
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.plan-scene__section-title::before {
+  content: '';
+  width: 3px;
+  height: 1rem;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
+
+.plan-scene__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 2.5rem 1.5rem !important;
+  text-align: center;
+}
+
+.plan-scene__empty-icon {
+  color: var(--color-accent);
+  opacity: 0.6;
+  margin-bottom: 0.25rem;
+}
+
+.plan-scene__empty-text {
+  margin: 0 0 0.875rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
 }
 
 .task-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 0;
+  gap: 0.5rem;
+  padding: 0.625rem 0;
   border-bottom: 1px solid var(--color-border, #f4f4f5);
-  font-size: 14px;
+  font-size: 0.875rem;
+}
+
+.task-row:last-child {
+  border-bottom: none;
 }
 
 .task-row.is-overdue {
@@ -132,7 +201,7 @@ h3 {
 }
 
 .due {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--color-text-secondary, #71717a);
   margin-left: auto;
 }
@@ -142,8 +211,9 @@ h3 {
   border: none;
   color: var(--color-text-secondary, #d4d4d8);
   cursor: pointer;
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 1;
+  padding: 0 0.25rem;
 }
 
 .btn-del:hover {
@@ -151,53 +221,55 @@ h3 {
 }
 
 .plan-card {
-  border: 1px solid var(--color-border, #e4e4e7);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 0.75rem;
 }
 
 .plan-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .plan-title {
   font-weight: 600;
+  font-size: 0.9375rem;
   flex: 1;
 }
 
 .badge-agent {
   background: color-mix(in srgb, var(--color-accent) 15%, transparent);
   color: var(--color-accent);
-  font-size: 11px;
-  padding: 2px 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
   border-radius: 999px;
 }
 
 .plan-motivation {
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--color-text-secondary, #52525b);
-  margin: 8px 0;
+  margin: 0.5rem 0;
+  line-height: 1.6;
 }
 
 .plan-progress {
-  font-size: 12px;
-  color: var(--color-text-secondary, #71717a);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  margin-top: 0.5rem;
 }
 
 .plan-tasks {
   list-style: none;
   padding: 0;
-  margin: 8px 0 0;
+  margin: 0.5rem 0 0;
 }
 
 .plan-tasks li {
-  padding: 4px 0;
+  padding: 0.25rem 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
 }
 </style>

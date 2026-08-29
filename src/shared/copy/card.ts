@@ -2,7 +2,7 @@
 
 export const cardCopy = {
   /** Card input component */
-  newCard: '记一笔',
+  newCard: '记忆卡片',
   quickMode: '极速',
   standardMode: '标准',
   guidedMode: '引导',
