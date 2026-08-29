@@ -41,6 +41,18 @@ export async function createPlan(payload: {
   return data
 }
 
+/** 创建独立任务（plan_id 可选；今日待办的快速添加走这里）。 */
+export async function createTask(payload: {
+  title: string
+  note?: string
+  due_date?: string
+  plan_id?: string
+}): Promise<TaskItem> {
+  const client = await getHttpClient()
+  const { data } = await client.post<TaskItem>('/api/v1/tasks', payload)
+  return data
+}
+
 export async function listPlans(status?: string): Promise<PlanItem[]> {
   const client = await getHttpClient()
   const params = status ? { status } : {}

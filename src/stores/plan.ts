@@ -28,6 +28,36 @@ export const usePlanStore = defineStore('plan', () => {
     }
   }
 
+  async function createPlan(payload: {
+    title: string
+    motivation?: string
+    tasks?: Array<{ title: string; note?: string; due_date?: string }>
+  }) {
+    error.value = null
+    try {
+      await planApi.createPlan({ ...payload, source: 'manual' })
+      await loadPlans()
+      await loadTodayTasks()
+      return true
+    } catch {
+      error.value = '创建计划失败'
+      return false
+    }
+  }
+
+  async function createTodayTask(title: string, dueDate: string | null) {
+    error.value = null
+    try {
+      await planApi.createTask({ title, due_date: dueDate ?? undefined })
+      await loadTodayTasks()
+      await loadPlans()
+      return true
+    } catch {
+      error.value = '创建待办失败'
+      return false
+    }
+  }
+
   async function toggleTask(taskId: string, currentStatus: string) {
     const newStatus = currentStatus === 'done' ? 'pending' : 'done'
     try {
@@ -65,6 +95,8 @@ export const usePlanStore = defineStore('plan', () => {
     error,
     loadPlans,
     loadTodayTasks,
+    createPlan,
+    createTodayTask,
     toggleTask,
     removeTask,
     removePlan,
