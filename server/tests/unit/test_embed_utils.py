@@ -83,3 +83,52 @@ def test_embedder_protocol_interface() -> None:
 
     custom = CustomEmbedder()
     assert custom.embed("test") == [0.0]
+
+
+def test_api_embedder_returns_first_vector_from_api() -> None:
+    """ApiEmbedder.embed 应调用 OpenAI 兼容端点并返回首条向量。"""
+    from unittest.mock import MagicMock, patch
+
+    from app.shared.embed_utils import ApiEmbedder
+
+    fake_client = MagicMock()
+    fake_client.embeddings.create.return_value = MagicMock(
+        data=[MagicMock(embedding=[0.1, 0.2, 0.3])]
+    )
+
+    with patch("openai.OpenAI", return_value=fake_client) as mock_openai:
+        embedder = ApiEmbedder(
+            api_key="sk-test", base_url="https://api.example.com/v1", model="text-embedding-v3"
+        )
+        vec = embedder.embed("失眠")
+
+    assert vec == [0.1, 0.2, 0.3]
+    mock_openai.assert_called_once_with(
+        api_key="sk-test", base_url="https://api.example.com/v1"
+    )
+    fake_client.embeddings.create.assert_called_once_with(
+        model="text-embedding-v3", input=["失眠"]
+    )
+
+
+def test_api_embedder_lazy_loads_client_once() -> None:
+    """ApiEmbedder 不应在 __init__ 时构造客户端,且两次 embed 复用同一客户端。"""
+    from unittest.mock import MagicMock, patch
+
+    from app.shared.embed_utils import ApiEmbedder
+
+    fake_client = MagicMock()
+    fake_client.embeddings.create.return_value = MagicMock(
+        data=[MagicMock(embedding=[0.5])]
+    )
+
+    with patch("openai.OpenAI", return_value=fake_client) as mock_openai:
+        embedder = ApiEmbedder(
+            api_key="sk-test", base_url="https://api.example.com/v1", model="m"
+        )
+        assert embedder._client is None  # 未构造
+        embedder.embed("第一次")
+        embedder.embed("第二次")
+
+    assert mock_openai.call_count == 1
+    assert fake_client.embeddings.create.call_count == 2
