@@ -191,18 +191,23 @@ onActivated(() => {
   color: var(--color-text-secondary);
   font-size: 0.8125rem;
   font-weight: 500;
-  padding: 0.3125rem 0.875rem;
+  padding: 0.3125rem 1rem;
   cursor: pointer;
   transition:
     color var(--motion-duration) var(--motion-ease),
-    background var(--motion-duration) var(--motion-ease);
+    background var(--motion-duration) var(--motion-ease),
+    font-weight var(--motion-duration) var(--motion-ease);
 }
 .timeline-scene__switch:hover {
   color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-bg-elevated-2) 50%, transparent);
 }
 .timeline-scene__switch.is-active {
   color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  background: var(--color-accent);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 .timeline-scene__actions {
   display: flex;

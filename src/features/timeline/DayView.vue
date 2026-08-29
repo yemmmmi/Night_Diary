@@ -112,6 +112,13 @@ onMounted(() => {
     </div>
 
     <section v-if="isEmptyDay" class="day-view__empty">
+      <div class="day-view__empty-icon" aria-hidden="true">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect x="10" y="6" width="28" height="36" rx="4" stroke="currentColor" stroke-width="2" opacity="0.5" />
+          <path d="M16 18h16M16 24h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3" />
+          <path d="M24 32v-6m-3 3h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </div>
       <p class="day-view__empty-title">{{ copy.emptyTitle }}</p>
       <p class="day-view__empty-hint">{{ copy.emptyHint }}</p>
       <GameButton variant="primary" @click="createForDate">{{ copy.emptyCta }}</GameButton>
@@ -213,10 +220,16 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  padding: 3rem 1.5rem;
+  padding: 4rem 1.5rem 3.5rem;
   text-align: center;
   border: 1px dashed var(--color-border);
   border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--color-bg-elevated) 50%, transparent);
+}
+.day-view__empty-icon {
+  color: var(--color-accent);
+  opacity: 0.5;
+  margin-bottom: 0.5rem;
 }
 .day-view__empty-title {
   font-size: 1rem;
@@ -226,7 +239,7 @@ onMounted(() => {
 .day-view__empty-hint {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 .day-view__diary.is-replied {
   border-left: 3px solid color-mix(in srgb, var(--color-success) 60%, var(--color-border));
