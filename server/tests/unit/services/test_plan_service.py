@@ -56,10 +56,10 @@ def test_create_task_standalone(db):
 
 
 def test_get_today_tasks(db):
-    from datetime import date
+    from datetime import date, timedelta
     today = date.today()
     plan_service.create_task(db, user_id="user-1", title="今日到期", due_date=today.isoformat())
-    tomorrow = date.today().replace(day=today.day + 1) if today.day < 28 else today
+    tomorrow = today + timedelta(days=1)
     plan_service.create_task(db, user_id="user-1", title="明日", due_date=tomorrow.isoformat())
     plan_service.create_task(db, user_id="user-1", title="无截止日的 pending")
 
