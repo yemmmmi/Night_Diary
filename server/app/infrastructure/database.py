@@ -128,7 +128,12 @@ def _run_lightweight_migrations(engine: Engine) -> None:
         "llm_call_logs": {"user_id": "VARCHAR(64)"},
         "agent_decisions": {"user_id": "VARCHAR(64)"},
         "tags": {"user_id": "VARCHAR(64)"},
-        "weekly_reports": {"user_id": "VARCHAR(64)"},
+        "analyses": {"intent": "VARCHAR(32)"},
+        "weekly_reports": {
+            "user_id": "VARCHAR(64)",
+            "plan_executions_json": "TEXT",
+            "week_tasks_json": "TEXT",
+        },
         "model_providers": {"user_id": "VARCHAR(64)"},
     }
 
