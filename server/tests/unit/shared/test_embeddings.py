@@ -47,7 +47,14 @@ def test_build_embedding_function_passes_settings_model(
 
     from app.shared.embeddings import build_embedding_function
 
-    ef = build_embedding_function(Settings(embedding_model_name="BAAI/bge-base-zh-v1.5"))
+    # Explicit "" keeps the local-fallback branch under test even when the
+    # developer's .env configures EMBEDDING_API_KEY (Settings loads .env).
+    ef = build_embedding_function(
+        Settings(
+            embedding_api_key="",
+            embedding_model_name="BAAI/bge-base-zh-v1.5",
+        )
+    )
 
     assert ef is not None
     assert recorder["model_name"] == "BAAI/bge-base-zh-v1.5"
@@ -61,7 +68,7 @@ def test_build_embedding_function_uses_default_settings(
 
     from app.shared.embeddings import build_embedding_function
 
-    build_embedding_function()
+    build_embedding_function(Settings(embedding_api_key=""))
 
     assert recorder["model_name"] == "BAAI/bge-small-zh-v1.5"
 

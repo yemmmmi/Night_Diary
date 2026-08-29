@@ -130,6 +130,73 @@ def test_reranker_shared_between_rag_and_episodic(tmp_path) -> None:
         assert mock_build.call_count == 1
 
 
+def test_build_embedder_prefers_api_when_key_configured(tmp_path) -> None:
+    """With embedding_api_key set, _build_embedder must use the cloud API embedder.
+
+    Mirrors build_embedding_function's cloud-first rule: deployments on
+    constrained networks (no sentence-transformers runtime) still get real
+    vector search for episodic memory.
+    """
+    from app.shared.embed_utils import ApiEmbedder
+
+    settings = Settings(
+        data_dir=str(tmp_path / "data"),
+        llm_api_key="sk-test",
+        llm_base_url="https://api.example.com/v1",
+        llm_model="test-model",
+        model_key_secret="test-model-secret-min-16-chars!!",
+        embedding_api_key="sk-embed-test",
+    )
+    container = ServiceContainer.create_core(settings)
+
+    assert isinstance(container._build_embedder(), ApiEmbedder)
+
+
+def test_build_embedder_falls_back_to_local_without_key(tmp_path) -> None:
+    """Without embedding_api_key, _build_embedder keeps the local BgeEmbedder."""
+    from app.shared.embed_utils import BgeEmbedder
+
+    # Explicit "" overrides the repo .env so the test is hermetic.
+    settings = Settings(
+        data_dir=str(tmp_path / "data"),
+        llm_api_key="sk-test",
+        llm_base_url="https://api.example.com/v1",
+        llm_model="test-model",
+        model_key_secret="test-model-secret-min-16-chars!!",
+        embedding_api_key="",
+    )
+    container = ServiceContainer.create_core(settings)
+
+    assert isinstance(container._build_embedder(), BgeEmbedder)
+
+
+def test_build_reranker_skips_when_sentence_transformers_missing(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_build_reranker must return None (no noisy load attempt) without the extra."""
+    import importlib.util
+
+    container = _make_core_container(tmp_path)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+
+    assert container._build_reranker(container.settings) is None
+
+
+def test_build_reranker_constructed_when_extra_present(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_build_reranker still constructs the Reranker when the extra is installed."""
+    import importlib.util
+
+    from app.domain.rag.reranker import Reranker
+
+    container = _make_core_container(tmp_path)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+
+    reranker = container._build_reranker(container.settings)
+    assert isinstance(reranker, Reranker)
+
+
 # ---------------------------------------------------------------------------
 # V3 P6 Task 1: model warmup (eliminate first-request cold start)
 # ---------------------------------------------------------------------------
