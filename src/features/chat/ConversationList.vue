@@ -14,7 +14,7 @@ defineEmits<{
 </script>
 
 <template>
-  <aside class="conv-list">
+  <aside class="conv-list" data-testid="conversation-list">
     <div
       v-for="conv in conversations"
       :key="conv.id"

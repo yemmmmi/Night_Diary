@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   listConversations,
   createConversation,
@@ -31,8 +31,27 @@ export const useChatStore = defineStore('chat', () => {
   // 中调用是安全的：store 在首次访问时初始化，通常处于某个组件的 setup 上下文。
   // streamingReply 提供 replyText / status / citations 给 UI 直接消费。
   const streamingReply = useStreamingReply()
-  // 默认关闭，需要通过设置页 / 环境变量 / localStorage 显式开启。
-  const streamingEnabled = ref(false)
+  // 流式点亮（PR5）：默认开启，回信由 SSE 逐字写进进行中的信。
+  const streamingEnabled = ref(true)
+
+  // 场景层只读视图（pinia 会解包嵌套 ref，这里收敛成稳定的顶层派生态）：
+  const streamingActive = computed(() => streamingReply.status.value === 'streaming')
+  const streamingText = computed(() =>
+    streamingReply.status.value === 'streaming' ? streamingReply.replyText.value : '',
+  )
+
+  // reply_end / retract 落回：流结束后重拉当前会话，把最终回复写回 messages。
+  // （retract 时后端已持久化替换文本，同样以重拉为准。）
+  watch(streamingReply.status, async (status) => {
+    if (status !== 'done' && status !== 'retracted') return
+    const convId = activeConversationId.value
+    if (!convId) return
+    try {
+      messages.value = await getMessages(convId)
+    } catch {
+      // 拉取失败时保留乐观渲染的消息，下次打开会话会重拉
+    }
+  })
 
   async function loadConversations() {
     loading.value = true
@@ -198,6 +217,8 @@ export const useChatStore = defineStore('chat', () => {
     error,
     streamingReply,
     streamingEnabled,
+    streamingActive,
+    streamingText,
     loadConversations,
     openConversation,
     startNewConversation,

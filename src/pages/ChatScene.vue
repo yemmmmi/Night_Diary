@@ -1,21 +1,18 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { chatCopy, type DiaryReferenceItem } from '@/shared/copy/chat'
+import { chatCopy } from '@/shared/copy/chat'
 import { listDiaryEntries, type DiaryEntry } from '@/shared/api/diary'
 import { listCards, type MemoryCard } from '@/shared/api/card'
-import { listEpisodic } from '@/shared/api/memory'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
 import { useDevStore } from '@/stores/dev'
 import { diaryEntrySummary } from '@/shared/utils/diaryFormat'
 import ConversationList from '@/features/chat/ConversationList.vue'
-import ChatMessage from '@/features/chat/ChatMessage.vue'
+import LetterMessage from '@/features/chat/LetterMessage.vue'
 import ChatInput from '@/features/chat/ChatInput.vue'
 import DiaryReferencePicker from '@/features/chat/DiaryReferencePicker.vue'
-import ReferencePanel from '@/features/chat/ReferencePanel.vue'
-import OutputPanel from '@/features/chat/OutputPanel.vue'
-import AITypingIndicator from '@/shared/components/AITypingIndicator.vue'
+import InkGrinding from '@/shared/components/InkGrinding.vue'
 import DevPipelinePanel from '@/features/dev/DevPipelinePanel.vue'
 import ModeBadge from '@/features/mode/ModeBadge.vue'
 
@@ -30,20 +27,12 @@ settings.load()
 const messagesEl = ref<HTMLElement | null>(null)
 const showDeleteConfirm = ref(false)
 const pendingDeleteId = ref<string | null>(null)
-const cardSummary = ref<string | null>(null)
 const cardGenerating = ref(false)
+const cardGenerated = ref(false)
 const diaryCatalog = ref<DiaryEntry[]>([])
 const referenceCards = ref<MemoryCard[]>([])
-const episodicMemories = ref<string[]>([])
 const modeBadge = ref<InstanceType<typeof ModeBadge> | null>(null)
-
-function toReferenceItem(entry: DiaryEntry): DiaryReferenceItem {
-  return {
-    id: entry.id,
-    date: entry.date,
-    summary: diaryEntrySummary(entry, referenceCards.value, 48),
-  }
-}
+const pendingUserText = ref<string | null>(null)
 
 const diaryLabelMap = computed(() => {
   const map: Record<number, string> = {}
@@ -53,41 +42,26 @@ const diaryLabelMap = computed(() => {
   return map
 })
 
-const pinnedDiaries = computed(() =>
-  chatStore.pinnedDiaryIds
-    .map((id) => diaryCatalog.value.find((entry) => entry.id === id))
-    .filter((entry): entry is DiaryEntry => entry != null)
-    .map(toReferenceItem),
-)
-
-const lastAssistantMessage = computed(() =>
-  [...chatStore.messages].reverse().find((msg) => msg.role === 'assistant') ?? null,
-)
-
-const retrievedDiaries = computed(() => {
-  const ids = lastAssistantMessage.value?.retrieved_diary_ids ?? []
-  const pinned = new Set(chatStore.pinnedDiaryIds)
-  return ids
-    .filter((id) => !pinned.has(id))
-    .map((id) => diaryCatalog.value.find((entry) => entry.id === id))
-    .filter((entry): entry is DiaryEntry => entry != null)
-    .map(toReferenceItem)
+const lastAssistantId = computed(() => {
+  for (let i = chatStore.messages.length - 1; i >= 0; i--) {
+    if (chatStore.messages[i].role === 'assistant') return chatStore.messages[i].id
+  }
+  return null
 })
+
+/* 进行中的信：POST 发送期间（sending）与 SSE 书写期间（streamingActive）都算 */
+const writingLetterVisible = computed(
+  () => chatStore.sending || chatStore.streamingActive,
+)
 
 async function loadReferenceData() {
   try {
-    const [diaries, cards, episodic] = await Promise.all([
-      listDiaryEntries({ limit: 50 }),
-      listCards(),
-      listEpisodic(),
-    ])
+    const [diaries, cards] = await Promise.all([listDiaryEntries({ limit: 50 }), listCards()])
     diaryCatalog.value = diaries
     referenceCards.value = cards
-    episodicMemories.value = episodic.slice(0, 3).map((entry) => `[${entry.emotion}] ${entry.event_summary}`)
   } catch {
     diaryCatalog.value = []
     referenceCards.value = []
-    episodicMemories.value = []
   }
 }
 
@@ -162,15 +136,14 @@ async function onSend(text: string) {
 }
 
 async function onGenerateCard() {
+  if (cardGenerating.value) return
   cardGenerating.value = true
   const result = await chatStore.generateCard()
-  if (result) {
-    cardSummary.value = result.event_summary
-  }
   cardGenerating.value = false
+  if (result) {
+    cardGenerated.value = true
+  }
 }
-
-const pendingUserText = ref<string | null>(null)
 
 const messageTimeline = computed(() => {
   const items: Array<
@@ -230,18 +203,29 @@ onActivated(async () => {
   }
 })
 
+/* 流式落笔时信纸持续下坠，保持视口贴底 */
+watch(
+  () => chatStore.streamingText,
+  () => {
+    scrollToBottom()
+  },
+)
+
 watch(
   () => chatStore.activeConversationId,
-  () => { cardSummary.value = null },
+  () => {
+    cardGenerated.value = false
+    cardGenerating.value = false
+  },
 )
 </script>
 
 <template>
-  <div class="chat-scene">
+  <div class="chat-scene" :class="{ 'chat-scene--dev': settings.developerMode }">
     <!-- Left: conversation list -->
     <aside class="chat-scene__sidebar">
-      <button type="button" class="chat-scene__new-btn" @click="onNewConversation">
-        + {{ chatCopy.newConversation }}
+      <button type="button" class="chat-scene__new-link" @click="onNewConversation">
+        {{ chatCopy.newConversation }}
       </button>
       <ConversationList
         :conversations="chatStore.conversations"
@@ -251,71 +235,89 @@ watch(
       />
     </aside>
 
-    <!-- Center: messages + input -->
+    <!-- Center: letter flow + composer -->
     <section class="chat-scene__main">
-      <ModeBadge ref="modeBadge" class="chat-scene__mode" />
+      <div class="chat-scene__bar">
+        <ModeBadge ref="modeBadge" />
+      </div>
+
       <!-- Empty state -->
       <div v-if="!chatStore.activeConversationId" class="chat-scene__empty">
         <p class="chat-scene__empty-title">{{ chatCopy.emptyTitle(settings.nickname) }}</p>
-        <p class="chat-scene__empty-desc">{{ chatCopy.emptyDesc(settings.nickname) }}</p>
-        <button type="button" class="chat-scene__new-btn chat-scene__new-btn--large" @click="onNewConversation">
-          + {{ chatCopy.newConversation }}
+        <p class="chat-scene__empty-desc">{{ chatCopy.emptyDesc() }}</p>
+        <button
+          type="button"
+          class="chat-scene__empty-link"
+          data-testid="new-letter"
+          @click="onNewConversation"
+        >
+          {{ chatCopy.newConversation }}
         </button>
       </div>
 
-      <!-- Messages -->
+      <!-- Letters -->
       <template v-else>
         <div ref="messagesEl" class="chat-scene__messages">
-          <template v-for="item in messageTimeline" :key="item.key">
-            <p v-if="item.kind === 'divider'" class="chat-scene__divider">
-              {{ chatCopy.dateDivider(item.date) }}
-            </p>
-            <ChatMessage
-              v-else
-              :message="item.message"
-              :diary-labels="diaryLabelMap"
-            />
-          </template>
+          <TransitionGroup name="letter" tag="div" class="letter-flow">
+            <template v-for="item in messageTimeline" :key="item.key">
+              <p v-if="item.kind === 'divider'" class="letter-flow__divider">
+                {{ chatCopy.dateDivider(item.date) }}
+              </p>
+              <LetterMessage
+                v-else
+                :message="item.message"
+                :diary-labels="diaryLabelMap"
+                :show-actions="item.message.id === lastAssistantId"
+                :generating="cardGenerating"
+                :generated="cardGenerated"
+                @generate-card="onGenerateCard"
+              />
+            </template>
 
-          <div v-if="chatStore.sending" class="chat-scene__typing">
-            <AITypingIndicator :label="chatCopy.thinkingLabel" />
-          </div>
+            <div
+              v-if="writingLetterVisible"
+              key="letter-streaming"
+              class="writing-letter"
+              data-testid="letter-streaming"
+            >
+              <header class="writing-letter__head">
+                <span class="writing-letter__signature">{{ chatCopy.signatureNight }}</span>
+              </header>
+              <p v-if="chatStore.streamingText" class="writing-letter__body">
+                {{ chatStore.streamingText }}
+              </p>
+              <p class="writing-letter__status">
+                <InkGrinding size="sm" />
+                <span>{{ chatCopy.writingLabel }}</span>
+              </p>
+            </div>
+          </TransitionGroup>
         </div>
 
-        <DiaryReferencePicker
-          v-model="chatStore.pinnedDiaryIds"
-          :entries="diaryCatalog"
-          :cards="referenceCards"
-          class="chat-scene__picker"
-        />
-        <ChatInput :disabled="chatStore.sending" @send="onSend" />
+        <div class="chat-scene__composer">
+          <DiaryReferencePicker
+            v-model="chatStore.pinnedDiaryIds"
+            :entries="diaryCatalog"
+            :cards="referenceCards"
+          />
+          <div class="chat-scene__composer-row">
+            <ChatInput
+              :disabled="chatStore.sending || chatStore.streamingActive"
+              @send="onSend"
+            />
+            <InkGrinding
+              v-if="chatStore.sending || chatStore.streamingActive"
+              size="sm"
+              class="chat-scene__composer-ink"
+            />
+          </div>
+        </div>
       </template>
     </section>
 
-    <!-- Right: reference + output + skill -->
-    <aside class="chat-scene__aside">
-      <div class="chat-scene__aside-scroll">
-        <ReferencePanel
-          :pinned-diaries="pinnedDiaries"
-          :retrieved-diaries="retrievedDiaries"
-          :episodic-memories="episodicMemories"
-          :loading="chatStore.loading"
-        />
-        <hr class="chat-scene__aside-divider" />
-        <OutputPanel
-          :card-summary="cardSummary"
-          :generating="cardGenerating"
-          :has-cards="false"
-          @generate-card="onGenerateCard"
-        />
-        <hr class="chat-scene__aside-divider" />
-        <section v-if="settings.developerMode" class="chat-scene__dev-panel">
-          <DevPipelinePanel />
-        </section>
-        <section v-else class="chat-scene__skill-panel">
-          <p class="chat-scene__skill-placeholder">{{ chatCopy.skillPlaceholder }}</p>
-        </section>
-      </div>
+    <!-- Right: dev pipeline (developer mode only) -->
+    <aside v-if="settings.developerMode" class="chat-scene__dev">
+      <DevPipelinePanel />
     </aside>
   </div>
 
@@ -345,38 +347,39 @@ watch(
 <style scoped>
 .chat-scene {
   display: grid;
-  grid-template-columns: 12rem 1fr 16rem;
+  grid-template-columns: 11rem minmax(0, 1fr);
   /* titlebar 2.5rem + nav tabs ~3rem + app-shell frameless padding 2.5rem */
   height: calc(100dvh - 8rem);
   overflow: hidden;
   box-sizing: border-box;
 }
 
+.chat-scene--dev {
+  grid-template-columns: 11rem minmax(0, 1fr) 20rem;
+}
+
 .chat-scene__sidebar {
-  padding: 0.75rem;
-  border-right: 1px solid var(--color-border);
+  padding: 0.75rem 0.75rem 0.75rem 1rem;
+  border-right: 1px solid var(--color-line);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.625rem;
   overflow: hidden;
 }
 
-.chat-scene__new-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.4375rem 0.75rem;
-  border: 1px dashed var(--color-border);
-  border-radius: 0.5rem;
-  background: transparent;
-  color: var(--color-text-secondary);
+.chat-scene__new-link {
+  border: none;
+  background: none;
+  padding: 0.125rem 0;
   font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-align: left;
   cursor: pointer;
-  transition: border-color var(--motion-duration) var(--motion-ease);
 }
 
-.chat-scene__new-btn:hover {
-  border-color: var(--color-accent-muted);
+.chat-scene__new-link:hover {
   color: var(--color-text-primary);
 }
 
@@ -387,6 +390,13 @@ watch(
   min-height: 0;
 }
 
+.chat-scene__bar {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1.25rem;
+  border-bottom: 1px solid var(--color-line);
+}
+
 .chat-scene__empty {
   flex: 1;
   display: flex;
@@ -395,86 +405,117 @@ watch(
   justify-content: center;
   padding: 2rem;
   gap: 0.5rem;
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
 }
 
 .chat-scene__empty-title {
+  font-family: var(--font-diary);
   font-size: 1rem;
-  font-weight: 600;
   color: var(--color-text-primary);
 }
 
-.chat-scene__new-btn--large {
-  margin-top: 0.75rem;
-  padding: 0.5rem 1rem;
+.chat-scene__empty-desc {
   font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.chat-scene__empty-link {
+  margin-top: 0.75rem;
+  border: none;
+  background: none;
+  padding: 0.25rem 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.chat-scene__empty-link:hover {
+  color: var(--color-text-primary);
 }
 
 .chat-scene__messages {
   flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0.5rem 1rem 1rem;
+}
+
+/* 书信流：居中 40rem 纸面，细线日期小字分日 */
+.letter-flow {
+  width: min(40rem, 100%);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.letter-flow__divider {
+  margin: 0.875rem 0 0.125rem;
+  text-align: center;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: var(--color-text-faint);
+}
+
+.chat-scene__composer {
+  border-top: 1px solid var(--color-line);
+  padding: 0.5rem 1.25rem 0.875rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 1rem;
-  overflow-y: auto;
-  min-height: 0;
 }
 
-.chat-scene__picker {
-  padding: 0 1rem 0.75rem;
-  border-top: 1px solid var(--color-border);
+.chat-scene__composer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.chat-scene__divider {
-  text-align: center;
+.chat-scene__composer-ink {
+  flex-shrink: 0;
+}
+
+/* 进行中的信：与已落定的信同一版式，落款夜记、末尾研墨 */
+.writing-letter {
+  padding: 0.875rem 0 0.75rem;
+  border-top: 1px solid var(--color-line);
+}
+
+.writing-letter__head {
+  display: flex;
+  align-items: baseline;
+  font-size: 0.6875rem;
+}
+
+.writing-letter__signature {
+  font-family: var(--font-diary);
+  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+}
+
+.writing-letter__body {
+  margin: 0.375rem 0 0;
+  font-family: var(--font-diary);
+  font-size: 0.9375rem;
+  line-height: 1.95;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-text-primary);
+}
+
+.writing-letter__status {
+  margin: 0.5rem 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
-  margin: 0.5rem 0;
 }
 
-.chat-scene__typing {
-  align-self: flex-start;
-  padding: 0.25rem 0.5rem;
-}
-
-.chat-scene__aside {
-  border-left: 1px solid var(--color-border);
+.chat-scene__dev {
+  border-left: 1px solid var(--color-line);
   overflow: hidden;
-}
-
-.chat-scene__aside-scroll {
-  padding: 0.75rem;
-  height: 100%;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-scene__aside-divider {
-  border: none;
-  border-top: 1px solid var(--color-border);
-  margin: 0.75rem 0;
-}
-
-.chat-scene__skill-panel {
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-scene__skill-placeholder {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  opacity: 0.5;
-  text-align: center;
-  padding: 1rem 0;
-}
-
-.chat-scene__dev-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 200px;
-  max-height: 400px;
 }
 
 .confirm-overlay {

@@ -2,6 +2,10 @@
 import { ref } from 'vue'
 import { chatCopy } from '@/shared/copy/chat'
 
+defineProps<{
+  disabled?: boolean
+}>()
+
 const emit = defineEmits<{
   send: [text: string]
 }>()
@@ -24,70 +28,86 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="chat-input">
-    <textarea
-      v-model="text"
-      class="chat-input__field"
-      rows="1"
-      :placeholder="chatCopy.inputPlaceholder"
-      @keydown="onKeydown"
-    />
+  <div class="letter-composer">
+    <div class="letter-composer__line ink-underline" data-testid="letter-input">
+      <textarea
+        v-model="text"
+        class="letter-composer__field"
+        rows="1"
+        :placeholder="chatCopy.inputPlaceholder"
+        :disabled="disabled"
+        @keydown="onKeydown"
+      />
+    </div>
     <button
       type="button"
-      class="chat-input__send"
-      :disabled="!text.trim()"
+      class="letter-composer__send"
+      data-testid="letter-send"
+      :disabled="!text.trim() || disabled"
       @click="onSend"
     >
-      &#8617;
+      {{ chatCopy.sendLabel }}
     </button>
   </div>
 </template>
 
 <style scoped>
-.chat-input {
+/* 底线式回信输入：正文落在纸上，只有一条会生长的底线 */
+.letter-composer {
   display: flex;
   align-items: flex-end;
-  gap: 0.5rem;
-  flex-shrink: 0;
-  padding: 0.625rem 0.75rem;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg);
+  gap: 0.75rem;
 }
 
-.chat-input__field {
+.letter-composer__line {
   flex: 1;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  background: var(--color-bg-elevated);
+  min-width: 0;
+}
+
+/* ink-underline 的底线生长在包裹层上，用 focus-within 点亮 */
+.letter-composer__line:focus-within::after {
+  transform: scaleX(1);
+}
+
+.letter-composer__field {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0.25rem 0;
   color: var(--color-text-primary);
-  font-family: var(--font-ui);
-  font-size: 0.8125rem;
+  font-family: var(--font-diary);
+  font-size: 0.9375rem;
+  line-height: 1.8;
   resize: none;
   outline: none;
 }
 
-.chat-input__field:focus {
-  border-color: var(--color-accent);
+.letter-composer__field::placeholder {
+  color: var(--color-text-faint);
 }
 
-.chat-input__send {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  flex-shrink: 0;
+.letter-composer__field:disabled {
+  opacity: 0.6;
+}
+
+.letter-composer__send {
   border: none;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: #fff;
-  font-size: 1rem;
+  background: none;
+  padding: 0.25rem 0;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
-  transition: opacity var(--motion-duration) var(--motion-ease);
 }
 
-.chat-input__send:disabled {
+.letter-composer__send:hover:not(:disabled) {
+  color: var(--color-text-primary);
+}
+
+.letter-composer__send:disabled {
   opacity: 0.35;
   cursor: default;
 }
