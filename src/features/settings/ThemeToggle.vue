@@ -17,16 +17,18 @@ const options: { value: ThemePreference; label: string; icon: typeof PhSun }[] =
     <p class="theme-toggle__hint">
       当前生效：<strong>{{ theme === 'day' ? '白天' : '夜间' }}</strong>
     </p>
-    <div class="theme-toggle__options">
+    <div class="theme-toggle__options" role="radiogroup" aria-label="主题偏好">
       <button
         v-for="option in options"
         :key="option.value"
         type="button"
+        role="radio"
+        :aria-checked="preference === option.value"
         class="theme-toggle__option"
         :class="{ 'is-active': preference === option.value }"
         @click="preference = option.value"
       >
-        <component :is="option.icon" :size="18" weight="duotone" />
+        <component :is="option.icon" :size="16" weight="duotone" />
         {{ option.label }}
       </button>
     </div>
@@ -37,7 +39,7 @@ const options: { value: ThemePreference; label: string; icon: typeof PhSun }[] =
 .theme-toggle {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.625rem;
 }
 
 .theme-toggle__hint {
@@ -48,28 +50,33 @@ const options: { value: ThemePreference; label: string; icon: typeof PhSun }[] =
 .theme-toggle__options {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.125rem 1.375rem;
 }
 
+/* 纸感文字选项：无底无框，选中以一道 accent 底线示意。 */
 .theme-toggle__option {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.5rem 0.875rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-raised);
+  padding: 0.375rem 0.125rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
   color: var(--color-text-secondary);
   font-size: 0.8125rem;
+  cursor: pointer;
   transition:
-    border-color var(--motion-duration) var(--motion-ease),
-    color var(--motion-duration) var(--motion-ease),
-    background var(--motion-duration) var(--motion-ease);
+    color var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart);
+}
+
+.theme-toggle__option:hover {
+  color: var(--color-text-primary);
 }
 
 .theme-toggle__option.is-active {
-  border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
   color: var(--color-text-primary);
-  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-raised));
+  border-bottom-color: var(--color-accent);
 }
 </style>

@@ -283,7 +283,7 @@ onMounted(() => {
         <select
           v-if="selectedPreset && selectedPreset.models.length > 0"
           v-model="form.model_name"
-          class="settings-form__input"
+          class="settings-form__input ink-underline"
         >
           <option v-for="opt in selectedPreset.models" :key="opt.value" :value="opt.value">
             {{ opt.label }}
@@ -293,23 +293,34 @@ onMounted(() => {
           v-else
           v-model="form.model_name"
           required
-          class="settings-form__input"
+          class="settings-form__input ink-underline"
           :placeholder="modelsCopy.modelInputPlaceholder"
         />
       </label>
       <label class="settings-form__field">
         <span class="settings-form__label">模型层级</span>
-        <select v-model="form.tier" class="settings-form__input">
+        <select v-model="form.tier" class="settings-form__input ink-underline">
           <option v-for="(label, tier) in tierLabels" :key="tier" :value="tier">{{ label }}</option>
         </select>
       </label>
       <label class="settings-form__field">
         <span class="settings-form__label">API 地址</span>
-        <input v-model="form.base_url" required class="settings-form__input" placeholder="https://api.deepseek.com/v1" />
+        <input
+          v-model="form.base_url"
+          required
+          class="settings-form__input ink-underline"
+          placeholder="https://api.deepseek.com/v1"
+        />
       </label>
       <label class="settings-form__field">
         <span class="settings-form__label">API 密钥</span>
-        <input v-model="form.api_key" required type="password" class="settings-form__input" placeholder="sk-..." />
+        <input
+          v-model="form.api_key"
+          required
+          type="password"
+          class="settings-form__input ink-underline"
+          placeholder="sk-..."
+        />
       </label>
       <label class="settings-form__checkbox">
         <input v-model="form.is_active" type="checkbox" />
@@ -362,21 +373,30 @@ onMounted(() => {
       <h3 class="llm-config__list-title">编辑模型</h3>
       <label class="settings-form__field">
         <span class="settings-form__label">模型名称</span>
-        <input v-model="editForm.model_name" required class="settings-form__input" />
+        <input v-model="editForm.model_name" required class="settings-form__input ink-underline" />
       </label>
       <label class="settings-form__field">
         <span class="settings-form__label">模型层级</span>
-        <select v-model="editForm.tier" class="settings-form__input">
+        <select v-model="editForm.tier" class="settings-form__input ink-underline">
           <option v-for="(label, tier) in tierLabels" :key="tier" :value="tier">{{ label }}</option>
         </select>
       </label>
       <label class="settings-form__field">
         <span class="settings-form__label">API 地址</span>
-        <input v-model="editForm.base_url" required class="settings-form__input" />
+        <input
+          v-model="editForm.base_url"
+          required
+          class="settings-form__input ink-underline"
+        />
       </label>
       <label class="settings-form__field">
         <span class="settings-form__label">新 API 密钥（留空则不修改）</span>
-        <input v-model="editForm.api_key" type="password" class="settings-form__input" placeholder="sk-..." />
+        <input
+          v-model="editForm.api_key"
+          type="password"
+          class="settings-form__input ink-underline"
+          placeholder="sk-..."
+        />
       </label>
       <label class="settings-form__checkbox">
         <input v-model="editForm.is_active" type="checkbox" />
@@ -417,7 +437,7 @@ onMounted(() => {
 
 .llm-config__edit {
   padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-line);
 }
 
 .settings-form {
@@ -437,14 +457,17 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 
+/* 底线输入：边框与聚焦生长线由全局 ink-underline 提供 */
 .settings-form__input {
   width: 100%;
-  padding: 0.625rem 0.75rem;
-  border-radius: 0.625rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated-2);
+  padding: 0.375rem 0.125rem;
+  border-radius: 0;
   color: var(--color-text-primary);
   font-size: 0.875rem;
+}
+
+.settings-form__input::placeholder {
+  color: var(--color-text-faint);
 }
 
 .settings-form__checkbox {
@@ -453,6 +476,10 @@ onMounted(() => {
   gap: 0.5rem;
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
+}
+
+.settings-form__checkbox input {
+  accent-color: var(--color-accent);
 }
 
 .settings-form__actions {
@@ -487,7 +514,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 0.625rem;
   padding: 0.75rem 0;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-line);
 }
 
 .models-list__item:last-child {
@@ -523,7 +550,7 @@ onMounted(() => {
 
 .llm-config__presets {
   padding-bottom: 0.875rem;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-line);
   margin-bottom: 0.25rem;
 }
 
@@ -552,14 +579,14 @@ onMounted(() => {
   gap: 0.25rem;
   min-height: 7.5rem;
   padding: 0.625rem 0.75rem;
-  border-radius: 0.625rem;
-  border: 1px solid var(--color-border);
+  border-radius: var(--radius-inner);
+  border: 1px solid var(--color-line);
   background: var(--color-bg-elevated-2);
   text-align: left;
   cursor: pointer;
   transition:
-    border-color 0.2s ease,
-    background 0.2s ease;
+    border-color var(--dur-fast) var(--ease-out-quart),
+    background var(--dur-fast) var(--ease-out-quart);
 }
 
 .preset-card:hover {

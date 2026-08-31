@@ -65,13 +65,23 @@ describe('WeeklyLetterCard', () => {
     const future = mountCard('2099-01-04') // far future week = not current
     expect(future.wrapper.text()).toContain('这一周没有留下周信')
     expect(future.wrapper.text()).not.toContain('生成本周周记')
+    expect(future.wrapper.find('.weekly-letter__action').exists()).toBe(false)
 
     const current = mountCard(currentMondayIso())
     expect(current.wrapper.text()).toContain('生成本周周记')
+    // 生成入口是安静的文字链，不再是按钮
+    expect(current.wrapper.find('.weekly-letter__action').exists()).toBe(true)
   })
 
-  it('renders the letter with structured plan block', () => {
+  it('renders the letter with structured plan block on a paper surface', () => {
     const { wrapper } = mountCard(report.period_start, [report])
+    const letter = wrapper.find('[data-testid="weekly-letter"]')
+    expect(letter.exists()).toBe(true)
+    expect(letter.classes()).toContain('weekly-letter')
+    // 信笺抬头：衬线周期 + 文楷正文
+    expect(wrapper.find('.weekly-letter__period').exists()).toBe(true)
+    expect(wrapper.find('.weekly-letter__period').text()).toContain('二十四')
+    expect(wrapper.find('.weekly-letter__content').classes()).toContain('font-diary')
     expect(wrapper.text()).toContain('这一周你经历了许多。')
     expect(wrapper.text()).toContain('早睡挑战')
     expect(wrapper.text()).toContain('1/2')

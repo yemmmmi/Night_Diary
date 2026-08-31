@@ -8,6 +8,7 @@
 @import './themes/day.css';
 @import './themes/night.css';
 @import './animations/transitions.css';
+@import './motion.css';
 
 @tailwind base;
 @tailwind components;

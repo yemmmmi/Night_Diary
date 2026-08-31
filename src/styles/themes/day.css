@@ -12,8 +12,12 @@
   --glass-bg: rgba(244, 237, 222, 0.9);
   --glass-border: #e4dccb;
   --color-diary-surface: #fffdf8;
+  --color-surface-raised: #fffdf8;
+  --shadow-panel: 0 2px 12px rgba(28, 26, 22, 0.05);
+  --color-seal-positive: #34506e;
   --color-seal-calm: #6b7f5e;
   --color-seal-lost: #4a5e75;
+  --color-seal-muted: #8a7f6c;
   --color-success: #6b7f5e;
   --color-warning: #b08d4a;
   --color-danger: #a65a5a;

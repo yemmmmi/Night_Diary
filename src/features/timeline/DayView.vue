@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { PhCaretLeft, PhCaretRight } from '@phosphor-icons/vue'
 
@@ -53,6 +53,27 @@ const isEmptyDay = computed(
   () => !timeline.loading && timeline.entries.length === 0 && dayCards.value.length === 0,
 )
 
+/** 翻页方向：prev 向右滑入、next 向左滑入（motion.css page-turn）。 */
+const turnDir = ref<'prev' | 'next' | null>(null)
+
+const turnClass = computed(() =>
+  turnDir.value === 'prev' ? 'page-turn-right' : turnDir.value === 'next' ? 'page-turn-left' : '',
+)
+
+async function shiftWithTurn(delta: number) {
+  const dir: 'prev' | 'next' = delta < 0 ? 'prev' : 'next'
+  turnDir.value = null
+  await timeline.shiftPeriod(delta)
+  // 先清类再挂新类，保证连续点击时动画能重新触发。
+  await nextTick()
+  turnDir.value = dir
+}
+
+/** 翻页动画播完后清掉方向类，DOM 回到无动效基态。 */
+function onTurnEnd(event: AnimationEvent) {
+  if (event.animationName.startsWith('page-turn')) turnDir.value = null
+}
+
 function cardEmotionColor(card: MemoryCard): string {
   return EMOTION_COLORS[card.emotion] ?? 'var(--color-accent)'
 }
@@ -89,7 +110,7 @@ onMounted(() => {
 <template>
   <section class="day-view">
     <div class="day-view__nav">
-      <button type="button" class="day-view__nav-btn" @click="timeline.shiftPeriod(-1)">
+      <button type="button" class="day-view__nav-btn" @click="shiftWithTurn(-1)">
         <PhCaretLeft :size="14" />
         {{ copy.prevDay }}
       </button>
@@ -97,7 +118,7 @@ onMounted(() => {
         {{ dayLabel }}
         <span v-if="timeline.isToday" class="day-view__today">{{ copy.todayTag }}</span>
       </span>
-      <button type="button" class="day-view__nav-btn" @click="timeline.shiftPeriod(1)">
+      <button type="button" class="day-view__nav-btn" @click="shiftWithTurn(1)">
         {{ copy.nextDay }}
         <PhCaretRight :size="14" />
       </button>
@@ -111,70 +132,78 @@ onMounted(() => {
       </button>
     </div>
 
-    <section v-if="isEmptyDay" class="day-view__empty">
-      <div class="day-view__empty-icon" aria-hidden="true">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-          <rect x="10" y="6" width="28" height="36" rx="4" stroke="currentColor" stroke-width="2" opacity="0.5" />
-          <path d="M16 18h16M16 24h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3" />
-          <path d="M24 32v-6m-3 3h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-      </div>
-      <p class="day-view__empty-title">{{ copy.emptyTitle }}</p>
-      <p class="day-view__empty-hint">{{ copy.emptyHint }}</p>
-      <GameButton variant="primary" @click="createForDate">{{ copy.emptyCta }}</GameButton>
-    </section>
-
-    <template v-else>
-      <GlassPanel
-        v-for="entry in timeline.entries"
-        :key="entry.id"
-        class="day-view__diary"
-        :class="{ 'is-replied': diaryStatus(entry) === 'reply' }"
-      >
-        <div class="day-view__diary-head">
-          <span class="day-view__diary-date">{{ timeline.date }}</span>
-          <span v-if="entry.weather" class="day-view__diary-weather">{{ entry.weather }}</span>
+    <div class="day-view__body" :class="turnClass" @animationend="onTurnEnd">
+      <section v-if="isEmptyDay" class="day-view__empty">
+        <div class="day-view__empty-icon" aria-hidden="true">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <rect x="10" y="6" width="28" height="36" rx="4" stroke="currentColor" stroke-width="2" opacity="0.5" />
+            <path d="M16 18h16M16 24h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3" />
+            <path d="M24 32v-6m-3 3h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
         </div>
-        <button type="button" class="day-view__diary-body" @click="timeline.selectEntry(entry.id)">
-          <span class="day-view__diary-preview font-diary">
-            {{ diarySummary(entry.content, 120) }}
-          </span>
-        </button>
-        <div class="day-view__diary-actions">
-          <button type="button" class="day-view__diary-continue" @click="openEntry(entry.id)">
-            {{ copy.writeDiary }}
+        <p class="day-view__empty-title">{{ copy.emptyTitle }}</p>
+        <p class="day-view__empty-hint">{{ copy.emptyHint }}</p>
+        <GameButton variant="primary" @click="createForDate">{{ copy.emptyCta }}</GameButton>
+      </section>
+
+      <template v-else>
+        <GlassPanel
+          v-for="entry in timeline.entries"
+          :key="entry.id"
+          class="day-view__diary"
+          :class="{ 'is-replied': diaryStatus(entry) === 'reply' }"
+        >
+          <div class="day-view__diary-head">
+            <span class="day-view__diary-date">{{ timeline.date }}</span>
+            <span v-if="entry.weather" class="day-view__diary-weather">{{ entry.weather }}</span>
+          </div>
+          <button type="button" class="day-view__diary-body" @click="timeline.selectEntry(entry.id)">
+            <span class="day-view__diary-preview font-diary">
+              {{ diarySummary(entry.content, 120) }}
+            </span>
           </button>
-        </div>
-      </GlassPanel>
+          <div class="day-view__diary-actions">
+            <button type="button" class="day-view__diary-continue" @click="openEntry(entry.id)">
+              {{ copy.writeDiary }}
+            </button>
+          </div>
+        </GlassPanel>
 
-      <TaskFoldRow v-if="timeline.isToday" class="day-view__tasks" />
+        <TaskFoldRow v-if="timeline.isToday" class="day-view__tasks" />
 
-      <GlassPanel
-        v-for="card in dayCards"
-        :key="card.card_id"
-        class="day-view__card"
-        :style="{ borderLeftColor: cardEmotionColor(card) }"
-      >
-        <button type="button" class="day-view__card-body" @click="openCard(card)">
-          <span class="day-view__card-summary font-diary">
-            {{ diarySummary(card.event_summary, 60, cardCopy.recordedMoodOnly) }}
-          </span>
-          <EmotionChips
-            class="day-view__card-emotion"
-            :emotions="card.emotions"
-            :emotion="card.emotion"
-            :size="12"
-            compact
-            :max-count="1"
-          />
-        </button>
-      </GlassPanel>
-    </template>
+        <GlassPanel
+          v-for="card in dayCards"
+          :key="card.card_id"
+          class="day-view__card"
+          :style="{ borderLeftColor: cardEmotionColor(card) }"
+        >
+          <button type="button" class="day-view__card-body" @click="openCard(card)">
+            <span class="day-view__card-summary font-diary">
+              {{ diarySummary(card.event_summary, 60, cardCopy.recordedMoodOnly) }}
+            </span>
+            <EmotionChips
+              class="day-view__card-emotion"
+              :emotions="card.emotions"
+              :emotion="card.emotion"
+              :size="12"
+              compact
+              :max-count="1"
+            />
+          </button>
+        </GlassPanel>
+      </template>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .day-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+/* 内容体：翻页方向滑入动画挂在它上面，导航按钮保持原位 */
+.day-view__body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -279,7 +308,7 @@ onMounted(() => {
 .day-view__diary-continue {
   border: none;
   background: transparent;
-  color: var(--color-accent, #d4a574);
+  color: var(--color-accent);
   font-size: 0.8125rem;
   cursor: pointer;
   padding: 0.25rem 0;

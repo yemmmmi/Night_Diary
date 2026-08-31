@@ -11,15 +11,18 @@ import { formatApiError } from '@/shared/utils/apiError'
 
 export const useWeeklyStore = defineStore('weekly', () => {
   const reports = ref<WeeklyReport[]>([])
+  /** 最近一次 loadReports 实际拉取的条数（洞悉页只装最近几封时小于 52）。 */
+  const loadedLimit = ref<number | null>(null)
   const loading = ref(false)
   const generating = ref(false)
   const error = ref<string | null>(null)
 
-  async function loadReports(): Promise<WeeklyReport[]> {
+  async function loadReports(limit: number = 52): Promise<WeeklyReport[]> {
     loading.value = true
     error.value = null
     try {
-      reports.value = await listWeekly({ limit: 52 })
+      reports.value = await listWeekly({ limit })
+      loadedLimit.value = limit
       return reports.value
     } catch (err) {
       error.value = formatApiError(err, '加载周记失败')
@@ -68,6 +71,7 @@ export const useWeeklyStore = defineStore('weekly', () => {
 
   return {
     reports,
+    loadedLimit,
     loading,
     generating,
     error,

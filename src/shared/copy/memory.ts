@@ -1,7 +1,7 @@
-/** Centralized copy for the Memory Library ("记忆库") scene. */
+/** Centralized copy for the insight ("洞悉") scene. */
 
 export const memoryCopy = {
-  title: '记忆库',
+  title: '洞悉',
   back: '返回',
   subtitle: [
     '你不必从中得到什么。你只是没有把它丢掉——这本身已经足够。',
@@ -10,6 +10,10 @@ export const memoryCopy = {
 
   // Overview
   overviewTitle: '记忆概览',
+  statEpisodic: '情节记忆',
+  statFromCards: '来自卡片',
+  statFromDiaries: '来自日记',
+  statCards: '记忆卡片',
   episodicCount: (n: number) => `${n} 条情节记忆`,
   cardContribution: (n: number) => `其中 ${n} 条来自记忆卡片`,
   diaryContribution: (n: number) => `${n} 条来自日记分析`,
@@ -54,8 +58,13 @@ export const memoryCopy = {
   deleteError: '删除失败',
 
   // Emotion trend chart
-  emotionChartTitle: '近 30 天情绪趋势',
-  emotionChartDesc: '鼠标移到折线点上，可查看当天记录的心情。',
+  emotionChartTitle: '近 14 天情绪趋势',
+  emotionChartDesc: '一天一根细柱。移到柱上，可看当天的均值与张数。',
+  emotionChartEmpty: '近 14 天还没有可统计的卡片。',
+
+  // Weekly letters
+  weeklyTitle: '周记信笺',
+  weeklyDesc: '夜记每周回一封信，最近的几封收在这里。',
 
   // Cards section
   cardsTitle: '记忆卡片',
@@ -69,5 +78,5 @@ export const memoryCopy = {
   cardsExpandToDiary: '展开为日记',
   cardsDelete: '删除',
 
-  loadError: '加载记忆库失败',
+  loadError: '加载洞悉失败',
 } as const

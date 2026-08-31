@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { PhCaretDown } from '@phosphor-icons/vue'
 
+import InkCheck from '@/shared/components/InkCheck.vue'
 import { timelineCopy as copy } from '@/shared/copy/timeline'
 import { usePlanStore } from '@/stores/plan'
 
@@ -19,24 +20,28 @@ const done = computed(() => planStore.todayTasks.filter((t) => t.status === 'don
       <PhCaretDown :size="14" class="task-fold__caret" :class="{ 'is-open': expanded }" />
     </button>
     <div v-if="expanded" class="task-fold__list">
-      <label v-for="task in planStore.todayTasks" :key="task.id" class="task-fold__item">
-        <input
-          type="checkbox"
+      <div
+        v-for="task in planStore.todayTasks"
+        :key="task.id"
+        class="task-fold__item"
+        :class="{ 'is-done': task.status === 'done' }"
+      >
+        <InkCheck
           :checked="task.status === 'done'"
-          @change="planStore.toggleTask(task.id, task.status)"
+          @toggle="planStore.toggleTask(task.id, task.status)"
         />
-        <span class="task-fold__title" :class="{ 'is-done': task.status === 'done' }">
+        <span class="task-fold__title ink-strike">
           {{ task.title }}
         </span>
-      </label>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
 .task-fold {
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-inner);
   background: var(--color-bg-elevated);
   padding: 0.375rem 0.625rem;
 }
@@ -53,7 +58,7 @@ const done = computed(() => planStore.todayTasks.filter((t) => t.status === 'don
   padding: 0.25rem 0;
 }
 .task-fold__caret {
-  transition: transform var(--motion-duration) var(--motion-ease);
+  transition: transform var(--dur-fast) var(--ease-out-quart);
 }
 .task-fold__caret.is-open {
   transform: rotate(180deg);
@@ -63,7 +68,7 @@ const done = computed(() => planStore.todayTasks.filter((t) => t.status === 'don
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.375rem 0 0.25rem;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-line);
 }
 .task-fold__item {
   display: flex;
@@ -72,13 +77,9 @@ const done = computed(() => planStore.todayTasks.filter((t) => t.status === 'don
   font-size: 0.8125rem;
   color: var(--color-text-primary);
   padding: 0.1875rem 0;
-  cursor: pointer;
 }
-.task-fold__item input {
-  accent-color: var(--color-accent);
-}
-.task-fold__title.is-done {
+/* 完成态：划线由全局 ink-strike 伪元素绘制，这里只做淡墨化 */
+.task-fold__item.is-done .task-fold__title {
   color: var(--color-text-secondary);
-  text-decoration: line-through;
 }
 </style>
