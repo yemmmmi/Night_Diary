@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-
 withDefaults(
   defineProps<{
     variant?: 'primary' | 'secondary' | 'ghost'
@@ -19,25 +17,6 @@ withDefaults(
 const emit = defineEmits<{
   click: [event: MouseEvent]
 }>()
-
-const ripples = ref<Array<{ id: number; x: number; y: number }>>([])
-let rippleId = 0
-
-function onClick(event: MouseEvent) {
-  if (event.currentTarget instanceof HTMLElement) {
-    const rect = event.currentTarget.getBoundingClientRect()
-    const id = ++rippleId
-    ripples.value.push({
-      id,
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    })
-    window.setTimeout(() => {
-      ripples.value = ripples.value.filter((r) => r.id !== id)
-    }, 520)
-  }
-  emit('click', event)
-}
 </script>
 
 <template>
@@ -49,14 +28,8 @@ function onClick(event: MouseEvent) {
       `game-button--${variant}`,
       { 'game-button--block': block, 'game-button--disabled': disabled },
     ]"
-    @click="onClick"
+    @click="emit('click', $event)"
   >
-    <span
-      v-for="ripple in ripples"
-      :key="ripple.id"
-      class="game-button__ripple"
-      :style="{ left: `${ripple.x}px`, top: `${ripple.y}px` }"
-    />
     <span class="game-button__label">
       <slot />
     </span>
@@ -64,9 +37,8 @@ function onClick(event: MouseEvent) {
 </template>
 
 <style scoped>
+/* 墨块按压（规格 §7.2-3）：hover 上浮 1.5px、active 下沉 1px，150ms。 */
 .game-button {
-  position: relative;
-  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -79,18 +51,18 @@ function onClick(event: MouseEvent) {
   border: 1px solid transparent;
   cursor: pointer;
   transition:
-    transform var(--motion-duration) var(--motion-ease),
-    box-shadow var(--motion-duration) var(--motion-ease),
-    background-color var(--motion-duration) var(--motion-ease),
-    border-color var(--motion-duration) var(--motion-ease);
+    transform var(--dur-instant) var(--ease-out-quart),
+    background-color var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color var(--dur-fast) var(--ease-out-quart);
 }
 
 .game-button:hover:not(:disabled) {
-  transform: scale(1.02);
+  transform: translateY(-1.5px);
 }
 
 .game-button:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: translateY(1px);
 }
 
 .game-button--block {
@@ -106,12 +78,10 @@ function onClick(event: MouseEvent) {
 .game-button--primary {
   background: var(--color-accent);
   color: var(--color-bg);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
 
 .game-button--primary:hover:not(:disabled) {
   background: var(--color-accent-muted);
-  box-shadow: 0 6px 20px color-mix(in srgb, var(--color-accent) 45%, transparent);
 }
 
 .game-button--secondary {
@@ -141,16 +111,9 @@ function onClick(event: MouseEvent) {
   z-index: 1;
 }
 
-.game-button__ripple {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  margin-left: -4px;
-  margin-top: -4px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.45);
-  pointer-events: none;
-  animation: ripple 520ms var(--motion-ease) forwards;
-  z-index: 0;
+@media (prefers-reduced-motion: reduce) {
+  .game-button {
+    transition: none;
+  }
 }
 </style>

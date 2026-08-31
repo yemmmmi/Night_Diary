@@ -10,6 +10,7 @@ const routeKey = computed(() => route.fullPath)
 
 onMounted(() => {
   if (!innerRef.value) return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   gsap.fromTo(
     innerRef.value,
     { opacity: 0, y: 16, scale: 0.98 },

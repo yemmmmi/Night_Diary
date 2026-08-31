@@ -55,16 +55,19 @@ const list = computed(() => props.emotions.filter(Boolean))
 }
 
 .emotion-stamp--positive {
-  background: #34506e;
+  background: var(--color-seal-positive);
 }
+
 .emotion-stamp--calm {
-  background: #6b7f5e;
+  background: var(--color-seal-calm);
 }
+
 .emotion-stamp--lost {
-  background: #4a5e75;
+  background: var(--color-seal-lost);
 }
+
 .emotion-stamp--muted {
-  background: #8a7f6c;
+  background: var(--color-seal-muted);
 }
 
 @keyframes stamp-press {

@@ -1,0 +1,134 @@
+/*
+ * 灵动层共享动效（规格 §7）：全部只动 transform 与 opacity。
+ * 消费方通过类名接入；reduced-motion 下静止（base.css 全局兜底 + 此处显式）。
+ */
+
+/* #4 底线生长：底线输入聚焦时底线从左生长。 */
+.ink-underline {
+  position: relative;
+  border: none;
+  border-bottom: 1px solid var(--color-line);
+  background: transparent;
+}
+
+.ink-underline:focus {
+  outline: none;
+}
+
+.ink-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 100%;
+  height: 1px;
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 280ms var(--ease-out-quart);
+  pointer-events: none;
+}
+
+.ink-underline:focus::after {
+  transform: scaleX(1);
+}
+
+/* #8 生长：洞悉趋势细柱逐根生长，stagger 40ms 由消费方内联 --i 索引。 */
+.trend-bars--enter .trend-bar {
+  animation: bar-grow 300ms var(--ease-out-quart) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(var(--bar-scale, 1));
+  }
+}
+
+/* #6 翻页：前一天内容向右滑入、后一天向左滑入（18px）。 */
+.page-turn-left {
+  animation: page-turn-left 380ms var(--ease-out-quart) both;
+}
+
+.page-turn-right {
+  animation: page-turn-right 380ms var(--ease-out-quart) both;
+}
+
+@keyframes page-turn-left {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes page-turn-right {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* #7 书信到达：笔谈新信上浮 12px 淡入。 */
+.letter-enter-active {
+  animation: letter-arrive 400ms var(--ease-out-quart) both;
+}
+
+@keyframes letter-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 手绘勾的划线跟随：消费方对标题加此类，随 InkCheck checked 状态生长。 */
+.ink-strike {
+  position: relative;
+}
+
+.ink-strike::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 55%;
+  height: 1px;
+  background: var(--color-text-faint);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-fast) var(--ease-out-quart);
+  pointer-events: none;
+}
+
+.is-done .ink-strike::after,
+.ink-strike--done::after {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ink-underline::after,
+  .ink-strike::after {
+    transition: none;
+  }
+
+  .trend-bars--enter .trend-bar,
+  .page-turn-left,
+  .page-turn-right,
+  .letter-enter-active {
+    animation: none;
+  }
+}

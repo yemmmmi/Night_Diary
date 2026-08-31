@@ -15,6 +15,10 @@
   --color-warning: #c9a25e;
   --color-danger: #c98787;
   --color-diary-surface: #221c15;
+  --color-surface-raised: #2e2720;
+  --shadow-panel: 0 2px 12px rgba(0, 0, 0, 0.4);
+  --color-seal-positive: #7d94b5;
   --color-seal-calm: #7a9270;
   --color-seal-lost: #6b82a0;
+  --color-seal-muted: #6e6353;
 }

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import GameButton from '@/shared/components/GameButton.vue'
+import InkGrinding from '@/shared/components/InkGrinding.vue'
 import NavTabs from '@/shared/components/NavTabs.vue'
 import PageTransition from '@/shared/components/PageTransition.vue'
 import { useSettingsStore } from '@/stores/settings'
@@ -64,7 +65,8 @@ const statusBanner = computed(() => {
 
     <div class="app-shell">
       <p v-if="statusBanner" class="app-status-banner" role="status">
-        {{ statusBanner }}
+        <InkGrinding />
+        <span>{{ statusBanner }}</span>
       </p>
 
       <!-- 降级状态提示（仅开发者模式，robustness P1-5） -->
@@ -147,6 +149,11 @@ const statusBanner = computed(() => {
   color: var(--color-text-secondary);
   background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-raised));
   border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+
+.app-status-banner > :deep([data-testid='ink-grinding']) {
+  margin-right: 0.375rem;
+  vertical-align: -0.1875rem;
 }
 
 .app-degraded-banner {
