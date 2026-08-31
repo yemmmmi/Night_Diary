@@ -90,7 +90,7 @@ onActivated(() => {
           <PhNotePencil :size="16" />
           {{ cardCopy.newCard }}
         </GameButton>
-        <GameButton class="glow-pulse" @click="writeForDate">
+        <GameButton @click="writeForDate">
           {{ copy.writeDiary }}
         </GameButton>
       </div>

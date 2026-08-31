@@ -5,7 +5,6 @@ import { useRoute } from 'vue-router'
 import GameButton from '@/shared/components/GameButton.vue'
 import NavTabs from '@/shared/components/NavTabs.vue'
 import PageTransition from '@/shared/components/PageTransition.vue'
-import ParticleBackground from '@/shared/components/ParticleBackground.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useBackend } from '@/shared/composables/useBackend'
 import { useMiddlewareStatus } from '@/shared/composables/useMiddlewareStatus'
@@ -35,8 +34,6 @@ function dismissError() {
   errorDismissed.value = true
 }
 
-const subtleParticles = computed(() => route.path.startsWith('/write'))
-
 const tabRouteNames = new Set(['home', 'plan', 'memory', 'chat', 'models'])
 
 const isTabRoute = computed(() => {
@@ -63,11 +60,9 @@ const statusBanner = computed(() => {
 
 <template>
   <div class="app-root">
-    <ParticleBackground :subtle="subtleParticles" />
-
     <NavTabs v-if="isTabRoute" />
 
-    <div class="app-shell particle-layer">
+    <div class="app-shell">
       <p v-if="statusBanner" class="app-status-banner" role="status">
         {{ statusBanner }}
       </p>
