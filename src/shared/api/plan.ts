@@ -16,6 +16,7 @@ export interface TaskItem {
   status: 'pending' | 'done' | 'skipped'
   source: 'manual' | 'agent'
   completed_at: string | null
+  actual_value: number | null
 }
 
 export interface PlanItem {
@@ -26,6 +27,10 @@ export interface PlanItem {
   status: 'active' | 'archived' | 'completed'
   source: 'manual' | 'agent'
   tasks: TaskItem[]
+  recurrence: string | null
+  target_value: number | null
+  target_unit: string | null
+  target_period: 'daily' | 'weekly' | 'total' | null
 }
 
 export async function createPlan(payload: {
@@ -35,6 +40,10 @@ export async function createPlan(payload: {
   tasks?: Array<{ title: string; note?: string; due_date?: string }>
   source?: 'manual' | 'agent'
   created_from_conversation_id?: string
+  recurrence?: string
+  target_value?: number
+  target_unit?: string
+  target_period?: 'daily' | 'weekly' | 'total'
 }): Promise<PlanItem> {
   const client = await getHttpClient()
   const { data } = await client.post<PlanItem>('/api/v1/plans', payload)
@@ -82,11 +91,12 @@ export async function listTasks(params: ListTasksParams = {}): Promise<TaskItem[
 export async function updateTaskStatus(
   taskId: string,
   status: 'pending' | 'done' | 'skipped',
+  actualValue?: number,
 ): Promise<TaskItem> {
   const client = await getHttpClient()
-  const { data } = await client.patch<TaskItem>(`/api/v1/tasks/${taskId}`, {
-    status,
-  })
+  const payload: Record<string, unknown> = { status }
+  if (actualValue != null && status === 'done') payload.actual_value = actualValue
+  const { data } = await client.patch<TaskItem>(`/api/v1/tasks/${taskId}`, payload)
   return data
 }
 
