@@ -194,32 +194,35 @@ onMounted(() => {
   position: relative;
   width: 2.5rem;
   height: 1.375rem;
-  border: none;
-  border-radius: 0.6875rem;
-  background: var(--color-border, rgba(0, 0, 0, 0.15));
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-button);
+  background: transparent;
   cursor: pointer;
-  transition: background var(--motion-duration, 220ms) var(--motion-ease, ease);
+  transition:
+    background var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart);
   flex-shrink: 0;
   padding: 0;
 }
 
 .backup-manager__switch--on {
-  background: var(--color-accent, #D4A574);
+  border-color: var(--color-accent);
+  background: var(--color-accent);
 }
 
 .backup-manager__switch-knob {
   position: absolute;
-  top: 0.1875rem;
-  left: 0.1875rem;
+  top: 0.125rem;
+  left: 0.125rem;
   width: 1rem;
   height: 1rem;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform var(--motion-duration, 220ms) var(--motion-ease, ease);
+  border-radius: var(--radius-seal);
+  background: var(--color-surface-raised);
+  transition: transform var(--dur-fast) var(--ease-out-quart);
 }
 
 .backup-manager__switch--on .backup-manager__switch-knob {
-  transform: translateX(1.125rem);
+  transform: translateX(1.0625rem);
 }
 
 .backup-manager__msg {
@@ -246,7 +249,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-line);
   font-size: 0.8125rem;
   color: var(--color-text-primary);
 }
@@ -257,7 +260,7 @@ onMounted(() => {
 
 .backup-manager__divider {
   height: 1px;
-  background: var(--color-border);
+  background: var(--color-line);
   margin: 0.5rem 0;
 }
 

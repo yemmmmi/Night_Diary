@@ -37,17 +37,26 @@ describe('TaskFoldRow', () => {
   it('renders a neutral summary line and expands on click', async () => {
     const { wrapper } = mountRow()
     expect(wrapper.text()).toContain('今日 2 项 · 已完成 1')
-    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="ink-check"]').exists()).toBe(false)
 
     await wrapper.find('.task-fold__summary').trigger('click')
-    expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="ink-check"]')).toHaveLength(2)
   })
 
-  it('toggles a task through the plan store', async () => {
+  it('toggles a task through the plan store when the ink check is clicked', async () => {
     const { wrapper, toggleSpy } = mountRow()
     await wrapper.find('.task-fold__summary').trigger('click')
-    const first = wrapper.findAll('input[type="checkbox"]')[0]
-    await first.setValue(true)
+    const first = wrapper.findAll('[data-testid="ink-check"]')[0]
+    await first.trigger('click')
     expect(toggleSpy).toHaveBeenCalledWith('t1', 'pending')
+  })
+
+  it('marks done rows with the ink strike line', async () => {
+    const { wrapper } = mountRow()
+    await wrapper.find('.task-fold__summary').trigger('click')
+    const items = wrapper.findAll('.task-fold__item')
+    expect(items[0].classes()).not.toContain('is-done')
+    expect(items[1].classes()).toContain('is-done')
+    expect(items[1].find('.task-fold__title.ink-strike').exists()).toBe(true)
   })
 })

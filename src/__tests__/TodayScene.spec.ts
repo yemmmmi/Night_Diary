@@ -198,12 +198,53 @@ describe('TodayScene', () => {
     planStore.plans = [metricPlan()]
     planStore.todayTasks = [task('t1', 'p1', '23:30 前上床')]
     await nextTick()
-    await wrapper.find('[data-testid="today-task-row"] input[type="checkbox"]').trigger('change')
+    await wrapper.find('[data-testid="today-task-row"] [data-testid="ink-check"]').trigger('click')
     expect(wrapper.find('[data-testid="today-actual-input"]').exists()).toBe(true)
     await wrapper.find('[data-testid="today-actual-input"]').setValue('1.5')
     await wrapper.find('[data-testid="today-actual-confirm"]').trigger('click')
     await vi.waitFor(() => {
       expect(api.updateTaskStatus).toHaveBeenCalledWith('t1', 'done', 1.5)
     })
+  })
+
+  it('renders todo toggles as hand-drawn ink checks with strike-following titles', async () => {
+    const { wrapper, planStore } = mountScene()
+    await flushPromises()
+    planStore.todayTasks = [task('t1', null, '倒垃圾'), { ...task('t2', null, '读书'), status: 'done' }]
+    await nextTick()
+    const rows = wrapper.findAll('[data-testid="today-task-row"]')
+    expect(wrapper.findAll('[data-testid="today-task-row"] [data-testid="ink-check"]')).toHaveLength(2)
+    expect(rows[0].classes()).not.toContain('is-done')
+    expect(rows[1].classes()).toContain('is-done')
+    expect(rows[1].find('.today-task__title.ink-strike').exists()).toBe(true)
+  })
+
+  it('toggles a standalone task through the store when the ink check is clicked', async () => {
+    const api = await import('@/shared/api/plan')
+    const { wrapper, planStore } = mountScene()
+    await flushPromises()
+    planStore.todayTasks = [task('t1', null, '倒垃圾')]
+    await nextTick()
+    await wrapper.find('[data-testid="today-task-row"] [data-testid="ink-check"]').trigger('click')
+    await vi.waitFor(() => {
+      expect(api.updateTaskStatus).toHaveBeenCalledWith('t1', 'done')
+    })
+  })
+
+  it('slides the main column sideways when paging between days', async () => {
+    const { wrapper } = mountScene()
+    await flushPromises()
+    const main = wrapper.find('[data-testid="today-main"]')
+    expect(main.classes()).not.toContain('page-turn-right')
+    expect(main.classes()).not.toContain('page-turn-left')
+
+    await wrapper.find('[data-testid="today-prev"]').trigger('click')
+    await flushPromises()
+    expect(main.classes()).toContain('page-turn-right')
+
+    await wrapper.find('[data-testid="today-next"]').trigger('click')
+    await flushPromises()
+    expect(main.classes()).toContain('page-turn-left')
+    expect(main.classes()).not.toContain('page-turn-right')
   })
 })

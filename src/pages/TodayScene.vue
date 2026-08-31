@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onActivated, onMounted, ref } from 'vue'
+import { computed, nextTick, onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { PhCaretLeft, PhCaretRight, PhNotePencil, PhPlus } from '@phosphor-icons/vue'
 
 import EmotionChips from '@/features/card/EmotionChips.vue'
 import GameButton from '@/shared/components/GameButton.vue'
+import InkCheck from '@/shared/components/InkCheck.vue'
 import { usePlanStore } from '@/stores/plan'
 import { useCardStore } from '@/stores/card'
 import { listDiaryEntries, type DiaryEntry } from '@/shared/api/diary'
@@ -29,6 +30,12 @@ const pullingPlanId = ref<string | null>(null)
 const pullingTitle = ref('')
 const completingTaskId = ref<string | null>(null)
 const completingValue = ref('')
+/** 翻页方向：prev 向右滑入、next 向左滑入（motion.css page-turn）。 */
+const turnDir = ref<'prev' | 'next' | null>(null)
+
+const turnClass = computed(() =>
+  turnDir.value === 'prev' ? 'page-turn-right' : turnDir.value === 'next' ? 'page-turn-left' : '',
+)
 
 const bigDate = computed(() => chineseDateLabel(anchorDate.value))
 const subtitle = computed(() => todaySubtitle(anchorDate.value))
@@ -137,10 +144,20 @@ async function loadEntries() {
 }
 
 async function shiftDay(delta: number) {
+  const dir: 'prev' | 'next' = delta < 0 ? 'prev' : 'next'
+  turnDir.value = null
   const next = parseLocalDate(anchorDate.value)
   next.setDate(next.getDate() + delta)
   anchorDate.value = toIsoDate(next)
   await loadEntries()
+  // 先清类再挂新类，保证连续点击时动画能重新触发。
+  await nextTick()
+  turnDir.value = dir
+}
+
+/** 翻页动画播完后清掉方向类，DOM 回到无动效基态。 */
+function onTurnEnd(event: AnimationEvent) {
+  if (event.animationName.startsWith('page-turn')) turnDir.value = null
 }
 
 function goWrite() {
@@ -177,7 +194,12 @@ onActivated(loadAll)
 
 <template>
   <div class="today-scene">
-    <div class="today-scene__main">
+    <div
+      class="today-scene__main"
+      :class="turnClass"
+      data-testid="today-main"
+      @animationend="onTurnEnd"
+    >
       <header class="today-head">
         <button
           type="button"
@@ -241,18 +263,15 @@ onActivated(loadAll)
             v-for="t in planStore.todayTasks"
             :key="t.id"
             class="today-task"
+            :class="{ 'is-done': t.status === 'done' }"
             data-testid="today-task-row"
           >
-            <label class="today-task__check">
-              <input
-                type="checkbox"
-                :checked="t.status === 'done'"
-                @change="onToggleTask(t)"
-              />
-              <span class="today-task__title" :class="{ 'is-done': t.status === 'done' }">
+            <div class="today-task__check">
+              <InkCheck :checked="t.status === 'done'" @toggle="onToggleTask(t)" />
+              <span class="today-task__title ink-strike">
                 {{ t.title }}
               </span>
-            </label>
+            </div>
             <span v-if="planTitleOf(t)" class="today-task__origin">{{ planTitleOf(t) }}</span>
             <div
               v-if="completingTaskId === t.id"
@@ -504,7 +523,7 @@ onActivated(loadAll)
 
 .today-task {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -521,12 +540,11 @@ onActivated(loadAll)
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  cursor: pointer;
   min-width: 0;
 }
 
-.today-task__title.is-done {
-  text-decoration: line-through;
+/* 完成态：划线由全局 ink-strike 伪元素绘制，这里只做淡墨化 */
+.today-task.is-done .today-task__title {
   color: var(--color-text-faint);
 }
 
@@ -544,7 +562,7 @@ onActivated(loadAll)
   align-items: center;
   gap: 0.5rem;
   margin-top: 0.25rem;
-  padding-left: 1.375rem;
+  padding-left: 1.875rem;
 }
 
 .today-actual__input {

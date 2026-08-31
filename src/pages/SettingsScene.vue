@@ -7,7 +7,6 @@ import BackupManager from '@/features/settings/BackupManager.vue'
 import DeveloperToggle from '@/features/settings/DeveloperToggle.vue'
 import SettingsSection from '@/features/settings/SettingsSection.vue'
 import ThemeToggle from '@/features/settings/ThemeToggle.vue'
-import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { getAppVersion, getStats, type AppStats } from '@/shared/api/settings'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -75,10 +74,10 @@ watch(
         </div>
       </header>
 
-      <GlassPanel class="settings-scene__privacy" elevated>
+      <div class="settings-scene__privacy">
         <p class="privacy-block__title">夜记完全运行在你的电脑上</p>
         <p class="privacy-block__text">日记与 AI 调用均不经过第三方服务器，无需注册或登录。</p>
-      </GlassPanel>
+      </div>
 
       <SettingsSection
         id="general"
@@ -89,7 +88,12 @@ watch(
       >
         <label class="settings-field">
           <span class="settings-field__label">称呼（可选）</span>
-          <input v-model="settings.nickname" class="settings-field__input" maxlength="24" placeholder="夜记如何称呼你" />
+          <input
+            v-model="settings.nickname"
+            class="settings-field__input ink-underline"
+            maxlength="24"
+            placeholder="夜记如何称呼你"
+          />
         </label>
         <ThemeToggle />
         <label class="settings-field settings-field--checkbox">
@@ -147,7 +151,7 @@ watch(
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
 .settings-scene__header {
@@ -161,13 +165,15 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+  margin-top: 0.25rem;
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
   text-decoration: none;
-  padding: 0.5rem 0.625rem;
-  border-radius: var(--radius-button);
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
+  transition: color var(--dur-fast) var(--ease-out-quart);
+}
+
+.settings-scene__back:hover {
+  color: var(--color-text-primary);
 }
 
 .settings-scene__title {
@@ -182,17 +188,22 @@ watch(
   color: var(--color-text-secondary);
 }
 
+/* 隐私说明：细线行淡墨，不做卡片。 */
+.settings-scene__privacy {
+  padding: 0.125rem 0.125rem 0.25rem;
+}
+
 .privacy-block__title {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: 0.375rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.25rem;
 }
 
 .privacy-block__text {
   font-size: 0.8125rem;
-  line-height: 1.6;
-  color: var(--color-text-secondary);
+  line-height: 1.7;
+  color: var(--color-text-faint);
 }
 
 .settings-field {
@@ -209,17 +220,25 @@ watch(
   color: var(--color-text-secondary);
 }
 
+.settings-field--checkbox input {
+  accent-color: var(--color-accent);
+}
+
 .settings-field__label {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
 }
 
+/* 底线输入：边框与聚焦生长线由全局 ink-underline 提供 */
 .settings-field__input {
-  padding: 0.625rem 0.75rem;
-  border-radius: 0.625rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated-2);
+  padding: 0.375rem 0.125rem;
+  border-radius: 0;
   color: var(--color-text-primary);
+  font-size: 0.875rem;
+}
+
+.settings-field__input::placeholder {
+  color: var(--color-text-faint);
 }
 
 .about-line {
@@ -231,13 +250,18 @@ watch(
 .usage-stats {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
 .usage-stats__row {
   display: flex;
   justify-content: space-between;
+  padding: 0.5rem 0.125rem;
+  border-bottom: 1px solid var(--color-line);
   font-size: 0.8125rem;
+}
+
+.usage-stats__row:last-child {
+  border-bottom: none;
 }
 
 .usage-stats__row dt {
@@ -248,6 +272,7 @@ watch(
   margin: 0;
   font-weight: 600;
   color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .settings-field__hint {
@@ -256,20 +281,15 @@ watch(
   margin-top: 0.375rem;
 }
 
+/* 模型入口：细线行 + caret，与分节同一节奏。 */
 .settings-scene__llm-link {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.125rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-outer);
-  background: var(--color-bg-elevated);
+  gap: 0.75rem;
+  padding: 0.875rem 0.125rem;
+  border-top: 1px solid var(--color-line);
   text-decoration: none;
-  transition: border-color var(--motion-duration) var(--motion-ease);
-}
-
-.settings-scene__llm-link:hover {
-  border-color: var(--color-accent);
 }
 
 .settings-scene__llm-link-title {
@@ -277,6 +297,11 @@ watch(
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--color-text-primary);
+  transition: color var(--dur-fast) var(--ease-out-quart);
+}
+
+.settings-scene__llm-link:hover .settings-scene__llm-link-title {
+  color: var(--color-accent);
 }
 
 .settings-scene__llm-link-desc {
@@ -287,7 +312,12 @@ watch(
 }
 
 .settings-scene__llm-link-arrow {
-  color: var(--color-text-secondary);
+  color: var(--color-text-faint);
   flex-shrink: 0;
+  transition: transform var(--dur-fast) var(--ease-out-quart);
+}
+
+.settings-scene__llm-link:hover .settings-scene__llm-link-arrow {
+  transform: translateX(2px);
 }
 </style>

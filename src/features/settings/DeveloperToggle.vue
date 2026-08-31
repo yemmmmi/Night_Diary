@@ -13,9 +13,21 @@ const settings = useSettingsStore()
 </template>
 
 <style scoped>
+label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
 .developer-toggle__hint {
   font-size: 0.7rem;
-  opacity: 0.5;
+  color: var(--color-text-faint);
   margin-left: 0.5rem;
+}
+
+input {
+  accent-color: var(--color-accent);
 }
 </style>
