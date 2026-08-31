@@ -135,6 +135,13 @@ def _run_lightweight_migrations(engine: Engine) -> None:
             "week_tasks_json": "TEXT",
         },
         "model_providers": {"user_id": "VARCHAR(64)"},
+        "plans": {
+            "recurrence": "VARCHAR(32)",
+            "target_value": "REAL",
+            "target_unit": "VARCHAR(16)",
+            "target_period": "VARCHAR(16)",
+        },
+        "tasks": {"actual_value": "REAL"},
     }
 
     inspector = inspect(engine)
