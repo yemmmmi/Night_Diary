@@ -49,9 +49,9 @@ function clearSearch() {
   searchResults.value = []
 }
 
+/** 账簿小字时间：08/25 21:00（不依赖 locale）。 */
 function formatTime(card: MemoryCard): string {
-  const d = new Date(card.created_at)
-  return `${d.toLocaleDateString('zh-CN')} ${d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+  return `${card.created_at.slice(5, 10).replace('-', '/')} ${card.created_at.slice(11, 16)}`
 }
 
 async function expandCard(card: MemoryCard) {
@@ -116,25 +116,26 @@ async function deleteCard(card: MemoryCard) {
       <p class="cards-section__empty-hint">{{ copy.cardsEmptyHint }}</p>
     </div>
 
+    <!-- 记忆卡片细线行：无卡片底，只以底线分隔 -->
     <div
       v-for="card in displayCards"
       :key="card.card_id"
-      class="cards-section__item glass-panel"
+      class="cards-section__row"
     >
-      <div class="cards-section__item-head">
+      <div class="cards-section__row-head">
         <EmotionChips :emotions="card.emotions" :emotion="card.emotion" />
         <CardTypeBadge :card-type="card.card_type" />
       </div>
-      <p v-if="card.event_summary" class="cards-section__item-summary font-diary">
+      <p v-if="card.event_summary" class="cards-section__row-summary font-diary">
         {{ card.event_summary }}
       </p>
-      <div v-if="card.tags.length > 0" class="cards-section__item-tags">
-        <span v-for="tag in card.tags" :key="tag" class="cards-section__item-tag">
+      <div v-if="card.tags.length > 0" class="cards-section__row-tags">
+        <span v-for="tag in card.tags" :key="tag" class="cards-section__row-tag">
           {{ tag }}
         </span>
       </div>
-      <div class="cards-section__item-footer">
-        <span class="cards-section__item-time">{{ formatTime(card) }}</span>
+      <div class="cards-section__row-footer">
+        <span class="cards-section__row-time">{{ formatTime(card) }}</span>
         <div class="cards-section__item-actions">
           <button
             v-if="!card.diary_id"
@@ -165,7 +166,7 @@ async function deleteCard(card: MemoryCard) {
 }
 .cards-section__error {
   padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-seal);
   background: color-mix(in srgb, var(--color-danger) 12%, transparent);
   color: var(--color-danger);
   font-size: 0.8125rem;
@@ -182,8 +183,8 @@ async function deleteCard(card: MemoryCard) {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.625rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-button);
   background: var(--color-bg-elevated);
 }
 .cards-section__search-icon {
@@ -209,57 +210,63 @@ async function deleteCard(card: MemoryCard) {
 }
 .cards-section__empty {
   text-align: center;
-  padding: 1.5rem 1rem;
-  border: 1px dashed var(--color-border);
-  border-radius: 0.75rem;
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
+  padding: 1.25rem 1rem;
+  color: var(--color-text-faint);
+  font-size: 0.8125rem;
   margin: 0;
 }
 .cards-section__empty-hint {
   font-size: 0.75rem;
   margin: 0.375rem 0 0;
-  opacity: 0.8;
+  opacity: 0.85;
 }
-.cards-section__item {
-  padding: 0.875rem 1rem;
+
+/* 卡片细线行 */
+.cards-section__row {
+  padding: 0.75rem 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  border-bottom: 1px solid var(--color-line);
 }
-.cards-section__item-head {
+.cards-section__row:last-child {
+  border-bottom: none;
+}
+.cards-section__row-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
-.cards-section__item-summary {
+.cards-section__row-summary {
   margin: 0;
   font-size: 0.875rem;
-  line-height: 1.6;
+  line-height: 1.8;
   color: var(--color-text-primary);
 }
-.cards-section__item-tags {
+.cards-section__row-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
+  gap: 0.5rem;
 }
-.cards-section__item-tag {
+.cards-section__row-tag {
   font-size: 0.6875rem;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  padding: 0.0625rem 0.5rem;
+  color: var(--color-text-faint);
 }
-.cards-section__item-footer {
+.cards-section__row-tag::before {
+  content: '#';
+}
+.cards-section__row-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
-.cards-section__item-time {
+.cards-section__row-time {
   font-size: 0.6875rem;
-  color: var(--color-text-secondary);
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 .cards-section__item-actions {
   display: flex;
@@ -268,17 +275,17 @@ async function deleteCard(card: MemoryCard) {
 .cards-section__action-btn {
   border: none;
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--color-text-faint);
   cursor: pointer;
   padding: 0.25rem;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-seal);
   display: inline-flex;
   font-size: 1rem;
   line-height: 1;
+  transition: color var(--dur-fast) var(--ease-out-quart);
 }
 .cards-section__action-btn:hover {
   color: var(--color-text-primary);
-  background: var(--color-bg-elevated-2, var(--color-bg-elevated));
 }
 .cards-section__action-btn--danger:hover {
   color: var(--color-danger);

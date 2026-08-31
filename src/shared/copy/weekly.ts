@@ -5,7 +5,7 @@ export const weeklyCopy = {
   generating: '正在回顾这一周……',
   regenerate: '重新生成本周',
   emptyHint: '这一周记录了日记或记忆卡片后，就能生成一封周回信',
-  letterTitle: '本周的信',
+  letterTitle: '周信',
   expand: '展开全文',
   collapse: '收起',
   diaryCount: (n: number) => `${n} 篇日记`,
