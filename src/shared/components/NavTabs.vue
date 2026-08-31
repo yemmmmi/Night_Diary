@@ -18,7 +18,8 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { key: 'record', label: '记录', routeName: 'home', path: '/' },
+  { key: 'today', label: '今天', routeName: 'home', path: '/' },
+  { key: 'record', label: '记录', routeName: 'timeline', path: '/timeline' },
   { key: 'plan', label: '规划', routeName: 'plan', path: '/plan' },
   { key: 'memory', label: '洞悉', routeName: 'memory', path: '/memory' },
   { key: 'chat', label: '笔谈', routeName: 'chat', path: '/chat' },
