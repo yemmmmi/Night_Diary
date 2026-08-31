@@ -27,6 +27,11 @@ export const appRoutes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'home',
+    component: () => import('@/pages/TodayScene.vue'),
+  },
+  {
+    path: '/timeline',
+    name: 'timeline',
     component: () => import('@/pages/TimelineScene.vue'),
   },
   {
@@ -61,7 +66,7 @@ export const appRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/weekly',
-    redirect: { path: '/', query: { view: 'week' } },
+    redirect: { path: '/timeline', query: { view: 'week' } },
   },
   {
     path: '/memory',

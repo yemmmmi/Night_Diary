@@ -24,7 +24,17 @@ describe('legacy route redirects', () => {
   it('redirects /weekly to the timeline week view', async () => {
     const router = buildRouter()
     await router.push('/weekly')
-    expect(router.currentRoute.value.path).toBe('/')
+    expect(router.currentRoute.value.path).toBe('/timeline')
     expect(router.currentRoute.value.query.view).toBe('week')
+  })
+})
+
+describe('home is the Today scene', () => {
+  it('mounts TodayScene at / and TimelineScene at /timeline', async () => {
+    const router = buildRouter()
+    await router.push('/')
+    expect(router.currentRoute.value.name).toBe('home')
+    await router.push('/timeline')
+    expect(router.currentRoute.value.name).toBe('timeline')
   })
 })

@@ -178,7 +178,7 @@ async function executeDelete() {
   deleteError.value = null
   try {
     await diaryStore.removeEntry(diaryId.value)
-    await router.push('/')
+    await router.push('/timeline')
   } catch (err) {
     deleteError.value = formatApiError(err, copy.deleteFailed)
     setSaveState('error')
@@ -186,7 +186,7 @@ async function executeDelete() {
 }
 
 function goBack() {
-  router.push('/')
+  router.push('/timeline')
 }
 
 watch(

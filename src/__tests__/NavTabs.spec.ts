@@ -25,26 +25,26 @@ function mountNav(name = 'home') {
 }
 
 describe('NavTabs', () => {
-  it('renders four paper text tabs and hides models from main nav', () => {
+  it('renders five paper text tabs and hides models from main nav', () => {
     const wrapper = mountNav()
     const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs.map((t) => t.text())).toEqual(['记录', '规划', '洞悉', '笔谈'])
+    expect(tabs.map((t) => t.text())).toEqual(['今天', '记录', '规划', '洞悉', '笔谈'])
     expect(wrapper.text()).not.toContain('模型')
     expect(wrapper.text()).not.toContain('设置')
   })
 
   it('marks the active tab by route name', () => {
-    const wrapper = mountNav('memory')
+    const wrapper = mountNav('timeline')
     const active = wrapper.find('[role="tab"].is-active')
     expect(active.exists()).toBe(true)
-    expect(active.text()).toBe('洞悉')
+    expect(active.text()).toBe('记录')
   })
 
   it('navigates to scene routes on tab click', async () => {
     const wrapper = mountNav()
     const tabs = wrapper.findAll('[role="tab"]')
-    await tabs[2].trigger('click')
-    expect(push).toHaveBeenCalledWith('/memory')
+    await tabs[1].trigger('click')
+    expect(push).toHaveBeenCalledWith('/timeline')
     await tabs[0].trigger('click')
     expect(push).toHaveBeenCalledWith('/')
   })

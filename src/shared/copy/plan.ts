@@ -3,10 +3,6 @@
 export const planCopy = {
   title: '我的计划',
   newPlan: '新建计划',
-  todayTitle: '今日待办',
-  todayEmpty: '今天没有待办，享受当下吧',
-  todayAddCta: '添加待办',
-  todayAddPlaceholder: '记一条待办……',
   plansTitle: '计划',
   plansEmpty: '还没有计划，可以从一个小目标开始',
   plansEmptyCta: '自己建一个',
