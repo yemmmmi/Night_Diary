@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { PhPlus } from '@phosphor-icons/vue'
 
@@ -9,20 +9,13 @@ import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { planCopy } from '@/shared/copy/plan'
 import { usePlanStore } from '@/stores/plan'
-import { toIsoDate } from '@/shared/utils/diaryFormat'
 
 defineOptions({ name: 'PlanScene' })
 
 const router = useRouter()
 const planStore = usePlanStore()
 
-const todayIso = computed(() => toIsoDate(new Date()))
 const showCreateForm = ref(false)
-const newTaskTitle = ref('')
-
-function isOverdue(dueDate: string | null, status: string): boolean {
-  return Boolean(dueDate) && dueDate! < todayIso.value && status !== 'done'
-}
 
 function goToChat() {
   router.push('/chat')
@@ -32,16 +25,8 @@ function startManualCreate() {
   showCreateForm.value = true
 }
 
-async function addTodayTask() {
-  const title = newTaskTitle.value.trim()
-  if (!title) return
-  const ok = await planStore.createTodayTask(title, todayIso.value)
-  if (ok) newTaskTitle.value = ''
-}
-
 onMounted(() => {
   planStore.loadPlans()
-  planStore.loadTodayTasks()
 })
 </script>
 
@@ -56,69 +41,6 @@ onMounted(() => {
     </div>
 
     <PlanCreateForm v-if="showCreateForm" class="plan-scene__form" @close="showCreateForm = false" />
-
-    <section class="plan-scene__section">
-      <h3 class="plan-scene__section-title">{{ planCopy.todayTitle }}</h3>
-      <template v-if="planStore.todayTasks.length === 0">
-        <GlassPanel class="plan-scene__empty" padding>
-          <div class="plan-scene__empty-icon" aria-hidden="true">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-              <circle cx="20" cy="20" r="16" stroke="currentColor" stroke-width="2" opacity="0.3" />
-              <path d="M14 20l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.5" />
-            </svg>
-          </div>
-          <p class="plan-scene__empty-text">{{ planCopy.todayEmpty }}</p>
-          <div class="plan-scene__quick-add">
-            <input
-              v-model="newTaskTitle"
-              type="text"
-              data-testid="today-add-input"
-              class="plan-scene__quick-input"
-              :placeholder="planCopy.todayAddPlaceholder"
-              maxlength="200"
-              @keydown.enter.prevent="addTodayTask"
-            />
-            <GameButton variant="secondary" data-testid="today-add-btn" @click="addTodayTask">
-              {{ planCopy.todayAddCta }}
-            </GameButton>
-          </div>
-        </GlassPanel>
-      </template>
-      <template v-else>
-        <GlassPanel class="plan-scene__panel" padding>
-          <div
-            v-for="task in planStore.todayTasks"
-            :key="task.id"
-            class="task-row"
-            :class="{ 'is-overdue': isOverdue(task.due_date, task.status) }"
-          >
-            <input
-              type="checkbox"
-              :checked="task.status === 'done'"
-              @change="planStore.toggleTask(task.id, task.status)"
-            />
-            <span :class="{ done: task.status === 'done' }">{{ task.title }}</span>
-            <span v-if="task.due_date" class="due">{{ task.due_date }}</span>
-            <button class="btn-del" @click="planStore.removeTask(task.id)">×</button>
-          </div>
-          <div class="plan-scene__quick-add plan-scene__quick-add--inline">
-            <input
-              v-model="newTaskTitle"
-              type="text"
-              data-testid="today-add-input"
-              class="plan-scene__quick-input"
-              :placeholder="planCopy.todayAddPlaceholder"
-              maxlength="200"
-              @keydown.enter.prevent="addTodayTask"
-            />
-            <GameButton variant="ghost" data-testid="today-add-btn" @click="addTodayTask">
-              <PhPlus :size="14" />
-              {{ planCopy.todayAddCta }}
-            </GameButton>
-          </div>
-        </GlassPanel>
-      </template>
-    </section>
 
     <section class="plan-scene__section">
       <h3 class="plan-scene__section-title">{{ planCopy.plansTitle }}</h3>
@@ -253,73 +175,6 @@ onMounted(() => {
   gap: 0.75rem;
   flex-wrap: wrap;
   justify-content: center;
-}
-
-.plan-scene__quick-add {
-  display: flex;
-  gap: 0.5rem;
-  width: 100%;
-  max-width: 26rem;
-}
-
-.plan-scene__quick-add--inline {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.plan-scene__quick-input {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  background: var(--color-bg);
-  color: var(--color-text-primary);
-  font-size: 0.875rem;
-  padding: 0.5rem 0.75rem;
-  outline: none;
-  transition: border-color var(--motion-duration) var(--motion-ease);
-}
-
-.plan-scene__quick-input:focus {
-  border-color: var(--color-accent);
-}
-
-.plan-scene__panel {
-  display: flex;
-  flex-direction: column;
-}
-
-.task-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 0;
-  border-bottom: 1px solid var(--color-border, #f4f4f5);
-  font-size: 0.875rem;
-}
-
-.task-row:last-of-type {
-  border-bottom: none;
-}
-
-.task-row.is-overdue {
-  opacity: 0.65;
-}
-
-.task-row.is-overdue .due {
-  color: var(--color-text-secondary, #a1a1aa);
-}
-
-.done {
-  text-decoration: line-through;
-  color: var(--color-text-secondary, #a1a1aa);
-}
-
-.due {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary, #71717a);
-  margin-left: auto;
 }
 
 .btn-del {
