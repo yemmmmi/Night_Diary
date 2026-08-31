@@ -1,18 +1,20 @@
 [data-theme='night'] {
-  --color-bg: #121212;
-  --color-bg-elevated: #1e1e1e;
-  --color-bg-elevated-2: #2c2c2c;
-  --color-text-primary: #e0e0e0;
-  --color-text-secondary: #9e9e9e;
-  --color-accent: #c4956a;
-  --color-accent-muted: #a67b52;
-  --color-border: rgba(255, 255, 255, 0.12);
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --color-success: #6aaf7a;
-  --color-warning: #d4a84a;
-  --color-danger: #cf6679;
-  --particle-primary: rgba(196, 149, 106, 0.35);
-  --particle-secondary: rgba(255, 255, 255, 0.12);
-  --color-diary-surface: #1a1a1a;
+  --color-bg: #1b1712;
+  --color-bg-elevated: #262019;
+  --color-bg-elevated-2: #2e2720;
+  --color-text-primary: #e6ddc9;
+  --color-text-secondary: #a89b85;
+  --color-text-faint: #7a6f5e;
+  --color-accent: #8aa6c9;
+  --color-accent-muted: #9db4d2;
+  --color-border: #3a3229;
+  --color-line: #3a3229;
+  --glass-bg: rgba(38, 32, 25, 0.9);
+  --glass-border: #3a3229;
+  --color-success: #7a9a6e;
+  --color-warning: #c9a25e;
+  --color-danger: #c98787;
+  --color-diary-surface: #221c15;
+  --color-seal-calm: #7a9270;
+  --color-seal-lost: #6b82a0;
 }

@@ -1,21 +1,19 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
 import DiaryEditor from '@/features/diary/DiaryEditor.vue'
 import CardDiaryPromptPanel from '@/features/diary/CardDiaryPromptPanel.vue'
-import DiaryReplySection from '@/features/diary/DiaryReplySection.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import GlassPanel from '@/shared/components/GlassPanel.vue'
 import { cardCopy } from '@/shared/copy/card'
 import { diarySceneCopy as copy } from '@/shared/copy/diaryScene'
 import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
-import { useAnalysisStore } from '@/stores/analysis'
 import { findCardForDiary } from '@/shared/utils/cardFormat'
 import { formatApiError } from '@/shared/utils/apiError'
-import { countWordUnits, diaryStatus } from '@/shared/utils/diaryFormat'
+import { countWordUnits } from '@/shared/utils/diaryFormat'
 import { useSettingsStore } from '@/stores/settings'
 import { useDevStore } from '@/stores/dev'
 import DevPipelinePanel from '@/features/dev/DevPipelinePanel.vue'
@@ -32,7 +30,6 @@ const route = useRoute()
 const router = useRouter()
 const diaryStore = useDiaryStore()
 const cardStore = useCardStore()
-const analysisStore = useAnalysisStore()
 const settings = useSettingsStore()
 const devStore = useDevStore()
 
@@ -101,14 +98,6 @@ const canSave = computed(() => {
   return hasContent.value
 })
 
-const entryStatus = computed(() =>
-  diaryStore.currentEntry ? diaryStatus(diaryStore.currentEntry) : 'draft',
-)
-
-const showReplySection = computed(
-  () => isEditing.value && diaryStore.currentEntry && entryStatus.value !== 'draft',
-)
-
 const saveLabel = computed(() => (diaryStore.saving ? copy.saving : copy.save))
 
 let saveStateTimer: ReturnType<typeof setTimeout> | null = null
@@ -123,23 +112,10 @@ function setSaveState(state: 'idle' | 'saving' | 'saved' | 'error') {
   }
 }
 
-async function loadAnalysis() {
-  if (!diaryId.value) {
-    analysisStore.clear()
-    return
-  }
-  try {
-    await analysisStore.loadForDiary(diaryId.value)
-  } catch {
-    // 404 = no analysis yet
-  }
-}
-
 async function loadEntry() {
   loadError.value = null
   if (!diaryId.value) {
     diaryStore.clearCurrent()
-    analysisStore.clear()
     content.value = ''
     saveState.value = 'idle'
     return
@@ -149,23 +125,9 @@ async function loadEntry() {
     const entry = await diaryStore.fetchEntry(diaryId.value)
     content.value = entry.content ?? ''
     saveState.value = 'idle'
-    await loadAnalysis()
-    await scrollToReplyIfNeeded()
   } catch (err) {
     loadError.value = formatApiError(err, copy.loadFailed)
   }
-}
-
-async function scrollToReplyIfNeeded() {
-  if (route.hash !== '#reply') return
-  await nextTick()
-  document.getElementById('reply')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-async function onAnalysisRefreshed() {
-  if (!diaryId.value) return
-  await diaryStore.fetchEntry(diaryId.value)
-  await loadAnalysis()
 }
 
 async function persist(showFeedback = true) {
@@ -234,13 +196,6 @@ watch(
   },
 )
 
-watch(
-  () => route.hash,
-  () => {
-    void scrollToReplyIfNeeded()
-  },
-)
-
 onMounted(async () => {
   await cardStore.loadCards()
   await loadEntry()
@@ -287,16 +242,6 @@ onMounted(async () => {
         v-model="content"
         :placeholder="editorPlaceholder"
         @autosave="onAutosave"
-      />
-
-      <DiaryReplySection
-        v-if="showReplySection && diaryId && diaryStore.currentEntry"
-        :diary-id="diaryId"
-        :entry="diaryStore.currentEntry"
-        :analysis="analysisStore.current"
-        :loading="analysisStore.loading"
-        :triggering="analysisStore.triggering"
-        @refreshed="onAnalysisRefreshed"
       />
 
       <footer class="diary-scene__footer">

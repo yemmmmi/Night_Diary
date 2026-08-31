@@ -11,11 +11,6 @@ vi.mock('vue-router', () => ({
 vi.mock('@/shared/api/diary', () => ({
   listDiaryEntries: vi.fn(async () => []),
 }))
-vi.mock('@/shared/api/analysis', () => ({
-  getAnalysis: vi.fn(async () => {
-    throw Object.assign(new Error('404'), { response: { status: 404 } })
-  }),
-}))
 vi.mock('@/shared/api/card', () => ({
   listCards: vi.fn(async () => []),
 }))
@@ -56,12 +51,13 @@ function findButton(wrapper: ReturnType<typeof mount>, text: string) {
 }
 
 describe('DetailPanel', () => {
-  it('renders date, weather, summary, status and reply preview', () => {
+  it('renders date, weather and summary without any reply element', () => {
     const { wrapper } = mountPanel()
     expect(wrapper.text()).toContain('2026-08-25')
     expect(wrapper.text()).toContain('晴')
     expect(wrapper.text()).toContain('今天走了很久')
-    expect(wrapper.text()).toContain('听起来散步帮你理清了思绪')
+    expect(wrapper.text()).not.toContain('回信')
+    expect(wrapper.text()).not.toContain('听起来散步帮你理清了思绪')
   })
 
   it('navigates to write page on continue', async () => {
@@ -70,27 +66,11 @@ describe('DetailPanel', () => {
     expect(push).toHaveBeenCalledWith('/write/7')
   })
 
-  it('navigates to analysis page on view reply', async () => {
-    const { wrapper } = mountPanel()
-    await findButton(wrapper, '查看回信').trigger('click')
-    expect(push).toHaveBeenCalledWith('/analysis/7')
-  })
-
   it('deletes entry after confirmation and clears selection', async () => {
     const { wrapper, timeline, diaryStore } = mountPanel()
     await findButton(wrapper, '删除日记').trigger('click')
     await findButton(wrapper, '确认删除').trigger('click')
     expect(diaryStore.removeEntry).toHaveBeenCalledWith(7)
     expect(timeline.selectedEntry).toBeNull()
-  })
-
-  it('hides reply block for drafts', () => {
-    const draft = { ...entry, content: '走了很久', reply: null }
-    setActivePinia(createPinia())
-    const timeline = useTimelineStore()
-    timeline.entries = [draft]
-    timeline.selectEntry(7)
-    const wrapper = mount(DetailPanel)
-    expect(wrapper.text()).not.toContain('回信')
   })
 })

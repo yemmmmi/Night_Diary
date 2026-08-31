@@ -24,10 +24,6 @@ vi.mock('@/shared/api/weekly', () => ({
   generateWeekly: vi.fn(async () => ({})),
   regenerateWeekly: vi.fn(async () => ({})),
 }))
-vi.mock('@/shared/api/analysis', () => ({
-  getAnalysis: vi.fn(async () => null),
-}))
-
 import TimelineScene from '@/pages/TimelineScene.vue'
 import { useTimelineStore } from '@/stores/timeline'
 

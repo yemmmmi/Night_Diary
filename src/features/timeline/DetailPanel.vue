@@ -11,21 +11,14 @@ import { timelineCopy as copy } from '@/shared/copy/timeline'
 import { useTimelineStore } from '@/stores/timeline'
 import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
-import { useAnalysisStore } from '@/stores/analysis'
 import { formatApiError } from '@/shared/utils/apiError'
 import { findCardForDiary } from '@/shared/utils/cardFormat'
-import {
-  diaryEntrySummary,
-  diaryStatus,
-  diaryStatusLabel,
-  diarySummary,
-} from '@/shared/utils/diaryFormat'
+import { diaryEntrySummary } from '@/shared/utils/diaryFormat'
 
 const router = useRouter()
 const timeline = useTimelineStore()
 const diaryStore = useDiaryStore()
 const cardStore = useCardStore()
-const analysisStore = useAnalysisStore()
 
 const showDeleteConfirm = ref(false)
 const deleteError = ref<string | null>(null)
@@ -36,24 +29,11 @@ const linkedCard = computed(() =>
   entry.value ? findCardForDiary(cardStore.cards, entry.value.id) : null,
 )
 
-const aiReplyPreview = computed(() => {
-  const text = analysisStore.current?.reply?.trim() || entry.value?.reply?.trim() || ''
-  return text ? diarySummary(text, 160) : null
-})
-
-const showAiPreview = computed(
-  () => entry.value != null && diaryStatus(entry.value) !== 'draft' && Boolean(aiReplyPreview.value),
-)
-
 watch(
   entry,
-  (next) => {
+  () => {
     showDeleteConfirm.value = false
     deleteError.value = null
-    analysisStore.clear()
-    if (next && diaryStatus(next) !== 'draft') {
-      analysisStore.loadForDiary(next.id).catch(() => {})
-    }
   },
   { immediate: true },
 )
@@ -67,18 +47,12 @@ function continueWriting() {
   router.push(`/write/${entry.value.id}`)
 }
 
-function viewReply() {
-  if (!entry.value) return
-  router.push(`/analysis/${entry.value.id}`)
-}
-
 function exportMarkdown() {
   if (!entry.value) return
   const e = entry.value
   const date = e.date || '未知日期'
   const weather = e.weather ? `  \n*天气：${e.weather}*` : ''
-  const aiAns = e.reply?.trim() || analysisStore.current?.reply?.trim() || ''
-  const md = `# ${date}\n${weather}\n\n## 日记\n\n${e.content}\n${aiAns ? `\n---\n\n## 回信\n\n${aiAns}\n` : ''}`
+  const md = `# ${date}\n${weather}\n\n## 日记\n\n${e.content}\n`
   const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -121,27 +95,8 @@ async function executeDelete() {
       {{ diaryEntrySummary(entry, cardStore.cards, 120) }}
     </p>
 
-    <span
-      v-if="diaryStatusLabel(diaryStatus(entry))"
-      class="detail-panel__chip"
-    >
-      {{ diaryStatusLabel(diaryStatus(entry)) }}
-    </span>
-
-    <div v-if="showAiPreview" class="detail-panel__ai">
-      <p class="detail-panel__ai-label">{{ copy.detailReplyLabel }}</p>
-      <p class="detail-panel__ai-preview font-diary">{{ aiReplyPreview }}</p>
-    </div>
-
     <div class="detail-panel__actions">
-      <GameButton variant="secondary" @click="continueWriting">{{ copy.detailContinue }}</GameButton>
-      <GameButton
-        v-if="diaryStatus(entry) !== 'draft'"
-        variant="primary"
-        @click="viewReply"
-      >
-        {{ entry.reply?.trim() ? copy.detailViewReply : copy.detailGetReply }}
-      </GameButton>
+      <GameButton variant="primary" @click="continueWriting">{{ copy.detailContinue }}</GameButton>
       <GameButton variant="ghost" @click="exportMarkdown">{{ copy.detailExport }}</GameButton>
       <GameButton variant="ghost" class="detail-panel__delete" @click="showDeleteConfirm = true">
         {{ copy.detailDelete }}
@@ -207,34 +162,6 @@ async function executeDelete() {
   line-height: 1.7;
   color: var(--color-text-primary);
 }
-.detail-panel__chip {
-  align-self: flex-start;
-  font-size: 0.6875rem;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  padding: 0.125rem 0.5rem;
-}
-.detail-panel__ai {
-  border-top: 1px solid var(--color-border);
-  padding-top: 0.625rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-.detail-panel__ai-label {
-  margin: 0;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--color-text-secondary);
-}
-.detail-panel__ai-preview {
-  margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.7;
-  color: var(--color-text-primary);
-}
 .detail-panel__actions {
   display: flex;
   flex-direction: column;
@@ -242,12 +169,12 @@ async function executeDelete() {
   margin-top: 0.5rem;
 }
 .detail-panel__delete {
-  color: var(--color-danger, #b3563e);
+  color: var(--color-danger);
 }
 .detail-panel__error {
   margin: 0;
   font-size: 0.75rem;
-  color: var(--color-danger, #b3563e);
+  color: var(--color-danger);
 }
 .detail-panel__confirm {
   border-top: 1px solid var(--color-border);

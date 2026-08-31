@@ -25,10 +25,7 @@ export const timelineCopy = {
   aiSuggested: 'AI 建议',
   weekOverview: (diary: number, card: number, done: number, total: number) =>
     `${diary} 篇日记 · ${card} 张卡片 · 任务 ${done}/${total}`,
-  detailReplyLabel: '回信',
   detailContinue: '继续编辑',
-  detailViewReply: '查看回信',
-  detailGetReply: '获取回信',
   detailExport: '导出 Markdown',
   detailDelete: '删除日记',
   detailDeleteConfirm: '确定删除这篇日记吗？',

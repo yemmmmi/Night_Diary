@@ -60,11 +60,6 @@ export const appRoutes: RouteRecordRaw[] = [
     redirect: { path: '/settings', hash: '#backup' },
   },
   {
-    path: '/analysis/:diaryId',
-    name: 'analysis',
-    component: () => import('@/pages/AnalysisScene.vue'),
-  },
-  {
     path: '/weekly',
     redirect: { path: '/', query: { view: 'week' } },
   },
