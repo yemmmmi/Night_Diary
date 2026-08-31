@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { isoWeekStart, recurrenceLabel, summarizePlanProgress } from '@/shared/utils/planProgress'
+import {
+  isoWeekStart,
+  ledgerLine,
+  recurrenceLabel,
+  summarizePlanProgress,
+  type PlanProgress,
+} from '@/shared/utils/planProgress'
 import type { PlanItem } from '@/shared/api/plan'
 
 function planWith(
@@ -51,6 +57,59 @@ describe('recurrenceLabel', () => {
     expect(recurrenceLabel('weekly:2,4')).toBe('每周 · 周二 周四')
     expect(recurrenceLabel('weekly:7')).toBe('每周 · 周日')
     expect(recurrenceLabel('garbage')).toBe('')
+  })
+})
+
+describe('ledgerLine', () => {
+  const base: PlanProgress = {
+    today: 0,
+    week: 0,
+    total: 0,
+    target: null,
+    unit: null,
+    period: null,
+    rate: null,
+  }
+
+  it('daily target carries denominators on today and week (week = target × 7)', () => {
+    const line = ledgerLine({
+      ...base,
+      today: 2.5,
+      week: 10,
+      total: 40,
+      target: 4,
+      unit: 'h',
+      period: 'daily',
+    })
+    expect(line).toBe('今日 2.5 / 4 h · 本周 10 / 28 h · 累计 40 h')
+  })
+
+  it('weekly target carries the denominator only on the week tier', () => {
+    const line = ledgerLine({
+      ...base,
+      today: 2.5,
+      week: 2.5,
+      total: 4,
+      target: 4,
+      unit: 'h',
+      period: 'weekly',
+    })
+    expect(line).toBe('今日 2.5 h · 本周 2.5 / 4 h · 累计 4 h')
+  })
+
+  it('total target carries the denominator only on the total tier', () => {
+    const line = ledgerLine({ ...base, total: 12, target: 20, period: 'total' })
+    expect(line).toBe('今日 0 · 本周 0 · 累计 12 / 20')
+  })
+
+  it('states plain counts without target', () => {
+    const line = ledgerLine({ ...base, today: 1, week: 3, total: 12 })
+    expect(line).toBe('今日 1 · 本周 3 · 累计 12')
+  })
+
+  it('rounds fractional amounts to two decimals', () => {
+    const line = ledgerLine({ ...base, today: 2.345, week: 2.345, total: 2.345 })
+    expect(line).toBe('今日 2.35 · 本周 2.35 · 累计 2.35')
   })
 })
 

@@ -21,6 +21,49 @@ const form = reactive({
 const submitting = ref(false)
 const titleError = ref(false)
 
+/** 周期三选项：无 / 每日 / 每周（每周时用周几 chip 多选，生成 weekly:2,4 串）。 */
+const recurrenceMode = ref<'none' | 'daily' | 'weekly'>('none')
+const weekdays = ref<number[]>([])
+const WEEKDAY_OPTIONS = [1, 2, 3, 4, 5, 6, 7] as const
+const WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] as const
+
+/** 目标值一行三输入：数值 / 单位 / 周期。 */
+const targetValueInput = ref('')
+const targetUnitInput = ref('')
+const targetPeriodInput = ref<'daily' | 'weekly' | 'total'>('weekly')
+
+function toggleWeekday(day: number) {
+  const index = weekdays.value.indexOf(day)
+  if (index >= 0) weekdays.value.splice(index, 1)
+  else weekdays.value.push(day)
+}
+
+function buildRecurrence(): string {
+  if (recurrenceMode.value === 'daily') return 'daily'
+  if (recurrenceMode.value === 'weekly' && weekdays.value.length > 0) {
+    const days = [...weekdays.value].sort((a, b) => a - b)
+    return `weekly:${days.join(',')}`
+  }
+  return 'none'
+}
+
+interface TargetPayload {
+  target_value: number
+  target_unit?: string
+  target_period: 'daily' | 'weekly' | 'total'
+}
+
+/** 数值有效（正数）才组装目标字段，否则整个目标缺省。 */
+function buildTarget(): TargetPayload | undefined {
+  const value = Number.parseFloat(targetValueInput.value)
+  if (!Number.isFinite(value) || value <= 0) return undefined
+  return {
+    target_value: value,
+    target_unit: targetUnitInput.value.trim() || undefined,
+    target_period: targetPeriodInput.value,
+  }
+}
+
 function addTask() {
   form.tasks.push({ title: '', due_date: '' })
 }
@@ -48,6 +91,8 @@ async function submit() {
     title,
     motivation: form.motivation.trim() || undefined,
     tasks: tasks.length > 0 ? tasks : undefined,
+    recurrence: buildRecurrence(),
+    ...buildTarget(),
   })
   submitting.value = false
   if (ok) emit('close')
@@ -87,6 +132,85 @@ async function submit() {
         :placeholder="planCopy.formMotivationPlaceholder"
       />
     </label>
+
+    <div class="plan-create-form__field">
+      <span class="plan-create-form__label">{{ planCopy.recurrenceLabel }}</span>
+      <div class="plan-create-form__seg" role="group">
+        <button
+          type="button"
+          class="seg-btn"
+          :class="{ 'is-active': recurrenceMode === 'none' }"
+          data-testid="recurrence-none"
+          @click="recurrenceMode = 'none'"
+        >
+          {{ planCopy.recurrenceNone }}
+        </button>
+        <button
+          type="button"
+          class="seg-btn"
+          :class="{ 'is-active': recurrenceMode === 'daily' }"
+          data-testid="recurrence-daily"
+          @click="recurrenceMode = 'daily'"
+        >
+          {{ planCopy.recurrenceDaily }}
+        </button>
+        <button
+          type="button"
+          class="seg-btn"
+          :class="{ 'is-active': recurrenceMode === 'weekly' }"
+          data-testid="recurrence-weekly"
+          @click="recurrenceMode = 'weekly'"
+        >
+          {{ planCopy.recurrenceWeekly }}
+        </button>
+      </div>
+      <div v-if="recurrenceMode === 'weekly'" class="plan-create-form__weekdays">
+        <span class="plan-create-form__weekday-label">{{ planCopy.recurrenceWeekdays }}</span>
+        <button
+          v-for="day in WEEKDAY_OPTIONS"
+          :key="day"
+          type="button"
+          class="weekday-chip"
+          :class="{ 'is-active': weekdays.includes(day) }"
+          :data-testid="`weekday-chip-${day}`"
+          @click="toggleWeekday(day)"
+        >
+          {{ WEEKDAY_LABELS[day - 1] }}
+        </button>
+      </div>
+    </div>
+
+    <div class="plan-create-form__field">
+      <span class="plan-create-form__label">{{ planCopy.targetValueLabel }}</span>
+      <div class="plan-create-form__target-row">
+        <input
+          v-model="targetValueInput"
+          type="number"
+          min="0"
+          step="0.5"
+          data-testid="target-value-input"
+          class="plan-create-form__input plan-create-form__target-value"
+          placeholder="4"
+        />
+        <input
+          v-model="targetUnitInput"
+          type="text"
+          data-testid="target-unit-input"
+          class="plan-create-form__input plan-create-form__target-unit"
+          :placeholder="planCopy.targetUnitPlaceholder"
+          maxlength="16"
+        />
+        <select
+          v-model="targetPeriodInput"
+          data-testid="target-period-select"
+          class="plan-create-form__input plan-create-form__target-period"
+        >
+          <option value="daily">{{ planCopy.targetPeriodDaily }}</option>
+          <option value="weekly">{{ planCopy.targetPeriodWeekly }}</option>
+          <option value="total">{{ planCopy.targetPeriodTotal }}</option>
+        </select>
+      </div>
+    </div>
 
     <div class="plan-create-form__field">
       <span class="plan-create-form__label">{{ planCopy.formTasksLabel }}</span>
@@ -241,5 +365,67 @@ async function submit() {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+/* 周期三选项（无 / 每日 / 每周） */
+.plan-create-form__seg {
+  display: inline-flex;
+  gap: 0.375rem;
+}
+.seg-btn {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+}
+.seg-btn.is-active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+/* 每周时选择的周几 chip（可多选） */
+.plan-create-form__weekdays {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  margin-top: 0.375rem;
+}
+.plan-create-form__weekday-label {
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+}
+.weekday-chip {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.625rem;
+  cursor: pointer;
+}
+.weekday-chip.is-active {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+/* 目标值一行三输入：数值 / 单位 / 周期 */
+.plan-create-form__target-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.plan-create-form__target-value {
+  width: 6rem;
+}
+.plan-create-form__target-unit {
+  width: 9rem;
+}
+.plan-create-form__target-period {
+  width: 7rem;
 }
 </style>

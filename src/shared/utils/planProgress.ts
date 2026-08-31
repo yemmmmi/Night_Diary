@@ -3,6 +3,10 @@ import { parseLocalDate, toIsoDate } from '@/shared/utils/diaryFormat'
 
 const WEEKDAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] as const
 
+function formatNumber(n: number): string {
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100)
+}
+
 /** ISO 周起始日（周一）的 ISO 日期串。 */
 export function isoWeekStart(iso: string): string {
   const date = parseLocalDate(iso)
@@ -54,4 +58,24 @@ export function summarizePlanProgress(plan: PlanItem, today: string): PlanProgre
     rate = Math.min(base / target, 1)
   }
   return { today: day, week, total, target, unit: plan.target_unit ?? null, period, rate }
+}
+
+/** 账簿一行小字（规格 §5.3）：分母只落在目标对应档位；每日目标的本周档分母按 target × 7 换算。 */
+export function ledgerLine(p: PlanProgress): string {
+  const amount = (n: number): string => (p.unit ? `${formatNumber(n)} ${p.unit}` : formatNumber(n))
+  const segment = (value: number, target: number | null): string =>
+    target != null ? `${formatNumber(value)} / ${amount(target)}` : amount(value)
+  const dayTarget = p.period === 'daily' ? p.target : null
+  const weekTarget =
+    p.period === 'weekly'
+      ? p.target
+      : p.period === 'daily' && p.target != null
+        ? p.target * 7
+        : null
+  const totalTarget = p.period === 'total' ? p.target : null
+  return [
+    `今日 ${segment(p.today, dayTarget)}`,
+    `本周 ${segment(p.week, weekTarget)}`,
+    `累计 ${segment(p.total, totalTarget)}`,
+  ].join(' · ')
 }
