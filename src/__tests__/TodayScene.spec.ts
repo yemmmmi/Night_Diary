@@ -10,9 +10,9 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
 }))
 
-const listDiaryEntries = vi.fn(async () => [] as unknown[])
+const listDiaryEntries = vi.hoisted(() => vi.fn(async () => [] as unknown[]))
 vi.mock('@/shared/api/diary', () => ({
-  listDiaryEntries: (...args: unknown[]) => listDiaryEntries(...args),
+  listDiaryEntries,
 }))
 vi.mock('@/shared/api/plan', () => ({
   listPlans: vi.fn(async () => []),
