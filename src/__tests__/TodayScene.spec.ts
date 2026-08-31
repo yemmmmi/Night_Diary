@@ -18,6 +18,7 @@ vi.mock('@/shared/api/plan', () => ({
   listPlans: vi.fn(async () => []),
   getTodayTasks: vi.fn(async () => []),
   createTask: vi.fn(async () => ({})),
+  updateTaskStatus: vi.fn(async () => ({})),
 }))
 vi.mock('@/shared/api/card', () => ({
   listCards: vi.fn(async () => []),
@@ -37,11 +38,41 @@ function entry(id: number, date: string, content: string): DiaryEntry {
 }
 
 function task(id: string, planId: string | null, title: string): TaskItem {
-  return { id, plan_id: planId, title, note: null, due_date: todayIso, status: 'pending', source: 'manual', completed_at: null }
+  return { id, plan_id: planId, title, note: null, due_date: todayIso, status: 'pending', source: 'manual', completed_at: null, actual_value: null }
 }
 
 function plan(id: string, title: string, motivation: string | null): PlanItem {
-  return { id, title, motivation, source_refs: [], status: 'active', source: 'manual', tasks: [] }
+  return {
+    id,
+    title,
+    motivation,
+    source_refs: [],
+    status: 'active',
+    source: 'manual',
+    tasks: [],
+    recurrence: null,
+    target_value: null,
+    target_unit: null,
+    target_period: null,
+  }
+}
+
+function metricPlan(): PlanItem {
+  return {
+    ...plan('p1', '早睡挑战', null),
+    recurrence: 'weekly:2,4',
+    target_value: 4,
+    target_unit: 'h',
+    target_period: 'weekly',
+    tasks: [
+      {
+        ...task('t9', 'p1', '23:30 前上床'),
+        status: 'done',
+        completed_at: `${todayIso}T22:00:00`,
+        actual_value: 2.5,
+      },
+    ],
+  }
 }
 
 function mountScene() {
@@ -118,6 +149,61 @@ describe('TodayScene', () => {
       expect(api.createTask).toHaveBeenCalledWith(
         expect.objectContaining({ title: '晚上散步 20 分钟', due_date: todayIso }),
       )
+    })
+  })
+
+  it('shows the plan ledger numbers and progress bar in the rail', async () => {
+    const { wrapper, planStore } = mountScene()
+    await flushPromises()
+    planStore.plans = [metricPlan()]
+    await nextTick()
+    const ledger = wrapper.find('[data-testid="today-plan-ledger"]')
+    expect(ledger.exists()).toBe(true)
+    expect(ledger.text()).toContain('今日')
+    expect(ledger.text()).toContain('2.5')
+    expect(wrapper.find('[data-testid="today-plan-bar"]').exists()).toBe(true)
+  })
+
+  it('hides the progress bar for plans without a target', async () => {
+    const { wrapper, planStore } = mountScene()
+    await flushPromises()
+    planStore.plans = [plan('p1', '每天写日记', null)]
+    await nextTick()
+    expect(wrapper.find('[data-testid="today-plan-ledger"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="today-plan-bar"]').exists()).toBe(false)
+  })
+
+  it('pulls a plan task into today with a prefilled title', async () => {
+    const api = await import('@/shared/api/plan')
+    const { wrapper, planStore } = mountScene()
+    await flushPromises()
+    planStore.plans = [metricPlan()]
+    await nextTick()
+    await wrapper.find('[data-testid="today-plan-pull"]').trigger('click')
+    const input = wrapper.find('[data-testid="today-plan-pull-input"]')
+    expect((input.element as HTMLInputElement).value).toBe('早睡挑战')
+    await input.setValue('23:30 前上床')
+    await wrapper.find('[data-testid="today-plan-pull-submit"]').trigger('click')
+    await vi.waitFor(() => {
+      expect(api.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ plan_id: 'p1', title: '23:30 前上床', due_date: todayIso }),
+      )
+    })
+  })
+
+  it('records an actual value when completing a task of a plan with target', async () => {
+    const api = await import('@/shared/api/plan')
+    const { wrapper, planStore } = mountScene()
+    await flushPromises()
+    planStore.plans = [metricPlan()]
+    planStore.todayTasks = [task('t1', 'p1', '23:30 前上床')]
+    await nextTick()
+    await wrapper.find('[data-testid="today-task-row"] input[type="checkbox"]').trigger('change')
+    expect(wrapper.find('[data-testid="today-actual-input"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="today-actual-input"]').setValue('1.5')
+    await wrapper.find('[data-testid="today-actual-confirm"]').trigger('click')
+    await vi.waitFor(() => {
+      expect(api.updateTaskStatus).toHaveBeenCalledWith('t1', 'done', 1.5)
     })
   })
 })
