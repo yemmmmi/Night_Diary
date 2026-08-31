@@ -34,14 +34,14 @@ function dismissError() {
   errorDismissed.value = true
 }
 
-const tabRouteNames = new Set(['home', 'plan', 'memory', 'chat', 'models'])
+const tabRouteNames = new Set(['home', 'plan', 'memory', 'chat'])
 
 const isTabRoute = computed(() => {
   const name = route.name as string | null
   return name != null && tabRouteNames.has(name)
 })
 
-const tabViewNames = ['TimelineScene', 'PlanScene', 'MemoryScene', 'ChatScene', 'ModelsScene']
+const tabViewNames = ['TimelineScene', 'PlanScene', 'MemoryScene', 'ChatScene']
 
 const statusBanner = computed(() => {
   if (error.value) return null
