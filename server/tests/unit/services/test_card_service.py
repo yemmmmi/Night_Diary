@@ -21,7 +21,7 @@ def test_create_card_refreshes_day_digest(db_session) -> None:
         mood_score=0.3,
     )
 
-    digest = get_digest(db_session, user_id="default", day=row.created_at.date())
+    digest = get_digest(db_session, user_id="default", day=card_service._card_digest_day(row))
     assert digest is not None
     assert digest.digest_type == "basic"
     assert digest.source == "card"
@@ -51,7 +51,7 @@ def test_update_card_re_aggregates_day_digest(db_session) -> None:
         tags=["加班", "想通"],
     )
 
-    digest = get_digest(db_session, user_id="default", day=row.created_at.date())
+    digest = get_digest(db_session, user_id="default", day=card_service._card_digest_day(row))
     assert digest is not None
     assert len(digest.cards) == 1
     assert digest.cards[0].emotion == "平静"
@@ -71,7 +71,7 @@ def test_delete_card_removes_from_day_digest(db_session) -> None:
     )
     card_service.delete_card(db_session, row.card_id, user_id="default")
 
-    digest = get_digest(db_session, user_id="default", day=row.created_at.date())
+    digest = get_digest(db_session, user_id="default", day=card_service._card_digest_day(row))
     assert digest is not None
     assert digest.cards == []
 
