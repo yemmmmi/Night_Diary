@@ -38,6 +38,10 @@ def create_plan(
     source_refs: list[dict[str, Any]] | None = None,
     source: str = "manual",
     created_from_conversation_id: str | None = None,
+    recurrence: str | None = None,
+    target_value: float | None = None,
+    target_unit: str | None = None,
+    target_period: str | None = None,
 ) -> PlanRow:
     row = PlanRow(
         id=_new_id(),
@@ -48,6 +52,10 @@ def create_plan(
         status="active",
         source=source,
         created_from_conversation_id=created_from_conversation_id,
+        recurrence=recurrence,
+        target_value=target_value,
+        target_unit=target_unit,
+        target_period=target_period,
     )
     db.add(row)
     db.commit()

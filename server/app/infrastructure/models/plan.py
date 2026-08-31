@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database import Base
@@ -37,6 +37,10 @@ class PlanRow(Base):
     status: Mapped[str] = mapped_column(String(20), default="active")  # active/archived/completed
     source: Mapped[str] = mapped_column(String(20), default="manual")  # manual/agent
     created_from_conversation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    recurrence: Mapped[str | None] = mapped_column(String(32), nullable=True)  # none/daily/weekly:1-7
+    target_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_unit: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    target_period: Mapped[str | None] = mapped_column(String(16), nullable=True)  # daily/weekly/total
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -65,6 +69,7 @@ class TaskRow(Base):
     source: Mapped[str] = mapped_column(String(20), default="manual")
     created_from_conversation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    actual_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

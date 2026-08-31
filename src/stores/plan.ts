@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as planApi from '@/shared/api/plan'
+import { toIsoDate } from '@/shared/utils/diaryFormat'
 
 export const usePlanStore = defineStore('plan', () => {
   const plans = ref<planApi.PlanItem[]>([])
@@ -32,6 +33,10 @@ export const usePlanStore = defineStore('plan', () => {
     title: string
     motivation?: string
     tasks?: Array<{ title: string; note?: string; due_date?: string }>
+    recurrence?: string
+    target_value?: number
+    target_unit?: string
+    target_period?: 'daily' | 'weekly' | 'total'
   }) {
     error.value = null
     try {
@@ -69,6 +74,36 @@ export const usePlanStore = defineStore('plan', () => {
     }
   }
 
+  /** 完成任务并记录实际值（§6.3：无值按 1 次计数由聚合兜底）。 */
+  async function completeTask(taskId: string, actualValue?: number) {
+    error.value = null
+    try {
+      await planApi.updateTaskStatus(taskId, 'done', actualValue)
+      await loadTodayTasks()
+      await loadPlans()
+    } catch {
+      error.value = '更新任务失败'
+    }
+  }
+
+  /** 从活跃计划手动拉一条进今日待办（§6.3 手动拉取，预填标题可改）。 */
+  async function pullToToday(planId: string, title: string) {
+    error.value = null
+    try {
+      await planApi.createTask({
+        plan_id: planId,
+        title,
+        due_date: toIsoDate(new Date()),
+      })
+      await loadTodayTasks()
+      await loadPlans()
+      return true
+    } catch {
+      error.value = '创建待办失败'
+      return false
+    }
+  }
+
   async function removeTask(taskId: string) {
     try {
       await planApi.deleteTask(taskId)
@@ -98,6 +133,8 @@ export const usePlanStore = defineStore('plan', () => {
     createPlan,
     createTodayTask,
     toggleTask,
+    completeTask,
+    pullToToday,
     removeTask,
     removePlan,
   }
