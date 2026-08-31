@@ -322,7 +322,7 @@ def test_update_plan_recurrence(authed_client: TestClient) -> None:
 
 
 def test_complete_task_records_actual_value(authed_client: TestClient) -> None:
-    """完成任务时记录实际值，响应透出 actual_value。"""
+    """完成任务时记录实际值并透出 actual_value。"""
     plan = _create_plan(authed_client, title="阅读")
     create = authed_client.post(
         "/api/v1/tasks", json={"title": "读书半小时", "plan_id": plan["id"]}
@@ -344,7 +344,7 @@ def test_complete_task_records_actual_value(authed_client: TestClient) -> None:
 
 
 def test_complete_task_without_actual_value(authed_client: TestClient) -> None:
-    """无实际值完成时 actual_value 保持 None（按 1 次计数由前端兜底）。"""
+    """无实际值完成时 actual_value 保持 None。按 1 次计数由前端兜底。"""
     create = authed_client.post("/api/v1/tasks", json={"title": "散步"})
     task_id = create.json()["id"]
     response = authed_client.patch(
