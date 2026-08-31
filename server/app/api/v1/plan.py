@@ -40,6 +40,7 @@ def _task_to_response(row: TaskRow) -> TaskResponse:
         status=row.status,
         source=row.source,
         completed_at=row.completed_at.isoformat() if row.completed_at else None,
+        actual_value=row.actual_value,
         created_at=row.created_at.isoformat() if row.created_at else "",
     )
 
@@ -53,6 +54,10 @@ def _plan_to_response(row: PlanRow, tasks: list[TaskRow] | None = None) -> PlanR
         status=row.status,
         source=row.source,
         tasks=[_task_to_response(t) for t in (tasks if tasks is not None else row.tasks)],
+        recurrence=row.recurrence,
+        target_value=row.target_value,
+        target_unit=row.target_unit,
+        target_period=row.target_period,
         created_at=row.created_at.isoformat() if row.created_at else "",
     )
 
@@ -71,6 +76,10 @@ def create_plan(body: PlanCreateRequest, db: DbDep, user: CurrentUserDep) -> Pla
         source_refs=[r.model_dump() for r in body.source_refs],
         source=body.source,
         created_from_conversation_id=body.created_from_conversation_id,
+        recurrence=body.recurrence,
+        target_value=body.target_value,
+        target_unit=body.target_unit,
+        target_period=body.target_period,
     )
     created_tasks: list[TaskRow] = []
     for task_body in body.tasks:

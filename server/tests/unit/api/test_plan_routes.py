@@ -273,3 +273,87 @@ def test_list_tasks_filters_by_due_date_range(authed_client: TestClient) -> None
     open_ended = authed_client.get("/api/v1/tasks", params={"date_to": "2026-08-25"})
     assert open_ended.status_code == 200
     assert [t["title"] for t in open_ended.json()] == []
+
+
+# ── PR4: metric columns (recurrence/target/actual) ────────────────────
+
+
+def test_create_plan_with_recurrence_and_target(authed_client: TestClient) -> None:
+    """POST /plans 携带周期与目标值字段应透出。"""
+    data = _create_plan(
+        authed_client,
+        title="早睡挑战",
+        recurrence="weekly:2,4",
+        target_value=4,
+        target_unit="h",
+        target_period="weekly",
+    )
+    assert data["recurrence"] == "weekly:2,4"
+    assert data["target_value"] == 4
+    assert data["target_unit"] == "h"
+    assert data["target_period"] == "weekly"
+
+
+def test_create_plan_defaults_metric_fields_to_none(authed_client: TestClient) -> None:
+    """不携带度量字段时响应应为 None 而非缺失。"""
+    data = _create_plan(authed_client, title="极简计划")
+    assert data["recurrence"] is None
+    assert data["target_value"] is None
+    assert data["target_unit"] is None
+    assert data["target_period"] is None
+
+
+def test_create_plan_rejects_bad_recurrence(authed_client: TestClient) -> None:
+    """非法周期标记应 422。"""
+    response = authed_client.post(
+        "/api/v1/plans", json={"title": "x", "recurrence": "monthly"}
+    )
+    assert response.status_code == 422
+
+
+def test_update_plan_recurrence(authed_client: TestClient) -> None:
+    """PATCH /plans/{id} 可更新周期。"""
+    plan = _create_plan(authed_client, title="跑步")
+    response = authed_client.patch(
+        f"/api/v1/plans/{plan['id']}", json={"recurrence": "daily"}
+    )
+    assert response.status_code == 200
+    assert response.json()["recurrence"] == "daily"
+
+
+def test_complete_task_records_actual_value(authed_client: TestClient) -> None:
+    """完成任务时记录实际值，响应透出 actual_value。"""
+    plan = _create_plan(authed_client, title="阅读")
+    create = authed_client.post(
+        "/api/v1/tasks", json={"title": "读书半小时", "plan_id": plan["id"]}
+    )
+    task_id = create.json()["id"]
+
+    response = authed_client.patch(
+        f"/api/v1/tasks/{task_id}", json={"status": "done", "actual_value": 2.5}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "done"
+    assert body["completed_at"] is not None
+    assert body["actual_value"] == 2.5
+
+    # 计划详情内嵌任务同样带 actual_value。
+    detail = authed_client.get(f"/api/v1/plans/{plan['id']}")
+    assert detail.json()["tasks"][0]["actual_value"] == 2.5
+
+
+def test_complete_task_without_actual_value(authed_client: TestClient) -> None:
+    """无实际值完成时 actual_value 保持 None（按 1 次计数由前端兜底）。"""
+    create = authed_client.post("/api/v1/tasks", json={"title": "散步"})
+    task_id = create.json()["id"]
+    response = authed_client.patch(
+        f"/api/v1/tasks/{task_id}", json={"status": "done"}
+    )
+    assert response.json()["actual_value"] is None
+
+
+def test_task_response_includes_actual_value_default(authed_client: TestClient) -> None:
+    """普通任务响应带 actual_value=None 字段。"""
+    create = authed_client.post("/api/v1/tasks", json={"title": "默认值检查"})
+    assert create.json()["actual_value"] is None

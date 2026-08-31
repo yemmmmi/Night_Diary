@@ -399,6 +399,7 @@ class TaskResponse(BaseModel):
     status: str
     source: str
     completed_at: str | None = None
+    actual_value: float | None = None
     created_at: str
 
 
@@ -407,6 +408,7 @@ class TaskUpdateRequest(BaseModel):
     note: str | None = None
     due_date: str | None = None
     status: str | None = Field(default=None, pattern="^(pending|done|skipped)$")
+    actual_value: float | None = Field(default=None, ge=0)
 
 
 class PlanCreateRequest(BaseModel):
@@ -416,6 +418,12 @@ class PlanCreateRequest(BaseModel):
     tasks: list[TaskCreateRequest] = Field(default_factory=list)
     source: str = Field(default="manual", pattern="^(manual|agent)$")
     created_from_conversation_id: str | None = None
+    recurrence: str | None = Field(
+        default=None, pattern=r"^(none|daily|weekly:[1-7](,[1-7])*)$"
+    )
+    target_value: float | None = Field(default=None, ge=0)
+    target_unit: str | None = Field(default=None, max_length=16)
+    target_period: str | None = Field(default=None, pattern="^(daily|weekly|total)$")
 
 
 class PlanResponse(BaseModel):
@@ -426,6 +434,10 @@ class PlanResponse(BaseModel):
     status: str
     source: str
     tasks: list[TaskResponse] = Field(default_factory=list)
+    recurrence: str | None = None
+    target_value: float | None = None
+    target_unit: str | None = None
+    target_period: str | None = None
     created_at: str
 
 
@@ -433,3 +445,9 @@ class PlanUpdateRequest(BaseModel):
     title: str | None = None
     motivation: str | None = None
     status: str | None = Field(default=None, pattern="^(active|archived|completed)$")
+    recurrence: str | None = Field(
+        default=None, pattern=r"^(none|daily|weekly:[1-7](,[1-7])*)$"
+    )
+    target_value: float | None = Field(default=None, ge=0)
+    target_unit: str | None = Field(default=None, max_length=16)
+    target_period: str | None = Field(default=None, pattern="^(daily|weekly|total)$")
