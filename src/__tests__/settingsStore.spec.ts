@@ -24,4 +24,20 @@ describe('settings store', () => {
     const raw = localStorage.getItem('night-diary-app-settings')
     expect(raw).toContain('"onboardingCompleted":true')
   })
+
+  it('ignores legacy replier fields in stored settings', () => {
+    localStorage.setItem(
+      'night-diary-app-settings',
+      JSON.stringify({
+        onboardingCompleted: true,
+        activeReplierId: 'preset-calm',
+        userRepliers: [{ id: 'u1', type: 'user', name: 'x', persona: 'y' }],
+      }),
+    )
+    const settings = useSettingsStore()
+    settings.load()
+    expect(settings.onboardingCompleted).toBe(true)
+    expect((settings as unknown as Record<string, unknown>).setActiveReplier).toBeUndefined()
+    expect((settings as unknown as Record<string, unknown>).replierName).toBeUndefined()
+  })
 })
