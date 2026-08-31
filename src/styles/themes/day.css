@@ -1,15 +1,20 @@
 [data-theme='day'] {
-  --color-bg: #ede6dc;
-  --color-bg-elevated: #f5f0e8;
-  --color-bg-elevated-2: #e8e0d5;
-  --color-text-primary: #3d3429;
-  --color-text-secondary: #6f6358;
-  --color-accent: #c4956a;
-  --color-accent-muted: #b0845a;
-  --color-border: rgba(61, 52, 41, 0.14);
-  --glass-bg: rgba(245, 240, 232, 0.88);
-  --glass-border: rgba(61, 52, 41, 0.14);
-  --particle-primary: rgba(196, 149, 106, 0.32);
-  --particle-secondary: rgba(123, 167, 201, 0.12);
-  --color-diary-surface: #f4f4f2;
+  --color-bg: #fbf8f1;
+  --color-bg-elevated: #f4edde;
+  --color-bg-elevated-2: #ede6d6;
+  --color-text-primary: #2a2419;
+  --color-text-secondary: #8a7f6c;
+  --color-text-faint: #b0a58f;
+  --color-accent: #34506e;
+  --color-accent-muted: #2c4258;
+  --color-border: #e4dccb;
+  --color-line: #e4dccb;
+  --glass-bg: rgba(244, 237, 222, 0.9);
+  --glass-border: #e4dccb;
+  --color-diary-surface: #fffdf8;
+  --color-seal-calm: #6b7f5e;
+  --color-seal-lost: #4a5e75;
+  --color-success: #6b7f5e;
+  --color-warning: #b08d4a;
+  --color-danger: #a65a5a;
 }
