@@ -5,7 +5,6 @@ import { PhCaretLeft, PhCaretRight } from '@phosphor-icons/vue'
 
 import EmotionChips from '@/features/card/EmotionChips.vue'
 import GameButton from '@/shared/components/GameButton.vue'
-import GlassPanel from '@/shared/components/GlassPanel.vue'
 import TaskFoldRow from '@/features/timeline/TaskFoldRow.vue'
 import { timelineCopy as copy } from '@/shared/copy/timeline'
 import { cardCopy } from '@/shared/copy/card'
@@ -25,17 +24,21 @@ const timeline = useTimelineStore()
 const cardStore = useCardStore()
 const planStore = usePlanStore()
 
-const EMOTION_COLORS: Record<string, string> = {
-  '开心': '#4CAF50',
-  '平静': '#607D8B',
-  '感激': '#D4A574',
-  '期待': '#26A69A',
-  '兴奋': '#FF9800',
-  '焦虑': '#7E57C2',
-  '疲惫': '#9E9E9E',
-  '悲伤': '#5C6BC0',
-  '迷茫': '#78909C',
-  '愤怒': '#EF5350',
+/** 情绪印章色：与 EmotionStamp 的 seal token 对齐，去硬编码。 */
+const EMOTION_SEAL: Record<string, string> = {
+  '开心': 'var(--color-seal-positive)',
+  '感激': 'var(--color-seal-positive)',
+  '期待': 'var(--color-seal-positive)',
+  '兴奋': 'var(--color-seal-positive)',
+  '满足': 'var(--color-seal-positive)',
+  '放松': 'var(--color-seal-positive)',
+  '平静': 'var(--color-seal-calm)',
+  '安宁': 'var(--color-seal-calm)',
+  '舒缓': 'var(--color-seal-calm)',
+  '迷茫': 'var(--color-seal-lost)',
+  '困惑': 'var(--color-seal-lost)',
+  '焦虑': 'var(--color-seal-lost)',
+  '疲惫': 'var(--color-seal-lost)',
 }
 
 const dayLabel = computed(() => {
@@ -75,7 +78,7 @@ function onTurnEnd(event: AnimationEvent) {
 }
 
 function cardEmotionColor(card: MemoryCard): string {
-  return EMOTION_COLORS[card.emotion] ?? 'var(--color-accent)'
+  return EMOTION_SEAL[card.emotion] ?? 'var(--color-seal-muted)'
 }
 
 function openEntry(entryId: number) {
@@ -147,7 +150,7 @@ onMounted(() => {
       </section>
 
       <template v-else>
-        <GlassPanel
+        <div
           v-for="entry in timeline.entries"
           :key="entry.id"
           class="day-view__diary"
@@ -167,15 +170,14 @@ onMounted(() => {
               {{ copy.writeDiary }}
             </button>
           </div>
-        </GlassPanel>
+        </div>
 
         <TaskFoldRow v-if="timeline.isToday" class="day-view__tasks" />
 
-        <GlassPanel
+        <div
           v-for="card in dayCards"
           :key="card.card_id"
           class="day-view__card"
-          :style="{ borderLeftColor: cardEmotionColor(card) }"
         >
           <button type="button" class="day-view__card-body" @click="openCard(card)">
             <span class="day-view__card-summary font-diary">
@@ -190,7 +192,7 @@ onMounted(() => {
               :max-count="1"
             />
           </button>
-        </GlassPanel>
+        </div>
       </template>
     </div>
   </section>
@@ -238,40 +240,47 @@ onMounted(() => {
 .day-view__today {
   font-size: 0.625rem;
   font-weight: 600;
-  color: #fff;
-  background: var(--color-accent);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
   padding: 0.125rem 0.375rem;
-  border-radius: 999px;
+  border-radius: var(--radius-seal);
   line-height: 1;
 }
 .day-view__empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  padding: 4rem 1.5rem 3.5rem;
+  gap: 0.375rem;
+  padding: 3.5rem 1.5rem 3rem;
   text-align: center;
-  border: 1px dashed var(--color-border);
-  border-radius: 0.875rem;
-  background: color-mix(in srgb, var(--color-bg-elevated) 50%, transparent);
 }
 .day-view__empty-icon {
-  color: var(--color-accent);
-  opacity: 0.5;
-  margin-bottom: 0.5rem;
+  color: var(--color-text-faint);
+  opacity: 0.35;
+  margin-bottom: 0.375rem;
 }
 .day-view__empty-title {
-  font-size: 1rem;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
   font-weight: 600;
   color: var(--color-text-primary);
 }
 .day-view__empty-hint {
   font-size: 0.8125rem;
-  color: var(--color-text-secondary);
+  color: var(--color-text-faint);
   margin-bottom: 1rem;
 }
+.day-view__diary,
+.day-view__card {
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.day-view__diary:last-child,
+.day-view__card:last-child {
+  border-bottom: none;
+}
 .day-view__diary.is-replied {
-  border-left: 3px solid color-mix(in srgb, var(--color-success) 60%, var(--color-border));
+  border-left: none;
 }
 .day-view__diary-head {
   display: flex;
@@ -315,9 +324,6 @@ onMounted(() => {
 }
 .day-view__diary-continue:hover {
   text-decoration: underline;
-}
-.day-view__card {
-  border-left: 3px solid var(--color-accent);
 }
 .day-view__card-body {
   display: flex;

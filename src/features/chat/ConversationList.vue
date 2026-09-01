@@ -53,16 +53,17 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  border-radius: 0.5rem;
-  transition: background var(--motion-duration) var(--motion-ease);
+  border-radius: var(--radius-seal);
+  border-left: 2px solid transparent;
+  transition: border-color var(--motion-duration) var(--motion-ease);
 }
 
 .conv-item:hover {
-  background: var(--color-bg-elevated-2);
+  border-left-color: var(--color-border);
 }
 
 .conv-item.is-active {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border-left-color: var(--color-accent);
 }
 
 .conv-item__body {

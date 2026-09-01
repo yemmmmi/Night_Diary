@@ -281,9 +281,9 @@ onMounted(() => {
 }
 
 .plan-scene__title {
-  font-family: var(--font-ui);
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
   color: var(--color-text-primary);
   margin: 0;
 }
@@ -297,13 +297,16 @@ onMounted(() => {
 }
 
 .plan-scene__empty {
-  padding: 2rem 0 0.5rem;
+  padding: 3rem 0 2rem;
+  text-align: center;
 }
 
 .plan-scene__empty-text {
-  margin: 0 0 0.875rem;
-  font-size: 0.875rem;
-  color: var(--color-text-faint);
+  margin: 0 0 0.375rem;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
   line-height: 1.6;
 }
 
@@ -311,6 +314,7 @@ onMounted(() => {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 /* 账簿主体：细线行，无卡片无阴影 */

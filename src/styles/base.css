@@ -1,8 +1,7 @@
 /*
- * 字体策略：系统字体回退（离线可用）。
- * --font-display 优先 Noto Serif SC（未安装时回退宋体系），
- * --font-diary 优先霞鹜文楷（未安装时回退楷体系）。
- * 后续如自托管 woff2，放入 src/assets/fonts/ 并在此追加 @font-face 即可无缝激活。
+ * 字体策略：自托管 npm 字体包，离线可用，按需加载。
+ * Noto Serif SC（标题）、霞鹜文楷（日记正文）、Plus Jakarta Sans（UI）。
+ * 字体在 src/main.ts 中以 JS import 加载，确保 Vite 正确打包。
  */
 
 @import './themes/day.css';
