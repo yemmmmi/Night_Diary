@@ -84,6 +84,14 @@ services:
       context: ./server
       dockerfile: Dockerfile
     command: python -m app.workers.worker
+    # Override the image's HTTP healthcheck (meant for the backend): the
+    # worker runs no HTTP server, so probe its main process instead.
+    healthcheck:
+      test: ['CMD-SHELL', 'python -c "from pathlib import Path; raise SystemExit(0 if b''app.workers.worker'' in Path(''/proc/1/cmdline'').read_bytes() else 1)"']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     environment:
       - APP_ENV=production
       - DATABASE_URL=mysql+pymysql://${MYSQL_USER:-nightdiary}:${MYSQL_PASSWORD:-nightdiary_pass}@mysql:3306/${MYSQL_DATABASE:-night_diary}?charset=utf8mb4
