@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,17 @@ def _table_columns(conn: Any, table: str) -> set[str]:
     return {col["name"] for col in inspect(conn).get_columns(table)}
 
 
+def _is_duplicate_column_error(exc: Exception) -> bool:
+    """True when ``exc`` means the column already exists — a concurrent
+    process (uvicorn workers + worker container) won the migration race and
+    its ALTER landed between our reflection and ours.
+
+    MySQL raises OperationalError 1060 "Duplicate column name 'x'"; SQLite
+    raises "duplicate column name: x". Both carry the phrase in the message.
+    """
+    return "duplicate column name" in str(exc).lower()
+
+
 def _run_lightweight_migrations(engine: Engine) -> None:
     """Add columns introduced after a table was first created.
 
@@ -150,16 +162,30 @@ def _run_lightweight_migrations(engine: Engine) -> None:
         for table, columns in additive_columns.items():
             if table not in existing_tables:
                 continue
-            present = {col["name"] for col in inspector.get_columns(table)}
+            present = _table_columns(conn, table)
             for column, ddl_type in columns.items():
-                if column not in present:
+                if column in present:
+                    continue
+                try:
                     conn.execute(text(f"ALTER TABLE {q(table)} ADD COLUMN {q(column)} {ddl_type}"))
+                except OperationalError as exc:
+                    if not _is_duplicate_column_error(exc):
+                        raise
+                    logger.info(
+                        "Column %s.%s already exists (concurrent migration won); skipping",
+                        table,
+                        column,
+                    )
 
         # Rename ai_ans → reply (SQLite < 3.35 can't DROP COLUMN, so we add + copy)
         for table, col in [("diary_entries", "reply")]:
             cols = _table_columns(conn, table)
             if col not in cols and "ai_ans" in cols:
-                conn.execute(text(f"ALTER TABLE {q(table)} ADD COLUMN {q(col)} TEXT"))
+                try:
+                    conn.execute(text(f"ALTER TABLE {q(table)} ADD COLUMN {q(col)} TEXT"))
+                except OperationalError as exc:
+                    if not _is_duplicate_column_error(exc):
+                        raise
                 conn.execute(text(f"UPDATE {q(table)} SET {q(col)} = {q('ai_ans')}"))
                 logger.info("Migrated %s.%s from ai_ans", table, col)
 
