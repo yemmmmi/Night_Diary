@@ -13,17 +13,21 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
+from sqlalchemy.orm import Session
 
 from app.api.deps import ContainerDep, CurrentUserDep, DbDep
 from app.api.schemas import (
+    CheckinCreateRequest,
+    CheckinResponse,
     PlanCreateRequest,
     PlanResponse,
     PlanUpdateRequest,
     TaskCreateRequest,
     TaskResponse,
     TaskUpdateRequest,
+    TodayProgressSnapshot,
 )
-from app.infrastructure.models import PlanRow, TaskRow
+from app.infrastructure.models import PlanCheckinRow, PlanRow, TaskRow
 from app.services import plan_service
 
 router = APIRouter(prefix="/plans", tags=["plan"])
@@ -36,6 +40,7 @@ def _task_to_response(row: TaskRow) -> TaskResponse:
         plan_id=row.plan_id,
         title=row.title,
         note=row.note,
+        link=row.link,
         due_date=row.due_date.isoformat() if row.due_date else None,
         status=row.status,
         source=row.source,
@@ -45,7 +50,30 @@ def _task_to_response(row: TaskRow) -> TaskResponse:
     )
 
 
-def _plan_to_response(row: PlanRow, tasks: list[TaskRow] | None = None) -> PlanResponse:
+def _checkin_to_response(row: PlanCheckinRow) -> CheckinResponse:
+    return CheckinResponse(
+        id=row.id,
+        plan_id=row.plan_id,
+        checkin_date=row.checkin_date.isoformat(),
+        started_at=row.started_at.isoformat() if row.started_at else None,
+        ended_at=row.ended_at.isoformat() if row.ended_at else None,
+        value=row.value,
+        status=row.status,
+        created_at=row.created_at.isoformat() if row.created_at else "",
+    )
+
+
+def _plan_to_response(
+    row: PlanRow,
+    db: Session | None = None,
+    tasks: list[TaskRow] | None = None,
+) -> PlanResponse:
+    snapshot = (
+        plan_service.build_today_snapshot(db, plan=row)
+        if db is not None and row.template in ("checkin_total", "timer_daily")
+        else None
+    )
+    today_progress = TodayProgressSnapshot(**snapshot) if snapshot else None
     return PlanResponse(
         id=row.id,
         title=row.title,
@@ -58,6 +86,8 @@ def _plan_to_response(row: PlanRow, tasks: list[TaskRow] | None = None) -> PlanR
         target_value=row.target_value,
         target_unit=row.target_unit,
         target_period=row.target_period,
+        template=row.template,
+        today_progress=today_progress,
         created_at=row.created_at.isoformat() if row.created_at else "",
     )
 
@@ -80,6 +110,7 @@ def create_plan(body: PlanCreateRequest, db: DbDep, user: CurrentUserDep) -> Pla
         target_value=body.target_value,
         target_unit=body.target_unit,
         target_period=body.target_period,
+        template=body.template,
     )
     created_tasks: list[TaskRow] = []
     for task_body in body.tasks:
@@ -89,12 +120,13 @@ def create_plan(body: PlanCreateRequest, db: DbDep, user: CurrentUserDep) -> Pla
             plan_id=plan.id,
             title=task_body.title,
             note=task_body.note,
+            link=task_body.link,
             due_date=task_body.due_date,
             source=task_body.source,
             created_from_conversation_id=task_body.created_from_conversation_id,
         )
         created_tasks.append(task)
-    return _plan_to_response(plan, created_tasks)
+    return _plan_to_response(plan, db, created_tasks)
 
 
 @router.get("", response_model=list[PlanResponse])
@@ -104,13 +136,13 @@ def list_plans(
     plan_status: str | None = Query(default=None, alias="status"),
 ) -> list[PlanResponse]:
     plans = plan_service.list_plans(db, user_id=str(user.id), status=plan_status)
-    return [_plan_to_response(p) for p in plans]
+    return [_plan_to_response(p, db) for p in plans]
 
 
 @router.get("/{plan_id}", response_model=PlanResponse)
 def get_plan(plan_id: str, db: DbDep, user: CurrentUserDep) -> PlanResponse:
     plan = plan_service.get_plan(db, plan_id=plan_id, user_id=str(user.id))
-    return _plan_to_response(plan)
+    return _plan_to_response(plan, db)
 
 
 @router.patch("/{plan_id}", response_model=PlanResponse)
@@ -120,12 +152,45 @@ def update_plan(
     plan = plan_service.update_plan(
         db, plan_id=plan_id, user_id=str(user.id), **body.model_dump(exclude_unset=True)
     )
-    return _plan_to_response(plan)
+    return _plan_to_response(plan, db)
 
 
 @router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_plan(plan_id: str, db: DbDep, user: CurrentUserDep) -> None:
     plan_service.delete_plan(db, plan_id=plan_id, user_id=str(user.id))
+
+
+# ── Skill-template check-ins (PR8) ────────────────────────────────────
+
+
+@router.post("/{plan_id}/checkin", response_model=CheckinResponse)
+def check_in(
+    plan_id: str,
+    body: CheckinCreateRequest,
+    db: DbDep,
+    user: CurrentUserDep,
+) -> CheckinResponse:
+    """checkin_total: daily check-in / timer_daily: start|stop the timer."""
+    if body.action == "start":
+        row = plan_service.start_timer(db, plan_id=plan_id, user_id=str(user.id))
+    elif body.action == "stop":
+        row = plan_service.stop_timer(db, plan_id=plan_id, user_id=str(user.id))
+    else:
+        row = plan_service.do_checkin(db, plan_id=plan_id, user_id=str(user.id))
+    return _checkin_to_response(row)
+
+
+@router.get("/{plan_id}/checkins", response_model=list[CheckinResponse])
+def list_checkins(
+    plan_id: str,
+    db: DbDep,
+    user: CurrentUserDep,
+    limit: int = Query(default=90, ge=1, le=365),
+) -> list[CheckinResponse]:
+    rows = plan_service.list_checkins(
+        db, plan_id=plan_id, user_id=str(user.id), limit=limit
+    )
+    return [_checkin_to_response(r) for r in rows]
 
 
 # ── Task routes ───────────────────────────────────────────────────────

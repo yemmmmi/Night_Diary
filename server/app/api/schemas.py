@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -357,6 +357,7 @@ class MessageResponse(BaseModel):
     retrieved_memory_ids: list[str] | None = None
     attached_card_ids: list[str] | None = None
     attached_plan_ids: list[str] | None = None
+    skill_result: dict[str, Any] | None = None
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}
@@ -402,6 +403,7 @@ class SendMessageResponse(BaseModel):
 class TaskCreateRequest(BaseModel):
     title: str = Field(max_length=200)
     note: str | None = None
+    link: str | None = Field(default=None, max_length=500)
     due_date: str | None = Field(default=None, description="ISO date YYYY-MM-DD")
     plan_id: str | None = None
     source: str = Field(default="manual", pattern="^(manual|agent)$")
@@ -413,6 +415,7 @@ class TaskResponse(BaseModel):
     plan_id: str | None = None
     title: str
     note: str | None = None
+    link: str | None = None
     due_date: str | None = None
     status: str
     source: str
@@ -424,6 +427,7 @@ class TaskResponse(BaseModel):
 class TaskUpdateRequest(BaseModel):
     title: str | None = None
     note: str | None = None
+    link: str | None = Field(default=None, max_length=500)
     due_date: str | None = None
     status: str | None = Field(default=None, pattern="^(pending|done|skipped)$")
     actual_value: float | None = Field(default=None, ge=0)
@@ -442,6 +446,37 @@ class PlanCreateRequest(BaseModel):
     target_value: float | None = Field(default=None, ge=0)
     target_unit: str | None = Field(default=None, max_length=16)
     target_period: str | None = Field(default=None, pattern="^(daily|weekly|total)$")
+    template: str | None = Field(
+        default=None, pattern="^(checkin_total|timer_daily|milestones)$"
+    )
+
+
+class CheckinCreateRequest(BaseModel):
+    action: str = Field(default="checkin", pattern="^(checkin|start|stop)$")
+
+
+class CheckinResponse(BaseModel):
+    id: str
+    plan_id: str
+    checkin_date: str
+    started_at: str | None = None
+    ended_at: str | None = None
+    value: float
+    status: str
+    created_at: str
+
+
+class TodayProgressSnapshot(BaseModel):
+    """Per-template progress snapshot embedded in plan list responses."""
+
+    checkin_date: str
+    today_checked_in: bool = False
+    today_seconds: float = 0
+    running: bool = False
+    started_at: str | None = None
+    total_checkins: int = 0
+    streak_days: int = 0
+    target_seconds: float | None = None
 
 
 class PlanResponse(BaseModel):
@@ -456,6 +491,8 @@ class PlanResponse(BaseModel):
     target_value: float | None = None
     target_unit: str | None = None
     target_period: str | None = None
+    template: str | None = None
+    today_progress: TodayProgressSnapshot | None = None
     created_at: str
 
 
