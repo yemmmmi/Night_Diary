@@ -8,6 +8,7 @@ defineOptions({ name: 'TimelineScene' })
 import DayView from '@/features/timeline/DayView.vue'
 import WeekView from '@/features/timeline/WeekView.vue'
 import MonthView from '@/features/timeline/MonthView.vue'
+import TodayRail from '@/features/timeline/TodayRail.vue'
 import DetailPanel from '@/features/timeline/DetailPanel.vue'
 import MemoryCardInput from '@/features/card/MemoryCardInput.vue'
 import EmotionChips from '@/features/card/EmotionChips.vue'
@@ -16,6 +17,7 @@ import { timelineCopy as copy } from '@/shared/copy/timeline'
 import { cardCopy } from '@/shared/copy/card'
 import { useTimelineStore } from '@/stores/timeline'
 import { useCardStore } from '@/stores/card'
+import { usePlanStore } from '@/stores/plan'
 import { buildTimelineQuery, parseTimelineQuery } from '@/shared/utils/timelineQuery'
 import type { TimelineView } from '@/shared/utils/timelineQuery'
 import { toIsoDate } from '@/shared/utils/diaryFormat'
@@ -30,6 +32,12 @@ const route = useRoute()
 const router = useRouter()
 const timeline = useTimelineStore()
 const cardStore = useCardStore()
+const planStore = usePlanStore()
+
+function loadRailData() {
+  void planStore.loadTodayTasks()
+  void planStore.loadPlans()
+}
 
 function syncFromRoute() {
   const { view, date } = parseTimelineQuery(route.query, toIsoDate(new Date()))
@@ -60,11 +68,13 @@ function writeForDate() {
 onMounted(() => {
   syncFromRoute()
   void cardStore.loadCards()
+  loadRailData()
 })
 
 onActivated(() => {
   syncFromRoute()
   void cardStore.loadCards()
+  loadRailData()
 })
 </script>
 
@@ -102,10 +112,11 @@ onActivated(() => {
     </div>
 
     <div class="timeline-scene__layout" :class="{ 'has-detail': timeline.selectedEntry }">
-      <div class="timeline-scene__main">
+      <div class="timeline-scene__main" :class="{ 'is-day': timeline.view === 'day' }">
         <DayView v-if="timeline.view === 'day'" />
         <WeekView v-else-if="timeline.view === 'week'" />
         <MonthView v-else />
+        <TodayRail v-if="timeline.view === 'day'" class="timeline-scene__rail" />
       </div>
       <aside v-if="timeline.selectedEntry" class="timeline-scene__detail">
         <DetailPanel />
@@ -238,8 +249,31 @@ onActivated(() => {
   gap: 1rem;
   align-items: start;
 }
+.timeline-scene__main {
+  min-width: 0;
+}
+.timeline-scene__main.is-day {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 272px;
+  gap: 0;
+}
+.timeline-scene__rail {
+  min-width: 0;
+}
 .timeline-scene__detail {
   min-width: 0;
+}
+@media (max-width: 63.99rem) {
+  .timeline-scene__main.is-day {
+    grid-template-columns: 1fr;
+  }
+  .timeline-scene__rail {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--color-line);
+    padding-top: 1.25rem;
+    margin-top: 1.25rem;
+  }
 }
 @media (min-width: 64rem) {
   .timeline-scene__layout.has-detail {

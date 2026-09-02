@@ -27,7 +27,7 @@ export const appRoutes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'home',
-    component: () => import('@/pages/TodayScene.vue'),
+    redirect: { name: 'timeline' },
   },
   {
     path: '/timeline',
@@ -118,7 +118,7 @@ router.beforeEach(async (to) => {
   }
   // 已登录用户访问 login 页则跳转首页
   if (to.name === 'login' && token) {
-    return { name: 'home' }
+    return { name: 'timeline' }
   }
 
   // 以下保留现有的 onboarding 逻辑

@@ -12,6 +12,7 @@ vi.mock('@/shared/api/diary', () => ({
   listDiaryEntries: vi.fn(async () => []),
 }))
 vi.mock('@/shared/api/plan', () => ({
+  listPlans: vi.fn(async () => []),
   listTasks: vi.fn(async () => []),
   getTodayTasks: vi.fn(async () => []),
 }))
