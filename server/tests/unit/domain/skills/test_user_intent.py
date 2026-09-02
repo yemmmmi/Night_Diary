@@ -21,7 +21,7 @@ class TestStrongRules:
         assert classify_user_intent("写一篇日记 记录一下今天").intent == "record"
 
     def test_casual_note_it_down_routes_to_record(self) -> None:
-        # 自然口语「记一下：……」是最高频的记录说法（浏览器实测补充）。
+        # 自然口语「记一下: ……」是最高频的记录说法(浏览器实测补充)。
         assert classify_user_intent("记一下：今天早上我跑了五公里，睡前写了两页手账").intent == "record"
 
     def test_insight_question_routes_to_insight(self) -> None:
@@ -70,7 +70,7 @@ class TestLLMFallback:
         assert decision.source == "default"
 
     def test_anxiety_wording_goes_through_llm(self) -> None:
-        # 「感到焦虑」类口语不带任何旧弱信号词，靠情感词表触发 LLM 兜底。
+        # 「感到焦虑」类口语不带任何旧弱信号词, 靠情感词表触发 LLM 兜底。
         decision = classify_user_intent(
             "我最近总感到焦虑，晚上睡不着", llm=_llm("insight")
         )

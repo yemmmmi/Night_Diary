@@ -273,8 +273,8 @@ def get_today_tasks(db: Session, *, user_id: str) -> list[TaskRow]:
             (TaskRow.due_date == today)
             | (TaskRow.due_date.is_(None))
         )
-        # MySQL 不支持 NULLS LAST；布尔表达式排序在 SQLite/MySQL 均可移植：
-        # 有 due_date（今天）排前，无 due_date 排后。
+        # MySQL 不支持 NULLS LAST; 布尔表达式排序在 SQLite/MySQL 均可移植:
+        # 有 due_date(今天)排前, 无 due_date 排后。
         .order_by(TaskRow.due_date.is_(None), TaskRow.due_date.asc(), TaskRow.created_at.asc())
     )
     return list(db.scalars(stmt))
