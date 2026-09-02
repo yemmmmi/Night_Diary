@@ -17,6 +17,7 @@ from app.services import (
     conversation_service,
     diary_service,
     plan_service,
+    user_skill_service,
 )
 from app.services.ai.conversation_loop import run_conversation_loop
 from app.services.ai.input_preprocessor import InputPreprocessor
@@ -64,6 +65,7 @@ class ChatReplyResult:
     token_info: dict[str, int] | None = None
     stop_reason: str = ""
     tool_calls_made: list[str] | None = None
+    skill_result: dict[str, Any] | None = None
 
 
 def _normalize_diary_ids(diary_ids: list[int]) -> list[int]:
@@ -289,6 +291,34 @@ def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[
     return "\n".join(lines), [mid for mid in memory_ids if mid]
 
 
+def _try_user_skill(
+    db: Session,
+    container: ServiceContainer,
+    *,
+    conversation_id: str,
+    content: str,
+    user_id: str,
+) -> Any:
+    """Run the 记录/洞悉/计划 skill router; ``None`` → continue as chat."""
+    try:
+        with trace_span(
+            "S4a_user_skill", "用户技能路由", input_snapshot={"raw_text": content[:60]}
+        ) as span:
+            outcome = user_skill_service.run_user_skill(
+                db,
+                container,
+                conversation_id=conversation_id,
+                content=content,
+                user_id=user_id,
+            )
+            if span:
+                span.metadata["skill"] = outcome.skill if outcome else "chat"
+            return outcome
+    except Exception as exc:
+        logger.warning("User skill routing failed (continuing as chat): %s", exc)
+        return None
+
+
 def _build_tools(
     container: ServiceContainer, *, user_id: str = "default"
 ) -> dict[str, ToolFn] | None:
@@ -327,6 +357,7 @@ class ReplyContext:
     is_crisis: bool
     safe_response: str | None
     trace_id: str
+    skill_outcome: Any = None  # SkillRunOutcome | None
 
 
 def _prepare_reply_context(
@@ -418,6 +449,32 @@ def _prepare_reply_context(
         )
     if preprocess_result.negation_detected:
         logger.info("input.negation_detected conversation=%s", conversation_id)
+
+    # ── Stage 2.4: User skill routing (record / insight / plan) ──
+    skill_outcome = _try_user_skill(
+        db,
+        container,
+        conversation_id=conversation_id,
+        content=content,
+        user_id=user_id,
+    )
+    if skill_outcome is not None:
+        return ReplyContext(
+            conversation_id=conversation_id,
+            content=content,
+            intent_result=None,
+            pinned_diaries_text="",
+            retrieved_diaries_text="",
+            retrieved_diary_ids=pinned_ids,
+            episodic_text="",
+            memory_ids=[],
+            tools=None,
+            crisis_guard=guard,
+            is_crisis=False,
+            safe_response=None,
+            trace_id=trace_id or "",
+            skill_outcome=skill_outcome,
+        )
 
     # ── Stage 2.5: Chat intent classification (drives routing) ──
     with trace_span("S4_intent", "意图分类", input_snapshot={"raw_text": content}) as span:
@@ -711,6 +768,27 @@ def generate_reply(
             )
         if preprocess_result.negation_detected:
             logger.info("input.negation_detected conversation=%s", conversation_id)
+
+        # ── Stage 2.4: User skill routing (record / insight / plan) ──
+        skill_outcome = _try_user_skill(
+            db,
+            container,
+            conversation_id=conversation_id,
+            content=content,
+            user_id=user_id,
+        )
+        if skill_outcome is not None:
+            skill_reply = ChatReplyResult(
+                reply_text=skill_outcome.reply_text,
+                retrieved_diary_ids=[],
+                retrieved_memory_ids=[],
+                token_info=skill_outcome.token_info,
+                stop_reason="user_skill",
+                skill_result=skill_outcome.skill_result,
+            )
+            if trace is not None:
+                trace.end()
+            return skill_reply
 
         # ── Stage 2.5: Chat intent classification (drives routing) ──
         with trace_span("S4_intent", "意图分类", input_snapshot={"raw_text": content}) as span:
@@ -1073,6 +1151,43 @@ async def generate_reply_streaming(
                         trace_id=trace_id,
                         conversation_id=conversation_id,
                         reply_text=ctx.safe_response or "",
+                        container=container,
+                    )
+                )
+            return
+
+        # ── User-skill path: publish the complete outcome as one chunk ──
+        if ctx.skill_outcome is not None:
+            outcome = ctx.skill_outcome
+            await publish_reply_start(trace_id, intent=f"user_skill_{outcome.skill}")
+            reply_started = True
+            await publish_text_delta(trace_id, outcome.reply_text)
+            await publish_text_end(trace_id)
+            await publish_reply_end(trace_id)
+            reply_end_sent = True
+
+            # The streaming path has no other persister — save the turn here
+            # so the frontend's post-reply refetch sees the skill result.
+            with contextlib.suppress(Exception):
+                conversation_service.add_user_message_and_reply(
+                    db,
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    content=content,
+                    reply_content=outcome.reply_text,
+                    skill_result=outcome.skill_result,
+                    token_info=outcome.token_info,
+                )
+            with contextlib.suppress(Exception):
+                pipeline.run_on_reply(
+                    MiddlewareContext(
+                        scenario="conversation",
+                        user_id=user_id,
+                        content=content,
+                        intent="",
+                        trace_id=trace_id,
+                        conversation_id=conversation_id,
+                        reply_text=outcome.reply_text,
                         container=container,
                     )
                 )
