@@ -74,7 +74,7 @@ def test_send_message_rejects_too_many_attached_plans(authed_client: TestClient)
 
 
 def test_send_message_with_attached_cards_and_plans(authed_client: TestClient) -> None:
-    """附卡片/计划随信落库：响应回显、历史可回读，回信侧不带附物。"""
+    """附卡片/计划随信落库: 响应回显、历史可回读, 回信侧不带附物。"""
     conversation_id = _create_conversation(authed_client)
     card_id = authed_client.post(
         "/api/v1/cards",
