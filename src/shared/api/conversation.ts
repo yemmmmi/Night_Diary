@@ -15,12 +15,16 @@ export interface ChatMessage {
   content: string
   retrieved_diary_ids?: number[]
   retrieved_memory_ids?: string[]
+  attached_card_ids?: string[]
+  attached_plan_ids?: string[]
   created_at: string
 }
 
 export interface SendMessagePayload {
   content: string
   diary_ids?: number[]
+  card_ids?: string[]
+  plan_ids?: string[]
   auto_retrieve?: boolean
 }
 

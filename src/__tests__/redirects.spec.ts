@@ -29,12 +29,11 @@ describe('legacy route redirects', () => {
   })
 })
 
-describe('home is the Today scene', () => {
-  it('mounts TodayScene at / and TimelineScene at /timeline', async () => {
+describe('home redirects to the timeline scene', () => {
+  it('redirects / to /timeline and mounts TimelineScene', async () => {
     const router = buildRouter()
     await router.push('/')
-    expect(router.currentRoute.value.name).toBe('home')
-    await router.push('/timeline')
     expect(router.currentRoute.value.name).toBe('timeline')
+    expect(router.currentRoute.value.path).toBe('/timeline')
   })
 })

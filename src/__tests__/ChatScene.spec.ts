@@ -6,6 +6,7 @@ import { nextTick } from 'vue'
 import type { ChatMessage, Conversation } from '@/shared/api/conversation'
 import type { DiaryEntry } from '@/shared/api/diary'
 import type { MemoryCard } from '@/shared/api/card'
+import type { PlanItem } from '@/shared/api/plan'
 import type { StreamingReplyStatus } from '@/shared/composables/useStreamingReply'
 
 const push = vi.fn()
@@ -41,6 +42,9 @@ vi.mock('@/shared/api/diary', () => ({ listDiaryEntries }))
 
 const listCards = vi.hoisted(() => vi.fn(async () => [] as MemoryCard[]))
 vi.mock('@/shared/api/card', () => ({ listCards }))
+
+const listPlans = vi.hoisted(() => vi.fn(async () => [] as PlanItem[]))
+vi.mock('@/shared/api/plan', () => ({ listPlans }))
 
 const getCurrentMode = vi.hoisted(() => vi.fn(async () => ({ mode: 'daily', display_name: '日常' })))
 const overrideMode = vi.hoisted(() => vi.fn(async () => ({ mode: 'daily', display_name: '日常' })))
@@ -85,6 +89,38 @@ function diary(id: number, content: string): DiaryEntry {
     reply: null,
     created_at: '2026-01-01T21:00:00',
     updated_at: '2026-01-01T21:00:00',
+  }
+}
+
+function card(cardId: string, summary: string, diaryId: number | null = null): MemoryCard {
+  return {
+    card_id: cardId,
+    emotion: '平静',
+    emotions: ['平静'],
+    event_summary: summary,
+    mood_score: 0.2,
+    tags: [],
+    importance: 3,
+    card_type: 'standard',
+    diary_id: diaryId,
+    created_at: '2026-01-01T21:00:00',
+    updated_at: '2026-01-01T21:00:00',
+  }
+}
+
+function plan(id: string, title: string): PlanItem {
+  return {
+    id,
+    title,
+    motivation: null,
+    source_refs: [],
+    status: 'active',
+    source: 'manual',
+    tasks: [],
+    recurrence: null,
+    target_value: null,
+    target_unit: null,
+    target_period: null,
   }
 }
 
@@ -168,6 +204,7 @@ describe('ChatScene', () => {
     routeQuery = {}
     listDiaryEntries.mockResolvedValue([])
     listCards.mockResolvedValue([])
+    listPlans.mockResolvedValue([])
     listConversations.mockResolvedValue([])
     getMessages.mockResolvedValue([])
     sendMessage.mockResolvedValue({
@@ -244,14 +281,100 @@ describe('ChatScene', () => {
     expect(wrapper.find('[data-testid="letter-note"]').exists()).toBe(false)
   })
 
-  it('uses a bottom-line ink input for the reply box', async () => {
+  it('uses a rounded-box input for the reply composer', async () => {
     const { wrapper } = mountScene({ messages: [msg('m1', 'user', '今天有点累')] })
     await flushPromises()
 
     const input = wrapper.find('[data-testid="letter-input"]')
     expect(input.exists()).toBe(true)
-    expect(input.classes()).toContain('ink-underline')
+    expect(input.classes()).toContain('letter-composer__box')
+    expect(input.classes()).not.toContain('ink-underline')
     expect(input.find('textarea').exists()).toBe(true)
+  })
+
+  it('attaches standalone cards and plans and sends them with the message', async () => {
+    listCards.mockResolvedValue([
+      card('card-1', '和夜记聊了睡眠', null),
+      card('card-2', '已关联日记的卡', 11),
+    ])
+    listPlans.mockResolvedValue([
+      plan('plan-1', '读完一本书'),
+      { ...plan('plan-2', '已归档计划'), status: 'archived' },
+    ])
+    const { wrapper, chatStore } = mountScene({ messages: [msg('m1', 'user', '今天有点累')] })
+    await flushPromises()
+
+    await wrapper.find('.diary-picker__add').trigger('click')
+    const cardItems = wrapper.findAll('[data-testid="diary-picker__card-item"]')
+    expect(cardItems).toHaveLength(1)
+    expect(cardItems[0].text()).toContain('和夜记聊了睡眠')
+    await cardItems[0].trigger('click')
+    expect(chatStore.pinnedCardIds).toEqual(['card-1'])
+    expect(wrapper.find('[data-testid="diary-picker__chip-card"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="plan-picker__add"]').trigger('click')
+    const planItems = wrapper.findAll('[data-testid="plan-picker__item"]')
+    expect(planItems).toHaveLength(1)
+    await planItems[0].trigger('click')
+    expect(chatStore.pinnedPlanIds).toEqual(['plan-1'])
+
+    await wrapper.find('[data-testid="letter-input"] textarea').setValue('今天有点累')
+    await wrapper.find('[data-testid="letter-send"]').trigger('click')
+    await flushPromises()
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({
+        content: '今天有点累',
+        card_ids: ['card-1'],
+        plan_ids: ['plan-1'],
+      }),
+    )
+  })
+
+  it('shows an attach note with card and plan counts on the user letter', async () => {
+    listCards.mockResolvedValue([card('card-1', '和夜记聊了睡眠')])
+    listPlans.mockResolvedValue([plan('plan-1', '读完一本书')])
+    const { wrapper } = mountScene({
+      messages: [
+        msg('m1', 'user', '帮我看看', {
+          attached_card_ids: ['card-1'],
+          attached_plan_ids: ['plan-1'],
+        }),
+      ],
+    })
+    await flushPromises()
+
+    const note = wrapper.find('[data-testid="letter-attach-note"]')
+    expect(note.exists()).toBe(true)
+    expect(note.text()).toContain('附上 1 张卡片、1 个计划')
+    expect(wrapper.text()).not.toContain('和夜记聊了睡眠')
+
+    await note.find('button').trigger('click')
+    await nextTick()
+    const items = wrapper.findAll('[data-testid="letter-attach-note-item"]')
+    expect(items).toHaveLength(2)
+    expect(wrapper.text()).toContain('和夜记聊了睡眠')
+    expect(wrapper.text()).toContain('读完一本书')
+  })
+
+  it('keeps the assistant margin note untouched for retrieved diaries', async () => {
+    listDiaryEntries.mockResolvedValue([diary(11, '和白猫在楼道里坐了一会')])
+    const { wrapper } = mountScene({
+      messages: [
+        msg('m1', 'assistant', '你提到过和小猫的相处', { retrieved_diary_ids: [11] }),
+        msg('m2', 'user', '帮我看看', { attached_card_ids: ['card-9'] }),
+      ],
+    })
+    await flushPromises()
+
+    const notes = wrapper.findAll('[data-testid="letter-note"]')
+    expect(notes).toHaveLength(1)
+    expect(notes[0].text()).toContain('参考了 1 篇日记')
+
+    const attachNotes = wrapper.findAll('[data-testid="letter-attach-note"]')
+    expect(attachNotes).toHaveLength(1)
+    expect(attachNotes[0].text()).toContain('附上 1 张卡片')
   })
 
   it('animates newly arrived letters with the letter-arrive transition', async () => {

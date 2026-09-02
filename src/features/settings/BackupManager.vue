@@ -6,6 +6,7 @@ import { createBackup, listBackups, restoreBackup } from '@/shared/api/settings'
 import { exportAll, importJson, type ExportSummary } from '@/shared/api/export'
 import { useSettingsStore } from '@/stores/settings'
 import { formatApiError } from '@/shared/utils/apiError'
+import { toIsoDate } from '@/shared/utils/diaryFormat'
 
 const settings = useSettingsStore()
 settings.load()
@@ -68,7 +69,7 @@ async function onExportJson() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    const date = new Date().toISOString().slice(0, 10)
+    const date = toIsoDate(new Date())
     a.download = `nightdiary-export-${date}.json`
     a.click()
     URL.revokeObjectURL(url)

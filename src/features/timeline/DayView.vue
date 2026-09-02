@@ -1,28 +1,25 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { PhCaretLeft, PhCaretRight } from '@phosphor-icons/vue'
 
 import EmotionChips from '@/features/card/EmotionChips.vue'
 import GameButton from '@/shared/components/GameButton.vue'
-import TaskFoldRow from '@/features/timeline/TaskFoldRow.vue'
 import { timelineCopy as copy } from '@/shared/copy/timeline'
 import { cardCopy } from '@/shared/copy/card'
 import { useTimelineStore } from '@/stores/timeline'
 import { useCardStore } from '@/stores/card'
-import { usePlanStore } from '@/stores/plan'
 import {
   diaryStatus,
   diarySummary,
-  parseLocalDate,
-  weekdayLabel,
 } from '@/shared/utils/diaryFormat'
+import { chineseDateLabel, todaySubtitle } from '@/shared/utils/todayFormat'
+import { serverDateIso } from '@/shared/utils/timeFormat'
 import type { MemoryCard } from '@/shared/api/card'
 
 const router = useRouter()
 const timeline = useTimelineStore()
 const cardStore = useCardStore()
-const planStore = usePlanStore()
 
 /** 情绪印章色：与 EmotionStamp 的 seal token 对齐，去硬编码。 */
 const EMOTION_SEAL: Record<string, string> = {
@@ -41,14 +38,12 @@ const EMOTION_SEAL: Record<string, string> = {
   '疲惫': 'var(--color-seal-lost)',
 }
 
-const dayLabel = computed(() => {
-  const d = parseLocalDate(timeline.date)
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${weekdayLabel(d)}`
-})
+const bigDate = computed(() => chineseDateLabel(timeline.date))
+const subtitle = computed(() => todaySubtitle(timeline.date))
 
 const dayCards = computed(() =>
   cardStore.cards.filter(
-    (c) => c.diary_id == null && c.created_at.slice(0, 10) === timeline.date,
+    (c) => c.diary_id == null && serverDateIso(c.created_at) === timeline.date,
   ),
 )
 
@@ -104,36 +99,47 @@ function openCard(card: MemoryCard) {
 function createForDate() {
   router.push({ path: '/write', query: { date: timeline.date } })
 }
-
-onMounted(() => {
-  if (timeline.isToday) void planStore.loadTodayTasks()
-})
 </script>
 
 <template>
   <section class="day-view">
-    <div class="day-view__nav">
-      <button type="button" class="day-view__nav-btn" @click="shiftWithTurn(-1)">
-        <PhCaretLeft :size="14" />
-        {{ copy.prevDay }}
+    <header class="day-view__head">
+      <button
+        type="button"
+        class="day-view__nav"
+        data-testid="day-prev"
+        aria-label="前一天"
+        @click="shiftWithTurn(-1)"
+      >
+        <PhCaretLeft :size="16" />
       </button>
-      <span class="day-view__label" :class="{ 'is-today': timeline.isToday }">
-        {{ dayLabel }}
-        <span v-if="timeline.isToday" class="day-view__today">{{ copy.todayTag }}</span>
-      </span>
-      <button type="button" class="day-view__nav-btn" @click="shiftWithTurn(1)">
-        {{ copy.nextDay }}
-        <PhCaretRight :size="14" />
+      <div class="day-view__head-center">
+        <h1 class="day-view__big-date" data-testid="day-big-date">{{ bigDate }}</h1>
+        <p class="day-view__sub">
+          {{ subtitle }}
+          <span v-if="timeline.isToday" class="day-view__today-tag">{{ copy.todayTag }}</span>
+        </p>
+      </div>
+      <button
+        type="button"
+        class="day-view__nav"
+        data-testid="day-next"
+        aria-label="后一天"
+        :disabled="timeline.isToday"
+        @click="shiftWithTurn(1)"
+      >
+        <PhCaretRight :size="16" />
       </button>
       <button
         v-if="!timeline.isToday"
         type="button"
-        class="day-view__nav-btn"
+        class="day-view__back-today"
+        data-testid="day-back-today"
         @click="timeline.goToday()"
       >
         {{ copy.backToToday }}
       </button>
-    </div>
+    </header>
 
     <div class="day-view__body" :class="turnClass" @animationend="onTurnEnd">
       <section v-if="isEmptyDay" class="day-view__empty">
@@ -172,8 +178,6 @@ onMounted(() => {
           </div>
         </div>
 
-        <TaskFoldRow v-if="timeline.isToday" class="day-view__tasks" />
-
         <div
           v-for="card in dayCards"
           :key="card.card_id"
@@ -210,34 +214,32 @@ onMounted(() => {
   flex-direction: column;
   gap: 0.75rem;
 }
-.day-view__nav {
-  display: flex;
+.day-view__head {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: 0.75rem;
+  margin-bottom: 1.5rem;
 }
-.day-view__nav-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 0.8125rem;
-  cursor: pointer;
-  padding: 0.25rem 0.375rem;
+.day-view__head-center {
+  text-align: center;
 }
-.day-view__nav-btn:hover {
-  color: var(--color-text-primary);
-}
-.day-view__label {
-  font-size: 0.875rem;
+.day-view__big-date {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  margin: 0;
   color: var(--color-text-primary);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
 }
-.day-view__today {
+.day-view__sub {
+  margin: 0.375rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-faint);
+  letter-spacing: 0.08em;
+}
+.day-view__today-tag {
   font-size: 0.625rem;
   font-weight: 600;
   color: var(--color-accent);
@@ -245,6 +247,41 @@ onMounted(() => {
   padding: 0.125rem 0.375rem;
   border-radius: var(--radius-seal);
   line-height: 1;
+  margin-left: 0.375rem;
+  vertical-align: 0.0625rem;
+}
+.day-view__nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out-quart),
+    background var(--dur-fast) var(--ease-out-quart);
+}
+.day-view__nav:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated-2);
+}
+.day-view__nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.day-view__back-today {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  padding: 0.25rem 0.375rem;
+}
+.day-view__back-today:hover {
+  color: var(--color-text-primary);
 }
 .day-view__empty {
   display: flex;

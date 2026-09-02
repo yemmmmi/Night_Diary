@@ -10,6 +10,7 @@ import WeeklyLetterCard from '@/features/timeline/WeeklyLetterCard.vue'
 import { timelineCopy as copy } from '@/shared/copy/timeline'
 import { cardCopy } from '@/shared/copy/card'
 import { useTimelineStore } from '@/stores/timeline'
+import { serverDateIso } from '@/shared/utils/timeFormat'
 import { useCardStore } from '@/stores/card'
 import type { DiaryEntry } from '@/shared/api/diary'
 import type { MemoryCard } from '@/shared/api/card'
@@ -66,7 +67,7 @@ const weekLabel = computed(() =>
 
 const weekStats = computed(() => {
   const cards = cardStore.cards.filter((c) => {
-    const d = c.created_at.slice(0, 10)
+    const d = serverDateIso(c.created_at)
     return d >= timeline.weekStartIso && d <= timeline.weekEndIso
   })
   const done = timeline.tasks.filter((t) => t.status === 'done').length
@@ -91,7 +92,7 @@ const weekColumns = computed(() => {
     if (card.diary_id != null) {
       cardByDiaryId.set(card.diary_id, card)
     } else {
-      const date = card.created_at.slice(0, 10)
+      const date = serverDateIso(card.created_at)
       const arr = standaloneCardsByDate.get(date)
       if (arr) arr.push(card)
       else standaloneCardsByDate.set(date, [card])

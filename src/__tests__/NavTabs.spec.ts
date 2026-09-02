@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 const push = vi.fn()
-let routeName = 'home'
+let routeName = 'timeline'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ name: routeName }),
@@ -12,7 +12,7 @@ vi.mock('vue-router', () => ({
 
 import NavTabs from '@/shared/components/NavTabs.vue'
 
-function mountNav(name = 'home') {
+function mountNav(name = 'timeline') {
   routeName = name
   setActivePinia(createPinia())
   return mount(NavTabs, {
@@ -25,10 +25,10 @@ function mountNav(name = 'home') {
 }
 
 describe('NavTabs', () => {
-  it('renders five paper text tabs and hides models from main nav', () => {
+  it('renders four paper text tabs and hides models from main nav', () => {
     const wrapper = mountNav()
     const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs.map((t) => t.text())).toEqual(['今天', '记录', '规划', '洞悉', '笔谈'])
+    expect(tabs.map((t) => t.text())).toEqual(['记录', '规划', '洞悉', '笔谈'])
     expect(wrapper.text()).not.toContain('模型')
     expect(wrapper.text()).not.toContain('设置')
   })
@@ -41,12 +41,12 @@ describe('NavTabs', () => {
   })
 
   it('navigates to scene routes on tab click', async () => {
-    const wrapper = mountNav()
+    const wrapper = mountNav('timeline')
     const tabs = wrapper.findAll('[role="tab"]')
-    await tabs[1].trigger('click')
-    expect(push).toHaveBeenCalledWith('/timeline')
     await tabs[0].trigger('click')
-    expect(push).toHaveBeenCalledWith('/')
+    expect(push).toHaveBeenCalledWith('/timeline')
+    await tabs[3].trigger('click')
+    expect(push).toHaveBeenCalledWith('/chat')
   })
 
   it('exposes gear entries for models and settings', () => {

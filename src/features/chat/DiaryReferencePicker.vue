@@ -6,16 +6,19 @@ import type { MemoryCard } from '@/shared/api/card'
 import { chatCopy } from '@/shared/copy/chat'
 import { findCardForDiary } from '@/shared/utils/cardFormat'
 import { diaryEntrySummary, diarySummary, toIsoDate } from '@/shared/utils/diaryFormat'
+import { serverDateIso } from '@/shared/utils/timeFormat'
 
 const props = withDefaults(
   defineProps<{
     modelValue: number[]
+    cardModelValue?: string[]
     entries: DiaryEntry[]
     cards?: MemoryCard[]
     max?: number
     loading?: boolean
   }>(),
   {
+    cardModelValue: () => [],
     cards: () => [],
     loading: false,
   },
@@ -23,12 +26,14 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:modelValue': [value: number[]]
+  'update:cardModelValue': [value: string[]]
 }>()
 
 const open = ref(false)
 
 const maxCount = computed(() => props.max ?? 3)
 const selectedIds = computed(() => props.modelValue)
+const selectedCardIds = computed(() => props.cardModelValue)
 
 const entryById = computed(() => {
   const map = new Map<number, DiaryEntry>()
@@ -39,7 +44,7 @@ const entryById = computed(() => {
 })
 
 function entryDateIso(entry: DiaryEntry): string {
-  return entry.date ?? entry.created_at.slice(0, 10)
+  return entry.date ?? serverDateIso(entry.created_at)
 }
 
 function linkedCard(entry: DiaryEntry): MemoryCard | null {
@@ -71,6 +76,13 @@ const availableDiaries = computed(() =>
     }),
 )
 
+/* 独立卡：未关联任何日记（diary_id == null）的卡片，卡片日记在日记区已可达 */
+const standaloneCards = computed(() =>
+  [...props.cards]
+    .filter((card) => card.diary_id === null)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+)
+
 function toggleDiary(id: number) {
   if (selectedIds.value.includes(id)) {
     emit(
@@ -83,10 +95,29 @@ function toggleDiary(id: number) {
   emit('update:modelValue', [...selectedIds.value, id])
 }
 
+function toggleCard(cardId: string) {
+  if (selectedCardIds.value.includes(cardId)) {
+    emit(
+      'update:cardModelValue',
+      selectedCardIds.value.filter((id) => id !== cardId),
+    )
+    return
+  }
+  if (selectedCardIds.value.length >= maxCount.value) return
+  emit('update:cardModelValue', [...selectedCardIds.value, cardId])
+}
+
 function removePin(id: number) {
   emit(
     'update:modelValue',
     selectedIds.value.filter((entryId) => entryId !== id),
+  )
+}
+
+function removeCardPin(cardId: string) {
+  emit(
+    'update:cardModelValue',
+    selectedCardIds.value.filter((id) => id !== cardId),
   )
 }
 
@@ -104,6 +135,32 @@ function chipLabel(id: number): string {
   const entry = entryById.value.get(id)
   return entry ? entryPreview(entry, 16) : `#${id}`
 }
+
+function cardChipLabel(card: MemoryCard): string {
+  const summary = (card.event_summary ?? '').trim()
+  if (summary) return diarySummary(summary, 16)
+  return `${card.emotion}的卡片`
+}
+
+function cardDateLabel(card: MemoryCard): string {
+  const iso = serverDateIso(card.created_at)
+  const today = toIsoDate(new Date())
+  if (iso === today) return '今天'
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+  })
+}
+
+function cardById(cardId: string): MemoryCard | undefined {
+  return standaloneCards.value.find((card) => card.card_id === cardId)
+}
+
+const bothSlotsFull = computed(
+  () =>
+    selectedIds.value.length >= maxCount.value &&
+    selectedCardIds.value.length >= maxCount.value,
+)
 </script>
 
 <template>
@@ -111,7 +168,7 @@ function chipLabel(id: number): string {
     <div class="diary-picker__selected">
       <button
         v-for="id in selectedIds"
-        :key="id"
+        :key="`d-${id}`"
         type="button"
         class="diary-picker__chip diary-picker__chip--selected"
         :title="chatCopy.removePin"
@@ -121,10 +178,22 @@ function chipLabel(id: number): string {
         <span aria-hidden="true">×</span>
       </button>
       <button
+        v-for="cardId in selectedCardIds"
+        :key="`c-${cardId}`"
+        type="button"
+        class="diary-picker__chip diary-picker__chip--selected diary-picker__chip--card"
+        data-testid="diary-picker__chip-card"
+        :title="chatCopy.removeCardPin"
+        @click="removeCardPin(cardId)"
+      >
+        {{ cardById(cardId) ? cardChipLabel(cardById(cardId)!) : '卡片' }}
+        <span aria-hidden="true">×</span>
+      </button>
+      <button
         type="button"
         class="diary-picker__add"
         :class="{ 'is-open': open }"
-        :disabled="selectedIds.length >= maxCount"
+        :disabled="bothSlotsFull"
         @click="open = !open"
       >
         + {{ chatCopy.pickDiary }}
@@ -134,31 +203,56 @@ function chipLabel(id: number): string {
     <div v-if="open" class="diary-picker__panel">
       <p class="diary-picker__hint">{{ chatCopy.pickDiaryHint }}</p>
       <p v-if="loading" class="diary-picker__empty">{{ chatCopy.noReference }}</p>
-      <p v-else-if="availableDiaries.length === 0" class="diary-picker__empty">
-        {{ chatCopy.pickDiaryEmpty }}
-      </p>
-      <div v-else class="diary-picker__list">
-        <button
-          v-for="entry in availableDiaries"
-          :key="entry.id"
-          type="button"
-          class="diary-picker__item"
-          :class="{ 'is-selected': selectedIds.includes(entry.id) }"
-          :aria-pressed="selectedIds.includes(entry.id)"
-          @click="toggleDiary(entry.id)"
-        >
-          <span class="diary-picker__item-head">
-            <span class="diary-picker__date">{{ formatDateLabel(entry) }}</span>
-            <span
-              v-if="entry.weather?.trim()"
-              class="diary-picker__meta"
-            >
-              {{ entry.weather.trim() }}
+      <template v-else>
+        <div v-if="availableDiaries.length" class="diary-picker__list">
+          <button
+            v-for="entry in availableDiaries"
+            :key="entry.id"
+            type="button"
+            class="diary-picker__item"
+            :class="{ 'is-selected': selectedIds.includes(entry.id) }"
+            :aria-pressed="selectedIds.includes(entry.id)"
+            data-testid="diary-picker__item"
+            @click="toggleDiary(entry.id)"
+          >
+            <span class="diary-picker__item-head">
+              <span class="diary-picker__date">{{ formatDateLabel(entry) }}</span>
+              <span
+                v-if="entry.weather?.trim()"
+                class="diary-picker__meta"
+              >
+                {{ entry.weather.trim() }}
+              </span>
             </span>
-          </span>
-          <span class="diary-picker__summary">{{ entryPreview(entry) }}</span>
-        </button>
-      </div>
+            <span class="diary-picker__summary">{{ entryPreview(entry) }}</span>
+          </button>
+        </div>
+        <p v-else class="diary-picker__empty">{{ chatCopy.pickDiaryEmpty }}</p>
+
+        <template v-if="standaloneCards.length">
+          <p class="diary-picker__section">{{ chatCopy.pickCardSection }}</p>
+          <div class="diary-picker__list">
+            <button
+              v-for="card in standaloneCards"
+              :key="card.card_id"
+              type="button"
+              class="diary-picker__item"
+              :class="{ 'is-selected': selectedCardIds.includes(card.card_id) }"
+              :aria-pressed="selectedCardIds.includes(card.card_id)"
+              data-testid="diary-picker__card-item"
+              @click="toggleCard(card.card_id)"
+            >
+              <span class="diary-picker__item-head">
+                <span class="diary-picker__date">{{ cardDateLabel(card) }}</span>
+                <span class="diary-picker__meta">{{ card.emotion }}</span>
+              </span>
+              <span class="diary-picker__summary">
+                {{ (card.event_summary ?? '').trim() || chatCopy.pickCardHint }}
+              </span>
+            </button>
+          </div>
+        </template>
+      </template>
     </div>
   </section>
 </template>
@@ -204,6 +298,18 @@ function chipLabel(id: number): string {
   border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-elevated));
   color: var(--color-text-primary);
+}
+
+/* 卡片 chip 以细体描边区分来源 */
+.diary-picker__chip--card {
+  border-style: dashed;
+}
+
+.diary-picker__section {
+  margin: 0.125rem 0 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
 }
 
 .diary-picker__panel {

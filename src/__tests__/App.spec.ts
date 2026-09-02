@@ -49,7 +49,7 @@ describe('App', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', name: 'home', component: TimelineScene },
+        { path: '/', name: 'timeline', component: TimelineScene },
         { path: '/settings', name: 'settings', component: TimelineScene },
       ],
     })

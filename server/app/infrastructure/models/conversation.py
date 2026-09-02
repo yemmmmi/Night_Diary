@@ -43,6 +43,8 @@ class ChatMessageRow(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     retrieved_diary_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
     retrieved_memory_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attached_card_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attached_plan_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_info: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 

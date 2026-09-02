@@ -55,6 +55,68 @@ def test_normalize_diary_ids_rejects_overflow() -> None:
         conversation_ai_service._normalize_diary_ids([1, 2, 3, 4])
 
 
+# ── PR7: attached cards / plans in pinned context ──
+
+
+def test_normalize_str_ids_rejects_overflow() -> None:
+    with pytest.raises(ValidationError):
+        conversation_ai_service._normalize_str_ids(
+            ["a", "b", "c", "d"], limit=3, label="张卡片"
+        )
+
+
+def test_compose_pinned_context_includes_attached_cards_and_plans(db_session) -> None:
+    """附上的卡片与计划拼成上下文块：情绪/摘要/标签与目标/进度齐全。"""
+    from app.services import card_service, plan_service
+
+    card = card_service.create_card(
+        db_session,
+        user_id="default",
+        emotion="低落",
+        event_summary="工作压力大到失眠",
+        tags=["工作", "睡眠"],
+    )
+    plan = plan_service.create_plan(
+        db_session,
+        user_id="default",
+        title="坚持减肥30天",
+        motivation="健康优先",
+        target_value=30,
+        target_unit="天",
+        target_period="total",
+    )
+
+    text = conversation_ai_service._compose_pinned_context(
+        db_session,
+        [],
+        card_ids=[card.card_id],
+        plan_ids=[plan.id],
+        user_id="default",
+    )
+
+    assert "【用户附上的卡片】" in text
+    assert "工作压力大到失眠" in text
+    assert "低落" in text
+    assert "【用户附上的计划】" in text
+    assert "坚持减肥30天" in text
+    assert "健康优先" in text
+    assert "目标：30天/total" in text
+
+
+def test_compose_pinned_context_skips_unknown_ids(db_session) -> None:
+    """查不到的附物静默跳过，不产生空块。"""
+    text = conversation_ai_service._compose_pinned_context(
+        db_session,
+        [],
+        card_ids=["missing-card"],
+        plan_ids=["missing-plan"],
+        user_id="default",
+    )
+
+    assert "【用户附上的卡片】" not in text
+    assert "【用户附上的计划】" not in text
+
+
 # ── PR-4: generate_card_from_conversation ──
 
 

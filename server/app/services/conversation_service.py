@@ -118,6 +118,8 @@ def add_message(
     content: str,
     retrieved_diary_ids: list[int] | None = None,
     retrieved_memory_ids: list[str] | None = None,
+    attached_card_ids: list[str] | None = None,
+    attached_plan_ids: list[str] | None = None,
     token_info: dict[str, Any] | None = None,
 ) -> ChatMessageRow:
     if get_conversation(db, user_id=user_id, conversation_id=conversation_id) is None:
@@ -129,6 +131,8 @@ def add_message(
         content=content,
         retrieved_diary_ids=json.dumps(retrieved_diary_ids) if retrieved_diary_ids else None,
         retrieved_memory_ids=json.dumps(retrieved_memory_ids) if retrieved_memory_ids else None,
+        attached_card_ids=json.dumps(attached_card_ids) if attached_card_ids else None,
+        attached_plan_ids=json.dumps(attached_plan_ids) if attached_plan_ids else None,
         token_info=json.dumps(token_info) if token_info else None,
         created_at=_now(),
     )
@@ -147,6 +151,8 @@ def add_user_message_and_reply(
     reply_content: str,
     retrieved_diary_ids: list[int] | None = None,
     retrieved_memory_ids: list[str] | None = None,
+    attached_card_ids: list[str] | None = None,
+    attached_plan_ids: list[str] | None = None,
     token_info: dict[str, Any] | None = None,
 ) -> tuple[ChatMessageRow, ChatMessageRow]:
     user_msg = add_message(
@@ -155,6 +161,8 @@ def add_user_message_and_reply(
         conversation_id=conversation_id,
         role="user",
         content=content,
+        attached_card_ids=attached_card_ids,
+        attached_plan_ids=attached_plan_ids,
     )
     reply_msg = add_message(
         db,

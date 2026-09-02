@@ -134,7 +134,11 @@ def _run_lightweight_migrations(engine: Engine) -> None:
 
     additive_columns: dict[str, dict[str, str]] = {
         "memory_cards": {"emotions_json": "TEXT", "user_id": "VARCHAR(64)"},
-        "chat_messages": {"token_info": "TEXT"},
+        "chat_messages": {
+            "token_info": "TEXT",
+            "attached_card_ids": "TEXT",
+            "attached_plan_ids": "TEXT",
+        },
         "diary_entries": {"user_id": "VARCHAR(64)"},
         "conversations": {"user_id": "VARCHAR(64)"},
         "llm_call_logs": {"user_id": "VARCHAR(64)"},

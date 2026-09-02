@@ -29,7 +29,7 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="letter-composer">
-    <div class="letter-composer__line ink-underline" data-testid="letter-input">
+    <div class="letter-composer__box" data-testid="letter-input">
       <textarea
         v-model="text"
         class="letter-composer__field"
@@ -52,21 +52,27 @@ function onKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
-/* 底线式回信输入：正文落在纸上，只有一条会生长的底线 */
+/* 圆棱方框回信输入：纸上的一只浅盒，落笔时描边点亮 */
 .letter-composer {
   display: flex;
   align-items: flex-end;
   gap: 0.75rem;
 }
 
-.letter-composer__line {
+.letter-composer__box {
   flex: 1;
   min-width: 0;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-inner);
+  background: var(--color-bg-elevated);
+  transition: border-color var(--motion-duration) var(--motion-ease),
+    box-shadow var(--motion-duration) var(--motion-ease);
 }
 
-/* ink-underline 的底线生长在包裹层上，用 focus-within 点亮 */
-.letter-composer__line:focus-within::after {
-  transform: scaleX(1);
+.letter-composer__box:focus-within {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 15%, transparent);
 }
 
 .letter-composer__field {
@@ -74,7 +80,7 @@ function onKeydown(e: KeyboardEvent) {
   width: 100%;
   border: none;
   background: transparent;
-  padding: 0.25rem 0;
+  padding: 0;
   color: var(--color-text-primary);
   font-family: var(--font-diary);
   font-size: 0.9375rem;
@@ -92,18 +98,22 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 .letter-composer__send {
-  border: none;
-  background: none;
-  padding: 0.25rem 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  padding: 0.4375rem 0.875rem;
+  border-radius: var(--radius-button);
   flex-shrink: 0;
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
-  text-decoration: underline;
-  text-underline-offset: 3px;
   cursor: pointer;
+  transition:
+    border-color var(--motion-duration) var(--motion-ease),
+    color var(--motion-duration) var(--motion-ease),
+    background var(--motion-duration) var(--motion-ease);
 }
 
 .letter-composer__send:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   color: var(--color-text-primary);
 }
 

@@ -14,7 +14,7 @@ import { useDiaryStore } from '@/stores/diary'
 import { useCardStore } from '@/stores/card'
 import { findCardForDiary } from '@/shared/utils/cardFormat'
 import { formatApiError } from '@/shared/utils/apiError'
-import { countWordUnits } from '@/shared/utils/diaryFormat'
+import { countWordUnits, toIsoDate } from '@/shared/utils/diaryFormat'
 import { buildDiaryMarkdown, diaryExportFilename } from '@/shared/utils/markdownExport'
 import { useSettingsStore } from '@/stores/settings'
 import { useDevStore } from '@/stores/dev'
@@ -178,7 +178,7 @@ async function onSaveClick() {
 }
 
 function exportMarkdown() {
-  const iso = targetDate.value ?? new Date().toISOString().slice(0, 10)
+  const iso = targetDate.value ?? toIsoDate(new Date())
   try {
     const md = buildDiaryMarkdown({ date: iso, content: content.value, emotions: emotions.value })
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })

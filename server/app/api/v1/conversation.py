@@ -105,6 +105,8 @@ def send_message(
         user_id=str(user.id),
         auto_retrieve=body.auto_retrieve,
         trace_id=trace_id,
+        card_ids=body.card_ids,
+        plan_ids=body.plan_ids,
     )
 
     user_msg, reply_msg = conversation_service.add_user_message_and_reply(
@@ -115,6 +117,8 @@ def send_message(
         reply_content=result.reply_text,
         retrieved_diary_ids=result.retrieved_diary_ids,
         retrieved_memory_ids=result.retrieved_memory_ids,
+        attached_card_ids=body.card_ids,
+        attached_plan_ids=body.plan_ids,
         token_info=result.token_info,
     )
     return SendMessageResponse(
@@ -174,6 +178,8 @@ async def send_message_streaming(
             user_id=str(user.id),
             auto_retrieve=body.auto_retrieve,
             trace_id=trace_id,
+            card_ids=body.card_ids,
+            plan_ids=body.plan_ids,
         )
     )
     # Register with TaskRegistry for lifecycle management (cancel on abort,

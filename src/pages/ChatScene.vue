@@ -4,14 +4,17 @@ import { useRoute } from 'vue-router'
 import { chatCopy } from '@/shared/copy/chat'
 import { listDiaryEntries, type DiaryEntry } from '@/shared/api/diary'
 import { listCards, type MemoryCard } from '@/shared/api/card'
+import { listPlans, type PlanItem } from '@/shared/api/plan'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
 import { useDevStore } from '@/stores/dev'
 import { diaryEntrySummary } from '@/shared/utils/diaryFormat'
+import { serverDateIso } from '@/shared/utils/timeFormat'
 import ConversationList from '@/features/chat/ConversationList.vue'
 import LetterMessage from '@/features/chat/LetterMessage.vue'
 import ChatInput from '@/features/chat/ChatInput.vue'
 import DiaryReferencePicker from '@/features/chat/DiaryReferencePicker.vue'
+import PlanReferencePicker from '@/features/chat/PlanReferencePicker.vue'
 import InkGrinding from '@/shared/components/InkGrinding.vue'
 import DevPipelinePanel from '@/features/dev/DevPipelinePanel.vue'
 import ModeBadge from '@/features/mode/ModeBadge.vue'
@@ -31,6 +34,7 @@ const cardGenerating = ref(false)
 const cardGenerated = ref(false)
 const diaryCatalog = ref<DiaryEntry[]>([])
 const referenceCards = ref<MemoryCard[]>([])
+const planCatalog = ref<PlanItem[]>([])
 const modeBadge = ref<InstanceType<typeof ModeBadge> | null>(null)
 const pendingUserText = ref<string | null>(null)
 
@@ -38,6 +42,25 @@ const diaryLabelMap = computed(() => {
   const map: Record<number, string> = {}
   for (const entry of diaryCatalog.value) {
     map[entry.id] = diaryEntrySummary(entry, referenceCards.value, 20)
+  }
+  return map
+})
+
+const cardLabelMap = computed(() => {
+  const map: Record<string, string> = {}
+  for (const card of referenceCards.value) {
+    const summary = (card.event_summary ?? '').trim()
+    map[card.card_id] = summary
+      ? `卡片 · ${summary}`
+      : `卡片 · ${card.emotion}`
+  }
+  return map
+})
+
+const planLabelMap = computed(() => {
+  const map: Record<string, string> = {}
+  for (const plan of planCatalog.value) {
+    map[plan.id] = `计划 · ${plan.title}`
   }
   return map
 })
@@ -56,12 +79,18 @@ const writingLetterVisible = computed(
 
 async function loadReferenceData() {
   try {
-    const [diaries, cards] = await Promise.all([listDiaryEntries({ limit: 50 }), listCards()])
+    const [diaries, cards, plans] = await Promise.all([
+      listDiaryEntries({ limit: 50 }),
+      listCards(),
+      listPlans('active'),
+    ])
     diaryCatalog.value = diaries
     referenceCards.value = cards
+    planCatalog.value = plans
   } catch {
     diaryCatalog.value = []
     referenceCards.value = []
+    planCatalog.value = []
   }
 }
 
@@ -153,7 +182,7 @@ const messageTimeline = computed(() => {
 
   let currentDate = ''
   for (const message of chatStore.messages) {
-    const date = message.created_at.slice(0, 10)
+    const date = serverDateIso(message.created_at)
     if (date !== currentDate) {
       currentDate = date
       items.push({ kind: 'divider', key: `div-${date}-${items.length}`, date })
@@ -166,7 +195,7 @@ const messageTimeline = computed(() => {
     const alreadyPersisted =
       last?.role === 'user' && last.content === pendingUserText.value
     if (!alreadyPersisted) {
-      const date = new Date().toISOString().slice(0, 10)
+      const date = serverDateIso(new Date().toISOString())
       if (date !== currentDate) {
         items.push({ kind: 'divider', key: `div-${date}-pending`, date })
       }
@@ -267,6 +296,8 @@ watch(
                 v-else
                 :message="item.message"
                 :diary-labels="diaryLabelMap"
+                :card-labels="cardLabelMap"
+                :plan-labels="planLabelMap"
                 :show-actions="item.message.id === lastAssistantId"
                 :generating="cardGenerating"
                 :generated="cardGenerated"
@@ -295,11 +326,18 @@ watch(
         </div>
 
         <div class="chat-scene__composer">
-          <DiaryReferencePicker
-            v-model="chatStore.pinnedDiaryIds"
-            :entries="diaryCatalog"
-            :cards="referenceCards"
-          />
+          <div class="chat-scene__refs">
+            <DiaryReferencePicker
+              v-model="chatStore.pinnedDiaryIds"
+              v-model:card-model-value="chatStore.pinnedCardIds"
+              :entries="diaryCatalog"
+              :cards="referenceCards"
+            />
+            <PlanReferencePicker
+              v-model="chatStore.pinnedPlanIds"
+              :plans="planCatalog"
+            />
+          </div>
           <div class="chat-scene__composer-row">
             <ChatInput
               :disabled="chatStore.sending || chatStore.streamingActive"
@@ -472,6 +510,14 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+/* 附物行：日记/卡片 picker 与计划 picker 并排，窄屏自动换行 */
+.chat-scene__refs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.375rem 1.5rem;
 }
 
 .chat-scene__composer-row {

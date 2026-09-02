@@ -55,6 +55,71 @@ def test_send_message_rejects_too_many_pins(authed_client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_send_message_rejects_too_many_attached_cards(authed_client: TestClient) -> None:
+    conversation_id = _create_conversation(authed_client)
+    response = authed_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "测试", "card_ids": ["a", "b", "c", "d"]},
+    )
+    assert response.status_code == 422
+
+
+def test_send_message_rejects_too_many_attached_plans(authed_client: TestClient) -> None:
+    conversation_id = _create_conversation(authed_client)
+    response = authed_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "测试", "plan_ids": ["a", "b", "c", "d"]},
+    )
+    assert response.status_code == 422
+
+
+def test_send_message_with_attached_cards_and_plans(authed_client: TestClient) -> None:
+    """附卡片/计划随信落库: 响应回显、历史可回读, 回信侧不带附物。"""
+    conversation_id = _create_conversation(authed_client)
+    card_id = authed_client.post(
+        "/api/v1/cards",
+        json={"emotion": "平静", "event_summary": "和夜记聊了睡眠"},
+    ).json()["card_id"]
+    plan_id = authed_client.post(
+        "/api/v1/plans",
+        json={"title": "读完一本书", "motivation": "想保持输入"},
+    ).json()["id"]
+
+    with patch(
+        "app.api.v1.conversation.conversation_ai_service.generate_reply",
+        return_value=ChatReplyResult(
+            reply_text="收到，我看看你附的卡片和计划。",
+            retrieved_diary_ids=[],
+            retrieved_memory_ids=[],
+        ),
+    ) as mock_generate:
+        sent = authed_client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={
+                "content": "帮我看看这两样",
+                "card_ids": [card_id],
+                "plan_ids": [plan_id],
+                "auto_retrieve": False,
+            },
+        )
+
+    assert sent.status_code == 201
+    body = sent.json()
+    assert body["message"]["attached_card_ids"] == [card_id]
+    assert body["message"]["attached_plan_ids"] == [plan_id]
+    assert body["reply"]["attached_card_ids"] is None
+    assert body["reply"]["attached_plan_ids"] is None
+    assert mock_generate.call_args.kwargs["card_ids"] == [card_id]
+    assert mock_generate.call_args.kwargs["plan_ids"] == [plan_id]
+
+    history = authed_client.get(f"/api/v1/conversations/{conversation_id}/messages")
+    assert history.status_code == 200
+    user_row = history.json()[0]
+    assert user_row["role"] == "user"
+    assert user_row["attached_card_ids"] == [card_id]
+    assert user_row["attached_plan_ids"] == [plan_id]
+
+
 # ── V3 P0: streaming endpoint ────────────────────────────────────────
 
 
