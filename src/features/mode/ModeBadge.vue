@@ -101,9 +101,10 @@ defineExpose({ load })
   background: var(--color-accent);
 }
 
+/* 向右展开：面板不越过主区左边界，避免被会话栏遮住/裁剪 */
 .mode-badge__panel {
   position: absolute;
-  right: 0;
+  left: 0;
   top: calc(100% + 0.375rem);
   width: 16rem;
   padding: 0.625rem;
