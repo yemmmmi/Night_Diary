@@ -42,10 +42,10 @@ const emit = defineEmits<{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  border-radius: var(--radius-button);
-  font-size: 0.875rem;
+  gap: 0.375rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: var(--radius-seal);
+  font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1.25rem;
   border: 1px solid transparent;
@@ -85,13 +85,14 @@ const emit = defineEmits<{
 }
 
 .game-button--secondary {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
+  background: transparent;
+  color: var(--color-text-secondary);
   border-color: var(--color-border);
 }
 
 .game-button--secondary:hover:not(:disabled) {
-  background: var(--color-bg-elevated-2);
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
 }
 
 .game-button--ghost {

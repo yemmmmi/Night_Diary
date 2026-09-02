@@ -408,30 +408,38 @@ watch(
 }
 
 .chat-scene__empty-title {
-  font-family: var(--font-diary);
-  font-size: 1rem;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
   color: var(--color-text-primary);
+  margin: 0;
 }
 
 .chat-scene__empty-desc {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
+  max-width: 22rem;
+  text-align: center;
+  line-height: 1.7;
+  margin: 0;
 }
 
 .chat-scene__empty-link {
-  margin-top: 0.75rem;
+  margin-top: 1rem;
   border: none;
   background: none;
-  padding: 0.25rem 0;
+  padding: 0.375rem 0.875rem;
   font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  font-weight: 600;
+  color: var(--color-bg);
+  background: var(--color-accent);
+  border-radius: var(--radius-seal);
   cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out-quart);
 }
 
 .chat-scene__empty-link:hover {
-  color: var(--color-text-primary);
+  background: var(--color-accent-muted);
 }
 
 .chat-scene__messages {

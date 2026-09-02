@@ -191,8 +191,8 @@ onActivated(() => {
           <span class="memory-overview__label">{{ copy.statCards }}</span>
         </div>
       </div>
-      <p class="memory-overview__profile">
-        {{ overview.profile_built ? copy.profileBuilt : copy.profileEmpty }}
+      <p v-if="overview.profile_built" class="memory-overview__profile">
+        {{ copy.profileBuilt }}
       </p>
     </section>
 
@@ -326,7 +326,7 @@ onActivated(() => {
 
 .memory-head__title {
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: 1.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--color-text-primary);

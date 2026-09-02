@@ -229,11 +229,14 @@ onActivated(loadAll)
       <section class="today-records">
         <h2 class="today-section-title">今日记录</h2>
         <template v-if="entries.length === 0">
-          <p class="today-blank">这一页还是空白。</p>
-          <GameButton variant="secondary" data-testid="today-write-cta" @click="goWrite">
-            <PhNotePencil :size="14" />
-            记一笔
-          </GameButton>
+          <div class="today-empty">
+            <p class="today-empty__title">这一页还是空白</p>
+            <p class="today-empty__hint">从一句话开始就好</p>
+            <GameButton variant="primary" data-testid="today-write-cta" @click="goWrite">
+              <PhNotePencil :size="14" />
+              记一笔
+            </GameButton>
+          </div>
         </template>
         <ul v-else class="today-records__list">
           <li v-for="e in entries" :key="e.id" class="today-record">
@@ -413,7 +416,7 @@ onActivated(loadAll)
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.75rem;
+  margin-bottom: 2.5rem;
 }
 
 .today-head__center {
@@ -422,18 +425,19 @@ onActivated(loadAll)
 
 .today-head__date {
   font-family: var(--font-display);
-  font-size: 2.125rem;
+  font-size: 2.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+  line-height: 1.15;
   margin: 0;
   color: var(--color-text-primary);
 }
 
 .today-head__sub {
-  margin: 0.25rem 0 0;
+  margin: 0.375rem 0 0;
   font-size: 0.8125rem;
   color: var(--color-text-faint);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
 }
 
 .today-head__nav {
@@ -476,6 +480,24 @@ onActivated(loadAll)
   margin: 0 0 0.875rem;
   font-size: 0.875rem;
   color: var(--color-text-faint);
+}
+
+/* 空态：衬线标题 + 淡墨辅助 + 唯一焦点 CTA */
+.today-empty {
+  padding: 1.5rem 0 1rem;
+  text-align: center;
+}
+.today-empty__title {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+.today-empty__hint {
+  font-size: 0.8125rem;
+  color: var(--color-text-faint);
+  margin: 0.375rem 0 1rem;
 }
 
 .today-records__list {
