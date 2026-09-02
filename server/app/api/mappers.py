@@ -132,12 +132,12 @@ def message_to_response(row: ChatMessageRow) -> MessageResponse:
             memory_ids = json.loads(row.retrieved_memory_ids)
         except (json.JSONDecodeError, TypeError):
             memory_ids = None
-    if getattr(row, "attached_card_ids", None):
+    if row.attached_card_ids:
         try:
             card_ids = json.loads(row.attached_card_ids)
         except (json.JSONDecodeError, TypeError):
             card_ids = None
-    if getattr(row, "attached_plan_ids", None):
+    if row.attached_plan_ids:
         try:
             plan_ids = json.loads(row.attached_plan_ids)
         except (json.JSONDecodeError, TypeError):
