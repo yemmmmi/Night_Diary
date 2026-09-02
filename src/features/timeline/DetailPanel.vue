@@ -14,6 +14,7 @@ import { useCardStore } from '@/stores/card'
 import { formatApiError } from '@/shared/utils/apiError'
 import { findCardForDiary } from '@/shared/utils/cardFormat'
 import { diaryEntrySummary } from '@/shared/utils/diaryFormat'
+import { serverDateIso } from '@/shared/utils/timeFormat'
 
 const router = useRouter()
 const timeline = useTimelineStore()
@@ -83,7 +84,7 @@ async function executeDelete() {
       <PhXCircle :size="16" />
     </button>
 
-    <p class="detail-panel__date">{{ entry.date ?? entry.created_at.slice(0, 10) }}</p>
+    <p class="detail-panel__date">{{ entry.date ?? serverDateIso(entry.created_at) }}</p>
     <p v-if="entry.weather" class="detail-panel__weather">{{ entry.weather }}</p>
 
     <div v-if="linkedCard" class="detail-panel__card-origin">

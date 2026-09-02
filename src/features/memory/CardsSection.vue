@@ -7,6 +7,7 @@ import CardTypeBadge from '@/features/card/CardTypeBadge.vue'
 import EmotionChips from '@/features/card/EmotionChips.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import { memoryCopy as copy } from '@/shared/copy/memory'
+import { parseServerTime } from '@/shared/utils/timeFormat'
 import { useCardStore } from '@/stores/card'
 import { searchCards, type CardSearchResult, type MemoryCard } from '@/shared/api/card'
 import { formatApiError } from '@/shared/utils/apiError'
@@ -49,9 +50,15 @@ function clearSearch() {
   searchResults.value = []
 }
 
-/** 账簿小字时间：08/25 21:00（不依赖 locale）。 */
+/** 账簿小字时间：08/25 21:00（本地时间，不依赖 locale）。 */
 function formatTime(card: MemoryCard): string {
-  return `${card.created_at.slice(5, 10).replace('-', '/')} ${card.created_at.slice(11, 16)}`
+  const date = parseServerTime(card.created_at)
+  if (Number.isNaN(date.getTime())) return ''
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  const hh = String(date.getHours()).padStart(2, '0')
+  const mm = String(date.getMinutes()).padStart(2, '0')
+  return `${m}/${d} ${hh}:${mm}`
 }
 
 async function expandCard(card: MemoryCard) {
