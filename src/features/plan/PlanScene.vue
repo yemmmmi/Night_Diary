@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { PhCaretRight, PhPlus } from '@phosphor-icons/vue'
+import { PhArrowSquareOut, PhCaretRight, PhPlus } from '@phosphor-icons/vue'
 
 import PlanCreateForm from '@/features/plan/PlanCreateForm.vue'
 import PlanRefsBlock from '@/features/plan/PlanRefsBlock.vue'
+import SkillPlanControls from '@/features/plan/SkillPlanControls.vue'
 import GameButton from '@/shared/components/GameButton.vue'
 import { planCopy } from '@/shared/copy/plan'
 import { toIsoDate } from '@/shared/utils/diaryFormat'
 import { ledgerLine, recurrenceLabel, summarizePlanProgress } from '@/shared/utils/planProgress'
 import type { PlanProgress } from '@/shared/utils/planProgress'
+import { skillPlanLine, skillPlanRate } from '@/shared/utils/skillPlanProgress'
+import { openExternal } from '@/shared/utils/openExternal'
+import { parseServerTime } from '@/shared/utils/timeFormat'
 import { usePlanStore } from '@/stores/plan'
 import type { PlanItem } from '@/shared/api/plan'
 
@@ -45,6 +49,69 @@ function progressOf(plan: PlanItem): PlanProgress {
 
 function stampOf(plan: PlanItem): string {
   return recurrenceLabel(plan.recurrence)
+}
+
+/* ── 模板计划（PR8 三模板）：账簿行/完成率切换 + 计时统一走表 ── */
+
+const nowMs = ref(Date.now())
+let ticker: ReturnType<typeof setInterval> | null = null
+const hasRunningTimer = computed(() =>
+  planStore.plans.some(
+    (p) => p.template === 'timer_daily' && p.today_progress?.running,
+  ),
+)
+
+watch(
+  hasRunningTimer,
+  (running) => {
+    if (running && ticker == null) {
+      ticker = setInterval(() => {
+        nowMs.value = Date.now()
+      }, 1000)
+    } else if (!running && ticker != null) {
+      clearInterval(ticker)
+      ticker = null
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  if (ticker != null) clearInterval(ticker)
+})
+
+function isTemplatePlan(plan: PlanItem): boolean {
+  return plan.template != null
+}
+
+function liveSecondsOf(plan: PlanItem): number {
+  const snapshot = plan.today_progress
+  if (!snapshot) return 0
+  const base = snapshot.today_seconds ?? 0
+  if (!snapshot.running || !snapshot.started_at) return base
+  const start = parseServerTime(snapshot.started_at)
+  if (Number.isNaN(start.getTime())) return base
+  return base + Math.max(0, (nowMs.value - start.getTime()) / 1000)
+}
+
+function ledgerOf(plan: PlanItem): string {
+  return plan.template
+    ? skillPlanLine(plan, liveSecondsOf(plan))
+    : ledgerLine(progressOf(plan))
+}
+
+function rateOf(plan: PlanItem): number | null {
+  return plan.template
+    ? skillPlanRate(plan, liveSecondsOf(plan))
+    : progressOf(plan).rate
+}
+
+async function refreshPlans() {
+  await planStore.loadPlans()
+}
+
+function openNodeLink(link: string) {
+  openExternal(link)
 }
 
 function toggleExpand(planId: string) {
@@ -148,12 +215,23 @@ onMounted(() => {
               <span v-if="stampOf(plan)" class="plan-stamp" data-testid="plan-stamp">{{ stampOf(plan) }}</span>
               <span v-if="plan.source === 'agent'" class="badge-agent">{{ planCopy.aiBadge }}</span>
             </div>
-            <p class="plan-row__ledger" data-testid="plan-ledger">{{ ledgerLine(progressOf(plan)) }}</p>
-            <div v-if="progressOf(plan).rate != null" class="plan-row__bar-track">
+            <p class="plan-row__ledger" data-testid="plan-ledger">{{ ledgerOf(plan) }}</p>
+            <div v-if="rateOf(plan) != null" class="plan-row__bar-track">
               <div
                 class="plan-row__bar"
                 data-testid="plan-progress-bar"
-                :style="{ width: `${(progressOf(plan).rate ?? 0) * 100}%` }"
+                :style="{ width: `${(rateOf(plan) ?? 0) * 100}%` }"
+              />
+            </div>
+            <div
+              v-if="plan.template === 'checkin_total' || plan.template === 'timer_daily'"
+              class="plan-row__ctrl"
+              @click.stop
+            >
+              <SkillPlanControls
+                :plan="plan"
+                :live-seconds="liveSecondsOf(plan)"
+                @refresh="refreshPlans"
               />
             </div>
 
@@ -167,9 +245,28 @@ onMounted(() => {
                     :checked="task.status === 'done'"
                     @change="onToggleTask(plan, task.id, task.status)"
                   />
-                  <span class="plan-task__title" :class="{ 'is-done': task.status === 'done' }">
-                    {{ task.title }}
+                  <span class="plan-task__main">
+                    <span class="plan-task__title" :class="{ 'is-done': task.status === 'done' }">
+                      {{ task.title }}
+                    </span>
+                    <span
+                      v-if="plan.template === 'milestones' && task.note"
+                      class="plan-task__note"
+                    >
+                      {{ task.note }}
+                    </span>
                   </span>
+                  <button
+                    v-if="task.link"
+                    type="button"
+                    class="plan-node__link"
+                    data-testid="plan-node-link"
+                    :title="task.link"
+                    @click.stop="openNodeLink(task.link)"
+                  >
+                    <PhArrowSquareOut :size="11" aria-hidden="true" />
+                    {{ planCopy.nodeReference }}
+                  </button>
                   <template v-if="completing && completing.taskId === task.id">
                     <label class="task-actual">
                       <span class="task-actual__label">{{ planCopy.actualInputLabel }}</span>
@@ -203,7 +300,7 @@ onMounted(() => {
               </ul>
               <div class="plan-row__actions">
                 <button
-                  v-if="!pulling || pulling.planId !== plan.id"
+                  v-if="!isTemplatePlan(plan) && (!pulling || pulling.planId !== plan.id)"
                   type="button"
                   class="plan-link-btn"
                   data-testid="plan-pull-link"
@@ -255,7 +352,7 @@ onMounted(() => {
                 <span class="plan-row__title">{{ plan.title }}</span>
                 <span v-if="stampOf(plan)" class="plan-stamp" data-testid="plan-stamp">{{ stampOf(plan) }}</span>
               </div>
-              <p class="plan-row__ledger" data-testid="plan-ledger">{{ ledgerLine(progressOf(plan)) }}</p>
+              <p class="plan-row__ledger" data-testid="plan-ledger">{{ ledgerOf(plan) }}</p>
             </li>
           </ul>
         </div>
@@ -403,6 +500,52 @@ onMounted(() => {
 .plan-row__bar {
   height: 2px;
   background: var(--color-accent);
+}
+
+/* 模板计划的打卡/计时控件行 */
+.plan-row__ctrl {
+  margin: 0.625rem 0 0 1.25rem;
+}
+
+.plan-task__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.plan-task__note {
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.plan-task__note.is-done {
+  color: var(--color-text-faint);
+}
+
+/* milestones 节点参考链接：细线小签，外链图标 */
+.plan-node__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1875rem 0.5rem;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color var(--motion-duration) var(--motion-ease),
+    color var(--motion-duration) var(--motion-ease);
+}
+
+.plan-node__link:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .plan-row__detail {

@@ -31,6 +31,7 @@ function task(partial: Partial<TaskItem> & { id: string }): TaskItem {
     plan_id: 'p1',
     title: 'task',
     note: null,
+    link: null,
     due_date: null,
     status: 'done',
     source: 'manual',
@@ -52,6 +53,8 @@ function plan(partial: Partial<PlanItem> & { id: string }): PlanItem {
     target_value: null,
     target_unit: null,
     target_period: null,
+    template: null,
+    today_progress: null,
     ...partial,
   }
 }

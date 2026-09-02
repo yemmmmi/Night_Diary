@@ -38,4 +38,18 @@ export const planCopy = {
   targetPeriodTotal: '累计',
   archivedTitle: '已归档',
   expandPlan: '展开',
+  /* 技能模板计划（PR8） */
+  checkinAction: '打卡 +1',
+  checkinTodayDone: '今日已打卡',
+  checkinPlanDone: '计划已完成',
+  timerStart: '开始计时',
+  timerStop: '停止计时',
+  timerDailyDone: '今日已达标',
+  streakDays: (days: number) => `已坚持 ${days} 天`,
+  timerCompleteTitle: (title: string) => `「${title}」今日已达标`,
+  timerCompleteDesc: '今天的计时目标已完成。计时仍在继续，可随时手动停止。',
+  timerCompleteClose: '好的',
+  checkinFailed: '打卡失败，稍后再试',
+  timerFailed: '计时操作失败，稍后再试',
+  nodeReference: '参考',
 } as const
