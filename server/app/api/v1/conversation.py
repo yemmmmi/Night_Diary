@@ -119,6 +119,7 @@ def send_message(
         retrieved_memory_ids=result.retrieved_memory_ids,
         attached_card_ids=body.card_ids,
         attached_plan_ids=body.plan_ids,
+        skill_result=result.skill_result,
         token_info=result.token_info,
     )
     return SendMessageResponse(

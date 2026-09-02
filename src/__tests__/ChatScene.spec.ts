@@ -121,6 +121,8 @@ function plan(id: string, title: string): PlanItem {
     target_value: null,
     target_unit: null,
     target_period: null,
+    template: null,
+    today_progress: null,
   }
 }
 

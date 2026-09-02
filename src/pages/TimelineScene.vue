@@ -39,9 +39,9 @@ function loadRailData() {
   void planStore.loadPlans()
 }
 
-function syncFromRoute() {
+function syncFromRoute(force = false) {
   const { view, date } = parseTimelineQuery(route.query, toIsoDate(new Date()))
-  if (timeline.view === view && timeline.date === date) return
+  if (!force && timeline.view === view && timeline.date === date) return
   timeline.view = view
   timeline.date = date
   void timeline.load()
@@ -66,13 +66,13 @@ function writeForDate() {
 }
 
 onMounted(() => {
-  syncFromRoute()
+  syncFromRoute(true)
   void cardStore.loadCards()
   loadRailData()
 })
 
 onActivated(() => {
-  syncFromRoute()
+  syncFromRoute(true)
   void cardStore.loadCards()
   loadRailData()
 })

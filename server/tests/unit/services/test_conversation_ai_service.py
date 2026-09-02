@@ -342,6 +342,7 @@ async def test_generate_reply_streaming_non_crisis_delegates_to_astream(
     mock_ctx.tools = None
     mock_ctx.crisis_guard = None
     mock_ctx.intent_result = None
+    mock_ctx.skill_outcome = None
 
     async def mock_stream(**kwargs):
         """Mimic run_conversation_loop_streaming: publish events + yield tokens."""

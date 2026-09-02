@@ -26,7 +26,7 @@ import type { PlanItem, TaskItem } from '@/shared/api/plan'
 const todayIso = toIsoDate(new Date())
 
 function task(id: string, planId: string | null, title: string): TaskItem {
-  return { id, plan_id: planId, title, note: null, due_date: todayIso, status: 'pending', source: 'manual', completed_at: null, actual_value: null }
+  return { id, plan_id: planId, title, note: null, link: null, due_date: todayIso, status: 'pending', source: 'manual', completed_at: null, actual_value: null }
 }
 
 function plan(id: string, title: string, motivation: string | null): PlanItem {
@@ -42,6 +42,8 @@ function plan(id: string, title: string, motivation: string | null): PlanItem {
     target_value: null,
     target_unit: null,
     target_period: null,
+    template: null,
+    today_progress: null,
   }
 }
 

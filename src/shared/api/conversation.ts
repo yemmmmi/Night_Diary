@@ -17,8 +17,44 @@ export interface ChatMessage {
   retrieved_memory_ids?: string[]
   attached_card_ids?: string[]
   attached_plan_ids?: string[]
+  skill_result?: SkillResult | null
   created_at: string
 }
+
+/* ── 技能结果（记录 / 洞悉 / 计划）：随 assistant 消息落库的结构化产出 ── */
+
+export interface RecordSkillResult {
+  skill: 'record'
+  diary_id: number
+  date: string
+  content: string
+}
+
+export interface InsightSkillResult {
+  skill: 'insight'
+  matched_theories: string[]
+  observations: string[]
+}
+
+export interface PlanSkillNode {
+  id: string
+  title: string
+  note: string
+  link: string | null
+  verified: boolean
+}
+
+export interface PlanSkillResult {
+  skill: 'plan'
+  plan_id: string
+  template: 'checkin_total' | 'timer_daily' | 'milestones'
+  title: string
+  target_value: number | null
+  target_unit: string | null
+  tasks: PlanSkillNode[]
+}
+
+export type SkillResult = RecordSkillResult | InsightSkillResult | PlanSkillResult
 
 export interface SendMessagePayload {
   content: string

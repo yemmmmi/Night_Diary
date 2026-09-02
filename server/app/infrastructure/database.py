@@ -138,6 +138,7 @@ def _run_lightweight_migrations(engine: Engine) -> None:
             "token_info": "TEXT",
             "attached_card_ids": "TEXT",
             "attached_plan_ids": "TEXT",
+            "skill_result": "TEXT",
         },
         "diary_entries": {"user_id": "VARCHAR(64)"},
         "conversations": {"user_id": "VARCHAR(64)"},
@@ -156,8 +157,9 @@ def _run_lightweight_migrations(engine: Engine) -> None:
             "target_value": "REAL",
             "target_unit": "VARCHAR(16)",
             "target_period": "VARCHAR(16)",
+            "template": "VARCHAR(20)",
         },
-        "tasks": {"actual_value": "REAL"},
+        "tasks": {"actual_value": "REAL", "link": "VARCHAR(500)"},
     }
 
     inspector = inspect(engine)

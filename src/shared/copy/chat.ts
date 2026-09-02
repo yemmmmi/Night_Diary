@@ -37,4 +37,14 @@ export const chatCopy = {
   cardGenerating: '收入中…',
   cardSavedInline: '已收入记忆',
   dateDivider: (date: string) => date,
+  skillRecordLabel: '已录入日记',
+  skillRecordExpand: '展开全文',
+  skillRecordCollapse: '收起',
+  skillInsightLabel: '洞悉 · 心理视角',
+  skillPlanLabel: '已创建计划',
+  skillPlanOpen: '去计划页推进',
+  skillPlanCheckin: (days: number) => `坚持 ${days} 天 · 每日打卡`,
+  skillPlanTimer: (hours: number) => `每日 ${hours} 小时 · 计时推进`,
+  skillPlanNodes: (total: number, verified: number) =>
+    `共 ${total} 个学习节点 · ${verified} 个附参考链接`,
 } as const

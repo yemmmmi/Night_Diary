@@ -12,11 +12,28 @@ export interface TaskItem {
   plan_id: string | null
   title: string
   note: string | null
+  /** milestones 模板节点的参考链接（PR8 模板3）。 */
+  link: string | null
   due_date: string | null
   status: 'pending' | 'done' | 'skipped'
   source: 'manual' | 'agent'
   completed_at: string | null
   actual_value: number | null
+}
+
+/** 技能生成的计划模板（PR8）：无模板（null）走旧版任务 UI。 */
+export type PlanTemplate = 'checkin_total' | 'timer_daily' | 'milestones'
+
+/** 模板计划的今日进度快照（后端内嵌在计划列表响应里）。 */
+export interface TodayProgressSnapshot {
+  checkin_date: string
+  today_checked_in?: boolean
+  today_seconds?: number
+  running?: boolean
+  started_at?: string | null
+  total_checkins?: number
+  streak_days?: number
+  target_seconds?: number | null
 }
 
 export interface PlanItem {
@@ -31,6 +48,44 @@ export interface PlanItem {
   target_value: number | null
   target_unit: string | null
   target_period: 'daily' | 'weekly' | 'total' | null
+  template: PlanTemplate | null
+  today_progress: TodayProgressSnapshot | null
+}
+
+export interface CheckinRecord {
+  id: string
+  plan_id: string
+  checkin_date: string
+  started_at: string | null
+  ended_at: string | null
+  value: number
+  status: string
+  created_at: string
+}
+
+/** 打卡动作：checkin_total 用 checkin，timer_daily 用 start / stop。 */
+export type CheckinAction = 'checkin' | 'start' | 'stop'
+
+export async function checkinPlan(
+  planId: string,
+  action: CheckinAction = 'checkin',
+): Promise<CheckinRecord> {
+  const client = await getHttpClient()
+  const { data } = await client.post<CheckinRecord>(
+    `/api/v1/plans/${planId}/checkin`,
+    { action },
+  )
+  return data
+}
+
+export async function listCheckins(planId: string, limit?: number): Promise<CheckinRecord[]> {
+  const client = await getHttpClient()
+  const params = limit ? { limit } : {}
+  const { data } = await client.get<CheckinRecord[]>(
+    `/api/v1/plans/${planId}/checkins`,
+    { params },
+  )
+  return data
 }
 
 export async function createPlan(payload: {
@@ -44,6 +99,7 @@ export async function createPlan(payload: {
   target_value?: number
   target_unit?: string
   target_period?: 'daily' | 'weekly' | 'total'
+  template?: PlanTemplate
 }): Promise<PlanItem> {
   const client = await getHttpClient()
   const { data } = await client.post<PlanItem>('/api/v1/plans', payload)

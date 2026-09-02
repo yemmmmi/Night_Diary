@@ -10,7 +10,7 @@ from app.infrastructure.models.daily_digest import DailyDigestRow
 from app.infrastructure.models.daily_mode import DailyModeRow
 from app.infrastructure.models.job import JobRow
 from app.infrastructure.models.pipeline_trace import PipelineTraceRow
-from app.infrastructure.models.plan import PlanRow, TaskRow
+from app.infrastructure.models.plan import PlanCheckinRow, PlanRow, TaskRow
 from app.infrastructure.models.reply_quality import ReplyQualityRow
 
 __all__ = [
@@ -18,6 +18,7 @@ __all__ = [
     "DailyModeRow",
     "JobRow",
     "PipelineTraceRow",
+    "PlanCheckinRow",
     "PlanRow",
     "ReplyQualityRow",
     "TaskRow",

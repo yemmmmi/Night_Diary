@@ -10,6 +10,7 @@ export default tseslint.config(
       'coverage/**',
       'public/**',
       'memory-card-feasibility/**',
+      'agent-architecture-report/**',
       'server/.venv/**',
       'scripts/**',
       'docs/reports/**',

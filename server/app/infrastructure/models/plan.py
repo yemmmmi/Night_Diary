@@ -41,12 +41,18 @@ class PlanRow(Base):
     target_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     target_unit: Mapped[str | None] = mapped_column(String(16), nullable=True)
     target_period: Mapped[str | None] = mapped_column(String(16), nullable=True)  # daily/weekly/total
+    # PR8 skill templates: checkin_total / timer_daily / milestones. NULL = legacy plan.
+    template: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
     tasks: Mapped[list[TaskRow]] = relationship(
+        back_populates="plan",
+        cascade="all, delete-orphan",
+    )
+    checkins: Mapped[list[PlanCheckinRow]] = relationship(
         back_populates="plan",
         cascade="all, delete-orphan",
     )
@@ -64,6 +70,8 @@ class TaskRow(Base):
     user_id: Mapped[str] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(200))
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # PR8: reference link for milestones-template learning nodes.
+    link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/done/skipped
     source: Mapped[str] = mapped_column(String(20), default="manual")
@@ -76,3 +84,32 @@ class TaskRow(Base):
     )
 
     plan: Mapped[PlanRow | None] = relationship(back_populates="tasks")
+
+
+class PlanCheckinRow(Base):
+    """A daily check-in / timing session for skill-template plans.
+
+    - checkin_total: one ``done`` row per day, ``value`` = 1.
+    - timer_daily: at most one row per day; ``status`` flips running → done
+      when the user stops the timer or the daily target is reached.
+      ``value`` accumulates elapsed seconds.
+    """
+
+    __tablename__ = "plan_checkins"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    plan_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("plans.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    checkin_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    value: Mapped[float] = mapped_column(Float, default=0)
+    status: Mapped[str] = mapped_column(String(16), default="done")  # running/done
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    plan: Mapped[PlanRow] = relationship(back_populates="checkins")

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 
 import type { ChatMessage } from '@/shared/api/conversation'
+import LetterSkillResult from '@/features/chat/LetterSkillResult.vue'
 import { chatCopy } from '@/shared/copy/chat'
 import { parseServerTime } from '@/shared/utils/timeFormat'
 
@@ -87,6 +88,11 @@ function onGenerateCard() {
     </header>
 
     <p class="letter__body">{{ message.content }}</p>
+
+    <LetterSkillResult
+      v-if="message.role === 'assistant' && message.skill_result"
+      :result="message.skill_result"
+    />
 
     <div v-if="noteItems.length > 0" class="letter-note" data-testid="letter-note">
       <button
