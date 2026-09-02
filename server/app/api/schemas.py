@@ -355,6 +355,8 @@ class MessageResponse(BaseModel):
     content: str
     retrieved_diary_ids: list[int] | None = None
     retrieved_memory_ids: list[str] | None = None
+    attached_card_ids: list[str] | None = None
+    attached_plan_ids: list[str] | None = None
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}
@@ -363,6 +365,8 @@ class MessageResponse(BaseModel):
 class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
     diary_ids: list[int] = Field(default_factory=list)
+    card_ids: list[str] = Field(default_factory=list)
+    plan_ids: list[str] = Field(default_factory=list)
     auto_retrieve: bool = True
 
     @field_validator("diary_ids")
@@ -370,6 +374,20 @@ class SendMessageRequest(BaseModel):
     def validate_diary_ids(cls, value: list[int]) -> list[int]:
         if len(value) > 3:
             raise ValueError("最多引用 3 篇日记")
+        return value
+
+    @field_validator("card_ids")
+    @classmethod
+    def validate_card_ids(cls, value: list[str]) -> list[str]:
+        if len(value) > 3:
+            raise ValueError("最多附上 3 张卡片")
+        return value
+
+    @field_validator("plan_ids")
+    @classmethod
+    def validate_plan_ids(cls, value: list[str]) -> list[str]:
+        if len(value) > 3:
+            raise ValueError("最多附上 3 个计划")
         return value
 
 

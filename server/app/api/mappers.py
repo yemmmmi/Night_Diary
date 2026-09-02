@@ -120,6 +120,8 @@ def conversation_to_response(row: ConversationRow) -> ConversationResponse:
 def message_to_response(row: ChatMessageRow) -> MessageResponse:
     diary_ids: list[int] | None = None
     memory_ids: list[str] | None = None
+    card_ids: list[str] | None = None
+    plan_ids: list[str] | None = None
     if row.retrieved_diary_ids:
         try:
             diary_ids = json.loads(row.retrieved_diary_ids)
@@ -130,6 +132,16 @@ def message_to_response(row: ChatMessageRow) -> MessageResponse:
             memory_ids = json.loads(row.retrieved_memory_ids)
         except (json.JSONDecodeError, TypeError):
             memory_ids = None
+    if getattr(row, "attached_card_ids", None):
+        try:
+            card_ids = json.loads(row.attached_card_ids)
+        except (json.JSONDecodeError, TypeError):
+            card_ids = None
+    if getattr(row, "attached_plan_ids", None):
+        try:
+            plan_ids = json.loads(row.attached_plan_ids)
+        except (json.JSONDecodeError, TypeError):
+            plan_ids = None
     return MessageResponse(
         id=row.id,
         conversation_id=row.conversation_id,
@@ -137,5 +149,7 @@ def message_to_response(row: ChatMessageRow) -> MessageResponse:
         content=row.content,
         retrieved_diary_ids=diary_ids,
         retrieved_memory_ids=memory_ids,
+        attached_card_ids=card_ids,
+        attached_plan_ids=plan_ids,
         created_at=row.created_at,
     )

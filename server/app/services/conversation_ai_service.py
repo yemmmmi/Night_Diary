@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -11,7 +12,12 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.orm import Session
 
 from app.infrastructure.task_queue import enqueue_task
-from app.services import conversation_service, diary_service
+from app.services import (
+    card_service,
+    conversation_service,
+    diary_service,
+    plan_service,
+)
 from app.services.ai.conversation_loop import run_conversation_loop
 from app.services.ai.input_preprocessor import InputPreprocessor
 from app.services.ai.prompts import FALLBACK_FEEDBACK
@@ -42,6 +48,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MAX_PINNED_DIARIES = 3
+MAX_ATTACHED_CARDS = 3
+MAX_ATTACHED_PLANS = 3
 MAX_RETRIEVAL_RESULTS = 3
 MAX_EPISODIC_RESULTS = 3
 
@@ -69,6 +77,98 @@ def _normalize_diary_ids(diary_ids: list[int]) -> list[int]:
     if len(normalized) > MAX_PINNED_DIARIES:
         raise ValidationError(f"最多引用 {MAX_PINNED_DIARIES} 篇日记")
     return normalized
+
+
+def _normalize_str_ids(ids: list[str], *, limit: int, label: str) -> list[str]:
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for value in ids:
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        normalized.append(value)
+    if len(normalized) > limit:
+        raise ValidationError(f"最多附上 {limit} {label}")
+    return normalized
+
+
+def _format_attached_cards(db: Session, card_ids: list[str], *, user_id: str) -> str:
+    """Render user-attached memory cards as a context block ("" when none)."""
+    if not card_ids:
+        return ""
+    parts: list[str] = []
+    for card_id in card_ids:
+        try:
+            card = card_service.get_card(db, card_id, user_id=user_id)
+        except Exception as exc:
+            logger.debug("Attached card %s lookup failed (skipped): %s", card_id, exc)
+            continue
+        date_str = card.created_at.date().isoformat() if card.created_at else "未知日期"
+        summary = (card.event_summary or "").strip() or "（无摘要）"
+        tags: list[str] = []
+        if card.tags_json:
+            try:
+                parsed = json.loads(card.tags_json)
+                if isinstance(parsed, list):
+                    tags = [str(t) for t in parsed][:3]
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+        tags_str = f" · 标签：{'、'.join(tags)}" if tags else ""
+        parts.append(f"[卡片 {card_id} · {date_str} · 情绪：{card.emotion}{tags_str}] {summary}")
+    if not parts:
+        return ""
+    return "【用户附上的卡片】\n" + "\n".join(parts)
+
+
+def _format_attached_plans(db: Session, plan_ids: list[str], *, user_id: str) -> str:
+    """Render user-attached plans as a context block ("" when none)."""
+    if not plan_ids:
+        return ""
+    parts: list[str] = []
+    for plan_id in plan_ids:
+        try:
+            plan = plan_service.get_plan(db, plan_id=plan_id, user_id=user_id)
+        except Exception as exc:
+            logger.debug("Attached plan %s lookup failed (skipped): %s", plan_id, exc)
+            continue
+        lines = [f"[计划 {plan.id} · {plan.title}] 状态：{plan.status}"]
+        if plan.motivation and plan.motivation.strip():
+            lines.append(f"动机：{plan.motivation.strip()}")
+        if plan.target_value is not None:
+            unit = plan.target_unit or ""
+            period = plan.target_period or ""
+            period_str = f"/{period}" if period else ""
+            lines.append(f"目标：{plan.target_value:g}{unit}{period_str}")
+        tasks = list(plan.tasks)
+        done = sum(1 for t in tasks if t.status == "done")
+        lines.append(f"任务进度：{done}/{len(tasks)}")
+        parts.append("\n".join(lines))
+    if not parts:
+        return ""
+    return "【用户附上的计划】\n" + "\n\n".join(parts)
+
+
+def _compose_pinned_context(
+    db: Session,
+    pinned_ids: list[int],
+    *,
+    card_ids: list[str],
+    plan_ids: list[str],
+    user_id: str,
+) -> str:
+    """Pinned diaries plus user-attached cards/plans, joined into one block."""
+    pinned_text = _format_retrieved_diaries(db, pinned_ids, user_id=user_id)
+    attached_blocks = [
+        block
+        for block in (
+            _format_attached_cards(db, card_ids, user_id=user_id),
+            _format_attached_plans(db, plan_ids, user_id=user_id),
+        )
+        if block
+    ]
+    if not attached_blocks:
+        return pinned_text
+    return pinned_text + "\n\n" + "\n\n".join(attached_blocks)
 
 
 def _retrieve_related_diary_ids(
@@ -240,6 +340,8 @@ def _prepare_reply_context(
     auto_retrieve: bool,
     crisis_guard: CrisisGuard | None,
     trace_id: str | None,
+    card_ids: list[str] | None = None,
+    plan_ids: list[str] | None = None,
 ) -> ReplyContext:
     """Extract Stage 1-3 from generate_reply for streaming path reuse.
 
@@ -251,6 +353,12 @@ def _prepare_reply_context(
     is active (the streaming path does not set one).
     """
     pinned_ids = _normalize_diary_ids(diary_ids)
+    attached_cards = _normalize_str_ids(
+        card_ids or [], limit=MAX_ATTACHED_CARDS, label="张卡片"
+    )
+    attached_plans = _normalize_str_ids(
+        plan_ids or [], limit=MAX_ATTACHED_PLANS, label="个计划"
+    )
     container.ensure_ai_stack(user_id=user_id)
 
     # ── Stage 2: Crisis guard (P0 safety) ──
@@ -462,7 +570,13 @@ def _prepare_reply_context(
             span.metadata["memory_count"] = len(memory_ids)
     if skill_context_text:
         episodic_text = f"{episodic_text}\n\n## 技能分析\n{skill_context_text}"
-    pinned_text = _format_retrieved_diaries(db, pinned_ids, user_id=user_id)
+    pinned_text = _compose_pinned_context(
+        db,
+        pinned_ids,
+        card_ids=attached_cards,
+        plan_ids=attached_plans,
+        user_id=user_id,
+    )
     retrieved_text = _format_retrieved_diaries(db, retrieved_ids, user_id=user_id)
 
     # ── Build tools (intent-filtered subset) ──
@@ -510,6 +624,8 @@ def generate_reply(
     crisis_guard: CrisisGuard | None = None,
     use_graph: bool = True,
     trace_id: str | None = None,
+    card_ids: list[str] | None = None,
+    plan_ids: list[str] | None = None,
 ) -> ChatReplyResult:
     """Build chat context and generate an assistant reply via the Agentic Loop.
 
@@ -532,6 +648,12 @@ def generate_reply(
         token = set_trace(trace)
     try:
         pinned_ids = _normalize_diary_ids(diary_ids)
+        attached_cards = _normalize_str_ids(
+            card_ids or [], limit=MAX_ATTACHED_CARDS, label="张卡片"
+        )
+        attached_plans = _normalize_str_ids(
+            plan_ids or [], limit=MAX_ATTACHED_PLANS, label="个计划"
+        )
         container.ensure_ai_stack(user_id=user_id)
 
         # ── Stage 2: Crisis guard (P0 safety) ──
@@ -741,7 +863,13 @@ def generate_reply(
                 span.metadata["memory_count"] = len(memory_ids)
         if skill_context_text:
             episodic_text = f"{episodic_text}\n\n## 技能分析\n{skill_context_text}"
-        pinned_text = _format_retrieved_diaries(db, pinned_ids, user_id=user_id)
+        pinned_text = _compose_pinned_context(
+            db,
+            pinned_ids,
+            card_ids=attached_cards,
+            plan_ids=attached_plans,
+            user_id=user_id,
+        )
         retrieved_text = _format_retrieved_diaries(db, retrieved_ids, user_id=user_id)
 
         # ── Build tools (intent-filtered subset) ──
@@ -871,6 +999,8 @@ async def generate_reply_streaming(
     crisis_guard: CrisisGuard | None = None,
     trace_id: str = "",
     middleware_pipeline: MiddlewarePipeline | None = None,
+    card_ids: list[str] | None = None,
+    plan_ids: list[str] | None = None,
 ) -> None:
     """Real streaming (P3): _prepare_reply_context -> run_conversation_loop_streaming -> post-write.
 
@@ -913,6 +1043,8 @@ async def generate_reply_streaming(
             auto_retrieve=auto_retrieve,
             crisis_guard=crisis_guard,
             trace_id=trace_id or None,
+            card_ids=card_ids,
+            plan_ids=plan_ids,
         )
 
         # No trace_id → no SSE subscriber → nothing to publish.

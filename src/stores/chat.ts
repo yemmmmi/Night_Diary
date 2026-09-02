@@ -21,6 +21,8 @@ export const useChatStore = defineStore('chat', () => {
   const activeConversationId = ref<string | null>(null)
   const messages = ref<ChatMessage[]>([])
   const pinnedDiaryIds = ref<number[]>([])
+  const pinnedCardIds = ref<string[]>([])
+  const pinnedPlanIds = ref<string[]>([])
   const autoRetrieve = ref(true)
   const loading = ref(false)
   const sending = ref(false)
@@ -136,6 +138,10 @@ export const useChatStore = defineStore('chat', () => {
                 pinnedDiaryIds.value.length > 0
                   ? pinnedDiaryIds.value
                   : undefined,
+              card_ids:
+                pinnedCardIds.value.length > 0 ? pinnedCardIds.value : undefined,
+              plan_ids:
+                pinnedPlanIds.value.length > 0 ? pinnedPlanIds.value : undefined,
               auto_retrieve: autoRetrieve.value,
             },
             traceId,
@@ -178,6 +184,8 @@ export const useChatStore = defineStore('chat', () => {
     const result = await sendMessage(convId, {
       content,
       diary_ids: pinnedDiaryIds.value,
+      card_ids: pinnedCardIds.value,
+      plan_ids: pinnedPlanIds.value,
       auto_retrieve: autoRetrieve.value,
     })
     messages.value = [...messages.value, result.message, result.reply]
@@ -206,11 +214,21 @@ export const useChatStore = defineStore('chat', () => {
     pinnedDiaryIds.value = [...pinnedDiaryIds.value, id]
   }
 
+  function setPinnedCardIds(ids: string[]) {
+    pinnedCardIds.value = ids.slice(0, 3)
+  }
+
+  function setPinnedPlanIds(ids: string[]) {
+    pinnedPlanIds.value = ids.slice(0, 3)
+  }
+
   return {
     conversations,
     activeConversationId,
     messages,
     pinnedDiaryIds,
+    pinnedCardIds,
+    pinnedPlanIds,
     autoRetrieve,
     loading,
     sending,
@@ -227,5 +245,7 @@ export const useChatStore = defineStore('chat', () => {
     generateCard,
     setPinnedDiaryIds,
     pinDiary,
+    setPinnedCardIds,
+    setPinnedPlanIds,
   }
 })

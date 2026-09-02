@@ -3,10 +3,13 @@ import { computed, ref } from 'vue'
 
 import type { ChatMessage } from '@/shared/api/conversation'
 import { chatCopy } from '@/shared/copy/chat'
+import { parseServerTime } from '@/shared/utils/timeFormat'
 
 const props = defineProps<{
   message: ChatMessage
   diaryLabels?: Record<number, string>
+  cardLabels?: Record<string, string>
+  planLabels?: Record<string, string>
   /** 信末操作行只渲染在最新一封夜记来信上（安静原则：不逐信挂链）。 */
   showActions?: boolean
   generating?: boolean
@@ -24,7 +27,7 @@ const signature = computed(() =>
 )
 
 const timeLabel = computed(() => {
-  const date = new Date(props.message.created_at)
+  const date = parseServerTime(props.message.created_at)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 })
@@ -35,10 +38,35 @@ const noteItems = computed(() => {
   return ids.map((id) => props.diaryLabels?.[id] ?? `日记 #${id}`)
 })
 
+/* 我的信的附物注脚：附上的卡片与计划（日记钉在回信侧以 retrieved 呈现） */
+const attachNoteItems = computed(() => {
+  if (props.message.role !== 'user') return []
+  const items: string[] = []
+  for (const cardId of props.message.attached_card_ids ?? []) {
+    items.push(props.cardLabels?.[cardId] ?? `卡片 #${cardId.slice(0, 6)}`)
+  }
+  for (const planId of props.message.attached_plan_ids ?? []) {
+    items.push(props.planLabels?.[planId] ?? `计划 #${planId.slice(0, 6)}`)
+  }
+  return items
+})
+
+const attachNoteLabel = computed(() =>
+  chatCopy.letterAttachNote(
+    (props.message.attached_card_ids ?? []).length,
+    (props.message.attached_plan_ids ?? []).length,
+  ),
+)
+
 const noteOpen = ref(false)
+const attachNoteOpen = ref(false)
 
 function toggleNote() {
   noteOpen.value = !noteOpen.value
+}
+
+function toggleAttachNote() {
+  attachNoteOpen.value = !attachNoteOpen.value
 }
 
 function onGenerateCard() {
@@ -75,6 +103,31 @@ function onGenerateCard() {
           :key="index"
           class="letter-note__item"
           data-testid="letter-note-item"
+        >
+          {{ item }}
+        </li>
+      </ul>
+    </div>
+
+    <div
+      v-else-if="attachNoteItems.length > 0"
+      class="letter-note letter-note--attach"
+      data-testid="letter-attach-note"
+    >
+      <button
+        type="button"
+        class="letter-note__toggle"
+        :aria-expanded="attachNoteOpen"
+        @click="toggleAttachNote"
+      >
+        {{ attachNoteLabel }}
+      </button>
+      <ul v-if="attachNoteOpen" class="letter-note__list">
+        <li
+          v-for="(item, index) in attachNoteItems"
+          :key="index"
+          class="letter-note__item"
+          data-testid="letter-attach-note-item"
         >
           {{ item }}
         </li>
@@ -150,6 +203,11 @@ function onGenerateCard() {
   border-left: 2px solid var(--color-accent-muted);
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
+}
+
+/* 我的信的附物注脚：虚线竖线，与回信侧参考注脚区分 */
+.letter-note--attach {
+  border-left-style: dashed;
 }
 
 .letter-note__toggle {

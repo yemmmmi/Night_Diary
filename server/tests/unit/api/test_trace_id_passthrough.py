@@ -117,6 +117,7 @@ def test_conversation_route_passes_trace_id_to_service(
     def fake_generate_reply(  # type: ignore[no-untyped-def]
         db, container, *, conversation_id, content, diary_ids,
         user_id, auto_retrieve=True, trace_id=None,
+        card_ids=None, plan_ids=None,
     ):
         captured["trace_id"] = trace_id
         return ChatReplyResult(
@@ -156,6 +157,7 @@ def test_conversation_route_without_trace_id_passes_none(
     def fake_generate_reply(  # type: ignore[no-untyped-def]
         db, container, *, conversation_id, content, diary_ids,
         user_id, auto_retrieve=True, trace_id=None,
+        card_ids=None, plan_ids=None,
     ):
         captured["trace_id"] = trace_id
         return ChatReplyResult(
