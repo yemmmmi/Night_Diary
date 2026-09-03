@@ -11,7 +11,7 @@ export async function createBackup(): Promise<string> {
   throw new Error(BACKUP_UNAVAILABLE_MESSAGE)
 }
 
-export async function restoreBackup(filename: string): Promise<void> {
+export async function restoreBackup(_filename: string): Promise<void> {
   throw new Error(BACKUP_UNAVAILABLE_MESSAGE)
 }
 

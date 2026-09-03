@@ -21,7 +21,7 @@ vi.mock('vue-router', () => ({
 }))
 
 const fetchEntry = vi.hoisted(() =>
-  vi.fn(async (id: number): Promise<DiaryEntry> => entryFixture),
+  vi.fn(async (_id: number): Promise<DiaryEntry> => entryFixture),
 )
 vi.mock('@/shared/api/diary', () => ({
   getDiaryEntry: fetchEntry,
@@ -34,7 +34,6 @@ vi.mock('@/shared/api/diary', () => ({
   listDiaryEntries: vi.fn(async () => []),
 }))
 
-const loadCards = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock('@/shared/api/card', () => ({
   listCards: vi.fn(async () => []),
   createCard: vi.fn(),

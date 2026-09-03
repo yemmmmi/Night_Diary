@@ -17,7 +17,6 @@ import { formatApiError } from '@/shared/utils/apiError'
 import { countWordUnits, toIsoDate } from '@/shared/utils/diaryFormat'
 import { buildDiaryMarkdown, diaryExportFilename } from '@/shared/utils/markdownExport'
 import { useSettingsStore } from '@/stores/settings'
-import { useDevStore } from '@/stores/dev'
 import DevPipelinePanel from '@/features/dev/DevPipelinePanel.vue'
 
 function parseQueryDate(raw: unknown): string | null {
@@ -33,7 +32,6 @@ const router = useRouter()
 const diaryStore = useDiaryStore()
 const cardStore = useCardStore()
 const settings = useSettingsStore()
-const devStore = useDevStore()
 
 const content = ref('')
 const loadError = ref<string | null>(null)

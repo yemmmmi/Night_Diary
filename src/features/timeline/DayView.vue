@@ -21,23 +21,6 @@ const router = useRouter()
 const timeline = useTimelineStore()
 const cardStore = useCardStore()
 
-/** 情绪印章色：与 EmotionStamp 的 seal token 对齐，去硬编码。 */
-const EMOTION_SEAL: Record<string, string> = {
-  '开心': 'var(--color-seal-positive)',
-  '感激': 'var(--color-seal-positive)',
-  '期待': 'var(--color-seal-positive)',
-  '兴奋': 'var(--color-seal-positive)',
-  '满足': 'var(--color-seal-positive)',
-  '放松': 'var(--color-seal-positive)',
-  '平静': 'var(--color-seal-calm)',
-  '安宁': 'var(--color-seal-calm)',
-  '舒缓': 'var(--color-seal-calm)',
-  '迷茫': 'var(--color-seal-lost)',
-  '困惑': 'var(--color-seal-lost)',
-  '焦虑': 'var(--color-seal-lost)',
-  '疲惫': 'var(--color-seal-lost)',
-}
-
 const bigDate = computed(() => chineseDateLabel(timeline.date))
 const subtitle = computed(() => todaySubtitle(timeline.date))
 
@@ -70,10 +53,6 @@ async function shiftWithTurn(delta: number) {
 /** 翻页动画播完后清掉方向类，DOM 回到无动效基态。 */
 function onTurnEnd(event: AnimationEvent) {
   if (event.animationName.startsWith('page-turn')) turnDir.value = null
-}
-
-function cardEmotionColor(card: MemoryCard): string {
-  return EMOTION_SEAL[card.emotion] ?? 'var(--color-seal-muted)'
 }
 
 function openEntry(entryId: number) {
