@@ -66,11 +66,6 @@ export async function getTrace(traceId: string): Promise<PipelineTrace> {
   return data
 }
 
-export async function deleteTrace(traceId: string): Promise<void> {
-  const client = await getHttpClient()
-  await client.delete(`/api/v1/dev/traces/${traceId}`)
-}
-
 export async function getDevStats(): Promise<{
   total_traces: number
   by_scenario: Record<string, number>
