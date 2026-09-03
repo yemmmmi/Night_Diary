@@ -2,7 +2,6 @@ import axios, { type AxiosInstance, isAxiosError } from 'axios'
 
 import {
   resolveBackendBaseUrl,
-  waitForCoreReady,
 } from '@/shared/composables/useBackend'
 
 export {
@@ -12,11 +11,11 @@ export {
   waitForCoreReady,
 } from '@/shared/composables/useBackend'
 
-const BOOTSTRAP_RETRY_MS = 300
-const BOOTSTRAP_MAX_RETRIES = 120
-
 let httpClient: AxiosInstance | null = null
 let httpClientBaseUrl: string | null = null
+
+const BOOTSTRAP_RETRY_MS = 300
+const BOOTSTRAP_MAX_RETRIES = 120
 
 function isBootstrap503(err: unknown): boolean {
   if (!isAxiosError(err) || err.response?.status !== 503) {
@@ -32,24 +31,6 @@ function isBootstrap503(err: unknown): boolean {
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-async function requestWithBootstrapRetry<T>(
-  baseURL: string,
-  request: () => Promise<T>,
-): Promise<T> {
-  for (let attempt = 0; attempt < BOOTSTRAP_MAX_RETRIES; attempt += 1) {
-    try {
-      return await request()
-    } catch (err) {
-      if (!isBootstrap503(err) || attempt === BOOTSTRAP_MAX_RETRIES - 1) {
-        throw err
-      }
-      await sleep(BOOTSTRAP_RETRY_MS)
-      await waitForCoreReady(baseURL, BOOTSTRAP_RETRY_MS * 2)
-    }
-  }
-  throw new Error('AI 引擎初始化超时')
 }
 
 export async function getHttpClient(): Promise<AxiosInstance> {
@@ -134,12 +115,6 @@ export async function getHttpClient(): Promise<AxiosInstance> {
   httpClientBaseUrl = baseURL
 
   return httpClient
-}
-
-/** Run an API call; retries while the backend bootstrap returns 503. */
-export async function apiRequest<T>(request: () => Promise<T>): Promise<T> {
-  const baseURL = await resolveBackendBaseUrl()
-  return requestWithBootstrapRetry(baseURL, request)
 }
 
 export function resetHttpClient(): void {
