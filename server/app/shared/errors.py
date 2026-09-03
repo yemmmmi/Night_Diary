@@ -48,11 +48,6 @@ class AnalysisNotFoundError(AppError):
         self.analysis_id = analysis_id
 
 
-class AnalysisUnchangedError(AppError):
-    def __init__(self) -> None:
-        super().__init__(message="日记内容未变化，无需重新分析", http_status=409)
-
-
 class TagNotFoundError(AppError):
     def __init__(self, *, tag_id: int) -> None:
         super().__init__(message=f"标签 {tag_id} 不存在", http_status=404)

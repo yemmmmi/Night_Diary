@@ -39,37 +39,6 @@ class DiaryResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class AnalysisResponse(BaseModel):
-    id: int
-    diary_id: int
-    created_at: datetime.datetime
-    token_cost: int | None
-    cache_hit_tokens: int | None
-    cache_miss_tokens: int | None
-    output_tokens: int | None
-    agent_mode: str | None
-    execution_tier: str | None
-    activated_agents: str | None
-    reply: str | None = None
-    model_name: str | None = None
-    status_detail: str | None = None
-    referenced_memory_count: int = 0
-
-    model_config = {"from_attributes": True}
-
-
-class AnalysisTriggerRequest(BaseModel):
-    """Request body for triggering/regenerating an analysis with a replier style.
-
-    ``replier_preset`` 对应前端预设风格 (warm/pragmatic/calm);
-    ``replier_persona`` 为用户自定义人设文本 (非空时优先级高于 preset).
-    两者都缺省时走后端默认 warm 风格, 保持向后兼容.
-    """
-
-    replier_preset: str | None = None
-    replier_persona: str | None = None
-
-
 class FeedbackCreateRequest(BaseModel):
     feedback_type: Literal["positive", "negative"]
     reason: str | None = None

@@ -49,15 +49,13 @@ vi.mock('@/shared/composables/useBackend', () => ({
 import { useTraceStream } from '@/shared/composables/useTraceStream'
 
 describe('useTraceStream', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>
-
   beforeEach(() => {
     MockEventSource.instances = []
     vi.stubGlobal('EventSource', MockEventSource)
     setActivePinia(createPinia())
     // Suppress Vue's onUnmounted warning since composable is called
     // outside a component setup context in tests.
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
   afterEach(() => {

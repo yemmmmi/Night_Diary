@@ -44,7 +44,6 @@ export interface MiddlewareStatus {
   llm: boolean
   rag: boolean
   episodic_memory: boolean
-  treehole: boolean
   degraded: boolean
 }
 
