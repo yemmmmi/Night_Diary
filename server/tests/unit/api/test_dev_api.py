@@ -95,7 +95,6 @@ def test_get_middleware_status(authed_client: TestClient) -> None:
         "llm",
         "rag",
         "episodic_memory",
-        "treehole",
         "degraded",
     ):
         assert key in data, f"missing {key}"

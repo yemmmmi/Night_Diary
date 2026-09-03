@@ -3,10 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy.orm import Session
-
 from app.api.schemas import (
-    AnalysisResponse,
     ConversationResponse,
     DiaryResponse,
     FeedbackResponse,
@@ -15,7 +12,6 @@ from app.api.schemas import (
     TagResponse,
     WeeklyReportResponse,
 )
-from app.infrastructure.models.analysis import AnalysisRow
 from app.infrastructure.models.conversation import ChatMessageRow, ConversationRow
 from app.infrastructure.models.diary_entry import DiaryEntryRow
 from app.infrastructure.models.feedback_record import FeedbackRow
@@ -34,46 +30,6 @@ def diary_to_response(row: DiaryEntryRow) -> DiaryResponse:
         reply=row.reply,
         created_at=row.created_at,
         updated_at=row.updated_at,
-    )
-
-
-def analysis_to_response(
-    row: AnalysisRow,
-    *,
-    reply: str | None = None,
-    db: Session | None = None,
-    referenced_memory_count: int = 0,
-    user_id: str | None = None,
-) -> AnalysisResponse:
-    model_name: str | None = None
-    if db is not None and row.execution_tier:
-        provider = model_service.get_active_provider_for_tier(
-            db, row.execution_tier, user_id=user_id
-        )
-        if provider is None and row.execution_tier != "default":
-            provider = model_service.get_active_provider_for_tier(db, "default", user_id=user_id)
-        if provider is not None:
-            model_name = provider.model_name
-
-    status_detail: str | None = None
-    if row.agent_mode == "fallback" and row.log:
-        status_detail = row.log.removeprefix("[Fallback] ").removeprefix("[降级] ").strip()
-
-    return AnalysisResponse(
-        id=row.id,
-        diary_id=row.diary_id,
-        created_at=row.created_at,
-        token_cost=row.token_cost,
-        cache_hit_tokens=row.cache_hit_tokens,
-        cache_miss_tokens=row.cache_miss_tokens,
-        output_tokens=row.output_tokens,
-        agent_mode=row.agent_mode,
-        execution_tier=row.execution_tier,
-        activated_agents=row.activated_agents,
-        reply=reply,
-        model_name=model_name,
-        status_detail=status_detail,
-        referenced_memory_count=referenced_memory_count,
     )
 
 

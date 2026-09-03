@@ -422,7 +422,6 @@ def get_middleware_status(db: DbDep, container: ContainerDep) -> dict[str, Any]:
         "llm": _check_llm(container),
         "rag": _check_rag(container),
         "episodic_memory": _check_episodic(container),
-        "treehole": _check_llm(container),  # LLM 可用则走树洞 LLM 路径, 否则规则兜底
     }
     status["degraded"] = not all(status.values())
     return status
