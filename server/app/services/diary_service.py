@@ -16,12 +16,34 @@ from app.shared.errors import DiaryNotFoundError, ValidationError
 
 if TYPE_CHECKING:
     from app.domain.rag.collections import DiaryCollectionManager
+    from app.services.container import ServiceContainer
 
 logger = logging.getLogger(__name__)
 
 RECENT_HISTORY_DAYS = 7
 RECENT_HISTORY_LIMIT = 10
 MAX_SNIPPET = 200
+
+
+def _schedule_digest_refresh(
+    container: ServiceContainer | None,
+    entry: DiaryEntryRow,
+    *,
+    user_id: str,
+) -> None:
+    """Async day-digest rebuild after a typed diary write (best-effort, never raises)."""
+    if container is None or entry.date is None:
+        return
+    try:
+        from app.services.digest_worker import schedule_day_digest_refresh
+
+        schedule_day_digest_refresh(
+            user_id,
+            entry.date.isoformat(),
+            entry.id,
+        )
+    except Exception as exc:
+        logger.warning("Digest refresh scheduling failed: diary_id=%s %s", entry.id, exc)
 
 
 def _format_emotion_for_chroma(
@@ -72,6 +94,7 @@ def create_entry(
     entry_date: date | None = None,
     weather: str | None = None,
     collection_manager: DiaryCollectionManager | None = None,
+    container: ServiceContainer | None = None,
 ) -> DiaryEntryRow:
     if not content or not content.strip():
         raise ValidationError("日记内容不能为空")
@@ -87,6 +110,7 @@ def create_entry(
     db.commit()
     db.refresh(entry)
     _sync_to_chroma(db, collection_manager, entry, user_id=user_id)
+    _schedule_digest_refresh(container, entry, user_id=user_id)
     return entry
 
 
@@ -169,6 +193,7 @@ def update_entry(
     content: str | None = None,
     weather: str | None = None,
     collection_manager: DiaryCollectionManager | None = None,
+    container: ServiceContainer | None = None,
 ) -> DiaryEntryRow:
     entry = get_entry(db, diary_id, user_id=user_id)
 
@@ -184,6 +209,7 @@ def update_entry(
     db.commit()
     db.refresh(entry)
     _sync_to_chroma(db, collection_manager, entry, user_id=user_id)
+    _schedule_digest_refresh(container, entry, user_id=user_id)
     return entry
 
 
@@ -193,8 +219,10 @@ def delete_entry(
     *,
     user_id: str,
     collection_manager: DiaryCollectionManager | None = None,
+    container: ServiceContainer | None = None,
 ) -> None:
     entry = get_entry(db, diary_id, user_id=user_id)
+    day_iso = entry.date.isoformat() if entry.date is not None else None
     if collection_manager is not None:
         try:
             collection_manager.delete_diary(str(diary_id))
@@ -202,6 +230,17 @@ def delete_entry(
             logger.warning("Chroma delete failed for diary_id=%s: %s", diary_id, exc)
     db.delete(entry)
     db.commit()
+    if container is not None and day_iso is not None:
+        try:
+            from app.services.digest_worker import schedule_day_digest_refresh
+
+            schedule_day_digest_refresh(user_id, day_iso, diary_id)
+        except Exception as exc:
+            logger.warning(
+                "Digest refresh scheduling failed after delete: diary_id=%s %s",
+                diary_id,
+                exc,
+            )
 
 
 def format_history_summary(

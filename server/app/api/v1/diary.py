@@ -49,6 +49,7 @@ def create_entry(
         entry_date=body.date,
         weather=body.weather,
         collection_manager=container.diary_collection,
+        container=container,
     )
     return diary_to_response(row)
 
@@ -74,6 +75,7 @@ def update_entry(
         content=body.content,
         weather=body.weather,
         collection_manager=container.diary_collection,
+        container=container,
     )
     return diary_to_response(row)
 
@@ -92,5 +94,6 @@ def delete_entry(
         diary_id,
         user_id=str(user.id),
         collection_manager=container.diary_collection,
+        container=container,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

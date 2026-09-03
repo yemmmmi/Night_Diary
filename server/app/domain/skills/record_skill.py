@@ -55,6 +55,7 @@ def run(
     user_id: str,
     conversation_id: str = "",
     collection_manager: Any = None,
+    container: Any = None,
 ) -> SkillRunOutcome:
     """Transcribe *content* into a diary entry and persist it."""
     diary_text = ""
@@ -73,6 +74,7 @@ def run(
         user_id=user_id,
         content=diary_text,
         collection_manager=collection_manager,
+        container=container,
     )
     logger.info(
         "record skill: diary_id=%s user=%s conversation=%s",

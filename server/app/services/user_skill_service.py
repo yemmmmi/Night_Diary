@@ -64,6 +64,7 @@ def run_user_skill(
                 user_id=user_id,
                 conversation_id=conversation_id,
                 collection_manager=container.diary_collection,
+                container=container,
             )
         if decision.intent == "insight":
             return insight_skill.run(
