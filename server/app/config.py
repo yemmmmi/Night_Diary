@@ -99,6 +99,13 @@ class Settings(BaseSettings):
         "http://localhost:8081/sse,http://localhost:8082/sse). "
         "If empty, only built-in tools are available.",
     )
+    mcp_stdios: str = Field(
+        default="",
+        description="Comma-separated stdio MCP server specs "
+        '(e.g. "tavily:uvx tavily-mcp api_key=xxx"). '
+        "Format: alias:command arg key=value. Trailing key=value tokens "
+        "become child-process env vars. Paths with spaces are unsupported.",
+    )
 
     # ---- Security ----
     model_key_secret: str = Field(
