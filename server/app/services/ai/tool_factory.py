@@ -383,129 +383,30 @@ def build_tool_specs() -> list[ToolSpec]:
     ]
 
 
+# ── Dynamic (MCP) tool specs ─────────────────────────────────────────────
+# MCP tools are discovered at runtime; their specs are registered here by
+# ToolRegistry so native function calling (specs_for_names) can see them.
+
+MCP_TOOL_PREFIX = "mcp__"
+
+_dynamic_specs: dict[str, ToolSpec] = {}
+
+
+def register_dynamic_specs(specs: dict[str, ToolSpec]) -> None:
+    """Register namespaced MCP tool specs for native function calling."""
+    _dynamic_specs.update(specs)
+
+
+def is_mcp_tool(name: str) -> bool:
+    return name.startswith(MCP_TOOL_PREFIX)
+
+
+def namespaced_tool_name(alias: str, raw_name: str) -> str:
+    return f"{MCP_TOOL_PREFIX}{alias}__{raw_name}"
+
+
 def specs_for_names(names: list[str]) -> list[ToolSpec]:
-    """Filter ToolSpec list to only the named tools (for intent-driven subset)."""
+    """Filter ToolSpec list to only the named tools (built-in + MCP)."""
     all_specs = {s.name: s for s in build_tool_specs()}
+    all_specs.update(_dynamic_specs)
     return [all_specs[n] for n in names if n in all_specs]
-
-
-def _load_mcp_tools(endpoint: str) -> dict[str, ToolFn]:
-    """Load tools from an external MCP server endpoint.
-
-    Uses :class:`PersistentMCPConnection` to keep the MCP session alive
-    beyond the initial discovery call (fixes the P0 session-closure bug
-    where ``async with`` exit killed the session that tool closures
-    captured).
-
-    Best-effort: returns empty dict on failure (import error, connection
-    error, or tool listing error).
-
-    Args:
-        endpoint: MCP server SSE endpoint URL (e.g. http://localhost:8081/sse).
-    """
-    import asyncio
-    import contextlib
-
-    from app.services.ai.mcp_persistent import PersistentMCPConnection
-
-    async def _discover_and_create() -> dict[str, ToolFn]:
-        tools: dict[str, ToolFn] = {}
-        conn = PersistentMCPConnection(endpoint)
-        try:
-            await conn.connect()
-            result = await conn.list_tools()
-
-            for mcp_tool in result.tools:
-                tool_name = mcp_tool.name
-
-                def make_fn(name: str, connection: PersistentMCPConnection) -> Any:
-                    async def _call_async(**kwargs: Any) -> str:
-                        resp = await connection.call_tool(name, kwargs)
-                        texts = [c.text for c in resp.content if hasattr(c, "text")]
-                        return "\n".join(texts) if texts else str(resp)
-
-                    def _call_sync(**kwargs: Any) -> str:
-                        try:
-                            return asyncio.run(_call_async(**kwargs))
-                        except Exception as exc:
-                            logger.error("MCP tool %s failed: %s", name, exc)
-                            return f"MCP tool {name} error: {exc}"
-
-                    return _call_sync
-
-                tools[tool_name] = make_fn(tool_name, conn)
-                logger.info("Loaded MCP tool: %s from %s", tool_name, endpoint)
-
-            # NOTE: We intentionally do NOT close conn here when tools were
-            # loaded. The connection must stay alive for subsequent tool
-            # calls. It lives for the lifetime of the process — acceptable
-            # because MCP endpoints are static config, and P5 will add a
-            # proper connection pool. If no tools were loaded, close to
-            # avoid leaking a useless connection.
-            if not tools:
-                await conn.close()
-
-        except ImportError as exc:
-            logger.warning("mcp package not installed; cannot load MCP tools from %s: %s", endpoint, exc)
-        except Exception as exc:
-            logger.error("Failed to load MCP tools from %s: %s", endpoint, exc)
-            with contextlib.suppress(Exception):
-                await conn.close()
-
-        return tools
-
-    try:
-        return asyncio.run(_discover_and_create())
-    except Exception as exc:
-        logger.error("MCP tool loading from %s failed: %s", endpoint, exc)
-        return {}
-
-
-def build_tool_map_with_mcp(
-    session_factory: sessionmaker[Session],
-    *,
-    retriever: Any,
-    llm: LLMClient,
-    weather_api_key: str = "",
-    user_id: str = "default",
-    mcp_endpoints: list[str] | None = None,
-) -> dict[str, ToolFn]:
-    """Build tool map with optional external MCP tools.
-
-    Combines built-in tools (from build_tool_map) with external tools loaded
-    from MCP server endpoints. MCP tools are loaded best-effort — failures
-    are logged and don't block the built-in tools.
-
-    Args:
-        mcp_endpoints: List of MCP server SSE endpoint URLs. If None or empty,
-            only built-in tools are returned.
-
-    Returns:
-        Combined tool map (built-in + MCP).
-    """
-    # Start with built-in tools
-    tools = build_tool_map(
-        session_factory,
-        retriever=retriever,
-        llm=llm,
-        weather_api_key=weather_api_key,
-        user_id=user_id,
-    )
-
-    # Load external MCP tools
-    if mcp_endpoints:
-        for endpoint in mcp_endpoints:
-            endpoint = endpoint.strip()
-            if not endpoint:
-                continue
-            logger.info("Loading MCP tools from endpoint: %s", endpoint)
-            mcp_tools = _load_mcp_tools(endpoint)
-            if mcp_tools:
-                tools.update(mcp_tools)
-                logger.info(
-                    "MCP tools loaded from %s: %s",
-                    endpoint,
-                    list(mcp_tools.keys()),
-                )
-
-    return tools
