@@ -47,4 +47,11 @@ export const chatCopy = {
   skillPlanTimer: (hours: number) => `每日 ${hours} 小时 · 计时推进`,
   skillPlanNodes: (total: number, verified: number) =>
     `共 ${total} 个学习节点 · ${verified} 个附参考链接`,
+  skillHintTitle: '也可以直接吩咐夜记',
+  skillHintRecord: '记一篇日记',
+  skillHintInsight: '洞悉此刻的自己',
+  skillHintPlan: '定一个小计划',
+  skillPrefillRecord: '帮我记一篇日记：',
+  skillPrefillInsight: '帮我分析一下：',
+  skillPrefillPlan: '帮我做个计划：',
 } as const

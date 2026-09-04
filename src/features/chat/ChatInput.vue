@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { chatCopy } from '@/shared/copy/chat'
 
 defineProps<{
@@ -11,6 +11,7 @@ const emit = defineEmits<{
 }>()
 
 const text = ref('')
+const fieldEl = ref<HTMLTextAreaElement | null>(null)
 
 function onSend() {
   const trimmed = text.value.trim()
@@ -25,12 +26,26 @@ function onKeydown(e: KeyboardEvent) {
     onSend()
   }
 }
+
+/* 供空态 skill 起手卡调用：填入引导句并聚焦到行尾 */
+function prefill(value: string) {
+  text.value = value
+  nextTick(() => {
+    const el = fieldEl.value
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  })
+}
+
+defineExpose({ prefill })
 </script>
 
 <template>
   <div class="letter-composer">
     <div class="letter-composer__box" data-testid="letter-input">
       <textarea
+        ref="fieldEl"
         v-model="text"
         class="letter-composer__field"
         rows="1"
