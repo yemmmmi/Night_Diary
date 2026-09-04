@@ -1,17 +1,40 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { chatCopy } from '@/shared/copy/chat'
+import type { UserSkill } from '@/shared/api/conversation'
 
-defineProps<{
+const props = defineProps<{
   disabled?: boolean
+  skill?: UserSkill | null
 }>()
 
 const emit = defineEmits<{
   send: [text: string]
+  'update:skill': [skill: UserSkill | null]
 }>()
 
 const text = ref('')
 const fieldEl = ref<HTMLTextAreaElement | null>(null)
+
+/* 手动 skill 选择 chips：null = 自动路由 */
+const skillOptions = computed(() => [
+  { value: null, label: chatCopy.skillModeAuto, title: chatCopy.skillModeAutoTitle },
+  {
+    value: 'record' as UserSkill,
+    label: chatCopy.skillModeRecord,
+    title: chatCopy.skillModeRecordTitle,
+  },
+  {
+    value: 'insight' as UserSkill,
+    label: chatCopy.skillModeInsight,
+    title: chatCopy.skillModeInsightTitle,
+  },
+  {
+    value: 'plan' as UserSkill,
+    label: chatCopy.skillModePlan,
+    title: chatCopy.skillModePlanTitle,
+  },
+])
 
 function onSend() {
   const trimmed = text.value.trim()
@@ -25,6 +48,10 @@ function onKeydown(e: KeyboardEvent) {
     e.preventDefault()
     onSend()
   }
+}
+
+function onSelectSkill(value: UserSkill | null) {
+  emit('update:skill', value)
 }
 
 /* 供空态 skill 起手卡调用：填入引导句并聚焦到行尾 */
@@ -43,26 +70,43 @@ defineExpose({ prefill })
 
 <template>
   <div class="letter-composer">
-    <div class="letter-composer__box" data-testid="letter-input">
-      <textarea
-        ref="fieldEl"
-        v-model="text"
-        class="letter-composer__field"
-        rows="1"
-        :placeholder="chatCopy.inputPlaceholder"
+    <div class="letter-composer__skills" data-testid="skill-picker">
+      <button
+        v-for="option in skillOptions"
+        :key="option.label"
+        type="button"
+        class="letter-composer__skill"
+        :class="{ 'is-active': props.skill === option.value }"
+        :data-testid="`skill-chip-${option.value ?? 'auto'}`"
+        :title="option.title"
         :disabled="disabled"
-        @keydown="onKeydown"
-      />
+        @click="onSelectSkill(option.value)"
+      >
+        {{ option.label }}
+      </button>
     </div>
-    <button
-      type="button"
-      class="letter-composer__send"
-      data-testid="letter-send"
-      :disabled="!text.trim() || disabled"
-      @click="onSend"
-    >
-      {{ chatCopy.sendLabel }}
-    </button>
+    <div class="letter-composer__row">
+      <div class="letter-composer__box" data-testid="letter-input">
+        <textarea
+          ref="fieldEl"
+          v-model="text"
+          class="letter-composer__field"
+          rows="1"
+          :placeholder="chatCopy.inputPlaceholder"
+          :disabled="disabled"
+          @keydown="onKeydown"
+        />
+      </div>
+      <button
+        type="button"
+        class="letter-composer__send"
+        data-testid="letter-send"
+        :disabled="!text.trim() || disabled"
+        @click="onSend"
+      >
+        {{ chatCopy.sendLabel }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -70,8 +114,51 @@ defineExpose({ prefill })
 /* 圆棱方框回信输入：纸上的一只浅盒，落笔时描边点亮 */
 .letter-composer {
   display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.letter-composer__row {
+  display: flex;
   align-items: flex-end;
   gap: 0.75rem;
+}
+
+/* 手动 skill 选择：一排安静的墨点，选中者着墨 */
+.letter-composer__skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding-left: 0.125rem;
+}
+
+.letter-composer__skill {
+  padding: 0.1875rem 0.625rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 0.6875rem;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition:
+    color var(--motion-duration) var(--motion-ease),
+    border-color var(--motion-duration) var(--motion-ease),
+    background var(--motion-duration) var(--motion-ease);
+}
+
+.letter-composer__skill:hover:not(:disabled) {
+  color: var(--color-text-secondary);
+}
+
+.letter-composer__skill.is-active {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  background: var(--color-accent-muted);
+  color: var(--color-text-primary);
+}
+
+.letter-composer__skill:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .letter-composer__box {

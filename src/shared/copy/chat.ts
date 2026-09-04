@@ -54,4 +54,12 @@ export const chatCopy = {
   skillPrefillRecord: '帮我记一篇日记：',
   skillPrefillInsight: '帮我分析一下：',
   skillPrefillPlan: '帮我做个计划：',
+  skillModeAuto: '自动',
+  skillModeRecord: '记录',
+  skillModeInsight: '洞悉',
+  skillModePlan: '计划',
+  skillModeAutoTitle: '由夜记识别这封信的意图',
+  skillModeRecordTitle: '把这封信转写成一篇日记',
+  skillModeInsightTitle: '以心理视角分析这封信',
+  skillModePlanTitle: '把这封信整理成一个计划',
 } as const

@@ -56,12 +56,16 @@ export interface PlanSkillResult {
 
 export type SkillResult = RecordSkillResult | InsightSkillResult | PlanSkillResult
 
+/* 用户可手动指定的技能（笔谈输入区 chips） */
+export type UserSkill = 'record' | 'insight' | 'plan'
+
 export interface SendMessagePayload {
   content: string
   diary_ids?: number[]
   card_ids?: string[]
   plan_ids?: string[]
   auto_retrieve?: boolean
+  skill?: UserSkill
 }
 
 export interface SendMessageResponse {
