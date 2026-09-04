@@ -585,12 +585,17 @@ watch(
   gap: 0.5rem;
 }
 
-/* 附物行：日记/卡片 picker 与计划 picker 并排，窄屏自动换行 */
+/* 附物行：日记/卡片 picker 与计划 picker 并排等宽，窄屏自动换行 */
 .chat-scene__refs {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 0.375rem 1.5rem;
+}
+
+.chat-scene__refs > * {
+  flex: 1 1 20rem;
+  min-width: 0;
 }
 
 .chat-scene__composer-row {
