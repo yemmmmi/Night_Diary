@@ -81,3 +81,60 @@ export async function getMiddlewareStatus(): Promise<MiddlewareStatus> {
   const { data } = await client.get('/api/v1/dev/middleware-status')
   return data
 }
+
+export interface McpEndpointStatus {
+  alias: string
+  transport: 'sse' | 'stdio'
+  state: 'healthy' | 'unhealthy' | 'dead'
+  tool_count: number
+  restart_count: number
+  last_error: string
+  loaded_at: string
+}
+
+export interface McpToolInfo {
+  name: string
+  description: string
+  source: string
+  transport: string
+}
+
+export interface McpCallLog {
+  id: string
+  user_id: string | null
+  trace_id: string | null
+  endpoint_alias: string
+  transport: string
+  tool_name: string
+  raw_tool_name: string
+  status: string
+  duration_ms: number
+  error_message: string | null
+  arguments_snapshot: string
+  result_snapshot: string
+  created_at: number
+}
+
+export async function getMcpStatus(): Promise<{ items: McpEndpointStatus[] }> {
+  const client = await getHttpClient()
+  const { data } = await client.get('/api/v1/dev/mcp/status')
+  return data
+}
+
+export async function getMcpTools(): Promise<{ items: McpToolInfo[] }> {
+  const client = await getHttpClient()
+  const { data } = await client.get('/api/v1/dev/mcp/tools')
+  return data
+}
+
+export async function getMcpCalls(params?: {
+  endpoint?: string
+  status?: string
+  user?: string
+  page?: number
+  page_size?: number
+}): Promise<{ items: McpCallLog[]; total: number }> {
+  const client = await getHttpClient()
+  const { data } = await client.get('/api/v1/dev/mcp/calls', { params })
+  return data
+}

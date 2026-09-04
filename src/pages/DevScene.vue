@@ -5,6 +5,14 @@ import TraceList from '@/features/dev/TraceList.vue'
 import TraceWaterfall from '@/features/dev/TraceWaterfall.vue'
 import MiddlewareStatus from '@/features/dev/MiddlewareStatus.vue'
 import AccountSwitcher from '@/features/dev/AccountSwitcher.vue'
+import McpPanel from '@/features/dev/McpPanel.vue'
+
+const activeTab = ref<'traces' | 'mcp'>('traces')
+
+function openTraceFromMcp(traceId: string) {
+  activeTab.value = 'traces'
+  void selectTrace(traceId)
+}
 
 const traces = ref<TraceSummary[]>([])
 const total = ref(0)
@@ -59,22 +67,43 @@ onMounted(() => {
 
 <template>
   <div class="dev-scene">
-    <div class="dev-scene__sidebar">
-      <TraceList :traces="traces" :total="total" :loading="loading" @select="selectTrace" />
+    <div class="dev-scene__tabs">
+      <button
+        class="dev-scene__tab"
+        :class="{ 'dev-scene__tab--active': activeTab === 'traces' }"
+        @click="activeTab = 'traces'"
+      >
+        链路追踪
+      </button>
+      <button
+        class="dev-scene__tab"
+        :class="{ 'dev-scene__tab--active': activeTab === 'mcp' }"
+        @click="activeTab = 'mcp'"
+      >
+        MCP
+      </button>
     </div>
-    <div class="dev-scene__main">
-      <div class="dev-scene__topbar">
-        <AccountSwitcher @switched="reload" />
-        <MiddlewareStatus v-if="middleware" :status="middleware" />
-        <div v-if="stats" class="dev-scene__stats">
-          <span>{{ stats.total_traces }} 条</span>
-          <span v-if="stats.avg_duration_ms">平均 {{ stats.avg_duration_ms.toFixed(0) }}ms</span>
-          <span v-if="stats.error_count > 0" class="dev-scene__errors">{{ stats.error_count }} 错误</span>
-        </div>
+    <div v-if="activeTab === 'mcp'" class="dev-scene__mcp">
+      <McpPanel @open-trace="openTraceFromMcp" />
+    </div>
+    <div v-else class="dev-scene__body">
+      <div class="dev-scene__sidebar">
+        <TraceList :traces="traces" :total="total" :loading="loading" @select="selectTrace" />
       </div>
-      <TraceWaterfall v-if="selectedTrace" :trace="selectedTrace" />
-      <div v-else class="dev-scene__empty">
-        <p>选择一条记录查看详情</p>
+      <div class="dev-scene__main">
+        <div class="dev-scene__topbar">
+          <AccountSwitcher @switched="reload" />
+          <MiddlewareStatus v-if="middleware" :status="middleware" />
+          <div v-if="stats" class="dev-scene__stats">
+            <span>{{ stats.total_traces }} 条</span>
+            <span v-if="stats.avg_duration_ms">平均 {{ stats.avg_duration_ms.toFixed(0) }}ms</span>
+            <span v-if="stats.error_count > 0" class="dev-scene__errors">{{ stats.error_count }} 错误</span>
+          </div>
+        </div>
+        <TraceWaterfall v-if="selectedTrace" :trace="selectedTrace" />
+        <div v-else class="dev-scene__empty">
+          <p>选择一条记录查看详情</p>
+        </div>
       </div>
     </div>
   </div>
@@ -82,9 +111,40 @@ onMounted(() => {
 
 <style scoped>
 .dev-scene {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 5rem);
+  overflow: hidden;
+}
+.dev-scene__tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.375rem 1rem 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+}
+.dev-scene__tab {
+  padding: 0.375rem 0.875rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.dev-scene__tab--active {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-accent);
+}
+.dev-scene__body {
   display: grid;
   grid-template-columns: 18rem 1fr;
-  height: calc(100dvh - 5rem);
+  flex: 1;
+  overflow: hidden;
+}
+.dev-scene__mcp {
+  flex: 1;
   overflow: hidden;
 }
 .dev-scene__sidebar {
