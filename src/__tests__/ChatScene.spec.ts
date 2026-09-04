@@ -334,6 +334,36 @@ describe('ChatScene', () => {
     )
   })
 
+  it('sends with a manually selected skill and resets to auto afterwards', async () => {
+    const { wrapper, chatStore } = mountScene({
+      messages: [msg('m1', 'user', '今天有点累')],
+    })
+    await flushPromises()
+
+    const recordChip = wrapper.find('[data-testid="skill-chip-record"]')
+    expect(recordChip.exists()).toBe(true)
+    expect(wrapper.find('[data-testid="skill-chip-auto"]').classes()).toContain(
+      'is-active',
+    )
+
+    await recordChip.trigger('click')
+    expect(chatStore.selectedSkill).toBe('record')
+    expect(recordChip.classes()).toContain('is-active')
+
+    await wrapper.find('[data-testid="letter-input"] textarea').setValue('开了一整天会，有点累')
+    await wrapper.find('[data-testid="letter-send"]').trigger('click')
+    await flushPromises()
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({ content: '开了一整天会，有点累', skill: 'record' }),
+    )
+    expect(chatStore.selectedSkill).toBeNull()
+    expect(wrapper.find('[data-testid="skill-chip-auto"]').classes()).toContain(
+      'is-active',
+    )
+  })
+
   it('shows an attach note with card and plan counts on the user letter', async () => {
     listCards.mockResolvedValue([card('card-1', '和夜记聊了睡眠')])
     listPlans.mockResolvedValue([plan('plan-1', '读完一本书')])

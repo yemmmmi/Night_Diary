@@ -55,6 +55,52 @@ def test_send_message_rejects_too_many_pins(authed_client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_send_message_rejects_unknown_skill(authed_client: TestClient) -> None:
+    conversation_id = _create_conversation(authed_client)
+    response = authed_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "测试", "skill": "dance"},
+    )
+    assert response.status_code == 422
+
+
+def test_send_message_passes_skill_to_generate_reply(authed_client: TestClient) -> None:
+    """手动指定 skill 时透传给 generate_reply(含 None 默认)。"""
+    conversation_id = _create_conversation(authed_client)
+
+    with patch(
+        "app.api.v1.conversation.conversation_ai_service.generate_reply",
+        return_value=ChatReplyResult(
+            reply_text="已记下。",
+            retrieved_diary_ids=[],
+            retrieved_memory_ids=[],
+        ),
+    ) as mock_generate:
+        sent = authed_client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={"content": "开了一整天会", "skill": "record", "auto_retrieve": False},
+        )
+
+    assert sent.status_code == 201
+    assert mock_generate.call_args.kwargs["forced_skill"] == "record"
+
+    with patch(
+        "app.api.v1.conversation.conversation_ai_service.generate_reply",
+        return_value=ChatReplyResult(
+            reply_text="聊聊吧。",
+            retrieved_diary_ids=[],
+            retrieved_memory_ids=[],
+        ),
+    ) as mock_generate:
+        sent = authed_client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={"content": "随便聊聊", "auto_retrieve": False},
+        )
+
+    assert sent.status_code == 201
+    assert mock_generate.call_args.kwargs["forced_skill"] is None
+
+
 def test_send_message_rejects_too_many_attached_cards(authed_client: TestClient) -> None:
     conversation_id = _create_conversation(authed_client)
     response = authed_client.post(

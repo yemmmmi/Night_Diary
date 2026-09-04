@@ -298,8 +298,12 @@ def _try_user_skill(
     conversation_id: str,
     content: str,
     user_id: str,
+    forced_skill: str | None = None,
 ) -> Any:
-    """Run the 记录/洞悉/计划 skill router; ``None`` → continue as chat."""
+    """Run the 记录/洞悉/计划 skill router; ``None`` → continue as chat.
+
+    *forced_skill* (user manual selection) skips intent classification.
+    """
     try:
         with trace_span(
             "S4a_user_skill", "用户技能路由", input_snapshot={"raw_text": content[:60]}
@@ -310,6 +314,7 @@ def _try_user_skill(
                 conversation_id=conversation_id,
                 content=content,
                 user_id=user_id,
+                skill=forced_skill,
             )
             if span:
                 span.metadata["skill"] = outcome.skill if outcome else "chat"
@@ -373,6 +378,7 @@ def _prepare_reply_context(
     trace_id: str | None,
     card_ids: list[str] | None = None,
     plan_ids: list[str] | None = None,
+    forced_skill: str | None = None,
 ) -> ReplyContext:
     """Extract Stage 1-3 from generate_reply for streaming path reuse.
 
@@ -457,6 +463,7 @@ def _prepare_reply_context(
         conversation_id=conversation_id,
         content=content,
         user_id=user_id,
+        forced_skill=forced_skill,
     )
     if skill_outcome is not None:
         return ReplyContext(
@@ -683,6 +690,7 @@ def generate_reply(
     trace_id: str | None = None,
     card_ids: list[str] | None = None,
     plan_ids: list[str] | None = None,
+    forced_skill: str | None = None,
 ) -> ChatReplyResult:
     """Build chat context and generate an assistant reply via the Agentic Loop.
 
@@ -776,6 +784,7 @@ def generate_reply(
             conversation_id=conversation_id,
             content=content,
             user_id=user_id,
+            forced_skill=forced_skill,
         )
         if skill_outcome is not None:
             skill_reply = ChatReplyResult(
@@ -1079,6 +1088,7 @@ async def generate_reply_streaming(
     middleware_pipeline: MiddlewarePipeline | None = None,
     card_ids: list[str] | None = None,
     plan_ids: list[str] | None = None,
+    forced_skill: str | None = None,
 ) -> None:
     """Real streaming (P3): _prepare_reply_context -> run_conversation_loop_streaming -> post-write.
 
@@ -1123,6 +1133,7 @@ async def generate_reply_streaming(
             trace_id=trace_id or None,
             card_ids=card_ids,
             plan_ids=plan_ids,
+            forced_skill=forced_skill,
         )
 
         # No trace_id → no SSE subscriber → nothing to publish.

@@ -338,6 +338,16 @@ class SendMessageRequest(BaseModel):
     card_ids: list[str] = Field(default_factory=list)
     plan_ids: list[str] = Field(default_factory=list)
     auto_retrieve: bool = True
+    skill: str | None = None
+
+    @field_validator("skill")
+    @classmethod
+    def validate_skill(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if value not in ("record", "insight", "plan"):
+            raise ValueError("skill 仅支持 record / insight / plan 或不传")
+        return value
 
     @field_validator("diary_ids")
     @classmethod

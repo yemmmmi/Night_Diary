@@ -372,6 +372,7 @@ watch(
           <div class="chat-scene__composer-row">
             <ChatInput
               ref="chatInput"
+              v-model:skill="chatStore.selectedSkill"
               :disabled="chatStore.sending || chatStore.streamingActive"
               @send="onSend"
             />

@@ -87,3 +87,53 @@ def test_dispatch_failure_degrades_to_none(db) -> None:
         )
         is None
     )
+
+
+# ── 手动指定 skill：跳过意图分类，内容无需触发词 ──────────────────────
+
+
+def test_manual_skill_forces_record_without_trigger_words(db) -> None:
+    container = _container("你今天开了一整天会，有点累。")
+    outcome = user_skill_service.run_user_skill(
+        db,
+        container,
+        conversation_id="c1",
+        content="开了一整天会，有点累",
+        user_id="u1",
+        skill="record",
+    )
+    assert outcome is not None
+    assert outcome.skill == "record"
+    entry = diary_service.get_entry(db, outcome.skill_result["diary_id"], user_id="u1")
+    assert entry.content == "你今天开了一整天会，有点累。"
+
+
+def test_manual_skill_forces_insight_without_trigger_words(db) -> None:
+    container = _container("情绪背后是对确定性的渴望。")
+    outcome = user_skill_service.run_user_skill(
+        db,
+        container,
+        conversation_id="c1",
+        content="最近总是心神不宁",
+        user_id="u1",
+        skill="insight",
+    )
+    assert outcome is not None
+    assert outcome.skill == "insight"
+    assert outcome.skill_result["skill"] == "insight"
+
+
+def test_manual_skill_rejects_unknown_value(db) -> None:
+    """非法 skill 值视为未指定，退回自动意图分类。"""
+    container = _container()
+    assert (
+        user_skill_service.run_user_skill(
+            db,
+            container,
+            conversation_id="c1",
+            content="今天天气真好",
+            user_id="u1",
+            skill="chat",
+        )
+        is None
+    )

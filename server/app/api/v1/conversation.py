@@ -107,6 +107,7 @@ def send_message(
         trace_id=trace_id,
         card_ids=body.card_ids,
         plan_ids=body.plan_ids,
+        forced_skill=body.skill,
     )
 
     user_msg, reply_msg = conversation_service.add_user_message_and_reply(
@@ -181,6 +182,7 @@ async def send_message_streaming(
             trace_id=trace_id,
             card_ids=body.card_ids,
             plan_ids=body.plan_ids,
+            forced_skill=body.skill,
         )
     )
     # Register with TaskRegistry for lifecycle management (cancel on abort,

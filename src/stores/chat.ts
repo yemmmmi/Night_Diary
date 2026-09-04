@@ -11,6 +11,7 @@ import {
   type Conversation,
   type ChatMessage,
   type GenerateCardPayload,
+  type UserSkill,
 } from '@/shared/api/conversation'
 import { formatApiError } from '@/shared/utils/apiError'
 import { useStreamingReply } from '@/shared/composables/useStreamingReply'
@@ -24,6 +25,8 @@ export const useChatStore = defineStore('chat', () => {
   const pinnedCardIds = ref<string[]>([])
   const pinnedPlanIds = ref<string[]>([])
   const autoRetrieve = ref(true)
+  /* 手动指定的 skill：null = 自动路由；发送后自动复位 */
+  const selectedSkill = ref<UserSkill | null>(null)
   const loading = ref(false)
   const sending = ref(false)
   const error = ref<string | null>(null)
@@ -113,6 +116,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!convId) return false
     sending.value = true
     error.value = null
+    const skill = selectedSkill.value ?? undefined
 
     try {
       if (streamingEnabled.value) {
@@ -143,6 +147,7 @@ export const useChatStore = defineStore('chat', () => {
               plan_ids:
                 pinnedPlanIds.value.length > 0 ? pinnedPlanIds.value : undefined,
               auto_retrieve: autoRetrieve.value,
+              skill,
             },
             traceId,
           )
@@ -173,6 +178,7 @@ export const useChatStore = defineStore('chat', () => {
       return false
     } finally {
       sending.value = false
+      selectedSkill.value = null
     }
   }
 
@@ -187,6 +193,7 @@ export const useChatStore = defineStore('chat', () => {
       card_ids: pinnedCardIds.value,
       plan_ids: pinnedPlanIds.value,
       auto_retrieve: autoRetrieve.value,
+      skill: selectedSkill.value ?? undefined,
     })
     messages.value = [...messages.value, result.message, result.reply]
     return true
@@ -222,6 +229,10 @@ export const useChatStore = defineStore('chat', () => {
     pinnedPlanIds.value = ids.slice(0, 3)
   }
 
+  function selectSkill(skill: UserSkill | null) {
+    selectedSkill.value = skill
+  }
+
   return {
     conversations,
     activeConversationId,
@@ -230,6 +241,7 @@ export const useChatStore = defineStore('chat', () => {
     pinnedCardIds,
     pinnedPlanIds,
     autoRetrieve,
+    selectedSkill,
     loading,
     sending,
     error,
@@ -247,5 +259,6 @@ export const useChatStore = defineStore('chat', () => {
     pinDiary,
     setPinnedCardIds,
     setPinnedPlanIds,
+    selectSkill,
   }
 })
