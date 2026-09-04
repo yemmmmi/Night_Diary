@@ -22,6 +22,7 @@
 - `MCP_STDIOS` 条目用空白分词（`split()`），不支持带空格的路径——文档注明用 PATH 上的命令（npx/uvx/python）
 - stdio 的 env 键值只识别**尾部**的 `key=value` token（避免吞掉 `--opt=v` 类参数）
 - 测试环境 `mcp` 包已安装（现有 `test_mcp_persistent.py` 未 skip 直接跑）
+- **实施时新增偏差（mcp SDK 2.0）**：已安装的 `mcp` 为 2.0.0，`ClientSession` 必须先 `await session.__aenter__()`（dispatcher 的 run 任务在其中启动）才能 `initialize()`；2.0 无公开 `close()`，关闭统一走 `session.__aexit__(None, None, None)`。连接层实现已按此调整（含 initialize 失败时的 session 回退退出与 `connect()` 失败路径的 `_close_session()` 清理）；SSE mock 测试断言相应从 `close.assert_awaited()` 改为 `__aexit__.assert_awaited()`。
 
 ---
 

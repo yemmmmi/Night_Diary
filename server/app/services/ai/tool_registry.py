@@ -179,7 +179,7 @@ class ToolRegistry:
                 status = "error"
                 error_message = str(exc)
                 result_text = f"[{name} error]: {exc}"
-            except Exception as exc:  # noqa: BLE001 — tool layer never raises
+            except Exception as exc:
                 status = "error"
                 error_message = str(exc)
                 result_text = f"[{name} error]: {exc}"

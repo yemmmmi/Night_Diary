@@ -7,7 +7,7 @@ import contextlib
 import json
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
 
@@ -337,7 +337,9 @@ def _build_tools(
             else None
         )
         if registry is not None:
-            return registry.build_tool_map(user_id=user_id)
+            return cast(
+                "dict[str, ToolFn] | None", registry.build_tool_map(user_id=user_id)
+            )
         llm = container._llm_for_tier("light", agent_name="tool")
         if llm is None or container.retriever is None:
             return None

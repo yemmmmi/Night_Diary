@@ -46,7 +46,6 @@ class TestMcpLoop:
 
     def test_stop_then_run_raises(self, mcp_loop: McpLoop) -> None:
         mcp_loop.stop()
-        import asyncio
 
         async def _noop() -> None:
             return None
