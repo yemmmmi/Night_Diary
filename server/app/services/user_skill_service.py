@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+SKILL_INTENTS = ("record", "insight", "plan")
+
+
 def route_intent(
     container: ServiceContainer, content: str
 ) -> IntentDecision:
@@ -41,10 +44,18 @@ def run_user_skill(
     conversation_id: str,
     content: str,
     user_id: str,
+    skill: str | None = None,
 ) -> SkillRunOutcome | None:
-    """Run the matching user skill, or None to continue as normal chat."""
+    """Run the matching user skill, or None to continue as normal chat.
+
+    *skill* forces a specific skill (user-side manual selection) and skips
+    intent classification entirely; only record/insight/plan are honored.
+    """
     try:
-        decision = route_intent(container, content)
+        if skill in SKILL_INTENTS:
+            decision = IntentDecision(intent=skill, source="manual")
+        else:
+            decision = route_intent(container, content)
         if decision.intent == "chat":
             return None
         logger.info(
