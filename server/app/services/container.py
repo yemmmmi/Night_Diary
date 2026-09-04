@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from app.domain.rag.reranker import Reranker
     from app.domain.rag.retriever import HybridRetriever
     from app.services.ai.router import ExecutionPlanner
+    from app.services.ai.tool_registry import ToolRegistry
     from app.shared.embed_utils import Embedder
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,8 @@ class ServiceContainer:
     _reranker_cache: Reranker | None = field(default=None, repr=False)
     _reranker_resolved: bool = field(default=False, repr=False)
     _ai_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    tool_registry: ToolRegistry | None = field(default=None, repr=False)
+    _registry_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @classmethod
     def create_core(cls, settings: Settings | None = None) -> ServiceContainer:
@@ -178,6 +181,24 @@ class ServiceContainer:
                 embedding_function=build_embedding_function(self.settings),
             )
 
+    def ensure_tool_registry(self) -> ToolRegistry | None:
+        """Create the ToolRegistry (local + MCP tools) once, lazily.
+
+        Separate lock from ``_ai_lock`` so the Dev API can build the registry
+        without loading the full AI stack. With no MCP endpoints configured
+        this is nearly free.
+        """
+        if self.tool_registry is not None:
+            return self.tool_registry
+        with self._registry_lock:
+            if self.tool_registry is None:
+                from app.services.ai.tool_registry import ToolRegistry
+
+                registry = ToolRegistry(self, self.settings)
+                registry.initialize()
+                self.tool_registry = registry
+        return self.tool_registry
+
     def ensure_memory(self, *, user_id: str = "default") -> None:
         """Lightweight path for card flows: three-layer memory + card collection.
 
@@ -227,6 +248,7 @@ class ServiceContainer:
             self.knowledge_store = knowledge_store
             self.bm25_index = bm25
             self.retriever = retriever
+            self.ensure_tool_registry()
             logger.info("AI stack ready (RAG + memory + agents)")
 
     def _build_embedder(self) -> Embedder:

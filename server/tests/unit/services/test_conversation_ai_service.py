@@ -827,3 +827,39 @@ def test_format_retrieved_diaries_prefers_day_digest(db_session) -> None:
     assert "加班到很晚，整体焦虑" in text
     assert "情绪：焦虑" in text
     assert "旧日记全文很长" in text  # 无 digest → 回落全文摘录
+
+
+class TestBuildToolsWithRegistry:
+    def test_build_tools_delegates_to_registry(self) -> None:
+        container = MagicMock()
+        registry = MagicMock()
+        registry.build_tool_map.return_value = {"x": lambda **k: "ok"}
+        container.__dict__["tool_registry"] = registry
+        result = conversation_ai_service._build_tools(container, user_id="u1")
+        registry.build_tool_map.assert_called_once_with(user_id="u1")
+        assert result == {"x": registry.build_tool_map.return_value["x"]}
+
+    def test_build_tools_falls_back_without_registry(self) -> None:
+        container = MagicMock()
+        container.retriever = None  # 无注册表 + 无 retriever → None（现行为）
+        assert conversation_ai_service._build_tools(container, user_id="u1") is None
+
+
+class TestFilterTools:
+    def test_local_gated_mcp_always_available(self) -> None:
+        all_tools = {
+            "search_diary": lambda **k: "",
+            "analyze_sentiment": lambda **k: "",
+            "mcp__tavily__search": lambda **k: "",
+        }
+        result = conversation_ai_service._filter_tools(all_tools, ["search_diary"])
+        assert set(result) == {"search_diary", "mcp__tavily__search"}
+
+    def test_no_need_tools_mcp_only(self) -> None:
+        all_tools = {"search_diary": lambda **k: "", "mcp__tavily__search": lambda **k: ""}
+        result = conversation_ai_service._filter_tools(all_tools, [])
+        assert set(result) == {"mcp__tavily__search"}
+
+    def test_no_tools_at_all(self) -> None:
+        assert conversation_ai_service._filter_tools(None, ["search_diary"]) is None
+        assert conversation_ai_service._filter_tools({"search_diary": lambda **k: ""}, []) is None

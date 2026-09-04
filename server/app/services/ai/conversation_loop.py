@@ -36,7 +36,7 @@ from app.services.ai.prompts import (
     TEMPORAL_KEYWORDS,
 )
 from app.services.ai.session_context import get_or_create_session
-from app.services.ai.tool_factory import ToolFn, specs_for_names
+from app.services.ai.tool_factory import ToolFn, is_mcp_tool, specs_for_names
 from app.services.ai.utils import extract_token_usage, merge_token_info
 from app.shared.crisis_guard import CrisisGuard
 from app.shared.llm import LLMClient, message_text
@@ -142,6 +142,11 @@ def _needs_tool_call(content: str) -> bool:
     but we only enable tool-calling mode when temporal keywords are present.
     """
     return any(kw in content for kw in TEMPORAL_KEYWORDS)
+
+
+def _has_mcp_tools(tools: dict[str, ToolFn] | None) -> bool:
+    """MCP tools bypass the intent whitelist — the LLM decides whether to call."""
+    return any(is_mcp_tool(name) for name in (tools or {}))
 
 
 def _execute_tool(
@@ -395,7 +400,11 @@ def run_conversation_loop(
 
         # Intent-driven routing (replaces _needs_tool_call heuristic when available)
         if intent_result is not None:
-            enable_tools = tools is not None and len(tools) > 0 and len(intent_result.need_tools) > 0
+            enable_tools = (
+                tools is not None
+                and len(tools) > 0
+                and (len(intent_result.need_tools) > 0 or _has_mcp_tools(tools))
+            )
             tier = intent_result.tier
             max_iterations = intent_result.max_iterations
         else:
@@ -650,7 +659,11 @@ async def run_conversation_loop_streaming(
 
     # Intent-driven routing
     if intent_result is not None:
-        enable_tools = tools is not None and len(tools) > 0 and len(intent_result.need_tools) > 0
+        enable_tools = (
+            tools is not None
+            and len(tools) > 0
+            and (len(intent_result.need_tools) > 0 or _has_mcp_tools(tools))
+        )
         tier = intent_result.tier
         max_iterations = intent_result.max_iterations
         intent = intent_result.intent_category

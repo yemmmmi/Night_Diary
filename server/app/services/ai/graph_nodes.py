@@ -25,6 +25,7 @@ from app.services.ai.conversation_loop import (
 )
 from app.services.ai.input_preprocessor import InputPreprocessor
 from app.services.ai.prompts import FALLBACK_FEEDBACK
+from app.services.ai.tool_factory import is_mcp_tool
 from app.services.ai.utils import extract_token_usage
 from app.shared.llm import message_text
 from app.shared.pipeline_trace import trace_span
@@ -87,7 +88,10 @@ def plan_node(state: dict[str, Any]) -> dict[str, Any]:
         tools = state.get("tools", {})
 
         if intent_result is not None:
-            enable_tools = bool(tools) and len(intent_result.need_tools) > 0
+            enable_tools = bool(tools) and (
+                len(intent_result.need_tools) > 0
+                or any(is_mcp_tool(name) for name in tools)
+            )
             tier = intent_result.tier
             max_iterations = intent_result.max_iterations
         else:

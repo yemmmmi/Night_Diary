@@ -184,6 +184,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await warmup_task
     with suppress(Exception):
         drain(timeout_s=5.0)
+    # Close MCP connections (stdio subprocesses) — best-effort.
+    with suppress(Exception):
+        container = app.state.container
+        registry = getattr(container, "tool_registry", None)
+        if registry is not None:
+            await asyncio.to_thread(registry.close)
 
 
 def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
