@@ -68,6 +68,8 @@ services:
       - NEO4J_URL=neo4j://neo4j:7687
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=nightdiary_neo4j
+      - MCP_ENDPOINTS=${MCP_ENDPOINTS:-}
+      - MCP_STDIOS=${MCP_STDIOS:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -119,6 +121,27 @@ services:
       - "80:80"
     depends_on:
       - backend
+    restart: unless-stopped
+
+  # ── 可选 MCP 工具服务（docker compose --profile mcp up -d 启用）──────
+  # stdio MCP server 经 supergateway 桥接为 SSE。启用后在根目录 .env 配置：
+  #   MCP_ENDPOINTS=fetch:http://mcp-fetch:9201/sse,tavily:http://mcp-tavily:9202/sse
+  mcp-fetch:
+    image: node:20-alpine
+    command: npx -y supergateway --stdio "npx -y @modelcontextprotocol/server-fetch" --port 9201
+    ports:
+      - "9201:9201"
+    profiles: [mcp]
+    restart: unless-stopped
+
+  mcp-tavily:
+    image: node:20-alpine
+    command: npx -y supergateway --stdio "npx -y tavily-mcp" --port 9202
+    environment:
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+    ports:
+      - "9202:9202"
+    profiles: [mcp]
     restart: unless-stopped
 
 volumes:
