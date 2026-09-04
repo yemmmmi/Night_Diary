@@ -36,7 +36,15 @@ const diaryCatalog = ref<DiaryEntry[]>([])
 const referenceCards = ref<MemoryCard[]>([])
 const planCatalog = ref<PlanItem[]>([])
 const modeBadge = ref<InstanceType<typeof ModeBadge> | null>(null)
+const chatInput = ref<InstanceType<typeof ChatInput> | null>(null)
 const pendingUserText = ref<string | null>(null)
+
+/* 空态 skill 起手卡：填入引导句，让三个 skill 的触发方式可被自然发现 */
+const skillStarters = [
+  { label: chatCopy.skillHintRecord, prefill: chatCopy.skillPrefillRecord },
+  { label: chatCopy.skillHintInsight, prefill: chatCopy.skillPrefillInsight },
+  { label: chatCopy.skillHintPlan, prefill: chatCopy.skillPrefillPlan },
+]
 
 const diaryLabelMap = computed(() => {
   const map: Record<number, string> = {}
@@ -120,6 +128,14 @@ async function onSelectConversation(id: string) {
 async function onNewConversation() {
   await chatStore.startNewConversation()
   scrollToBottom()
+}
+
+async function onSkillStart(prefill: string) {
+  if (!chatStore.activeConversationId) {
+    await chatStore.startNewConversation()
+  }
+  await nextTick()
+  chatInput.value?.prefill(prefill)
 }
 
 function onAskDelete(id: string) {
@@ -282,6 +298,21 @@ watch(
         >
           {{ chatCopy.newConversation }}
         </button>
+        <div class="chat-scene__skills" data-testid="chat-skill-hints">
+          <p class="chat-scene__skills-label">{{ chatCopy.skillHintTitle }}</p>
+          <div class="chat-scene__skills-row">
+            <button
+              v-for="starter in skillStarters"
+              :key="starter.prefill"
+              type="button"
+              class="chat-scene__skill"
+              data-testid="chat-skill-starter"
+              @click="onSkillStart(starter.prefill)"
+            >
+              {{ starter.label }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Letters -->
@@ -340,6 +371,7 @@ watch(
           </div>
           <div class="chat-scene__composer-row">
             <ChatInput
+              ref="chatInput"
               :disabled="chatStore.sending || chatStore.streamingActive"
               @send="onSend"
             />
@@ -478,6 +510,47 @@ watch(
 
 .chat-scene__empty-link:hover {
   background: var(--color-accent-muted);
+}
+
+/* 空态 skill 起手卡：一行引导 chip，点了直接落到回信框 */
+.chat-scene__skills {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.chat-scene__skills-label {
+  margin: 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: var(--color-text-faint);
+}
+
+.chat-scene__skills-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.chat-scene__skill {
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-bg-elevated);
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color var(--dur-fast) var(--ease-out-quart);
+}
+
+.chat-scene__skill:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  color: var(--color-text-primary);
 }
 
 .chat-scene__messages {

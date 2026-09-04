@@ -454,6 +454,25 @@ describe('ChatScene', () => {
     expect(createConversation).toHaveBeenCalled()
   })
 
+  it('starts a new letter with a skill trigger prefilled from the empty state', async () => {
+    createConversation.mockResolvedValue(conv('c9', '新的一封'))
+    const { wrapper } = mountScene({})
+    await flushPromises()
+
+    const starters = wrapper.findAll('[data-testid="chat-skill-starter"]')
+    expect(starters).toHaveLength(3)
+    expect(wrapper.find('[data-testid="chat-skill-hints"]').text()).toContain('直接吩咐')
+
+    await starters[0].trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    expect(createConversation).toHaveBeenCalled()
+    const textarea = wrapper.find('[data-testid="letter-input"] textarea')
+    expect(textarea.exists()).toBe(true)
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('帮我记一篇日记：')
+  })
+
   it('pins the diary referenced by the route query deep link', async () => {
     routeQuery = { diaryId: '11' }
     listDiaryEntries.mockResolvedValue([])
