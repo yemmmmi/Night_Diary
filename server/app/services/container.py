@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.config import Settings, get_settings
 from app.infrastructure.agent_decision_logger import SqliteAgentDecisionLogger
 from app.infrastructure.database import create_db_engine, create_session_factory, init_db
-from app.infrastructure.feedback_repository import SqliteStylePreferenceStore
 from app.infrastructure.llm_call_tracer import SqliteLLMCallTracer
 from app.infrastructure.memory_repository import (
     SqliteEpisodicMemoryStore,
@@ -58,7 +57,6 @@ class ServiceContainer:
     llm_factory: LLMFactory
     llm_tracer: SqliteLLMCallTracer
     decision_logger: SqliteAgentDecisionLogger
-    style_preference_store: SqliteStylePreferenceStore
     skill_tracer: SqliteSkillActivationTracer | None = field(default=None, repr=False)
     diary_collection: DiaryCollectionManager | None = field(default=None, repr=False)
     card_collection: CardCollectionManager | None = field(default=None, repr=False)
@@ -111,7 +109,6 @@ class ServiceContainer:
             llm_factory=LLMFactory(cfg),
             llm_tracer=SqliteLLMCallTracer(factory),
             decision_logger=SqliteAgentDecisionLogger(factory),
-            style_preference_store=SqliteStylePreferenceStore(factory),
             skill_tracer=SqliteSkillActivationTracer(factory),
         )
         t_tracers = _time.perf_counter()

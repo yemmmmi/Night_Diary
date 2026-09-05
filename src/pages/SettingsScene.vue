@@ -7,7 +7,7 @@ import BackupManager from '@/features/settings/BackupManager.vue'
 import DeveloperToggle from '@/features/settings/DeveloperToggle.vue'
 import SettingsSection from '@/features/settings/SettingsSection.vue'
 import ThemeToggle from '@/features/settings/ThemeToggle.vue'
-import { getAppVersion, getStats, type AppStats } from '@/shared/api/settings'
+import { getStats, type AppStats } from '@/shared/api/settings'
 import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
@@ -19,7 +19,6 @@ const openSection = ref('general')
 const sectionIds = ['general', 'backup', 'about'] as const
 const usageStats = ref<AppStats | null>(null)
 const statsLoading = ref(true)
-const appVersion = ref<string | null>(null)
 
 function syncSectionFromRoute() {
   const hash = route.hash.replace('#', '')
@@ -44,7 +43,6 @@ async function loadAbout() {
   } finally {
     statsLoading.value = false
   }
-  appVersion.value = await getAppVersion()
 }
 
 onMounted(() => {
@@ -128,7 +126,6 @@ watch(
         :open="openSection === 'about'"
         @toggle="toggleSection"
       >
-        <p v-if="appVersion" class="about-line">版本 {{ appVersion }}</p>
         <p v-if="statsLoading" class="about-line">加载统计…</p>
         <dl v-else-if="usageStats" class="usage-stats">
           <div class="usage-stats__row"><dt>日记总数</dt><dd>{{ usageStats.diary_count }}</dd></div>

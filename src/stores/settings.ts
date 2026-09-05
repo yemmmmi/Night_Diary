@@ -9,7 +9,6 @@ export interface AppSettingsSnapshot {
   nickname: string
   themePreference: ThemePreference
   soundEnabled: boolean
-  autoBackup: boolean
   onboardingCompleted: boolean
   developerMode: boolean
 }
@@ -18,7 +17,6 @@ const DEFAULTS: AppSettingsSnapshot = {
   nickname: '',
   themePreference: 'auto',
   soundEnabled: false,
-  autoBackup: false,
   onboardingCompleted: false,
   developerMode: false,
 }
@@ -38,7 +36,6 @@ function readStored(): AppSettingsSnapshot {
           ? parsed.themePreference
           : DEFAULTS.themePreference,
       soundEnabled: Boolean(parsed.soundEnabled),
-      autoBackup: Boolean(parsed.autoBackup),
       onboardingCompleted: Boolean(parsed.onboardingCompleted),
       developerMode: Boolean(parsed.developerMode),
     }
@@ -52,7 +49,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const nickname = ref(DEFAULTS.nickname)
   const themePreference = ref<ThemePreference>(DEFAULTS.themePreference)
   const soundEnabled = ref(DEFAULTS.soundEnabled)
-  const autoBackup = ref(DEFAULTS.autoBackup)
   const onboardingCompleted = ref(DEFAULTS.onboardingCompleted)
   const developerMode = ref(DEFAULTS.developerMode)
 
@@ -60,7 +56,6 @@ export const useSettingsStore = defineStore('settings', () => {
     nickname.value = snapshot.nickname
     themePreference.value = snapshot.themePreference
     soundEnabled.value = snapshot.soundEnabled
-    autoBackup.value = snapshot.autoBackup
     onboardingCompleted.value = snapshot.onboardingCompleted
     developerMode.value = snapshot.developerMode
   }
@@ -76,7 +71,6 @@ export const useSettingsStore = defineStore('settings', () => {
       nickname: nickname.value,
       themePreference: themePreference.value,
       soundEnabled: soundEnabled.value,
-      autoBackup: autoBackup.value,
       onboardingCompleted: onboardingCompleted.value,
       developerMode: developerMode.value,
     }
@@ -89,7 +83,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   watch(
-    [nickname, themePreference, soundEnabled, autoBackup, onboardingCompleted, developerMode],
+    [nickname, themePreference, soundEnabled, onboardingCompleted, developerMode],
     persist,
     { deep: true },
   )
@@ -99,7 +93,6 @@ export const useSettingsStore = defineStore('settings', () => {
     nickname,
     themePreference,
     soundEnabled,
-    autoBackup,
     onboardingCompleted,
     developerMode,
     load,

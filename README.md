@@ -27,8 +27,9 @@
 
 | 场景 | 描述 | 入口 |
 |------|------|------|
-| 写日记 → 回信 | 用户写日记（或记一笔卡片），系统生成回信 + 情绪分析 | `POST /api/v1/analysis/trigger` |
-| 会话 → 多轮对话 | 用户与 AI 多轮对话，支持工具调用、记忆检索、实体查询 | `POST /api/v1/conversation/{id}/messages` |
+| 手写日记 → 日摘要 | 保存日记后异步重建当日 digest（不写 reply） | `POST /api/v1/diary/entries` → `digest_worker` |
+| 卡片展开 → 短回信 | 卡片展开为日记后走 treehole（1–3 句 + digest） | `POST /api/v1/cards/{id}/expand` |
+| 会话 → 多轮对话 | 用户技能 / PlannerAgent / LangGraph 工具循环 | `POST /api/v1/conversations/{id}/messages` |
 
 两场景通过共享子组件互通：`ContentNormalizer`（三来源归一化）、`UnifiedMemoryAtom`（统一记忆原子）、`MemoryGateway`（四维检查 + 长期画像晋升）、`HybridEntityExtractor`（regex + LLM 双层实体提取）。
 
@@ -37,7 +38,7 @@
 ```
 night-diary-v2/
 ├── src/                        # Vue 3 前端
-│   ├── pages/                  # 场景级页面（Diary / Chat / Analysis / Memory ...）
+│   ├── pages/                  # 场景级页面（Diary / Chat / Plan / Memory ...）
 │   ├── features/               # 按业务领域组织（diary / chat / card / memory ...）
 │   ├── shared/                 # API / 组件 / composables / stores / utils
 │   ├── stores/                 # Pinia（auth / diary / chat / analysis ...）
@@ -46,22 +47,21 @@ night-diary-v2/
 │   ├── app/
 │   │   ├── main.py             # 入口（绑 0.0.0.0）
 │   │   ├── config.py           # pydantic-settings 配置
-│   │   ├── api/v1/             # 路由层（auth / diary / conversation / analysis ...）
+│   │   ├── api/v1/             # 路由层（auth / diary / card / conversation / plan / mode / skills ...）
 │   │   ├── services/           # 业务编排
-│   │   │   ├── ai/             # Agent 编排（conversation_loop / graph_nodes / input_preprocessor ...）
+│   │   │   ├── ai/             # treehole / conversation_loop / conversation_graph / router ...
 │   │   │   ├── container.py    # DI 容器
-│   │   │   ├── analysis_service.py      # 场景一入口
+│   │   │   ├── diary_service.py         # 手写日记 + digest
+│   │   │   ├── analysis_service.py      # 卡片展开 → treehole
 │   │   │   ├── conversation_ai_service.py # 场景二入口
 │   │   │   ├── memory_gateway.py        # 统一记忆写入
-│   │   │   └── normalizer.py            # ContentNormalizer 三来源归一化
+│   │   │   └── normalizer.py            # ContentNormalizer
 │   │   ├── domain/             # 领域模型
-│   │   │   ├── agents/         # IntentClassifier / ChatIntentClassifier / SlotExtractor / EntityExtractor ...
+│   │   │   ├── agents/         # Supervisor/Workers（周报）/ ChatIntentClassifier（8 类）/ PlannerAgent
 │   │   │   ├── memory/         # EpisodicMemory / LongTermMemory / UnifiedMemoryAtom
-│   │   │   ├── skills/         # SkillRegistry（crisis / sentiment / memory_recall / entity_tracker）
-│   │   │   ├── feedback/       # ThompsonSampling / PromptTuner / ImplicitStyle
+│   │   │   ├── skills/         # diary/chat registry + 用户技能 record/insight/plan
 │   │   │   ├── rag/            # ChromaDB 检索 + BM25 + reranker
-│   │   │   ├── knowledge/      # 实体知识存储
-│   │   │   └── orchestrator.py # OrchestratorProtocol 统一编排协议
+│   │   │   └── knowledge/      # 实体知识存储
 │   │   ├── infrastructure/     # 基础设施
 │   │   │   ├── database.py     # 双引擎（SQLite / MySQL）
 │   │   │   ├── redis_client.py # Redis（降级到内存）

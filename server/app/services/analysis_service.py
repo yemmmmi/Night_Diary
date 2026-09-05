@@ -326,7 +326,6 @@ def create_analysis(
     user_id: str,
     planner: ExecutionPlanner,
     container: ServiceContainer | None = None,
-    style_fragment: str | None = None,
 ) -> tuple[AnalysisRow, int]:
     """Create analysis and return (row, referenced_memory_count)."""
     entry = (
@@ -455,7 +454,6 @@ def trigger_analysis(
     container: ServiceContainer,
     *,
     user_id: str,
-    style_fragment: str | None = None,
     trace_id: str | None = None,
 ) -> tuple[AnalysisRow, int]:
     """End-to-end entry: build planner from container and create analysis.
@@ -492,7 +490,6 @@ def trigger_analysis(
             user_id=user_id,
             planner=planner,
             container=container,
-            style_fragment=style_fragment,
         )
         if trace is not None:
             trace.end()
