@@ -43,7 +43,6 @@ class FakeWorker:
         fail: bool = False,
         tokens: int = 0,
         observe_key: str | None = None,
-        stream_tokens: list[str] | None = None,
     ) -> None:
         self.output_key = output_key
         self.response = response
@@ -55,10 +54,6 @@ class FakeWorker:
         self.ran = False
         self.fallback_called = False
         self.style_fragment_seen: str | None = None
-        # When set, run_streaming yields these token-by-token; otherwise it
-        # degrades to emitting ``response`` as a single chunk (matching the
-        # supervisor's "worker lacks streaming support" fallback path).
-        self.stream_tokens = stream_tokens
 
     async def run(
         self,
@@ -78,14 +73,6 @@ class FakeWorker:
         if self.tokens:
             update["total_tokens_used"] = self.tokens
         return update
-
-    async def run_streaming(self, state: dict[str, Any]) -> Any:
-        """Token stream used by ``supervisor.synthesize_streaming``."""
-        if self.stream_tokens is not None:
-            for token in self.stream_tokens:
-                yield token
-        else:
-            yield self.response
 
     def fallback(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         self.fallback_called = True
@@ -269,94 +256,3 @@ async def test_graph_compresses_episodic_before_workers() -> None:
     assert result.get("compressed_history")
     assert "失眠" in result["compressed_history"]
     assert empathy.observed and "失眠" in str(empathy.observed)
-
-
-async def test_invoke_streaming_single_worker_yields_tokens() -> None:
-    """invoke_streaming reuses classify+dispatch, then streams the single worker.
-
-    PURE_RECORD routes to empathy only, so synthesize_streaming takes the
-    single-worker fast path and streams empathy.run_streaming token-by-token.
-    The returned final_state carries the dispatched worker output, and the
-    token stream mirrors what the worker yields (not a single merged chunk).
-    """
-    empathy = FakeWorker("empathy_response", "你好", stream_tokens=["你", "好"])
-    retrieval = FakeWorker("retrieval_context", "应当跳过")
-    insight = FakeWorker("insight_response", "应当跳过")
-    graph = _make_graph(
-        IntentCategory.PURE_RECORD.value,
-        empathy=empathy,
-        retrieval=retrieval,
-        insight=insight,
-    )
-
-    final_state, token_stream = await graph.invoke_streaming(
-        _state(), workers={"empathy": empathy}
-    )
-
-    tokens = [token async for token in token_stream]
-
-    # Tokens are streamed individually from empathy.run_streaming.
-    assert tokens == ["你", "好"]
-    # PURE_RECORD activates empathy only.
-    assert empathy.ran
-    assert not retrieval.ran
-    assert not insight.ran
-    # The dispatched worker output is present on the returned state.
-    assert final_state["empathy_response"] == "你好"
-    assert final_state.get("errors", []) == []
-
-
-async def test_invoke_streaming_without_workers_degrades_to_single_chunk() -> None:
-    """Without streaming-capable workers, synthesize_streaming emits one chunk.
-
-    The caller may pass workers=None (or omit a worker); the supervisor then
-    yields the already-computed single-worker output verbatim in one chunk
-    rather than token-by-token. invoke_streaming still returns the dispatched
-    state, so the caller always has the full reply even if streaming degrades.
-    """
-    empathy = FakeWorker("empathy_response", "完整的非流式回信")
-    retrieval = FakeWorker("retrieval_context", "x")
-    insight = FakeWorker("insight_response", "x")
-    graph = _make_graph(
-        IntentCategory.PURE_RECORD.value,
-        empathy=empathy,
-        retrieval=retrieval,
-        insight=insight,
-    )
-
-    final_state, token_stream = await graph.invoke_streaming(_state())
-
-    tokens = [token async for token in token_stream]
-
-    assert tokens == ["完整的非流式回信"]
-    assert final_state["empathy_response"] == "完整的非流式回信"
-
-
-async def test_invoke_streaming_preserves_invoke_classification() -> None:
-    """invoke_streaming produces the same classify+dispatch state shape as invoke.
-
-    Both entry points share _classify_and_dispatch, so after dispatch the
-    streaming state carries the same intent/tier/activated_agents as a plain
-    invoke run would (pre-synthesize). This guards the pure-refactor guarantee.
-    """
-    empathy = FakeWorker("empathy_response", "回应")
-    retrieval = FakeWorker("retrieval_context", "历史")
-    insight = FakeWorker("insight_response", "洞察")
-    intent = IntentCategory.EMOTIONAL_SUPPORT.value
-    graph = _make_graph(
-        intent,
-        empathy=empathy,
-        retrieval=retrieval,
-        insight=insight,
-    )
-
-    streaming_state, _ = await graph.invoke_streaming(
-        _state(), workers={"empathy": empathy}
-    )
-
-    assert streaming_state["intent"] == intent
-    assert streaming_state["tier"] == "medium"
-    # EMOTIONAL_SUPPORT routes empathy + retrieval; both ran during dispatch.
-    assert empathy.ran and retrieval.ran
-    assert "empathy" in streaming_state["activated_agents"]
-    assert "retrieval" in streaming_state["activated_agents"]

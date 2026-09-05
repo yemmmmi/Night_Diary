@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import AsyncGenerator
 from typing import Any
 
 from app.domain.agents.context_compressor import memory_context_from_state
@@ -27,9 +26,7 @@ from app.domain.agents.prompts import (
 from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.knowledge.store import DomainKnowledgeStore
 from app.domain.memory.types import EmotionBaseline
-from app.shared.crisis_guard import CrisisGuard
 from app.shared.llm import LLMClient, message_text
-from app.shared.streaming_safety import StreamingSafetyGuard
 from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
 logger = logging.getLogger(__name__)
@@ -98,36 +95,13 @@ class InsightAgent:
         )
         return {"insight_response": reply, **usage}
 
-    async def run_streaming(
-        self,
-        state: MultiAgentState,
-        *,
-        style_fragment: str | None = None,
-    ) -> AsyncGenerator[str, None]:
-        """Streaming variant — yield tokens from ``astream`` with safety filtering.
-
-        Shares :meth:`_build_prompt` with :meth:`run`. ``retrospective_query`` is
-        a low-risk intent, so the guard streams tokens directly without buffering
-        (analytical replies rarely carry mid-stream crisis signals).
-        """
-        prompt = self._build_prompt(state, style_fragment=style_fragment)
-        guard = StreamingSafetyGuard(CrisisGuard())
-
-        async def _raw_stream() -> AsyncGenerator[str, None]:
-            async for token in self._llm.astream(prompt):
-                yield token
-
-        async for item in guard.filter_stream(_raw_stream(), intent="retrospective_query"):
-            if isinstance(item, str):
-                yield item
-
     def _build_prompt(
         self,
         state: MultiAgentState,
         *,
         style_fragment: str | None = None,
     ) -> str:
-        """Build the full LLM prompt — shared by :meth:`run` and :meth:`run_streaming`."""
+        """Build the LLM prompt for :meth:`run`."""
         diary_content = state.get("diary_content", "")
         retrieval_context = state.get("retrieval_context", "")
         episodic = state.get("episodic_context", []) or []

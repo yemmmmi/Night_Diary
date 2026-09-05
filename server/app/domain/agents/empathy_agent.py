@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import AsyncGenerator
 from typing import Any
 
 from app.domain.agents.context_compressor import memory_context_from_state
@@ -35,10 +34,8 @@ from app.domain.agents.prompts import (
 from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.knowledge.store import DomainKnowledgeStore
 from app.domain.skills.crisis_detector import CRISIS_RESOURCES
-from app.shared.crisis_guard import CrisisGuard
 from app.shared.emotion_estimator import EmotionEstimator, get_emotion_estimator
 from app.shared.llm import LLMClient, message_text
-from app.shared.streaming_safety import StreamingSafetyGuard
 from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
 logger = logging.getLogger(__name__)
@@ -103,45 +100,13 @@ class EmpathyAgent:
         )
         return {"empathy_response": reply, **usage}
 
-    async def run_streaming(
-        self,
-        state: MultiAgentState,
-        *,
-        style_fragment: str | None = None,
-    ) -> AsyncGenerator[str, None]:
-        """Streaming variant — yield tokens from ``astream`` with safety filtering.
-
-        Shares :meth:`_build_prompt` with :meth:`run` so the prompt is identical
-        to the non-streaming path. Token-level safety (crisis buffering /
-        sliding-window retract) is delegated to :class:`StreamingSafetyGuard`;
-        non-``str`` retract events are dropped here — higher layers decide how to
-        surface a retraction. ``emotional_vent`` is a buffered intent, so the
-        guard holds the first segment until it passes the rule-based crisis check.
-        """
-        prompt = self._build_prompt(state, style_fragment=style_fragment)
-        guard = StreamingSafetyGuard(CrisisGuard())
-
-        async def _raw_stream() -> AsyncGenerator[str, None]:
-            async for token in self._llm.astream(prompt):
-                yield token
-
-        async for item in guard.filter_stream(_raw_stream(), intent="emotional_vent"):
-            if isinstance(item, str):
-                yield item
-
     def _build_prompt(
         self,
         state: MultiAgentState,
         *,
         style_fragment: str | None = None,
     ) -> str:
-        """Build the full LLM prompt — shared by :meth:`run` and :meth:`run_streaming`.
-
-        Centralising prompt construction here guarantees the streaming and
-        non-streaming paths produce byte-identical prompts (same crisis detection,
-        domain-knowledge lookup, and style-fragment handling), so switching a
-        single-worker route to streaming changes only the transport, not the reply.
-        """
+        """Build the LLM prompt for :meth:`run`."""
         diary_content = state.get("diary_content", "")
         intent = state.get("intent", "pure_record")
         profile = state.get("long_term_profile", {}) or {}

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -183,33 +182,3 @@ def run_multi_agent(
         activated_skills=activated_skills,
         referenced_memory_count=len(episodic_context),
     )
-
-
-async def run_multi_agent_streaming(
-    *,
-    graph: MultiAgentGraph,
-    state: MultiAgentState,
-    workers: dict[str, Any] | None = None,
-) -> AsyncGenerator[str, None]:
-    """Native async streaming of the multi-agent reply — no thread-pool wrapper.
-
-    Unlike :func:`run_multi_agent`, which wraps ``graph.invoke`` in a
-    ``ThreadPoolExecutor`` + ``asyncio.run`` (and therefore blows up with
-    "asyncio.run() cannot be called from a running event loop" when invoked from
-    inside an existing loop), this is a plain ``async`` generator: it can be
-    ``async for``-driven directly from a FastAPI request handler or any other
-    already-running loop.
-
-    The ``graph`` and ``state`` are supplied by the caller — this helper stays
-    single-responsibility and only bridges :meth:`MultiAgentGraph.invoke_streaming`
-    to a token-only stream. ``workers`` is forwarded unchanged so the caller can
-    inject streaming-capable agent instances (exposing ``run_streaming``) that
-    :meth:`SupervisorAgent.synthesize_streaming` needs to stream straight from a
-    worker.
-
-    Yields:
-        Reply tokens (``str``) produced by the graph's synthesis phase, in order.
-    """
-    _, token_stream = await graph.invoke_streaming(state, workers=workers)
-    async for token in token_stream:
-        yield token

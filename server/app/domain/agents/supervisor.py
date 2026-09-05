@@ -25,7 +25,6 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections.abc import AsyncGenerator
 from typing import Any
 
 from app.domain.agents.intent_classifier import IntentClassifier
@@ -277,53 +276,6 @@ class SupervisorAgent:
                 "final_response": final,
                 "agent_mode": "multi_agent",
             }
-
-    async def synthesize_streaming(
-        self,
-        state: MultiAgentState,
-        *,
-        workers: dict[str, Any] | None = None,
-        trace_id: str = "",
-    ) -> AsyncGenerator[str, None]:
-        """Streaming synthesis — single content worker astreams, multi-worker degrades.
-
-        For the ~75% scene-1 single-worker routes (PURE_RECORD /
-        EMOTIONAL_SUPPORT / HABIT_TRACKING) there is exactly one content-producing
-        worker, so its reply can be streamed token-by-token via the worker's
-        :meth:`run_streaming` — no LLM merge is needed. The RETROSPECTIVE_REVIEW
-        route has two content workers (empathy + insight) and cannot be streamed
-        without an LLM synthesis pass, so it degrades to the non-streaming
-        :meth:`synthesize` and emits the merged reply in a single chunk.
-
-        ``workers`` maps worker names ("empathy" / "insight") to agent instances
-        that expose ``run_streaming``. The :class:`MultiAgentGraph` owns the
-        worker agents and passes them in — the supervisor itself stays
-        worker-agnostic, exactly as in V2 (it has no ``_workers`` of its own).
-        When a single-worker route is requested but no streaming-capable worker is
-        supplied, the worker's already-computed output is emitted verbatim so the
-        caller always receives a complete reply.
-        """
-        if trace_id:
-            logger.debug("supervisor.synthesize_streaming trace_id=%s", trace_id)
-
-        outputs = self._collect_outputs(state)
-        content_outputs = {k: v for k, v in outputs.items() if k != "retrieval"}
-
-        if len(content_outputs) == 1:
-            worker_name = next(iter(content_outputs))
-            worker = (workers or {}).get(worker_name)
-            if worker is not None and hasattr(worker, "run_streaming"):
-                async for token in worker.run_streaming(state):
-                    yield token
-                return
-            # Worker lacks streaming support — emit the already-computed output.
-            yield content_outputs[worker_name]
-            return
-
-        # Multiple content workers (e.g. RETROSPECTIVE_REVIEW) — degrade to the
-        # non-streaming LLM synthesis and emit the merged reply in one chunk.
-        result = await self.synthesize(state)
-        yield result.get("final_response", "")
 
     # ----- internals -----
 
