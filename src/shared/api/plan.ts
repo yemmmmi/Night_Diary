@@ -78,20 +78,6 @@ export async function checkinPlan(
   return data
 }
 
-/**
- * 预留：暂无调用方（计时控件用 today 快照）。
- * 计划模板若扩展"打卡历史时间线"，此 API 与后端路由已就绪。
- */
-export async function listCheckins(planId: string, limit?: number): Promise<CheckinRecord[]> {
-  const client = await getHttpClient()
-  const params = limit ? { limit } : {}
-  const { data } = await client.get<CheckinRecord[]>(
-    `/api/v1/plans/${planId}/checkins`,
-    { params },
-  )
-  return data
-}
-
 export async function createPlan(payload: {
   title: string
   motivation?: string

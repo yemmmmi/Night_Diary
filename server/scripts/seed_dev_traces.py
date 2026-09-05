@@ -589,10 +589,10 @@ class DevTraceSeeder:
     # ── 日记 ──
 
     def seed_diary(self, token: str, case: dict[str, Any]) -> CaseResult:
-        """创建日记 → 触发分析，返回结果。
+        """创建日记（digest 异步）+ 卡片展开触发树洞分析。
 
-        POST /api/v1/diary/entries 创建日记（带 trace 头）
-        POST /api/v1/analysis/{diary_id} 触发分析（带 trace 头）
+        POST /api/v1/diary/entries 落库并调度 digest_worker
+        POST /api/v1/cards + /cards/{id}/expand 走现码回信路径（treehole）
         """
         # ── 创建日记 ──
         diary_trace_id = str(uuid4())
@@ -619,35 +619,50 @@ class DevTraceSeeder:
         diary_id = resp.json()["id"]
         self._diary_id_map[case["id"]] = diary_id
 
-        # ── 触发分析 ──
-        analysis_trace_id = str(uuid4())
-        analysis_headers = {
+        # ── 卡片展开 → 树洞分析（现码回信路径）──
+        expand_trace_id = str(uuid4())
+        expand_headers = {
             **self._auth_headers(token),
-            "X-Trace-Id": analysis_trace_id,
+            "X-Trace-Id": expand_trace_id,
             "X-Developer-Mode": "true",
         }
-        preset = case.get("preset")
-        body: dict[str, Any] = {} if preset is None else {"replier_preset": preset}
         try:
-            resp = self._post_with_retry(
-                f"/api/v1/analysis/{diary_id}",
-                json=body,
-                headers=analysis_headers,
+            card_resp = self._post_with_retry(
+                "/api/v1/cards",
+                json={"emotion": "平静", "event_summary": case["content"]},
+                headers=expand_headers,
             )
         except httpx.RequestError as exc:
             return CaseResult(
-                case["id"], case["name"], analysis_trace_id, "error",
-                f"分析请求异常: {exc}",
+                case["id"], case["name"], expand_trace_id, "error",
+                f"卡片请求异常: {exc}",
+            )
+        if card_resp.status_code != 201:
+            return CaseResult(
+                case["id"], case["name"], expand_trace_id, "error",
+                f"卡片创建失败 [{card_resp.status_code}]: {card_resp.text[:200]}",
+            )
+        card_id = card_resp.json()["card_id"]
+        try:
+            resp = self._post_with_retry(
+                f"/api/v1/cards/{card_id}/expand",
+                json={},
+                headers=expand_headers,
+            )
+        except httpx.RequestError as exc:
+            return CaseResult(
+                case["id"], case["name"], expand_trace_id, "error",
+                f"展开请求异常: {exc}",
             )
 
-        if resp.status_code == 201:
+        if resp.status_code == 200:
             return CaseResult(
-                case["id"], case["name"], analysis_trace_id, "ok",
-                f"diary_id={diary_id}",
+                case["id"], case["name"], expand_trace_id, "ok",
+                f"diary_id={diary_id} card_id={card_id}",
             )
         return CaseResult(
-            case["id"], case["name"], analysis_trace_id, "error",
-            f"分析失败 [{resp.status_code}]: {resp.text[:200]}",
+            case["id"], case["name"], expand_trace_id, "error",
+            f"卡片展开失败 [{resp.status_code}]: {resp.text[:200]}",
         )
 
     # ── 单轮对话 ──
