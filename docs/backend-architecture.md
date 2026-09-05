@@ -28,7 +28,7 @@
 ```
 api          → HTTP 路由层（请求/响应 Schema、依赖注入、错误处理）
 services     → 服务编排层（业务流程编排、AI 场景入口、依赖容器）
-domain       → 领域核心层（多智能体、记忆系统、RAG、技能、反馈学习）
+domain       → 领域核心层（多智能体、记忆系统、RAG、技能）
 infrastructure → 基础设施层（数据库、ORM 模型、外部服务适配器）
 shared       → 共享基础设施（LLM 协议、错误体系、追踪接口、工具函数）
 workers      → 后台任务层（RQ Worker 入口）
@@ -36,12 +36,14 @@ workers      → 后台任务层（RQ Worker 入口）
 
 ### 1.3 两大 AI 场景
 
-| 场景 | 入口 | 编排器 | 执行引擎 |
-|------|------|--------|----------|
-| 场景一：日记分析 | `analysis_service.py` | `DiaryOrchestrator` | `ExecutionPlanner` + `MultiAgentGraph` |
-| 场景二：多轮对话 | `conversation_ai_service.py` | `ConversationOrchestrator` | `ConversationLoop` + `ConversationGraph` |
+| 路径 | 入口 | 编排 |
+|------|------|------|
+| 手写日记保存 | `diary_service.create_entry` | `digest_worker`（日摘要，不写 reply） |
+| 卡片展开回信 | `card_service.expand_to_diary` → `trigger_analysis` | **treehole**（短回信 + digest） |
+| 场景二对话 | `conversation_ai_service.generate_reply` | 用户技能 / PlannerAgent / LangGraph（失败回退 legacy loop） |
+| 周报 | `weekly_service` | `ExecutionPlanner` → MultiAgentGraph |
 
-两个场景共享：危机检测、记忆网关、实体提取、上下文压缩等子组件，通过统一的 `OrchestratorProtocol` 接口暴露。
+共享：危机检测、记忆网关、实体提取、上下文压缩。默认中间件 `safety / mode / finalize`。
 
 ---
 
@@ -60,30 +62,30 @@ server/app/
 │   ├── schemas.py               # 请求/响应模型
 │   └── v1/                      # v1 版本端点
 │       ├── router.py            # 路由聚合
-│       ├── analysis.py          # 日记分析
 │       ├── auth.py              # 认证
-│       ├── card.py              # 记忆卡片
+│       ├── card.py              # 记忆卡片（含 expand → treehole）
 │       ├── conversation.py      # 对话
 │       ├── dev.py               # 开发者模式
 │       ├── diary.py             # 日记 CRUD
 │       ├── error_handlers.py    # 全局错误处理
 │       ├── export.py            # 数据导出
-│       ├── feedback.py          # 反馈
+│       ├── feedback.py          # 显式点赞/点踩
 │       ├── memory.py            # 记忆管理
+│       ├── mode.py              # 用户模式档位
 │       ├── model_download.py    # 模型下载
 │       ├── models.py            # 模型配置
+│       ├── plan.py              # 计划 / 任务
+│       ├── skills.py            # 用户技能清单
 │       ├── stats.py             # 统计
 │       ├── tags.py              # 标签
 │       └── weekly.py            # 周记
 │
 ├── domain/                      # 领域核心层
-│   ├── orchestrator.py          # 编排器协议（统一两大场景接口）
-│   ├── agents/                  # 多智能体系统（15 个文件）
-│   ├── feedback/                # 反馈学习（5 个文件）
-│   ├── knowledge/               # 领域知识（3 个文件）
-│   ├── memory/                  # 记忆系统（7 个文件）
-│   ├── rag/                     # 检索增强生成（9 个文件）
-│   └── skills/                  # 技能系统（10 个文件）
+│   ├── agents/                  # 周报 MultiAgentGraph + 意图分类 + PlannerAgent
+│   ├── knowledge/               # 领域知识
+│   ├── memory/                  # 三层记忆
+│   ├── rag/                     # 混合检索
+│   └── skills/                  # diary/chat registry + 用户技能
 │
 ├── infrastructure/              # 基础设施层
 │   ├── database.py              # SQLAlchemy 引擎/会话
@@ -139,7 +141,6 @@ server/app/
 - **memory（记忆系统）**：三层记忆架构——工作记忆（当前会话）、情景记忆（近期事件，deque + SQLite）、长期记忆（用户画像，基于标签的晋升机制）
 - **rag（检索增强生成）**：混合检索器集成 BM25 关键词检索 + ChromaDB 向量检索 + 重排序；支持日记集合和卡片集合
 - **skills（技能系统）**：可插拔的技能架构，含危机检测、情感分析、实体追踪、记忆回忆等技能；通过注册表统一管理和激活
-- **feedback（反馈学习）**：基于汤普森采样的多臂赌博机实现提示词风格调优；支持隐式风格偏好提取
 - **knowledge（领域知识）**：领域知识存储，为智能体提供常识背景
 
 ### 3.3 infrastructure 层
@@ -193,10 +194,12 @@ server/app/
 | `api/mappers.py` | ORM 行到响应 Schema 的映射转换 |
 | `api/schemas.py` | Pydantic 请求/响应模型定义 |
 | `api/v1/router.py` | v1 路由聚合器 |
-| `api/v1/analysis.py` | 日记分析触发接口 |
 | `api/v1/auth.py` | 认证接口（注册/登录/登出） |
-| `api/v1/card.py` | 记忆卡片接口 |
+| `api/v1/card.py` | 记忆卡片接口（`POST /{id}/expand` 触发 treehole 回信） |
 | `api/v1/conversation.py` | 对话接口 |
+| `api/v1/mode.py` | 用户模式档位 |
+| `api/v1/plan.py` | 计划 / 任务 |
+| `api/v1/skills.py` | 用户技能清单 |
 | `api/v1/dev.py` | 开发者模式接口 |
 | `api/v1/diary.py` | 日记 CRUD 接口 |
 | `api/v1/error_handlers.py` | 全局错误处理注册 |
@@ -222,7 +225,8 @@ server/app/
 | `agents/graph.py` | 多智能体图（asyncio 并发编排） |
 | `agents/context_compressor.py` | 上下文压缩器 |
 | `agents/intent_classifier.py` | 日记意图分类器（4 类日记意图） |
-| `agents/chat_intent_classifier.py` | 对话意图分类器（6 类对话意图） |
+| `agents/chat_intent_classifier.py` | 对话意图分类器（8 类，含 plan_exploration / task_command） |
+| `agents/planner_agent.py` | 计划提案（只读，确认后 REST 落库） |
 | `agents/slot_extractor.py` | 槽位提取器 |
 | `agents/entity_extractor.py` | 实体提取器 |
 | `agents/query_understander.py` | 查询理解器 |
@@ -267,15 +271,6 @@ server/app/
 | `skills/injection.py` | 技能注入 |
 | `skills/skill_loader.py` | 技能加载器 |
 | `skills/types.py` | 技能类型定义 |
-
-**feedback 子模块**
-
-| 文件 | 职责 |
-|------|------|
-| `feedback/prompt_tuner.py` | 提示词调优器 |
-| `feedback/thompson_sampling.py` | 汤普森采样（多臂赌博机） |
-| `feedback/implicit_style.py` | 隐式风格偏好提取 |
-| `feedback/types.py` | 反馈类型定义 |
 
 **knowledge 子模块**
 
@@ -439,15 +434,14 @@ ServiceContainer
 │   ├── LongTermMemory（长期记忆）
 │   └── WorkingMemory（工作记忆）
 │
-├── build_multi_agent_graph()  ← 多智能体图（场景一）
+├── build_multi_agent_graph()  ← 多智能体图（周报）
 │   ├── SupervisorAgent（中枢：IntentClassifier + SkillRegistry + LLM）
 │   ├── EmpathyAgent（共情 Worker，medium 层级 LLM）
 │   ├── RetrievalAgent（检索 Worker）
 │   ├── InsightAgent（洞察 Worker，heavy 层级 LLM）
-│   ├── ContextCompressor（上下文压缩器）
-│   └── PromptTuner（提示词调优器 + ThompsonSampling）
+│   └── ContextCompressor（上下文压缩器）
 │
-├── build_execution_planner()  ← 执行规划器（场景一核心）
+├── build_execution_planner()  ← 执行规划器（周报 / treehole 取 light LLM）
 │   └── ExecutionPlanner（llm_by_tier + multi_agent_graph + retriever + 3层memory）
 │
 ├── get_chat_intent_classifier()  ← 对话意图分类器（场景二）
@@ -457,25 +451,33 @@ ServiceContainer
 
 ### 5.3 两大 AI 场景调用链
 
-**场景一：日记分析**
+**手写日记保存（无即时回信）**
 
 ```
-POST /api/v1/diaries/{id}/analyze
+POST /api/v1/diary/entries
   ↓
-api/v1/analysis.py → deps.get_container()
+diary_service.create_entry()
+  └── digest_worker.schedule_day_digest_refresh()  （异步日摘要）
+```
+
+**卡片展开回信（treehole）**
+
+```
+POST /api/v1/cards/{id}/expand
   ↓
-analysis_service.trigger_analysis()
-  ├── diary_service 查找日记
-  ├── ExecutionPlanner.execute()
-  │   ├── 输入预处理（清洗/NFC/安全/省略补齐）
-  │   ├── MultiAgentGraph.run()
-  │   │   ├── Supervisor：意图分类 → 技能选择 → 路由决策
-  │   │   ├── Empathy/Retrieval/Insight 并发执行
-  │   │   ├── ContextCompressor 压缩上下文
-  │   │   └── PromptTuner 风格调优
-  │   ├── 记忆网关：写入情景记忆 → 晋升长期画像
-  │   └── 管道追踪：记录执行轨迹
-  └── 持久化分析结果
+card_service.expand_to_diary() → analysis_service.trigger_analysis()
+  └── _run_treehole_analysis()
+      ├── 危机短路 → 安全模板
+      ├── run_treehole()（1–3 句 + DiaryDigest）
+      └── 持久化 AnalysisRow + daily_digests + 记忆原子
+```
+
+**周报（MultiAgentGraph）**
+
+```
+weekly_service → ExecutionPlanner.execute() → MultiAgentGraph
+  ├── Supervisor：意图分类 → 技能选择 → 路由
+  └── Empathy / Retrieval / Insight（检索先行，共情洞察并发）
 ```
 
 **场景二：多轮对话**
