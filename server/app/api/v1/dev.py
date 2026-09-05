@@ -19,7 +19,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func
 
 from app.api.deps import ContainerDep, DbDep
+from app.infrastructure.mcp_call_tracer import list_calls as list_mcp_calls
 from app.infrastructure.models.pipeline_trace import PipelineTraceRow
+from app.services.ai.tool_factory import build_tool_specs
 from app.shared.pipeline_trace import get_trace
 from app.shared.trace_event_bus import get_event_bus
 
@@ -454,3 +456,45 @@ def trigger_quality_scan(
 
     scenarios = [scenario] if scenario else None
     return run_quality_scan(db, container, scenarios=scenarios, limit=limit)
+
+
+@router.get("/mcp/status")
+def get_mcp_status(container: ContainerDep) -> dict[str, Any]:
+    """MCP endpoint health: alias, transport, state, tool count, restarts."""
+    registry = container.ensure_tool_registry()
+    items = registry.status() if registry is not None else []
+    return {"items": items}
+
+
+@router.get("/mcp/tools")
+def get_mcp_tools(container: ContainerDep) -> dict[str, Any]:
+    """All agent tools: 8 local + MCP (source = 'local' | endpoint alias)."""
+    registry = container.ensure_tool_registry()
+    items = [
+        {"name": s.name, "description": s.description, "source": "local", "transport": "local"}
+        for s in build_tool_specs()
+    ]
+    if registry is not None:
+        items.extend(registry.tools_listing())
+    return {"items": items}
+
+
+@router.get("/mcp/calls")
+def list_mcp_call_logs(
+    db: DbDep,
+    endpoint: str | None = Query(None, description="Filter by endpoint alias"),
+    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
+    user: str | None = Query(None, description="Filter by user_id"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> dict[str, Any]:
+    """MCP tool call log with filters and pagination."""
+    items, total = list_mcp_calls(
+        db,
+        endpoint=endpoint,
+        status=status_filter,
+        user_id=user,
+        page=page,
+        page_size=page_size,
+    )
+    return {"items": items, "total": total}

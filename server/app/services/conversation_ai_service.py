@@ -7,7 +7,7 @@ import contextlib
 import json
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
 
@@ -23,7 +23,7 @@ from app.services.ai.conversation_loop import run_conversation_loop
 from app.services.ai.input_preprocessor import InputPreprocessor
 from app.services.ai.prompts import FALLBACK_FEEDBACK
 from app.services.ai.session_context import get_or_create_session
-from app.services.ai.tool_factory import ToolFn, build_tool_map
+from app.services.ai.tool_factory import ToolFn, build_tool_map, is_mcp_tool
 from app.services.memory_gateway import MemoryGateway
 from app.shared.crisis_guard import CrisisGuard, get_crisis_guard
 from app.shared.emotion_estimator import get_emotion_estimator
@@ -329,6 +329,17 @@ def _build_tools(
 ) -> dict[str, ToolFn] | None:
     """Build the tool map for the Agentic Loop, or None if unavailable."""
     try:
+        # __dict__.get avoids auto-creating attributes on MagicMock containers
+        # (same pattern as conversation_loop's graph lookup).
+        registry = (
+            container.__dict__.get("tool_registry")
+            if hasattr(container, "__dict__")
+            else None
+        )
+        if registry is not None:
+            return cast(
+                "dict[str, ToolFn] | None", registry.build_tool_map(user_id=user_id)
+            )
         llm = container._llm_for_tier("light", agent_name="tool")
         if llm is None or container.retriever is None:
             return None
@@ -338,6 +349,24 @@ def _build_tools(
     except Exception as exc:
         logger.warning("Tool map build failed: %s", exc)
         return None
+
+
+def _filter_tools(
+    all_tools: dict[str, ToolFn] | None,
+    need_tools: list[str],
+) -> dict[str, ToolFn] | None:
+    """Intent-gated local tools + always-available MCP tools."""
+    if not all_tools:
+        return None
+    if need_tools:
+        selected = {
+            name: fn
+            for name, fn in all_tools.items()
+            if name in need_tools or is_mcp_tool(name)
+        }
+    else:
+        selected = {name: fn for name, fn in all_tools.items() if is_mcp_tool(name)}
+    return selected or None
 
 
 @dataclass
@@ -648,11 +677,7 @@ def _prepare_reply_context(
         all_tools = _build_tools(container, user_id=user_id)
         if span:
             span.metadata["tool_count"] = len(all_tools) if all_tools else 0
-    tools: dict[str, ToolFn] | None = None
-    if all_tools and intent_result.need_tools:
-        tools = {name: fn for name, fn in all_tools.items() if name in intent_result.need_tools}
-        if not tools:
-            tools = None
+    tools: dict[str, ToolFn] | None = _filter_tools(all_tools, intent_result.need_tools)
 
     # Release the DB connection before the long-running streaming loop.
     # The session re-acquires a connection when downstream code next
@@ -964,11 +989,7 @@ def generate_reply(
             all_tools = _build_tools(container, user_id=user_id)
             if span:
                 span.metadata["tool_count"] = len(all_tools) if all_tools else 0
-        tools: dict[str, ToolFn] | None = None
-        if all_tools and intent_result.need_tools:
-            tools = {name: fn for name, fn in all_tools.items() if name in intent_result.need_tools}
-            if not tools:
-                tools = None
+        tools: dict[str, ToolFn] | None = _filter_tools(all_tools, intent_result.need_tools)
 
         # Release the DB connection before the long-running Agentic Loop
         # (LLM network calls). The session re-acquires a connection when
