@@ -74,23 +74,6 @@ def normalize_style_key(style: str | None) -> str:
     return STYLE_KEY_ALIASES.get(key, "warm")
 
 
-def build_style_fragment(
-    replier_preset: str | None,
-    replier_persona: str | None,
-) -> str | None:
-    """把前端传来的 preset/persona 转成注入 prompt 的 style_fragment 文本。
-
-    优先级: 自定义人设 (``replier_persona``) > 预设风格 (``replier_preset``) > None。
-    返回 ``None`` 表示不覆盖, 由 agent 回落到 profile 中的偏好风格。
-    """
-    if replier_persona and replier_persona.strip():
-        return f"## 回信者人设（用户指定，优先级最高）\n{replier_persona.strip()}"
-    if replier_preset and replier_preset.strip():
-        style_text = EMPATHY_STYLE_INSTRUCTIONS[normalize_style_key(replier_preset)]
-        return f"## 回信风格（用户指定，优先级最高）\n{style_text}"
-    return None
-
-
 EMPATHY_CRISIS_BLOCK = (
     "\n## ⚠️ 危机响应模式\n"
     "检测到用户可能正在经历极度痛苦。请：\n"
@@ -251,6 +234,5 @@ __all__ = [
     "SUPERVISOR_FALLBACK_RESPONSE",
     "SUPERVISOR_SYNTHESIZE_PROMPT",
     "SUPERVISOR_WORKER_LABELS",
-    "build_style_fragment",
     "normalize_style_key",
 ]

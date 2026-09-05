@@ -217,17 +217,17 @@ async def abort_message(
     return {"cancelled": cancelled}
 
 
-@router.post("/{conversation_id}/night-talk", response_model=dict[str, Any])
-def generate_night_talk(
+@router.post("/{conversation_id}/generate-card", response_model=dict[str, Any])
+def generate_card_from_conversation(
     conversation_id: str, db: DbDep, user: CurrentUserDep, container: ContainerDep
 ) -> dict[str, Any]:
-    """Generate a night talk (关系记忆) from conversation history."""
+    """Extract a memory-card draft from conversation history."""
     conv = conversation_service.get_conversation(
         db, user_id=str(user.id), conversation_id=conversation_id
     )
     if conv is None:
         raise ConversationNotFoundError(conversation_id=conversation_id)
-    return conversation_ai_service.generate_night_talk(
+    return conversation_ai_service.generate_card_from_conversation(
         db,
         container,
         user_id=str(user.id),

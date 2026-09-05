@@ -1417,14 +1417,14 @@ NIGHT_TALK_FALLBACK = {"event_summary": "一段温暖的夜话", "tags": ["夜�
 CARD_GEN_FALLBACK = {"event_summary": "对话摘要", "tags": ["对话"]}
 
 
-def generate_night_talk(
+def generate_card_from_conversation(
     db: Session,
     container: ServiceContainer,
     *,
     user_id: str,
     conversation_id: str,
 ) -> dict[str, Any]:
-    """Generate a night talk (关系记忆) from conversation history.
+    """Extract a memory-card draft from conversation history.
 
     Two-stage process:
     1. Draft: light LLM extracts resonance-worthy fragments from the conversation.
@@ -1470,7 +1470,7 @@ def generate_night_talk(
 
     # ── Stage 1: Draft — LLM extracts resonance-worthy fragments ──
     container.ensure_ai_stack(user_id=user_id)
-    llm: LLMClient | None = container._llm_for_tier("light", agent_name="night-talk")
+    llm: LLMClient | None = container._llm_for_tier("light", agent_name="generate-card")
     if llm is None:
         logger.warning("Night-talk LLM unavailable; returning emotion-only result")
         return {
@@ -1538,18 +1538,6 @@ def generate_night_talk(
         "tags": tags,
         "persisted": persisted,
     }
-
-
-# Backward-compatible alias
-def generate_card_from_conversation(
-    db: Session,
-    container: ServiceContainer,
-    *,
-    user_id: str,
-    conversation_id: str,
-) -> dict[str, Any]:
-    """Deprecated alias for :func:`generate_night_talk`."""
-    return generate_night_talk(db, container, user_id=user_id, conversation_id=conversation_id)
 
 
 def _parse_card_json(text: str) -> dict[str, Any]:
