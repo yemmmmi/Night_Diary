@@ -37,12 +37,10 @@ def main():
     session_factory = create_session_factory(engine)
     llm_factory = LLMFactory(settings)
     
-    from app.infrastructure.feedback_repository import SqliteStylePreferenceStore
     from app.shared.tracing import NoOpAgentDecisionLogger, NoOpLLMCallTracer
 
     tracer = NoOpLLMCallTracer()
     decision_logger = NoOpAgentDecisionLogger()
-    style_store = SqliteStylePreferenceStore(session_factory)
 
     from app.services.container import ServiceContainer
     container = ServiceContainer(
@@ -52,7 +50,6 @@ def main():
         llm_factory=llm_factory,
         llm_tracer=tracer,
         decision_logger=decision_logger,
-        style_preference_store=style_store,
     )
 
     logger.info("=== 触发 ensure_ai_stack ===")

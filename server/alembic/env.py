@@ -26,7 +26,6 @@ from app.infrastructure.models import app_config as _app_config_models  # noqa: 
 from app.infrastructure.models import conversation as _conversation_models  # noqa: F401
 from app.infrastructure.models import daily_digest as _daily_digest_models  # noqa: F401
 from app.infrastructure.models import diary_entry as _diary_entry_models  # noqa: F401
-from app.infrastructure.models import feedback as _feedback_models  # noqa: F401
 from app.infrastructure.models import feedback_record as _feedback_record_models  # noqa: F401
 from app.infrastructure.models import job as _job_models  # noqa: F401
 from app.infrastructure.models import llm_call_log as _llm_call_log_models  # noqa: F401
