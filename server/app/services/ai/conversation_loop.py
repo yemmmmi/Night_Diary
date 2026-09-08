@@ -646,8 +646,11 @@ async def run_conversation_loop_streaming(
 
     Yields:
         ``str`` — safe text tokens to forward to the frontend.
-        ``{"retract": True, "replacement": str}`` — crisis detected mid-stream;
-            caller must stop after emitting the RETRACT event.
+        ``{"retract": True, "replacement": str, ...}`` — crisis detected
+            mid-stream; caller must stop after emitting the RETRACT event.
+        ``{"complete": True, ...}`` — terminal metadata for persistence
+            (reply text, token usage, tool calls, and stop reason). This is not
+            forwarded to SSE clients.
 
     This function does **not** handle crisis short-circuit (Stage 2) — the
     caller (:func:`generate_reply`) is responsible for routing crisis intents
@@ -747,6 +750,13 @@ async def run_conversation_loop_streaming(
         session.add_turn(content, FALLBACK_FEEDBACK)
         await publish_reply_end(trace_id, citations=[], usage={})
         yield FALLBACK_FEEDBACK
+        yield {
+            "complete": True,
+            "reply_text": FALLBACK_FEEDBACK,
+            "token_info": {},
+            "tool_calls_made": [],
+            "stop_reason": "no_llm",
+        }
         return
 
     # ── P2: plan_exploration 意图分支 → PlannerAgent (streaming) ──
@@ -853,6 +863,13 @@ async def run_conversation_loop_streaming(
                 trace_id, citations=citation_dicts, usage=total_usage
             )
             yield FALLBACK_FEEDBACK
+            yield {
+                "complete": True,
+                "reply_text": FALLBACK_FEEDBACK,
+                "token_info": total_usage,
+                "tool_calls_made": tool_calls_made,
+                "stop_reason": "llm_error",
+            }
             return
 
         turn_usage = extract_token_usage(response)
@@ -913,6 +930,13 @@ async def run_conversation_loop_streaming(
         session.add_turn(content, safe_text)
         await publish_reply_end(trace_id, citations=citation_dicts, usage=total_usage)
         yield safe_text
+        yield {
+            "complete": True,
+            "reply_text": safe_text,
+            "token_info": total_usage,
+            "tool_calls_made": tool_calls_made,
+            "stop_reason": "safety_fallback",
+        }
         return
 
     # Publish REPLY_START
@@ -940,7 +964,12 @@ async def run_conversation_loop_streaming(
             session.accumulate_usage(total_usage)
             session.add_turn(content, replacement)
             await publish_reply_end(trace_id, citations=citation_dicts, usage=total_usage)
-            yield item
+            yield {
+                **item,
+                "token_info": total_usage,
+                "tool_calls_made": tool_calls_made,
+                "stop_reason": "retracted",
+            }
             return
         # Safe token — forward to caller and publish TEXT_DELTA
         token = item
@@ -970,6 +999,13 @@ async def run_conversation_loop_streaming(
 
     # Publish REPLY_END
     await publish_reply_end(trace_id, citations=citation_dicts, usage=total_usage)
+    yield {
+        "complete": True,
+        "reply_text": aggregated_text,
+        "token_info": total_usage,
+        "tool_calls_made": tool_calls_made,
+        "stop_reason": "completed",
+    }
 
 
 __all__ = [

@@ -159,7 +159,7 @@ def _run_lightweight_migrations(engine: Engine) -> None:
             "target_period": "VARCHAR(16)",
             "template": "VARCHAR(20)",
         },
-        "tasks": {"actual_value": "REAL", "link": "VARCHAR(500)"},
+        "tasks": {"actual_value": "REAL", "link": "VARCHAR(500)", "source_links_json": "TEXT"},
     }
 
     inspector = inspect(engine)

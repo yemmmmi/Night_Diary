@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -48,6 +50,77 @@ def test_generate_reply_uses_pinned_and_retrieved(db_session, monkeypatch) -> No
     # Reply now includes citation section (P2 Task 8: result integration enhancement)
     assert "这是测试回复。" in result.reply_text
     assert result.retrieved_diary_ids == [entry.id]
+
+
+def test_generate_reply_process_info_marks_tool_sources(db_session, monkeypatch) -> None:
+    """process_info 组装：意图/工具来源（mcp__/本地）正确标注。"""
+    from app.services.ai.conversation_loop import LoopResult
+
+    conv = conversation_service.create_conversation(db_session, user_id="default")
+
+    container = MagicMock()
+    container.ensure_ai_stack = MagicMock()
+    container.retriever = None
+    container.episodic_memory = None
+    container._llm_for_tier = MagicMock(return_value=_StubLLM())
+
+    loop_result = LoopResult(
+        reply_text="查到了。",
+        token_info={"total_tokens_used": 123},
+        stop_reason="tool_called",
+        tool_calls_made=["get_diary_by_date", "mcp__fetch__fetch"],
+    )
+
+    with (
+        patch.object(conversation_ai_service, "_retrieve_related_diary_ids", return_value=[]),
+        patch.object(conversation_ai_service, "run_conversation_loop", return_value=loop_result),
+        patch.object(conversation_ai_service, "_maybe_persist_episodic"),
+    ):
+        result = conversation_ai_service.generate_reply(
+            db_session,
+            container,
+            user_id="default",
+            conversation_id=conv.id,
+            content="帮我查一下上周三的日记，顺便搜下相关资料",
+            diary_ids=[],
+            auto_retrieve=False,
+            use_graph=False,
+        )
+
+    info = result.process_info
+    assert info is not None
+    assert info["intent"]  # intent classified (rule fallback at minimum)
+    assert info["stop_reason"] == "tool_called"
+    assert info["tokens"] == 123
+    assert info["duration_ms"] >= 0
+    sources = {t["name"]: t["source"] for t in info["tool_calls"]}
+    assert sources["get_diary_by_date"] == "local"
+    assert sources["mcp__fetch__fetch"] == "mcp"
+
+
+def test_process_info_persisted_and_returned(db_session) -> None:
+    """process_info 随 assistant 消息落库，重新查询仍可读回。"""
+    conv = conversation_service.create_conversation(db_session, user_id="default")
+    process = {"intent": "user_skill_plan", "skill": "plan", "tool_calls": [], "duration_ms": 800}
+
+    _, reply = conversation_service.add_user_message_and_reply(
+        db_session,
+        user_id="default",
+        conversation_id=conv.id,
+        content="做个计划",
+        reply_content="已创建计划。",
+        process_info=process,
+    )
+
+    rows = conversation_service.list_messages(
+        db_session, user_id="default", conversation_id=conv.id
+    )
+    assert [r.role for r in rows] == ["user", "assistant"]
+    assert rows[-1].process_info is not None
+    import json as _json
+
+    assert _json.loads(rows[-1].process_info)["skill"] == "plan"
+    assert reply.id == rows[-1].id
 
 
 def test_normalize_diary_ids_rejects_overflow() -> None:
@@ -396,6 +469,97 @@ async def test_generate_reply_streaming_non_crisis_delegates_to_astream(
     assert reply_end_event["usage"]["total_tokens_used"] == 42
 
     await bus.unsubscribe(trace_id, queue)
+
+
+async def test_generate_reply_streaming_persists_process_info(db_session) -> None:
+    conv = conversation_service.create_conversation(db_session, user_id="default")
+    ctx = MagicMock(
+        is_crisis=False,
+        skill_outcome=None,
+        pinned_diaries_text="",
+        retrieved_diaries_text="",
+        retrieved_diary_ids=[7],
+        episodic_text="",
+        memory_ids=["memory-1"],
+        tools=None,
+        crisis_guard=None,
+        intent_result=SimpleNamespace(intent_category="casual_chat", tier="light"),
+    )
+
+    async def mock_stream(**kwargs):
+        yield "流式回答"
+        yield {
+            "complete": True,
+            "reply_text": "流式回答",
+            "token_info": {"total_tokens_used": 42},
+            "tool_calls_made": ["mcp__fetch__fetch"],
+            "stop_reason": "completed",
+        }
+
+    pipeline = MagicMock()
+    with patch.object(
+        conversation_ai_service, "_prepare_reply_context", return_value=ctx
+    ), patch(
+        "app.services.ai.conversation_loop.run_conversation_loop_streaming",
+        side_effect=mock_stream,
+    ):
+        await conversation_ai_service.generate_reply_streaming(
+            db_session,
+            MagicMock(),
+            conversation_id=conv.id,
+            content="你好",
+            diary_ids=[],
+            user_id="default",
+            trace_id="persist-stream",
+            middleware_pipeline=pipeline,
+        )
+
+    rows = conversation_service.list_messages(
+        db_session, user_id="default", conversation_id=conv.id
+    )
+    assert [row.role for row in rows] == ["user", "assistant"]
+    assert rows[-1].content == "流式回答"
+    info = json.loads(rows[-1].process_info or "{}")
+    assert info["intent"] == "casual_chat"
+    assert info["tokens"] == 42
+    assert info["retrieved_diaries"] == 1
+    assert info["retrieved_memories"] == 1
+    assert info["tool_calls"] == [
+        {"name": "mcp__fetch__fetch", "source": "mcp"}
+    ]
+
+
+async def test_generate_reply_streaming_crisis_persists_process_info(
+    db_session,
+) -> None:
+    conv = conversation_service.create_conversation(db_session, user_id="default")
+    ctx = MagicMock(
+        is_crisis=True,
+        safe_response="请立即联系可信赖的人。",
+        retrieved_diary_ids=[],
+        memory_ids=[],
+    )
+    pipeline = MagicMock()
+
+    with patch.object(
+        conversation_ai_service, "_prepare_reply_context", return_value=ctx
+    ):
+        await conversation_ai_service.generate_reply_streaming(
+            db_session,
+            MagicMock(),
+            conversation_id=conv.id,
+            content="我不想活了",
+            diary_ids=[],
+            user_id="default",
+            trace_id="persist-crisis",
+            middleware_pipeline=pipeline,
+        )
+
+    rows = conversation_service.list_messages(
+        db_session, user_id="default", conversation_id=conv.id
+    )
+    assert rows[-1].content == "请立即联系可信赖的人。"
+    assert json.loads(rows[-1].process_info or "{}")["intent"] == "crisis_signal"
 
 
 async def test_generate_reply_streaming_no_trace_id_publishes_nothing(
