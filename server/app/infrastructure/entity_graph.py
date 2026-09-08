@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,11 @@ logger = logging.getLogger(__name__)
 _NEO4J_URL = os.getenv("NEO4J_URL", "")
 _neo4j_driver = None
 _neo4j_available = False
+
+# Init runs once at import (before Docker's embedded DNS is always ready to
+# resolve sibling containers), so retry a few times before falling back.
+_INIT_ATTEMPTS = 5
+_INIT_RETRY_DELAY_S = 3.0
 
 
 def _init_neo4j() -> None:
@@ -36,21 +42,35 @@ def _init_neo4j() -> None:
         from neo4j import GraphDatabase
 
         from app.config import get_settings
-
-        settings = get_settings()
-        _neo4j_driver = GraphDatabase.driver(
-            _NEO4J_URL,
-            auth=(settings.neo4j_user, settings.neo4j_password),
-        )
-        _neo4j_driver.verify_connectivity()
-        _neo4j_available = True
-        logger.info(
-            "Neo4j connected: %s", _NEO4J_URL.split("@")[-1] if "@" in _NEO4J_URL else "(local)"
-        )
     except ImportError:
         logger.debug("neo4j package not installed; using SQLite fallback for entity graph")
-    except Exception as exc:
-        logger.warning("Neo4j connection failed (%s); using SQLite fallback", exc)
+        return
+
+    settings = get_settings()
+    for attempt in range(1, _INIT_ATTEMPTS + 1):
+        try:
+            _neo4j_driver = GraphDatabase.driver(
+                _NEO4J_URL,
+                auth=(settings.neo4j_user, settings.neo4j_password),
+            )
+            _neo4j_driver.verify_connectivity()
+            _neo4j_available = True
+            logger.info(
+                "Neo4j connected: %s", _NEO4J_URL.split("@")[-1] if "@" in _NEO4J_URL else "(local)"
+            )
+            return
+        except Exception as exc:
+            if attempt < _INIT_ATTEMPTS:
+                logger.warning(
+                    "Neo4j connection attempt %d/%d failed (%s); retrying in %.0fs",
+                    attempt,
+                    _INIT_ATTEMPTS,
+                    exc,
+                    _INIT_RETRY_DELAY_S,
+                )
+                time.sleep(_INIT_RETRY_DELAY_S)
+            else:
+                logger.warning("Neo4j connection failed (%s); using SQLite fallback", exc)
 
 
 def is_neo4j_available() -> bool:

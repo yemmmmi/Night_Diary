@@ -31,8 +31,12 @@ dependencies = [
 
     # Entity graph (Neo4j; optional, falls back to SQLite)
     "neo4j>=5.0.0",
-    "mcp>=1.0",
+    "mcp>=2.0,<3.0",
     "langgraph>=0.2,<1.0",
+
+    # Official fetch MCP server (stdio) — enabled via MCP_STDIOS in .env.
+    # 2026.x requires the mcp 2.x SDK (McpError→MCPError rename breaks ≤2025.4).
+    "mcp-server-fetch>=2026.6,<2027",
 ]
 
 [project.optional-dependencies]

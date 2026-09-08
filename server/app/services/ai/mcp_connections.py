@@ -213,6 +213,48 @@ class SseMcpConnection(McpConnection):
         return session
 
 
+class StreamableHttpMcpConnection(McpConnection):
+    """Streamable HTTP transport — session-per-client, reconnect-safe.
+
+    Unlike the SSE bridge (one client per server process), streamable HTTP
+    creates an independent session per connection, so backend restarts or
+    concurrent clients no longer kill the gateway.
+    """
+
+    transport = "streamable_http"
+
+    def __init__(self, alias: str, url: str, loop: McpLoop, **kwargs: Any) -> None:
+        super().__init__(alias, loop, **kwargs)
+        self.url = url
+
+    async def _connect(self) -> Any:
+        # mcp 2.x yields (read, write); 1.x added a third get_session_id value.
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamable_http_client
+
+        cm = streamable_http_client(self.url)
+        streams = await cm.__aenter__()
+        read, write = streams[0], streams[1]
+        self._cm = cm
+        session = ClientSession(read, write)
+        await session.__aenter__()
+        try:
+            await session.initialize()
+        except BaseException:
+            with contextlib.suppress(Exception):
+                await session.__aexit__(None, None, None)
+            raise
+        return session
+
+
+def http_connection(alias: str, url: str, loop: McpLoop) -> McpConnection:
+    """Pick the HTTP transport from the URL path: ``/mcp`` → streamable
+    HTTP, anything else (e.g. ``/sse``) → SSE for backward compatibility."""
+    if url.rstrip("/").endswith("/mcp"):
+        return StreamableHttpMcpConnection(alias, url, loop)
+    return SseMcpConnection(alias, url, loop)
+
+
 class StdioMcpConnection(McpConnection):
     """stdio transport — the ``mcp`` SDK spawns and owns the child process."""
 
