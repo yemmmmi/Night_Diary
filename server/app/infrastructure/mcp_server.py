@@ -103,7 +103,9 @@ class MCPServer:
                 Tool(
                     name=spec.name,
                     description=spec.description,
-                    inputSchema=spec.parameters,
+                    # MCP 2.x exposes the JSON alias at runtime; its generated
+                    # Pydantic type signature still advertises input_schema.
+                    inputSchema=spec.parameters,  # type: ignore[call-arg]
                 )
                 for spec in self._specs
             ]
@@ -115,8 +117,8 @@ class MCPServer:
             return [TextContent(type="text", text=result)]
 
         server = Server("night-diary")
-        server.list_tools()(list_tools)  # type: ignore[no-untyped-call]
-        server.call_tool()(call_tool)
+        server.list_tools()(list_tools)  # type: ignore[attr-defined, no-untyped-call]
+        server.call_tool()(call_tool)  # type: ignore[attr-defined, no-untyped-call]
 
         import asyncio
 
@@ -147,7 +149,8 @@ class MCPServer:
                 Tool(
                     name=spec.name,
                     description=spec.description,
-                    inputSchema=spec.parameters,
+                    # See run_stdio: runtime alias and generated signature differ.
+                    inputSchema=spec.parameters,  # type: ignore[call-arg]
                 )
                 for spec in self._specs
             ]
@@ -159,8 +162,8 @@ class MCPServer:
             return [TextContent(type="text", text=result)]
 
         server = Server("night-diary-sse")
-        server.list_tools()(list_tools)  # type: ignore[no-untyped-call]
-        server.call_tool()(call_tool)
+        server.list_tools()(list_tools)  # type: ignore[attr-defined, no-untyped-call]
+        server.call_tool()(call_tool)  # type: ignore[attr-defined, no-untyped-call]
         sse = SseServerTransport("/messages/")
 
         async def handle_sse(request: Any) -> Any:

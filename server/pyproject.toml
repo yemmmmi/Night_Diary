@@ -12,6 +12,9 @@ dependencies = [
     "pydantic-settings>=2.4",
     "aiosqlite>=0.20",
     "chromadb>=0.5,<0.6",
+    # NumPy 2.4+ type stubs require a Python 3.12 mypy target; this project
+    # intentionally keeps Python 3.11 runtime/type-check compatibility.
+    "numpy>=1.22.5,<2.4",
     "jieba>=0.42",
     "langchain-text-splitters>=0.3",
     "langchain-openai>=0.2,<1.0",
