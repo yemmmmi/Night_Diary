@@ -25,6 +25,13 @@ const sendMessage = vi.hoisted(() => vi.fn())
 const sendMessageStreaming = vi.hoisted(() => vi.fn())
 const generateCardSummary = vi.hoisted(() => vi.fn())
 const abortStreaming = vi.hoisted(() => vi.fn(async () => ({ cancelled: true })))
+const listSkills = vi.hoisted(() =>
+  vi.fn(async () => [
+    { id: 'record', label: '记录', description: '把这封信转写成一篇日记' },
+    { id: 'insight', label: '洞悉', description: '以心理视角分析这封信' },
+    { id: 'plan', label: '计划', description: '把这封信整理成一个计划' },
+  ]),
+)
 
 vi.mock('@/shared/api/conversation', () => ({
   listConversations,
@@ -35,6 +42,7 @@ vi.mock('@/shared/api/conversation', () => ({
   sendMessageStreaming,
   generateCardSummary,
   abortStreaming,
+  listSkills,
 }))
 
 const listDiaryEntries = vi.hoisted(() => vi.fn(async () => [] as DiaryEntry[]))

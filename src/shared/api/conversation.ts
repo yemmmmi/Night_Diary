@@ -8,6 +8,24 @@ export interface Conversation {
   updated_at: string
 }
 
+export interface ProcessToolCall {
+  name: string
+  source: 'local' | 'mcp'
+}
+
+export interface ProcessInfo {
+  intent?: string
+  tier?: string
+  skill?: string | null
+  skill_source?: 'manual' | 'auto'
+  tool_calls?: ProcessToolCall[]
+  retrieved_diaries?: number
+  retrieved_memories?: number
+  stop_reason?: string
+  duration_ms?: number
+  tokens?: number
+}
+
 export interface ChatMessage {
   id: string
   conversation_id: string
@@ -18,6 +36,7 @@ export interface ChatMessage {
   attached_card_ids?: string[]
   attached_plan_ids?: string[]
   skill_result?: SkillResult | null
+  process_info?: ProcessInfo | null
   created_at: string
 }
 
@@ -41,7 +60,7 @@ export interface PlanSkillNode {
   title: string
   note: string
   link: string | null
-  verified: boolean
+  multi_source: boolean
 }
 
 export interface PlanSkillResult {
@@ -56,8 +75,20 @@ export interface PlanSkillResult {
 
 export type SkillResult = RecordSkillResult | InsightSkillResult | PlanSkillResult
 
-/* 用户可手动指定的技能（笔谈输入区 chips） */
-export type UserSkill = 'record' | 'insight' | 'plan'
+/* 用户可手动指定的技能：取值来自 GET /api/v1/skills 的动态发现 */
+export type UserSkill = string
+
+export interface SkillSpec {
+  id: string
+  label: string
+  description: string
+}
+
+export async function listSkills(): Promise<SkillSpec[]> {
+  const client = await getHttpClient()
+  const { data } = await client.get<{ items: SkillSpec[] }>('/api/v1/skills')
+  return data.items
+}
 
 export interface SendMessagePayload {
   content: string

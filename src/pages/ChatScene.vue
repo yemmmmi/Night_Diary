@@ -233,7 +233,7 @@ const messageTimeline = computed(() => {
 })
 
 onMounted(async () => {
-  await Promise.all([chatStore.loadConversations(), loadReferenceData()])
+  await Promise.all([chatStore.loadConversations(), loadReferenceData(), chatStore.loadSkills()])
   modeBadge.value?.load()
   applyRouteDiaryPin()
 })
@@ -373,6 +373,7 @@ watch(
             <ChatInput
               ref="chatInput"
               v-model:skill="chatStore.selectedSkill"
+              :skills="chatStore.skills"
               :disabled="chatStore.sending || chatStore.streamingActive"
               @send="onSend"
             />
