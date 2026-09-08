@@ -1,0 +1,25 @@
+{
+  "_placeholder": true,
+  "mode": "stub-oracle",
+  "disclaimer": "Harness and parser placeholder only; these scores are not real quality measurements.",
+  "model": {
+    "decision_accuracy": 1.0,
+    "tool_name_accuracy": 1.0,
+    "argument_accuracy": 1.0,
+    "exact_match": 1.0,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "parse_success_rate": 1.0,
+    "avg_tool_count": 0.6667
+  },
+  "parser": {
+    "decision_accuracy": 1.0,
+    "tool_name_accuracy": 1.0,
+    "argument_accuracy": 1.0,
+    "exact_match": 1.0,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "parse_success_rate": 1.0,
+    "avg_tool_count": 0.6667
+  }
+}
