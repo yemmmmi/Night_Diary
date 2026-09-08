@@ -7,6 +7,17 @@ export interface SourceRef {
   snippet?: string
 }
 
+export interface SourceLink {
+  url: string
+  title?: string | null
+  snippet?: string | null
+  domain?: string | null
+  /** 同一查询返回了至少两个独立域名候选；不表示事实已验证。 */
+  multi_source?: boolean
+  /** 主参考（对应 tasks.link）。 */
+  is_primary?: boolean
+}
+
 export interface TaskItem {
   id: string
   plan_id: string | null
@@ -14,6 +25,8 @@ export interface TaskItem {
   note: string | null
   /** milestones 模板节点的参考链接（PR8 模板3）。 */
   link: string | null
+  /** PR9：milestones 节点的联网溯源与多来源候选。 */
+  source_links?: SourceLink[]
   due_date: string | null
   status: 'pending' | 'done' | 'skipped'
   source: 'manual' | 'agent'
@@ -172,6 +185,13 @@ export async function archiveTask(taskId: string): Promise<TaskItem> {
   const { data } = await client.patch<TaskItem>(`/api/v1/tasks/${taskId}`, {
     status: 'skipped',
   })
+  return data
+}
+
+/** PR9：重新检索一个里程碑节点并回填参考来源（source_links）。 */
+export async function researchTask(taskId: string): Promise<TaskItem> {
+  const client = await getHttpClient()
+  const { data } = await client.post<TaskItem>(`/api/v1/tasks/${taskId}/research`)
   return data
 }
 

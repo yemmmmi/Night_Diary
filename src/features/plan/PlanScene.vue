@@ -11,7 +11,12 @@ import { planCopy } from '@/shared/copy/plan'
 import { toIsoDate } from '@/shared/utils/diaryFormat'
 import { ledgerLine, recurrenceLabel, summarizePlanProgress } from '@/shared/utils/planProgress'
 import type { PlanProgress } from '@/shared/utils/planProgress'
-import { skillPlanLine, skillPlanRate } from '@/shared/utils/skillPlanProgress'
+import {
+  planSourceSummary,
+  skillPlanLine,
+  skillPlanPercentLabel,
+  skillPlanRate,
+} from '@/shared/utils/skillPlanProgress'
 import { openExternal } from '@/shared/utils/openExternal'
 import { parseServerTime } from '@/shared/utils/timeFormat'
 import { usePlanStore } from '@/stores/plan'
@@ -29,6 +34,12 @@ const showArchived = ref(false)
 const completing = ref<{ taskId: string; value: string } | null>(null)
 /** 拉一条进今日待办的行内输入（预填计划标题，可改）。 */
 const pulling = ref<{ planId: string; title: string } | null>(null)
+/** PR9：节点"来源依据"可收缩块的展开态（默认收起，keys 存 taskId）。 */
+const sourceOpenTaskId = ref<string | null>(null)
+/** PR9：计划级"信息来源总览"展开态。 */
+const sourceOverviewOpen = ref(false)
+/** PR9：正在补充参考来源的 taskId。 */
+const researchingTaskId = ref<string | null>(null)
 
 const today = toIsoDate(new Date())
 
@@ -112,6 +123,40 @@ async function refreshPlans() {
 
 function openNodeLink(link: string) {
   openExternal(link)
+}
+
+function nodeSourcesOf(plan: PlanItem) {
+  return planSourceSummary(plan)
+}
+
+function srcHost(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
+}
+
+function percentOf(plan: PlanItem): string | null {
+  return skillPlanPercentLabel(plan, liveSecondsOf(plan))
+}
+
+function toggleNodeSources(taskId: string) {
+  sourceOpenTaskId.value = sourceOpenTaskId.value === taskId ? null : taskId
+}
+
+function toggleSourceOverview() {
+  sourceOverviewOpen.value = !sourceOverviewOpen.value
+}
+
+async function researchNode(taskId: string) {
+  if (researchingTaskId.value) return
+  researchingTaskId.value = taskId
+  try {
+    await planStore.researchTask(taskId)
+  } finally {
+    researchingTaskId.value = null
+  }
 }
 
 function toggleExpand(planId: string) {
@@ -223,8 +268,15 @@ onMounted(() => {
                 :style="{ width: `${(rateOf(plan) ?? 0) * 100}%` }"
               />
             </div>
+            <p v-if="percentOf(plan)" class="plan-row__percent" data-testid="plan-percent">
+              {{ percentOf(plan) }}
+            </p>
             <div
-              v-if="plan.template === 'checkin_total' || plan.template === 'timer_daily'"
+              v-if="
+                plan.template === 'checkin_total' ||
+                plan.template === 'timer_daily' ||
+                plan.template === 'milestones'
+              "
               class="plan-row__ctrl"
               @click.stop
             >
@@ -232,12 +284,45 @@ onMounted(() => {
                 :plan="plan"
                 :live-seconds="liveSecondsOf(plan)"
                 @refresh="refreshPlans"
+                @open="toggleExpand(plan.id)"
               />
             </div>
 
             <div v-if="expandedPlanId === plan.id" class="plan-row__detail" @click.stop>
               <p v-if="plan.motivation" class="plan-row__motivation">{{ plan.motivation }}</p>
               <PlanRefsBlock :refs="plan.source_refs" />
+              <div
+                v-if="plan.template === 'milestones'"
+                class="plan-sources-overview"
+              >
+                <button
+                  type="button"
+                  class="plan-sources-overview__toggle"
+                  data-testid="source-overview-toggle"
+                  :aria-expanded="sourceOverviewOpen"
+                  @click="toggleSourceOverview"
+                >
+                  {{ planCopy.planSourceOverview }}
+                  <span v-if="nodeSourcesOf(plan).used > 0" class="plan-sources-overview__meta">
+                    {{ planCopy.planSourceQueries(nodeSourcesOf(plan).used, nodeSourcesOf(plan).totalNodes) }}
+                    · {{ planCopy.planSourceMultiSource(nodeSourcesOf(plan).multiSource, nodeSourcesOf(plan).totalNodes) }}
+                  </span>
+                </button>
+                <div v-if="sourceOverviewOpen" class="plan-sources-overview__body">
+                  <p v-if="nodeSourcesOf(plan).used === 0" class="plan-sources-overview__empty">
+                    {{ planCopy.planSourceOverviewEmpty }}
+                  </p>
+                  <template v-else>
+                    <p class="plan-sources-overview__line">
+                      {{ planCopy.planSourceQueries(nodeSourcesOf(plan).used, nodeSourcesOf(plan).totalNodes) }}
+                      · {{ planCopy.planSourceMultiSource(nodeSourcesOf(plan).multiSource, nodeSourcesOf(plan).totalNodes) }}
+                    </p>
+                    <p v-if="nodeSourcesOf(plan).domains.length" class="plan-sources-overview__domains">
+                      {{ nodeSourcesOf(plan).domains.join(' · ') }}
+                    </p>
+                  </template>
+                </div>
+              </div>
               <ul class="plan-row__tasks">
                 <li v-for="task in plan.tasks" :key="task.id" class="plan-task">
                   <input
@@ -267,6 +352,70 @@ onMounted(() => {
                     <PhArrowSquareOut :size="11" aria-hidden="true" />
                     {{ planCopy.nodeReference }}
                   </button>
+                  <template v-if="plan.template === 'milestones'">
+                    <button
+                      type="button"
+                      class="plan-node__link"
+                      data-testid="node-sources-toggle"
+                      :aria-expanded="sourceOpenTaskId === task.id"
+                      @click.stop="toggleNodeSources(task.id)"
+                    >
+                      {{ planCopy.nodeSources }}
+                    </button>
+                    <div
+                      v-if="sourceOpenTaskId === task.id"
+                      class="plan-node-sources"
+                      data-testid="node-sources-block"
+                    >
+                      <p v-if="!task.source_links || task.source_links.length === 0" class="plan-node-sources__empty">
+                        {{ planCopy.nodeSourcesEmpty }}
+                        <button
+                          type="button"
+                          class="plan-node-sources__research"
+                          data-testid="node-research-btn"
+                          :disabled="researchingTaskId === task.id"
+                          @click.stop="researchNode(task.id)"
+                        >
+                          {{ researchingTaskId === task.id ? planCopy.nodeSourceResearching : planCopy.nodeSourceResearch }}
+                        </button>
+                      </p>
+                      <template v-else>
+                        <button
+                          type="button"
+                          class="plan-node-sources__research plan-node-sources__research--refresh"
+                          data-testid="node-research-btn"
+                          :disabled="researchingTaskId === task.id"
+                          @click.stop="researchNode(task.id)"
+                        >
+                          {{ researchingTaskId === task.id ? planCopy.nodeSourceResearching : planCopy.nodeSourceResearch }}
+                        </button>
+                        <ul class="plan-node-sources__list">
+                          <li
+                            v-for="(src, idx) in task.source_links"
+                            :key="idx"
+                            class="plan-node-sources__item"
+                            :class="{ 'is-primary': src.is_primary }"
+                          >
+                            <a
+                              class="plan-node-sources__url"
+                              :href="src.url"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              @click.stop
+                            >
+                              {{ src.is_primary ? planCopy.nodeSourcePrimary : '' }}
+                              {{ src.domain || srcHost(src.url) }}
+                            </a>
+                            <span v-if="src.multi_source" class="plan-node-sources__multi-source">
+                              {{ planCopy.nodeSourceMultiSource }}
+                            </span>
+                            <span v-if="src.title" class="plan-node-sources__title">{{ src.title }}</span>
+                            <span v-if="src.snippet" class="plan-node-sources__snippet">{{ src.snippet }}</span>
+                          </li>
+                        </ul>
+                      </template>
+                    </div>
+                  </template>
                   <template v-if="completing && completing.taskId === task.id">
                     <label class="task-actual">
                       <span class="task-actual__label">{{ planCopy.actualInputLabel }}</span>
@@ -546,6 +695,149 @@ onMounted(() => {
 .plan-node__link:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
+}
+
+/* 显式进度百分比（PR9）：进度条下的小字 */
+.plan-row__percent {
+  margin: 0.375rem 0 0 1.25rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+}
+
+/* 计划级信息来源总览（PR9） */
+.plan-sources-overview {
+  margin: 0.625rem 0;
+  border-top: 1px solid var(--color-line);
+  padding-top: 0.5rem;
+}
+
+.plan-sources-overview__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.plan-sources-overview__toggle:hover {
+  color: var(--color-text-primary);
+}
+
+.plan-sources-overview__meta {
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+}
+
+.plan-sources-overview__body {
+  margin-top: 0.375rem;
+  padding-left: 0.25rem;
+}
+
+.plan-sources-overview__empty {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+}
+
+.plan-sources-overview__line {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.plan-sources-overview__domains {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+  word-break: break-all;
+}
+
+/* 节点来源依据（PR9）：默认收起的可伸缩块 */
+.plan-node-sources {
+  width: 100%;
+  margin-top: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-ink) 3%, transparent);
+}
+
+.plan-node-sources__empty {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--color-text-faint);
+}
+
+.plan-node-sources__research {
+  margin: 0.375rem 0 0;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.plan-node-sources__research:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.plan-node-sources__research--refresh {
+  display: inline-block;
+  margin: 0 0 0.375rem;
+}
+
+.plan-node-sources__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plan-node-sources__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.375rem;
+  padding: 0.25rem 0;
+  font-size: 0.75rem;
+}
+
+.plan-node-sources__item.is-primary .plan-node-sources__url {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.plan-node-sources__url {
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.plan-node-sources__multi-source {
+  font-size: 0.6875rem;
+  color: var(--color-accent);
+}
+
+.plan-node-sources__title {
+  color: var(--color-text-secondary);
+}
+
+.plan-node-sources__snippet {
+  width: 100%;
+  color: var(--color-text-faint);
+  line-height: 1.6;
 }
 
 .plan-row__detail {

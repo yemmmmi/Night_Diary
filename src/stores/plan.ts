@@ -123,6 +123,19 @@ export const usePlanStore = defineStore('plan', () => {
     }
   }
 
+  /** PR9：重新检索一个里程碑节点，回填其参考来源（source_links）。 */
+  async function researchTask(taskId: string) {
+    error.value = null
+    try {
+      await planApi.researchTask(taskId)
+      await loadPlans()
+      return true
+    } catch {
+      error.value = '检索失败，稍后再试'
+      return false
+    }
+  }
+
   return {
     plans,
     todayTasks,
@@ -134,6 +147,7 @@ export const usePlanStore = defineStore('plan', () => {
     createTodayTask,
     toggleTask,
     completeTask,
+    researchTask,
     pullToToday,
     removeTask,
     removePlan,
