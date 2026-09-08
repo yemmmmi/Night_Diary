@@ -54,6 +54,26 @@ class FailingConn(FakeConn):
         raise RuntimeError("boom")
 
 
+class RecoveringConn(FakeConn):
+    def __init__(self, alias: str = "recovering") -> None:
+        super().__init__(alias)
+        self.recovery_enabled = False
+
+    def connect(self) -> bool:
+        if self.state != "dead":
+            return True
+        if not self.recovery_enabled:
+            return False
+        self.state = "healthy"
+        self.last_error = ""
+        return True
+
+    def call_tool(self, name: str, args: dict[str, Any]) -> str:
+        self.state = "dead"
+        self.last_error = "retries exhausted"
+        raise RuntimeError(self.last_error)
+
+
 @pytest.fixture()
 def session_factory():
     engine = create_engine("sqlite://")
@@ -101,6 +121,31 @@ class TestBuildToolMap:
         reg._container._llm_for_tier.return_value = None
         assert reg.build_tool_map(user_id="u1") is None
 
+    def test_dead_endpoint_tools_removed_then_restored(self, session_factory) -> None:
+        conn = RecoveringConn()
+        reg, _ = _registry(session_factory, conn)
+        tool_name = "mcp__recovering__echo"
+
+        initial_tools = reg.build_tool_map(user_id="u1")
+        assert initial_tools is not None
+        assert tool_name in initial_tools
+
+        assert "error" in initial_tools[tool_name](text="hi")
+        assert reg.status()[0]["state"] == "dead"
+        assert reg.status()[0]["tool_count"] == 0
+        assert tool_name not in {item["name"] for item in reg.tools_listing()}
+
+        dead_tools = reg.build_tool_map(user_id="u1")
+        assert dead_tools is not None
+        assert tool_name not in dead_tools
+
+        conn.recovery_enabled = True
+        recovered_tools = reg.build_tool_map(user_id="u1")
+        assert recovered_tools is not None
+        assert tool_name in recovered_tools
+        assert reg.status()[0]["state"] == "healthy"
+        assert reg.status()[0]["tool_count"] == 1
+
 
 class TestCallMcp:
     def test_success_logs_row(self, session_factory) -> None:
@@ -140,7 +185,7 @@ class TestCallMcp:
         assert mcp_spans[0].metadata["transport"] == "stdio"
 
     def test_log_write_failure_does_not_break_call(self, session_factory) -> None:
-        reg, fake = _registry(session_factory)
+        reg, _ = _registry(session_factory)
 
         class _BrokenFactory:
             def __call__(self):

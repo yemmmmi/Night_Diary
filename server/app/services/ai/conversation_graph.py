@@ -196,19 +196,8 @@ def run_conversation_graph(
         "conversation_id": conversation_id,
     }
 
-    try:
-        final_state = graph.invoke(initial_state)
-        return dict(final_state) if final_state else {}
-    except Exception as exc:
-        logger.error("Conversation graph execution failed: %s", exc)
-        # Return a minimal state with fallback
-        return {
-            "final_response": "抱歉，我现在无法回复，请稍后再试。",
-            "stop_reason": "error",
-            "total_usage": {},
-            "citations": [],
-            "tool_calls_made": [],
-        }
+    final_state = graph.invoke(initial_state)
+    return dict(final_state) if final_state else {}
 
 
 __all__ = [
