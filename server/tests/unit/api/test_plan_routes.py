@@ -357,3 +357,74 @@ def test_task_response_includes_actual_value_default(authed_client: TestClient) 
     """普通任务响应带 actual_value=None 字段。"""
     create = authed_client.post("/api/v1/tasks", json={"title": "默认值检查"})
     assert create.json()["actual_value"] is None
+
+
+def test_task_response_includes_source_links_default(authed_client: TestClient) -> None:
+    """任务响应带 source_links=[] 默认字段(不含网络来源的任务)。"""
+    create = authed_client.post("/api/v1/tasks", json={"title": "无来源任务"})
+    assert create.json()["source_links"] == []
+
+
+def test_patch_task_backfills_source_links(authed_client: TestClient) -> None:
+    """PATCH accepts legacy verified input but emits normalized multi_source."""
+    plan = _create_plan(authed_client, title="学剪辑", tasks=[{"title": "基础剪切"}])
+    task_id = plan["tasks"][0]["id"]
+    source_links = [
+        {"url": "https://a.com/tut", "title": "入门", "domain": "a.com",
+         "verified": True, "is_primary": True},
+        {"url": "https://b.com/ref", "title": "参考", "domain": "b.com", "verified": True},
+    ]
+    response = authed_client.patch(
+        f"/api/v1/tasks/{task_id}", json={"source_links": source_links}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["source_links"][0]["url"] == "https://a.com/tut"
+    assert data["source_links"][0]["is_primary"] is True
+    assert data["source_links"][0]["multi_source"] is True
+    assert "verified" not in data["source_links"][0]
+    detail = authed_client.get(f"/api/v1/plans/{plan['id']}")
+    stored_links = detail.json()["tasks"][0]["source_links"]
+    assert stored_links[1]["domain"] == "b.com"
+    assert stored_links[1]["multi_source"] is True
+    assert "verified" not in stored_links[1]
+
+
+def test_research_task_backfills_provenance(
+    authed_client: TestClient, monkeypatch
+) -> None:
+    """POST /tasks/{id}/research 重新检索并回填 source_links(PR D)。"""
+    from app.domain.skills import plan_skill
+    from app.services.web_search_service import WebSearchResult
+
+    plan = _create_plan(authed_client, title="学剪辑", tasks=[{"title": "基础剪切"}])
+    task_id = plan["tasks"][0]["id"]
+
+    monkeypatch.setattr(
+        plan_skill,
+        "search_web",
+        lambda query, max_results=5: [
+            WebSearchResult(title="tut", url="https://a.com/x", snippet="s"),
+            WebSearchResult(title="ref", url="https://b.com/y", snippet="s"),
+        ],
+    )
+    monkeypatch.setattr(
+        "app.services.web_search_service.web_search_available", lambda: True
+    )
+
+    response = authed_client.post(f"/api/v1/tasks/{task_id}/research")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["source_links"]) == 2
+    assert data["source_links"][0]["is_primary"] is True
+    assert data["source_links"][0]["multi_source"] is True
+    assert data["link"] == "https://a.com/x"
+
+
+def test_research_task_rejects_standalone(authed_client: TestClient) -> None:
+    """不属于里程碑计划的独立任务拒绝补充来源。"""
+    create = authed_client.post("/api/v1/tasks", json={"title": "独立任务"})
+    task_id = create.json()["id"]
+    response = authed_client.post(f"/api/v1/tasks/{task_id}/research")
+    # 独立任务 plan_id 为 None → ValidationError (4xx)
+    assert response.status_code in (400, 404, 422)

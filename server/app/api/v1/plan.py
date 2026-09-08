@@ -10,18 +10,20 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import ContainerDep, CurrentUserDep, DbDep
+from app.api.mappers import source_links_from_json
 from app.api.schemas import (
     CheckinCreateRequest,
     CheckinResponse,
     PlanCreateRequest,
     PlanResponse,
     PlanUpdateRequest,
+    SourceLink,
     TaskCreateRequest,
     TaskResponse,
     TaskUpdateRequest,
@@ -29,6 +31,7 @@ from app.api.schemas import (
 )
 from app.infrastructure.models import PlanCheckinRow, PlanRow, TaskRow
 from app.services import plan_service
+from app.shared.errors import ValidationError
 
 router = APIRouter(prefix="/plans", tags=["plan"])
 tasks_router = APIRouter(prefix="/tasks", tags=["task"])
@@ -41,6 +44,10 @@ def _task_to_response(row: TaskRow) -> TaskResponse:
         title=row.title,
         note=row.note,
         link=row.link,
+        source_links=[
+            SourceLink.model_validate(item)
+            for item in source_links_from_json(row.source_links_json)
+        ],
         due_date=row.due_date.isoformat() if row.due_date else None,
         status=row.status,
         source=row.source,
@@ -267,6 +274,37 @@ def update_task(
         task = plan_service.update_task(
             db, task_id=task_id, user_id=str(user.id), **fields
         )
+    return _task_to_response(task)
+
+
+@tasks_router.post("/{task_id}/research", response_model=TaskResponse)
+def research_task(
+    task_id: str,
+    db: DbDep,
+    user: CurrentUserDep,
+) -> TaskResponse:
+    """Search again for a milestone node and backfill its source provenance.
+
+    PR D ("补充来源"): for legacy milestone nodes created without web
+    evidence, re-run the bounded web search for that node and persist the
+    ranked ``source_links`` (and primary ``link``). Returns the updated task;
+    no-ops (keeps existing data) when search is unavailable.
+    """
+    from app.domain.skills import plan_skill
+
+    task = plan_service.get_task(db, task_id=task_id, user_id=str(user.id))
+    if not task.plan_id:
+        raise ValidationError("该任务不属于里程碑计划, 无法补充来源")
+    plan = plan_service.get_plan(db, plan_id=task.plan_id, user_id=str(user.id))
+    topic = plan.title
+    provenance = plan_skill.research_node(topic, task.title)
+    changes: dict[str, Any] = {}
+    if provenance.get("source_links"):
+        changes["source_links"] = provenance["source_links"]
+    if provenance.get("link") and not task.link:
+        changes["link"] = provenance["link"]
+    if changes:
+        task = plan_service.update_task(db, task_id=task_id, user_id=str(user.id), **changes)
     return _task_to_response(task)
 
 

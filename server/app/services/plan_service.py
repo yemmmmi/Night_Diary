@@ -123,6 +123,7 @@ def create_task(
     plan_id: str | None = None,
     note: str | None = None,
     link: str | None = None,
+    source_links: list[dict[str, Any]] | None = None,
     due_date: str | None = None,
     source: str = "manual",
     created_from_conversation_id: str | None = None,
@@ -135,6 +136,7 @@ def create_task(
         title=title,
         note=note,
         link=link,
+        source_links_json=json.dumps(source_links or [], ensure_ascii=False),
         due_date=parsed_due,
         status="pending",
         source=source,
@@ -246,6 +248,9 @@ def update_task(
         # SQLite reject raw ISO strings for Date columns.
         if key == "due_date" and isinstance(value, str):
             value = date.fromisoformat(value)
+        if key == "source_links" and isinstance(value, list):
+            key = "source_links_json"
+            value = json.dumps(value, ensure_ascii=False)
         if hasattr(row, key) and value is not None:
             setattr(row, key, value)
     db.commit()

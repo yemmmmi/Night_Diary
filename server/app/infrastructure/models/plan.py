@@ -72,6 +72,9 @@ class TaskRow(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     # PR8: reference link for milestones-template learning nodes.
     link: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # PR9: per-node web-search provenance (JSON list of {url,title,snippet,
+    # domain,multi_source,is_primary}). NULL for legacy/agent-less nodes.
+    source_links_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/done/skipped
     source: Mapped[str] = mapped_column(String(20), default="manual")
