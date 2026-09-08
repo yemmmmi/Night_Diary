@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   countDoneTasks,
   formatDuration,
+  planSourceSummary,
   skillPlanLine,
+  skillPlanPercentLabel,
   skillPlanRate,
 } from '@/shared/utils/skillPlanProgress'
 import type { PlanItem, TaskItem } from '@/shared/api/plan'
@@ -147,5 +149,67 @@ describe('countDoneTasks', () => {
       tasks: [task('t1', 'done'), task('t2', 'pending'), task('t3', 'done')],
     })
     expect(countDoneTasks(plan)).toEqual({ done: 2, total: 3 })
+  })
+})
+
+describe('skillPlanPercentLabel', () => {
+  it('renders "X / 30 天 (Z%)" for checkin_total', () => {
+    expect(skillPlanPercentLabel(checkinPlan(0))).toBe('0 / 30 天 (0%)')
+    expect(skillPlanPercentLabel(checkinPlan(15))).toBe('15 / 30 天 (50%)')
+    expect(skillPlanPercentLabel(checkinPlan(30))).toBe('30 / 30 天 (100%)')
+  })
+
+  it('renders "X小时 / 4小时 (Z%)" for timer_daily', () => {
+    expect(skillPlanPercentLabel(timerPlan(7200))).toBe('2小时 / 4小时 (50%)')
+    expect(skillPlanPercentLabel(timerPlan(0), 7200)).toBe('2小时 / 4小时 (50%)')
+  })
+
+  it('renders "X / Y 节点 (Z%)" for milestones', () => {
+    const plan = planWith({
+      template: 'milestones',
+      tasks: [task('t1', 'done'), task('t2', 'pending'), task('t3', 'pending')],
+    })
+    expect(skillPlanPercentLabel(plan)).toBe('1 / 3 节点 (33%)')
+  })
+
+  it('returns null for legacy plans or missing targets', () => {
+    expect(skillPlanPercentLabel(planWith({}))).toBeNull()
+    const noTarget = planWith({
+      template: 'checkin_total',
+      target_value: null,
+      today_progress: { checkin_date: '2026-09-02', total_checkins: 3 },
+    })
+    expect(skillPlanPercentLabel(noTarget)).toBeNull()
+  })
+})
+
+describe('planSourceSummary', () => {
+  it('aggregates queries, multi-source nodes and deduped domains', () => {
+    const plan = planWith({
+      template: 'milestones',
+      tasks: [
+        task('t1', 'pending'),
+        task('t2', 'pending'),
+        task('t3', 'pending'),
+      ] as TaskItem[],
+    })
+    plan.tasks[0].source_links = [
+      { url: 'https://a.com/x', domain: 'a.com', multi_source: true },
+      { url: 'https://b.com/y', domain: 'b.com', multi_source: true },
+    ]
+    plan.tasks[1].source_links = [
+      { url: 'https://a.com/z', domain: 'a.com', multi_source: true },
+    ]
+    const summary = planSourceSummary(plan)
+    expect(summary.used).toBe(2)
+    expect(summary.multiSource).toBe(2)
+    expect(summary.totalNodes).toBe(3)
+    expect(summary.domains).toEqual(['a.com', 'b.com'])
+  })
+
+  it('returns zeros when no node has sources', () => {
+    const plan = planWith({ template: 'milestones', tasks: [task('t1', 'pending')] })
+    const summary = planSourceSummary(plan)
+    expect(summary).toEqual({ used: 0, multiSource: 0, totalNodes: 1, domains: [] })
   })
 })

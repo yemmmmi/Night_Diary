@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { PhPlay, PhStop, PhTimer } from '@phosphor-icons/vue'
+import { PhCaretRight, PhPlay, PhStop, PhTimer } from '@phosphor-icons/vue'
 
 import type { PlanItem } from '@/shared/api/plan'
 import { checkinPlan } from '@/shared/api/plan'
@@ -15,6 +15,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   refresh: []
+  /** PR9：milestones"去推进"——让父层展开节点进度列表。 */
+  open: []
 }>()
 
 const busy = ref(false)
@@ -87,7 +89,9 @@ async function toggleTimer() {
 </script>
 
 <template>
-  <div v-if="plan.template === 'checkin_total' || plan.template === 'timer_daily'">
+  <div
+    v-if="plan.template === 'checkin_total' || plan.template === 'timer_daily' || plan.template === 'milestones'"
+  >
     <!-- 累计打卡：每日一次 -->
     <button
       v-if="plan.template === 'checkin_total'"
@@ -105,6 +109,18 @@ async function toggleTimer() {
             ? planCopy.checkinTodayDone
             : planCopy.checkinAction
       }}
+    </button>
+
+    <!-- 里程碑：进入节点进度列表 -->
+    <button
+      v-else-if="plan.template === 'milestones'"
+      type="button"
+      class="skill-ctrl"
+      data-testid="milestone-btn"
+      @click.stop="emit('open')"
+    >
+      <PhCaretRight :size="12" aria-hidden="true" />
+      {{ planCopy.milestoneAction }}
     </button>
 
     <!-- 每日计时：开始 / 停止 + 走表 -->

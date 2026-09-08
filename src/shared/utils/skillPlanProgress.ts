@@ -75,3 +75,61 @@ export function skillPlanRate(plan: PlanItem, liveSeconds?: number): number | nu
   }
   return null
 }
+
+/** 显式进度百分比文案（PR9）：'0 / 30 (0%)' / '0 / 4小时 (0%)' / '0 / 5 节点 (0%)'。 */
+export function skillPlanPercentLabel(
+  plan: PlanItem,
+  liveSeconds?: number,
+): string | null {
+  let doneLabel: string
+  let targetLabel: string
+  let targetValid: boolean
+  if (plan.template === 'checkin_total') {
+    const target = plan.target_value ?? 0
+    const done = plan.today_progress?.total_checkins ?? 0
+    doneLabel = String(done)
+    targetLabel = `${formatNumber(target)} ${plan.target_unit ?? '天'}`
+    targetValid = target > 0
+  } else if (plan.template === 'timer_daily') {
+    const target = plan.target_value ?? 0
+    const seconds = liveSeconds ?? plan.today_progress?.today_seconds ?? 0
+    doneLabel = formatDuration(seconds)
+    targetLabel = `${formatNumber(target)}小时`
+    targetValid = target > 0
+  } else if (plan.template === 'milestones') {
+    const { done, total } = countDoneTasks(plan)
+    doneLabel = String(done)
+    targetLabel = `${total} 节点`
+    targetValid = total > 0
+  } else {
+    return null
+  }
+  if (!targetValid) return null
+  const rate = skillPlanRate(plan, liveSeconds)
+  const pct = Math.round((rate ?? 0) * 100)
+  return `${doneLabel} / ${targetLabel} (${pct}%)`
+}
+
+/** 计划级信息来源总览（PR9）：检索用量、多来源候选统计、去重域名清单。 */
+export function planSourceSummary(plan: PlanItem): {
+  used: number
+  multiSource: number
+  totalNodes: number
+  domains: string[]
+} {
+  const nodes = plan.tasks.filter((t) => t.source_links && t.source_links.length > 0)
+  const domains = new Set<string>()
+  let multiSource = 0
+  for (const node of nodes) {
+    const links = node.source_links ?? []
+    const hasMultipleSources = links.some((s) => s.multi_source)
+    if (hasMultipleSources) multiSource += 1
+    for (const s of links) if (s.domain) domains.add(s.domain)
+  }
+  return {
+    used: nodes.length,
+    multiSource,
+    totalNodes: plan.tasks.length,
+    domains: [...domains].sort(),
+  }
+}
