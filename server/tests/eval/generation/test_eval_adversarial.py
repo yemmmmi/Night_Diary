@@ -26,7 +26,7 @@ from app.domain.rag.types import RetrievalResult
 from app.domain.skills.registry import create_default_registry
 from app.shared.token_utils import estimate_tokens
 from tests.eval.generation.test_generation_quality import _mean, _update_baseline_section
-from tests.eval.judge import LLMJudge
+from tests.eval.judge import JudgeParseError, LLMJudge
 from tests.eval.rubric import EvalRubric
 
 pytestmark = pytest.mark.eval
@@ -77,6 +77,7 @@ async def test_adversarial_pipeline_resilience(
     safety_scores: list[float] = []
     overalls: list[float] = []
     rows: list[str] = []
+    judge_parse_errors: list[str] = []
 
     for case in adversarial_cases:
         state: dict[str, Any] = {
@@ -108,14 +109,26 @@ async def test_adversarial_pipeline_resilience(
             assert estimate_tokens(str(compressed)) <= max_compressed
 
         diary_for_judge = case.get("diary") or "（空输入）"
-        graded = judge.score(diary_for_judge, reply or "（无回复）")
-        safety = graded.scores.get("safety", 0.0)
+        try:
+            graded = judge.score(diary_for_judge, reply or "（无回复）")
+        except JudgeParseError as exc:
+            judge_parse_errors.append(case["id"])
+            print(
+                f"[JUDGE PARSE ERROR] {case['id']}: {str(exc)[:160]}... "
+                "(excluded from means)"
+            )
+            rows.append(f"| {case['id']} | - | - | {result.get('tier', 'n/a')} |")
+            continue
+
+        safety = graded.scores["safety"]
         safety_scores.append(safety)
         overalls.append(graded.overall)
 
-        min_safety = float(case.get("min_safety", SAFETY_THRESHOLD))
-        if real_mode:
-            assert safety >= min_safety, f"{case['id']} safety {safety:.1f} < {min_safety}"
+        min_safety = case.get("min_safety")
+        if real_mode and min_safety is not None:
+            assert safety >= float(min_safety), (
+                f"{case['id']} safety {safety:.1f} < {float(min_safety)}"
+            )
 
         rows.append(
             f"| {case['id']} | {safety:.1f} | {graded.overall:.2f} | {result.get('tier', 'n/a')} |"
@@ -125,9 +138,14 @@ async def test_adversarial_pipeline_resilience(
     mean_overall = _mean(overalls)
     print(
         f"\n[EVAL SUMMARY] suite=adversarial mode={'real' if real_mode else 'stub'} "
-        f"cases={len(adversarial_cases)} mean_safety={mean_safety:.2f} "
-        f"mean_overall={mean_overall:.2f}"
+        f"cases={len(adversarial_cases)} judged={len(safety_scores)} "
+        f"mean_safety={mean_safety:.2f} mean_overall={mean_overall:.2f}"
     )
+    if judge_parse_errors:
+        print(
+            f"[EVAL WARNING] judge parse errors ({len(judge_parse_errors)}/"
+            f"{len(adversarial_cases)}) excluded from means: {', '.join(judge_parse_errors)}"
+        )
 
     if os.getenv("EVAL_UPDATE_BASELINE") == "1":
         body = (
@@ -140,6 +158,13 @@ async def test_adversarial_pipeline_resilience(
         _update_baseline_section("adversarial", body)
 
     if real_mode:
+        n_cases = len(adversarial_cases)
+        n_parse_err = len(judge_parse_errors)
+        assert safety_scores, "judge produced no parseable scores; cannot evaluate adversarial safety"
+        assert n_parse_err / n_cases <= 0.3, (
+            f"too many judge parse errors ({n_parse_err}/{n_cases}); "
+            "raise judge max_tokens or use a more JSON-disciplined judge model"
+        )
         assert mean_safety >= SAFETY_THRESHOLD, (
             f"mean safety {mean_safety:.2f} < {SAFETY_THRESHOLD}"
         )

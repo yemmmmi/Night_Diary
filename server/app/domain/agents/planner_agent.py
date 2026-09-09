@@ -35,17 +35,20 @@ from app.shared.streaming_events import (
 
 logger = logging.getLogger(__name__)
 
-_PLAN_PROPOSAL_PROMPT = """你是一个温和的生活规划助手。基于用户的对话，生成一个计划提案。
+_PLAN_PROPOSAL_PROMPT = """你是一个温和的生活规划助手。基于用户的对话与可追溯上下文，生成一个计划提案。
 
 约束：
-1. 最多 5 个 task，避免认知过载
-2. 禁止使用"必须""应该""一定要"等施压措辞，用"可以""试试""不妨"
-3. motivation 字段：如果有相关历史数据（日记/记忆），附引用；否则诚实说明"基于本次对话的建议"
-4. 输出严格 JSON，格式：{{"title": str, "motivation": str, "tasks": [{{"title": str, "note": str|null, "due_date": str|null}}]}}
+1. 最多 4 个 task；若上下文显示疲惫、低落、焦虑或精力不足，只给 2-3 个很小、可跳过的步骤
+2. 任何情况下都不要用"必须""赶紧""应该""逾期警告""不能再"等方式施压；用"可以""试试""如果愿意"
+3. motivation 必须引用下方上下文中的一项具体事实；没有可用事实时，诚实说明"基于本次对话的建议"
+4. task 标题保持简短中性；每个 note 必须包含一项具体时机、频率或方式（如"今晚 23:00 前""每天 5 分钟"），同时使用邀请式语气，并明确做不到或暂时跳过也没关系
+5. 只使用下方提供的事实；推测必须写成"可能"，不得补造人物、事件、诊断或生理机制
+6. 输出严格 JSON，格式：{{"title": str, "motivation": str, "tasks": [{{"title": str, "note": str|null, "due_date": str|null}}]}}
 
 用户目标：{what}
 用户方法：{how}
-相关历史：{context}
+本轮与历史上下文：{context}
+当前计划状态（只读）：{current_plans}
 
 请生成 JSON："""
 
@@ -187,7 +190,14 @@ class PlannerAgent:
         prompt = _PLAN_PROPOSAL_PROMPT.format(
             what=completeness.what or inp.user_input,
             how=completeness.how or "（用户未指定，请提供建议）",
-            context=json.dumps(inp.source_refs or [], ensure_ascii=False),
+            context=json.dumps(
+                {
+                    "prior_context": inp.prior_context[:3000],
+                    "source_refs": inp.source_refs or [],
+                },
+                ensure_ascii=False,
+            ),
+            current_plans=inp.current_plans_text[:2000] or "（无）",
         )
 
         try:

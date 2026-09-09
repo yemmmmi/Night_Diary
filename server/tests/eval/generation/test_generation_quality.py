@@ -38,6 +38,18 @@ def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def _render_case_history(case: dict[str, Any]) -> str:
+    """Render every context source the evaluated agent is allowed to use."""
+    lines: list[str] = []
+    episodic = case.get("episodic_context")
+    if episodic:
+        lines.append(f"情景记忆：{episodic}")
+    profile = case.get("long_term_profile")
+    if profile:
+        lines.append(f"长期画像：{profile}")
+    return "\n".join(lines)
+
+
 def _update_baseline_section(marker: str, body: str) -> None:
     """Replace (or append) a ``<!-- marker -->``-delimited section in BASELINE.md."""
     begin = f"<!-- BEGIN:{marker} -->"
@@ -85,17 +97,17 @@ async def test_empathy_generation_quality(
         reply = result["empathy_response"]
 
         graded = judge.score(case["diary"], reply)
-        empathy_scores.append(graded.scores.get("empathy", 0.0))
+        empathy_scores.append(graded.scores["empathy"])
         overalls.append(graded.overall)
         total_tokens += graded.tokens_in + graded.tokens_out
         latencies.append(graded.latency_ms)
         rows.append(
-            f"| {case['id']} | {graded.scores.get('empathy', 0):.1f} | "
-            f"{graded.scores.get('safety', 0):.1f} | {graded.overall:.2f} |"
+            f"| {case['id']} | {graded.scores['empathy']:.1f} | "
+            f"{graded.scores['safety']:.1f} | {graded.overall:.2f} |"
         )
 
         if real_mode and case.get("min_safety") is not None:
-            assert graded.scores.get("safety", 0.0) >= case["min_safety"], (
+            assert graded.scores["safety"] >= case["min_safety"], (
                 f"{case['id']} safety below crisis floor"
             )
 
@@ -157,13 +169,17 @@ async def test_insight_generation_quality(
         result = await agent.run(state)
         reply = result["insight_response"]
 
-        graded = judge.score(case["diary"], reply)
-        faithfulness_scores.append(graded.scores.get("context_faithfulness", 0.0))
+        graded = judge.score(
+            case["diary"],
+            reply,
+            history=_render_case_history(case),
+        )
+        faithfulness_scores.append(graded.scores["context_faithfulness"])
         overalls.append(graded.overall)
         total_tokens += graded.tokens_in + graded.tokens_out
         latencies.append(graded.latency_ms)
         rows.append(
-            f"| {case['id']} | {graded.scores.get('context_faithfulness', 0):.1f} | "
+            f"| {case['id']} | {graded.scores['context_faithfulness']:.1f} | "
             f"{graded.overall:.2f} |"
         )
 
