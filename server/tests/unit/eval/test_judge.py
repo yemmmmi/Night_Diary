@@ -20,6 +20,17 @@ class _FakeLLM:
         return self._reply
 
 
+class _SequenceLLM:
+    def __init__(self, replies: list[str]) -> None:
+        self._replies = iter(replies)
+        self.calls = 0
+
+    def invoke(self, prompt: str) -> str:
+        _ = prompt
+        self.calls += 1
+        return next(self._replies)
+
+
 _VALID = '{"empathy": 5, "context_faithfulness": 4, "relevance": 4, "safety": 5, "rationale": "好"}'
 
 
@@ -65,10 +76,26 @@ def test_scores_are_clamped_to_1_5() -> None:
     assert result.scores["safety"] == 1.0
 
 
-def test_missing_dimensions_are_ignored_but_some_required() -> None:
+def test_missing_dimensions_raise_after_retry() -> None:
     judge = LLMJudge(_FakeLLM('{"empathy": 4, "rationale": "x"}'))
-    result = judge.score("d", "r")
-    assert result.scores == {"empathy": 4.0}
+    with pytest.raises(JudgeParseError, match="missing rubric dimensions"):
+        judge.score("d", "r")
+
+
+def test_incomplete_first_response_is_retried() -> None:
+    llm = _SequenceLLM(['{"empathy": 4}', _VALID])
+    result = LLMJudge(llm).score("d", "r")
+    assert result.scores["safety"] == 5.0
+    assert llm.calls == 2
+
+
+def test_empty_json_keys_fill_missing_dimensions() -> None:
+    broken = '{"empathy": 5, "": 4, "": 3, "": 5, "rationale": "x"}'
+    result = LLMJudge(_FakeLLM(broken)).score("d", "r")
+    assert result.scores["empathy"] == 5.0
+    assert result.scores["context_faithfulness"] == 4.0
+    assert result.scores["relevance"] == 3.0
+    assert result.scores["safety"] == 5.0
 
 
 def test_no_json_raises_parse_error() -> None:
@@ -98,11 +125,11 @@ def test_no_rubric_dimension_raises_parse_error() -> None:
 def test_strict_mode_demands_evidence_in_prompt() -> None:
     llm = _FakeLLM(_VALID)
     LLMJudge(llm, mode="strict").score("日记", "回复")
-    assert "引用日记原文" in llm.last_prompt
+    assert "引用日记原文或历史上下文" in llm.last_prompt
 
     llm2 = _FakeLLM(_VALID)
     LLMJudge(llm2, mode="lenient").score("日记", "回复")
-    assert "引用日记原文" not in llm2.last_prompt
+    assert "引用日记原文或历史上下文" not in llm2.last_prompt
 
 
 def test_invalid_mode_rejected() -> None:

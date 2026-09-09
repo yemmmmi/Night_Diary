@@ -142,7 +142,7 @@ def planner_llm() -> Any:
     # Planner is generative: a higher temperature yields more varied proposals.
     # Module-scoped so the (expensive, real-mode) eval runs once per suite and
     # both the quality test and the regression test share one LLM pass.
-    return HttpLLM(temperature=0.7, max_tokens=900) if REAL_MODE else StubPlannerLLM()
+    return HttpLLM(temperature=0.3, max_tokens=900) if REAL_MODE else StubPlannerLLM()
 
 
 @pytest.fixture(scope="module")
