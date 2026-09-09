@@ -1,22 +1,31 @@
 {
   "_placeholder": false,
-  "_note": "Seeded by EVAL_UPDATE_BASELINE=1 make eval-intent. Scalar metrics only; per_class_* and confusion_matrix are reported in stdout but not persisted here.",
-  "baseline_a": {
-    "accuracy": 0.696,
-    "macro_f1": 0.6968,
-    "weighted_f1": 0.7012,
-    "rule_short_circuit_rate": 0.304,
-    "llm_layer_accuracy": 0.5747,
-    "avg_latency_ms": 0.0247,
-    "avg_tokens_per_call": 175.0
+  "_mode": "mixed",
+  "_model": "deepseek-v4-flash",
+  "_sample_count": 250,
+  "_seeded_at": "2026-09-09T07:11:54.296013+00:00",
+  "_runs": 1,
+  "_note": "baseline_a is the REAL contract when _placeholder=false; treatment_b is always a deterministic stub oracle upper bound and is excluded from quality regression.",
+  "_strategy_modes": {
+    "baseline_a": "real",
+    "treatment_b": "stub_oracle"
   },
-  "treatment_b": {
+  "baseline_a": {
+    "accuracy": 0.744,
+    "macro_f1": 0.7293,
+    "weighted_f1": 0.7375,
+    "rule_short_circuit_rate": 0.304,
+    "llm_layer_accuracy": 0.6437,
+    "avg_latency_ms": 1142.2387,
+    "avg_tokens_per_call": 225.26
+  },
+  "oracle_upper_bound": {
     "accuracy": 0.992,
     "macro_f1": 0.9919,
     "weighted_f1": 0.992,
     "rule_short_circuit_rate": 0.304,
     "llm_layer_accuracy": 1.0,
-    "avg_latency_ms": 0.0435,
+    "avg_latency_ms": 0.057,
     "avg_tokens_per_call": 112.0
   }
 }

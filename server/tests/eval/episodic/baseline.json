@@ -5,9 +5,20 @@
     "ndcg@5": 0.4911
   },
   "vector": {
-    "recall@5": 0.2317,
-    "mrr": 0.2625,
-    "ndcg@5": 0.222
+    "recall@5": 0.3483,
+    "mrr": 0.3267,
+    "ndcg@5": 0.2921
   },
-  "_placeholder": true
+  "vector_rerank": {
+    "recall@5": 0.5642,
+    "mrr": 0.55,
+    "ndcg@5": 0.5222
+  },
+  "_placeholder": false,
+  "_mode": "real",
+  "_embedding_model": "text-embedding-v3",
+  "_rerank_model": "qwen3-rerank",
+  "_sample_count": 20,
+  "_seeded_at": "2026-09-09T07:13:50.570219+00:00",
+  "_runs": 1
 }

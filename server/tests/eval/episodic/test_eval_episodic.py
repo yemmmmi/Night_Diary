@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -174,7 +175,22 @@ def _write_baseline(metrics: dict[str, dict[str, float]], placeholder: bool) -> 
     payload: dict[str, Any] = {
         name: {key: scores[key] for key in METRIC_KEYS} for name, scores in metrics.items()
     }
+    from app.config import get_settings
+
+    settings = get_settings()
     payload["_placeholder"] = placeholder
+    payload["_mode"] = "stub" if placeholder else "real"
+    payload["_embedding_model"] = (
+        settings.embedding_model if settings.embedding_api_key else settings.embedding_model_name
+    )
+    payload["_rerank_model"] = (
+        settings.rerank_model
+        if settings.rerank_api_key or settings.embedding_api_key
+        else "BAAI/bge-reranker-base"
+    )
+    payload["_sample_count"] = 20
+    payload["_seeded_at"] = datetime.now(UTC).isoformat()
+    payload["_runs"] = 1
     BASELINE_PATH.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
@@ -221,6 +237,7 @@ def eval_report(
         "skipped": skipped,
         "failures": failures,
         "by_category": by_category,
+        "real_embed_mode": real_embed_mode,
     }
 
 
@@ -252,6 +269,9 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any]) -> None:
     stub-mode placeholder (``_placeholder: true``) — those numbers are not a
     retrieval-quality contract and must not gate a future real-mode run.
     """
+    if not eval_report["real_embed_mode"]:
+        pytest.skip("current run is stub mode; REAL retrieval baseline comparison is invalid")
+
     baseline = _load_baseline()
     if baseline is None:
         pytest.skip("no baseline.json; seed with EVAL_UPDATE_BASELINE=1 make eval-episodic")
@@ -259,6 +279,11 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any]) -> None:
         pytest.skip(
             "baseline.json is a stub-mode placeholder; reseed in real mode "
             "(pip install -e '.[eval]') to record a retrieval-quality contract"
+        )
+    if "_mode" not in baseline:
+        pytest.skip(
+            "baseline.json lacks mode metadata; reseed with "
+            "EVAL_UPDATE_BASELINE=1 make eval-episodic"
         )
 
     regressions: list[str] = []

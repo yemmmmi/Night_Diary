@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -169,18 +170,32 @@ def _load_baseline() -> dict[str, Any] | None:
 
 
 def _write_baseline(
-    baseline_a: dict[str, Any], treatment_b: dict[str, Any]
+    baseline_a: dict[str, Any],
+    treatment_b: dict[str, Any],
+    *,
+    real_mode: bool,
+    model_name: str,
+    sample_count: int,
 ) -> None:
-    """Persist the scalar metric block for both strategies (round-trippable)."""
+    """Persist REAL baseline A and the separately-labelled oracle upper bound."""
     payload = {
-        "_placeholder": False,
+        "_placeholder": not real_mode,
+        "_mode": "mixed",
+        "_model": model_name if real_mode else "stub-rule-echo",
+        "_sample_count": sample_count,
+        "_seeded_at": datetime.now(UTC).isoformat(),
+        "_runs": 1,
         "_note": (
-            "Seeded by EVAL_UPDATE_BASELINE=1 make eval-intent. "
-            "Scalar metrics only; per_class_* and confusion_matrix are "
-            "reported in stdout but not persisted here."
+            "baseline_a is the REAL contract when _placeholder=false; "
+            "treatment_b is always a deterministic stub oracle upper bound "
+            "and is excluded from quality regression."
         ),
+        "_strategy_modes": {
+            "baseline_a": "real" if real_mode else "stub_rule_echo",
+            "treatment_b": "stub_oracle",
+        },
         "baseline_a": {k: baseline_a[k] for k in SCALAR_KEYS},
-        "treatment_b": {k: treatment_b[k] for k in SCALAR_KEYS},
+        "oracle_upper_bound": {k: treatment_b[k] for k in SCALAR_KEYS},
     }
     BASELINE_PATH.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -233,7 +248,13 @@ def eval_report(
     )
 
     if os.getenv("EVAL_UPDATE_BASELINE") == "1":
-        _write_baseline(baseline_a, treatment_b)
+        _write_baseline(
+            baseline_a,
+            treatment_b,
+            real_mode=real_mode,
+            model_name=model_name,
+            sample_count=len(eval_cases),
+        )
         print(
             f"[baseline] wrote {BASELINE_PATH.name} "
             f"(baseline_a + treatment_b) for {len(eval_cases)} cases"
@@ -440,9 +461,14 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any], real_mode: bool)
         pytest.skip(
             "placeholder baseline; seed with EVAL_UPDATE_BASELINE=1 make eval-intent"
         )
+    if "_mode" not in baseline:
+        pytest.skip(
+            "baseline.json lacks mode metadata; reseed with "
+            "EVAL_UPDATE_BASELINE=1 make eval-intent"
+        )
 
     regressions: list[str] = []
-    for strategy in ("baseline_a", "treatment_b"):
+    for strategy in ("baseline_a",):
         recorded = baseline.get(strategy, {})
         current = eval_report[strategy]
 
