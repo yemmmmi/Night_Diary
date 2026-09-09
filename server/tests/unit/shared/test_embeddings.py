@@ -73,6 +73,22 @@ def test_build_embedding_function_uses_default_settings(
     assert recorder["model_name"] == "BAAI/bge-small-zh-v1.5"
 
 
+def test_build_embedding_function_prefers_cloud_api() -> None:
+    from app.shared.embeddings import (
+        OpenAICompatibleEmbeddingFunction,
+        build_embedding_function,
+    )
+
+    ef = build_embedding_function(
+        Settings(
+            embedding_api_key="sk-test",
+            embedding_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            embedding_model="text-embedding-v3",
+        )
+    )
+    assert isinstance(ef, OpenAICompatibleEmbeddingFunction)
+
+
 def test_module_import_defers_heavy_imports() -> None:
     """Importing the factory module must not eagerly import the ML stack.
 

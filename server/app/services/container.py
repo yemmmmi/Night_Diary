@@ -296,36 +296,18 @@ class ServiceContainer:
 
     @staticmethod
     def _build_reranker(cfg: Settings) -> Reranker | None:
-        """Build a reranker from local model weights, gracefully degrade to None.
+        """Build a cloud or local reranker; gracefully degrade to None.
 
-        Looks for a fine-tuned reranker under ``models_dir/reranker-night-diary``;
-        falls back to the base ``BAAI/bge-reranker-base`` if the fine-tuned
-        directory is absent. Any load failure is caught and logged — the
-        retriever still works without reranking (RRF-fused order is returned).
-
-        Returns ``None`` immediately (single info log, no load attempt) when
-        ``sentence-transformers`` is not installed — the ``[eval]`` extra is
-        optional at runtime, and the reranker is a pure local-model feature
-        with no cloud equivalent.
+        Cloud-first (Qwen/DashScope ``qwen3-rerank`` via Cohere-compatible
+        ``/reranks``) when ``rerank_api_key`` or ``embedding_api_key`` is set;
+        otherwise falls back to the local CrossEncoder under
+        ``models_dir/reranker-night-diary`` or ``BAAI/bge-reranker-base``.
+        Any failure is caught and logged — the retriever still works without
+        reranking (RRF-fused order is returned).
         """
-        import importlib.util
+        from app.domain.rag.reranker import build_reranker
 
-        if importlib.util.find_spec("sentence_transformers") is None:
-            logger.info(
-                "sentence-transformers not installed; cross-encoder reranking "
-                "disabled (install the [eval] extra and model weights to enable)"
-            )
-            return None
-
-        fine_tuned = Path(cfg.models_dir) / "reranker-night-diary"
-        model_name = str(fine_tuned) if fine_tuned.exists() else "BAAI/bge-reranker-base"
-        from app.domain.rag.reranker import Reranker
-
-        try:
-            return Reranker(model_name=model_name, local_files_only=True)
-        except Exception as exc:
-            logger.warning("Reranker init skipped (%s); degrading to no-rerank: %s", model_name, exc)
-            return None
+        return build_reranker(cfg, top_k=5, local_files_only=True)
 
     def warmup_models(self) -> None:
         """Preload embedding + reranker models (best-effort, non-blocking on failure).

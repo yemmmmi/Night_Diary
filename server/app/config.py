@@ -167,6 +167,26 @@ class Settings(BaseSettings):
         description="Model name used at the embedding endpoint.",
     )
 
+    # ---- Rerank via cloud API (Cohere-compatible, e.g. Qwen/DashScope qwen3-rerank) ----
+    # Prefer cloud when ``rerank_api_key`` is set, otherwise reuse ``embedding_api_key``
+    # (same DashScope key). Local CrossEncoder remains the last-resort fallback.
+    # Note: DashScope embedding uses ``compatible-mode/v1``; rerank uses
+    # ``compatible-api/v1`` — different path prefixes.
+    rerank_api_key: str = Field(
+        default="",
+        description="API key for a Cohere-compatible rerank endpoint. "
+        "Empty falls back to embedding_api_key, then to local CrossEncoder.",
+    )
+    rerank_base_url: str = Field(
+        default="https://dashscope.aliyuncs.com/compatible-api/v1",
+        description="Base URL of the Cohere-compatible rerank endpoint "
+        "(POST {base}/reranks).",
+    )
+    rerank_model: str = Field(
+        default="qwen3-rerank",
+        description="Model name used at the rerank endpoint.",
+    )
+
     # ---- HuggingFace (first-run model download) ----
     hf_endpoint: str = Field(
         default="https://hf-mirror.com",

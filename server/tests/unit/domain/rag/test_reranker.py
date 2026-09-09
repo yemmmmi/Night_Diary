@@ -196,3 +196,80 @@ def test_rerank_episodic_uses_summary_and_tags():
     assert query == "query"
     assert "失眠" in content
     assert "睡眠" in content or "健康" in content  # tags 拼入 content
+
+
+def test_api_rerank_model_maps_scores_back_to_input_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ApiRerankModel.predict 应按 pairs 原序回填 relevance_score。"""
+    from app.domain.rag.reranker import ApiRerankModel
+
+    calls: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "results": [
+                    {"index": 1, "relevance_score": 0.9},
+                    {"index": 0, "relevance_score": 0.2},
+                ]
+            }
+
+    class FakeClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> FakeClient:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def post(self, url: str, headers: dict[str, str], json: dict[str, object]) -> FakeResponse:
+            calls.append({"url": url, "headers": headers, "json": json})
+            return FakeResponse()
+
+    monkeypatch.setattr("httpx.Client", FakeClient)
+    model = ApiRerankModel(
+        api_key="sk-test",
+        base_url="https://dashscope.aliyuncs.com/compatible-api/v1",
+        model="qwen3-rerank",
+    )
+    scores = model.predict([("q", "a"), ("q", "b")])
+    assert scores == [0.2, 0.9]
+    assert calls[0]["url"] == "https://dashscope.aliyuncs.com/compatible-api/v1/reranks"
+    assert calls[0]["json"] == {
+        "model": "qwen3-rerank",
+        "query": "q",
+        "documents": ["a", "b"],
+        "top_n": 2,
+    }
+
+
+def test_build_reranker_prefers_cloud_api() -> None:
+    """有 DashScope key 时应走 ApiRerankModel, 不依赖本机 CrossEncoder。"""
+    from app.config import Settings
+    from app.domain.rag import reranker as reranker_mod
+
+    built = reranker_mod.build_reranker(
+        Settings(
+            embedding_api_key="sk-embed",
+            rerank_api_key="",
+            rerank_base_url="https://dashscope.aliyuncs.com/compatible-api/v1",
+            rerank_model="qwen3-rerank",
+        )
+    )
+    assert built is not None
+    model = built._load_model()  # type: ignore[attr-defined]
+    assert isinstance(model, reranker_mod.ApiRerankModel)
+
+
+def test_resolve_rerank_api_key_falls_back_to_embedding_key() -> None:
+    from app.config import Settings
+    from app.domain.rag.reranker import resolve_rerank_api_key
+
+    assert resolve_rerank_api_key(Settings(rerank_api_key="", embedding_api_key="sk-e")) == "sk-e"
+    assert resolve_rerank_api_key(Settings(rerank_api_key="sk-r", embedding_api_key="sk-e")) == "sk-r"
