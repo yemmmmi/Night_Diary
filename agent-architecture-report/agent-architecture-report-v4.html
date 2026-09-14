@@ -569,7 +569,7 @@
   <div class="v3-band">
     <b>本版（REV 4.2）更新了什么：</b>在 4.1 的四入口事实图之上做了一次<b>逐条代码复核</b>。修正 3 处与代码相反的事实——情景记忆淘汰会<b>同步删除持久层行</b>、Neo4j 不可用时实体<b>不落库</b>（不存在 SQLite 写入路径）、<code>StreamingSafetyGuard</code> 只接在流式对话链路；
     校准 8 处参数与字段名——时间槽位枚举数、危机词表举例、<code>target_unit / target_period</code>、多跳收敛判据、<b>2048 字符</b>快照、<b>工具轮次 ≤2</b>、checkin API 形态、Stage 顺序；
-    给 5 处数字标注来源与可复现性——RAG 质量门、树洞末轮、后端测试计数、8 目录 stub 拆分、MCP 试跑；其中 RAG 与 episodic 已用 2026-09-14 复跑验证（逐位一致）并落盘；
+    给 5 处数字标注来源与可复现性——RAG 质量门、树洞末轮、后端测试计数、8 目录 stub 拆分、MCP 试跑；其中 RAG 与 episodic 已用 2026-09-14 复跑验证（逐位一致）并落盘，<code>mcp_decision</code> 也从 stub placeholder <b>转正为 REAL 底线</b>（12 例 decision 0.917 / FPR 0.00 / exact 0.75，容差 0.15）；
     并新增 <b>2.8 节</b>补齐 V3.2 用户模式体系与中间件管线（<code>safety → mode → finalize</code>）。
     <b>已存在：</b>MCP 工具注册表——
     <code>ToolRegistry</code> 统一注册 8 本地工具 + MCP 远程工具，<code>mcp_connections.py</code> 连接层（SSE / Streamable HTTP / stdio 三传输 + 退避重启），
@@ -661,7 +661,7 @@
           <text x="180" y="344">▸ 记忆守门：24h 窗口 Jaccard ≥ <tspan font-weight="700" fill="#44549E">0.85</tspan> 去重，危机文本禁止写入，情景记忆 LRU <tspan font-weight="700" fill="#44549E">100</tspan> 条</text>
           <text x="180" y="370">▸ 技能 REAL 30 例：Token −75.4%；full accuracy 0.767 → progressive 0.633（成本/质量取舍）</text>
           <text x="180" y="396">▸ 生成质量（LLM-as-Judge，overall/5）：共情 <tspan font-weight="700" fill="#44549E">4.93</tspan> · 对抗 <tspan font-weight="700" fill="#44549E">4.83</tspan> · 计划提案 <tspan font-weight="700" fill="#44549E">4.97</tspan>；维度分：共情 4.87 / 对抗 safety 5.00</text>
-          <text x="180" y="422">▸ 评测 9 套；CI 显式 8 目录不含 generation；MCP 仍 placeholder，REAL 复跑 0.6667 未入库</text>
+          <text x="180" y="422">▸ 评测 9 套；CI 显式 8 目录不含 generation；MCP decision 已入库 REAL 底线（exact 0.75 · FPR 0.00）</text>
           <text x="180" y="448">▸ 降级矩阵：LangGraph 失败回退 legacy loop · bind_tools 失败回退文本协议 · RQ 失败回退线程 · Neo4j 失败仅记日志</text>
         </g>
 
@@ -1292,7 +1292,7 @@ flowchart LR
     <div class="glyph">05</div>
     <div class="txt"><b>分论点：</b>"有数字"不等于"有真实成绩"。8 套原评测加本分支新增 MCP decision 共 9 套；
     每项必须同时标注 REAL / stub / oracle、模型、样本量和 CI 状态。CI 工作流当前显式列出 8 个目录，
-    不含 generation；MCP decision 文件仍是 placeholder，REAL 试跑（2026-09-14 复跑 model_exact 0.6667 / parser 1.0000）仍未写入合同。</div>
+    不含 generation；MCP decision 已把 REAL 底线写入 <code>baseline.json</code>（12 例：decision 0.917 / FPR 0.00 / exact 0.75 / 参数 0.625，容差 0.15）。</div>
   </div>
 
   <h3 id="s-6-1">6.1 九套评测：运行模式、模型、样本量与 CI 状态</h3>
@@ -1307,7 +1307,7 @@ flowchart LR
       <tr><td>计划提案</td><td><b>REAL</b>；deepseek-v4-flash judge；13/13 已评</td><td>overall <b class="n">4.97</b> / 5；gentleness / 忠实度 / 安全均为 5.00</td><td>显式 CI 仅跑 stub 接线</td></tr>
       <tr><td>生成质量</td><td><b>REAL</b>；deepseek-v4-flash；generation 套件共 31 例（图 10 另含 plan 13 例 / treehole 5 例，合计 49 例）</td><td>共情 overall 4.93；洞察忠实度 4.60；多轮 coherence 1.00 / 忠实度 5.00</td><td><b>不在显式 eval job</b></td></tr>
       <tr><td>树洞摘要</td><td><b>REAL</b>；deepseek-v4-flash；5 例</td><td>2026-09-14 复跑 overall <b>4.77</b> / 忠实度 5.00（v4.1 记录 4.72，属 5 例样本波动），已按 REAL 结果重播种 <code>BASELINE.md</code></td><td>显式 CI 仅跑 stub 接线；该套无 <code>baseline.json</code> 门禁</td></tr>
-      <tr><td>MCP decision</td><td><b>stub oracle placeholder</b>；12 例</td><td>文件仍 1.0 接线；2026-09-14 REAL 复跑 model_exact <b>0.6667</b> / parser 1.0000（v4.1 记录 0.75——LLM 决策有波动），<b>仍不是质量合同</b></td><td>已列入显式 CI，质量门禁待写入 REAL 基线</td></tr>
+      <tr><td>MCP decision</td><td><b>REAL</b>（<code>_mode: real</code>）；deepseek-v4-flash；12 例</td><td>decision 0.917 / <b>FPR 0.00</b>（无误调用）；exact <b>0.75</b>（同套复跑 0.6667–0.75）；<b>参数准确率 0.625 是最大短板</b>；已入库，容差 0.15 只拦退步</td><td>显式 CI 跑 stub 路径；REAL 回归仅 real 模式生效</td></tr>
     </tbody>
   </table></div>
 
@@ -1512,7 +1512,7 @@ flowchart TD
       <tr>
         <td>效果评估体系 / 可观测性<sup><a href="#cite-3">[3]</a></sup><span class="cover-chip cover-full">有代码证据</span></td>
         <td>9 套评测目录 + 模式/模型/样本/CI 标签 + LLM-as-Judge 落库 + MCP 调用流水 + p50/p95</td>
-        <td>"CI 当前显式跑 8 个 eval 目录（含 MCP decision），generation 不在该 job；MCP 文件仍是 12 例 stub oracle placeholder，2026-09-14 REAL 复跑 model_exact 0.6667（v4.1 记 0.75）仍未写入合同。"</td>
+        <td>"CI 当前显式跑 8 个 eval 目录（含 MCP decision），generation 不在该 job；MCP decision 的 REAL 底线已入库——decision 0.917、FPR 0.00，说明"该不该调"基本稳了，但参数准确率 0.625 说明"怎么调"还没调好。"</td>
       </tr>
       <tr>
         <td>工程化：FastAPI / Docker / 队列 / 向量库<sup><a href="#cite-7">[7]</a></sup><span class="cover-chip cover-full">有代码证据</span></td>
@@ -1551,7 +1551,7 @@ flowchart TD
   <div class="sec-head"><span class="sec-num">SECTION 09</span><h2>缺陷剖析与优化决策</h2></div>
   <div class="sec-thesis">
     <span class="tag">本节结论</span>
-    当前短板按事实状态重排：真实工具决策（D1）、MCP 合同尚未入库（D3）、情景记忆向量仍弱于 Jaccard（D2）、
+    当前短板按事实状态重排：真实工具决策（D1）、MCP 决策的参数准确率（D3，REAL 底线已入库）、情景记忆向量仍弱于 Jaccard（D2）、
     多轮评测样本量小（D5）、安全召回、队列可靠性、知识库播种、画像晋升与联网能力重复。同步图异常传播已在本快照修复，
     作为已关闭问题保留回归证据。
   </div>
@@ -1577,12 +1577,12 @@ flowchart TD
   </div>
 
   <div class="defect">
-    <div class="d-head"><span class="d-no">D3</span><span class="d-title">MCP decision 文件仍是 placeholder，REAL 试跑未写成合同</span><span class="badge p1">P1 · 接线不等于质量</span></div>
+    <div class="d-head"><span class="d-no">D3</span><span class="d-title">MCP decision 已入库 REAL 底线，但参数与工具名准确率仍偏低</span><span class="badge p1">P1 · 已入库，待达阈值</span></div>
     <dl>
-      <dt>现象</dt><dd>MCP 工具常驻可用集、绕过意图白名单；第 9 套评测的 <code>baseline.json</code> 仍是 stub oracle placeholder（model/parser 1.0）。REAL 试跑打印 <code>model_exact</code> 0.75（2026-09-09，三次质量门）与 <b>0.6667</b>（2026-09-14 复跑）/ <code>parser_exact=1.0000</code>（12 例，deepseek-v4-flash）——<b>同一套 12 例的 LLM 决策本身有波动，且都没有写入 baseline</b>，因此不能当质量门禁引用。</dd>
-      <dt>根因</dt><dd>MCP 批次优先打通传输与观测；decision 评测 harness 已能 REAL 跑，缺的是把结果写成带 <code>_mode/_model/_sample_count</code> 的合同并设阈值。</dd>
-      <dt>影响</dt><dd>面试被问"MCP 工具误调用怎么办"时，目前有一次 0.75 的试跑观察，没有入库合同与回归阈值；线上一次误调用仍带来真实外部请求成本。</dd>
-      <dt>优化方向</dt><dd>把三次试跑之一写入 REAL baseline，再讨论 decision ≥ 0.85 一类阈值；与 D1 的 native 0.75 分开讲：一个是本地工具、一个是 MCP 决策，都还没过合同门槛。</dd>
+      <dt>现象</dt><dd>MCP 工具常驻可用集、绕过意图白名单；第 9 套评测的 <code>baseline.json</code> 已于 2026-09-14 由 REAL 运行播种（<code>_mode: real</code>，12 例，deepseek-v4-flash）：<b>decision 0.9167、FPR 0.00</b>（没有把不该调的场景误调用）、tool_name 0.75、<b>argument 0.625</b>、exact 0.75。<b>同一套 12 例复跑出现过 0.6667 / 0.75 两个值</b>（后者与 v4.1 报告一致），所以回归容差取 0.15——门禁只拦明显退步。</dd>
+      <dt>根因</dt><dd>决策层本身是稳的（该不该调 11/12 正确），短板在"调什么、怎么填"：工具描述只写"能做什么"，参数 schema 没有示例，模型选对动作却填错参数。</dd>
+      <dt>影响</dt><dd>"接入了 MCP"现在能回答"调不调得对"（FPR 0.00），但"调得好不好"仍是 exact 0.75；对外不能把 0.75 说成质量达标，误调用虽为 0，参数错误仍会导致外部请求失败重试。</dd>
+      <dt>优化方向</dt><dd>先补工具描述的参数示例与"何时不调用"章节，参数校验失败时回灌错误让模型重试一次；把 exact 推到 0.85 以上后，再把门禁从"容差拦退步"升级为绝对阈值。与 D1 的 native 0.75 分开讲：一个是本地工具决策（FPR 0.60），一个是 MCP 决策（FPR 0.00）。</dd>
     </dl>
   </div>
 
@@ -1662,7 +1662,7 @@ flowchart TD
     <tbody>
       <tr><td>D1 工具决策 0.75</td><td><span class="badge p0">P0</span></td><td class="num">1 天</td><td>"原生 FC"必被追问，数字难看</td><td><b>投递前必修</b>（few-shot + 工具描述）</td></tr>
       <tr><td>D2 记忆向量弱于 Jaccard</td><td><span class="badge p1">P1</span></td><td class="num">1–2 天</td><td>只讲"向量检索"会被数字打脸</td><td>用 hybrid 叙事；可选换 embedding</td></tr>
-      <tr><td>D3 MCP 合同未入库</td><td><span class="badge p1">P1</span></td><td class="num">0.5 天</td><td>"接入了 MCP"仍不能回答"调得好吗"</td><td>写入 REAL baseline 后再设阈值</td></tr>
+      <tr><td>D3 MCP 参数准确率 0.625</td><td><span class="badge p1">P1</span></td><td class="num">1 天</td><td>决策稳但参数填错，被追问即暴露</td><td>补参数示例 + 错误回灌；REAL 底线已入库（0.75）</td></tr>
       <tr><td>D4 图异常真回退</td><td><span class="badge ok">已关闭</span></td><td class="num">已完成</td><td>旧实现只返回固定 fallback</td><td>保留故障注入回归测试</td></tr>
       <tr><td>D5 多轮样本量 / 词面诊断</td><td><span class="badge p2">P2</span></td><td class="num">扩样本</td><td>n=3 满分经不起追问</td><td>扩评测集；勿引用过期 2.67</td></tr>
       <tr><td>D6 危机规则召回</td><td><span class="badge p1">P1</span></td><td class="num">2–3 天</td><td>伦理合规追问卡壳</td><td>备好"延迟 vs 召回"权衡话术</td></tr>
@@ -1675,7 +1675,7 @@ flowchart TD
 
   <div class="callout">
     <b>给秋招的排序建议：</b>投递前仍优先 D1（native 工具决策 0.75 / FPR 0.60）。
-    D3 把已观察到的 MCP REAL 0.75 写成合同；D8 的幂等播种可降低新环境演示风险。
+    D3 的 REAL 底线已入库（exact 0.75 / FPR 0.00），下一步是把参数准确率 0.625 推上去再设绝对阈值；D8 的幂等播种可降低新环境演示风险。
     D2 不再是"缺基线"，而是"向量单路 0.348 &lt; Jaccard 0.498，重排后 0.564"的策略故事。
     其余 P1 / P2 准备"现象-根因-权衡-计划"四段式话术——
     <b>面试官对"知道自己在哪薄弱"的候选人的信任，远高于对"项目完美"的信任</b>。
@@ -1759,7 +1759,7 @@ flowchart TD
   </div>
   <p class="note">说明：架构与指标来自 <code>feature/agent-report-hardening</code> 分支 2026-09-09（复核基准 <code>ddd48d7</code>，REV 4.2 逐条对照源码与 baseline 文件）。ORM 表数按代码核为 25 个 Row + 1 张关联表。
   评测数字按来源分三类标注：<b>已入库且可复现</b>（intent / tool_call / skill_call / <b>rag 云端 REAL</b> / episodic / plan / generation / <b>treehole</b>）——其中 RAG 与 episodic 在 2026-09-14 复跑逐位一致，treehole 复跑 overall 4.77（v4.1 记 4.72，5 例波动）并已重播种；
-  <b>接线占位</b>（<code>mcp_decision</code> 仍是 12 例 stub-oracle placeholder，REAL 复跑 model_exact 0.6667 未写入合同）；
+  <b>已入库的 REAL 底线</b>（含 <code>mcp_decision</code>：12 例 decision 0.917 / FPR 0.00 / exact 0.75，容差 0.15 只拦退步）；
   <b>本地自述</b>（测试计数无日志产物，已按 2026-09-14 复跑口径在正文标注）。JD 部分仅做公开岗位的方向性映射。</p>
 </footer>
 
