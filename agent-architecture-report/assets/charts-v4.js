@@ -322,7 +322,7 @@
       right: 14,
       bottom: 8,
       style: {
-        text: 'Qwen text-embedding-v3 + qwen3-rerank · 2026-09-09 REAL 质量门',
+        text: 'Qwen text-embedding-v3 + qwen3-rerank · 2026-09 REAL 质量门（两次复跑一致）',
         fontSize: 10.5,
         fontFamily: FONT,
         fill: C.muted

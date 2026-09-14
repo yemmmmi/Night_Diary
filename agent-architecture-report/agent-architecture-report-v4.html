@@ -1,10 +1,11 @@
-<!-- REV 4.1 · feature/agent-report-hardening · 2026-09-09 workspace · HEAD db7e446 + uncommitted eval/prompt/REAL baselines -->
+<!-- REV 4.2 · feature/agent-report-hardening · 依据 HEAD ddd48d7（含 8180f2f REAL 基线播种）逐条核对代码后修订 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>夜记 v3 · Agent 体系全景（MCP 接入版）— 秋招简历技术拆解手册 · REV 4.1</title>
+<meta name="description" content="夜记 v3 Agent 体系全景：四入口分治、分层记忆、混合 RAG、数据结构与量化评估，逐条标注 REAL / stub / oracle 与 CI 状态。">
+<title>夜记 v3 · Agent 体系全景（MCP 接入版）— 秋招简历技术拆解手册 · REV 4.2</title>
 <style>
   @font-face { font-family: 'Lora'; src: url('./_shared/fonts/Lora-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
   @font-face { font-family: 'Lora'; src: url('./_shared/fonts/Lora-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
@@ -17,17 +18,17 @@
   :root {
     --bg: #FAF9F5;
     --bg2: #F1EEE6;
-    --bg3: #E9E4D8;
     --ink: #2A2823;
-    --muted: #827B6D;
+    --muted: #6E6A5E;      /* AA ≥4.5 on --bg（原 #827B6D 为 3.98） */
     --rule: #E0DACB;
     --accent: #44549E;
     --accent-soft: #44549E14;
-    --accent2: #B07B4F;
+    --accent2: #8C5E35;    /* AA ≥4.5 on --bg 与 --bg2（原 #B07B4F 为 3.44） */
     --accent2-soft: #B07B4F18;
     --ok: #4E7A52;
-    --warn: #A66A2E;
+    --warn: #8A5A24;       /* AA ≥4.5 on --bg（原 #A66A2E 为 4.22） */
     --bad: #A24B40;
+    --good: #3D725B;       /* 原缺失，.badge.ok 引用了未定义变量 */
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -37,13 +38,14 @@
   body {
     background: var(--bg);
     color: var(--ink);
-    font-family: 'WorkSans', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    font-family: 'WorkSans', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
     font-size: 15.5px;
     line-height: 1.75;
     -webkit-font-smoothing: antialiased;
   }
 
   mark.key { background: none; color: var(--accent); font-weight: 600; }
+  mark.warn { background: none; color: var(--warn); font-weight: 600; }
 
   sup a { color: var(--accent); text-decoration: none; font-size: 0.72em; font-weight: 600; }
   sup a:hover { text-decoration: underline; }
@@ -197,7 +199,6 @@
   h4 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; color: var(--accent); }
 
   p { margin: 10px 0; }
-  p.lead { font-size: 16px; }
   .path {
     font-family: 'JetBrainsMono', 'Consolas', monospace;
     font-size: 12.5px;
@@ -252,7 +253,6 @@
   .chip.medium { background: #44549E18; color: var(--accent); }
   .chip.heavy { background: #44549E2E; color: var(--accent); }
   .chip.crisis { background: #A24B4018; color: var(--bad); }
-  .chip.none { background: #827B6D18; color: var(--muted); }
 
   /* ---------- Callouts / metrics ---------- */
   .callout {
@@ -292,7 +292,7 @@
   figure.chart-figure figcaption { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 10px; text-align: left; }
   figure.diagram figcaption { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
   .chart-container { width: 100%; min-height: 380px; background: #fff; border: 1px solid var(--rule); border-radius: 8px; padding: 8px; }
-  .chart-container.short { min-height: 300px; }
+  .chart-container.short { min-height: 330px; }
   pre.mermaid { display: flex; justify-content: center; background: #fff; border: 1px solid var(--rule); border-radius: 8px; padding: 16px; }
 
   /* ---------- Pillar intro ---------- */
@@ -384,7 +384,6 @@
   /* ---------- JD coverage ---------- */
   .cover-chip { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 0 8px; margin-left: 6px; white-space: nowrap; }
   .cover-full { background: #4E7A5218; color: var(--ok); }
-  .cover-part { background: #A66A2E18; color: var(--warn); }
   .cover-none { background: #A24B4018; color: var(--bad); }
 
   /* ---------- Resume ---------- */
@@ -453,6 +452,33 @@
     .evolve { grid-template-columns: 1fr; }
     .hero h1 { font-size: 30px; }
   }
+
+  /* ---------- Print / PDF ---------- */
+  @media print {
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-size: 11pt; line-height: 1.6; }
+    .layout { display: block; max-width: none; padding: 0; }
+    aside.toc {
+      position: static;
+      height: auto;
+      max-height: none;
+      overflow: visible;
+      padding: 0 0 12pt;
+      border-bottom: 1px solid var(--rule);
+      break-after: page;
+    }
+    aside.toc li { margin: 1pt 0; }
+    header.hero { padding: 0 0 14pt; break-after: avoid; }
+    h1 { font-size: 20pt; }
+    h2 { font-size: 15pt; break-after: avoid; }
+    h3, h4 { break-after: avoid; }
+    figure, table, .defect, .callout, .qa-item, .resume-block, .metric-grid, .evolve-col {
+      break-inside: avoid;
+    }
+    .chart-container, .chart-container.short { min-height: 300px; page-break-inside: avoid; }
+    pre.mermaid { break-inside: avoid; }
+    .src-url { color: var(--muted); }
+  }
 </style>
 </head>
 <body>
@@ -464,39 +490,46 @@
   <ol>
     <li><a href="#sec-0">塔尖 · 核心论点</a></li>
     <li><a href="#sec-1">一 · 金字塔总览与 v3 演进</a></li>
-    <li><a href="#sec-1" class="sub">1.1 五根支柱</a></li>
-    <li><a href="#sec-1" class="sub">1.2 v2 → v3 演进与废案清理</a></li>
+    <li><a href="#s-1-1" class="sub">1.1 五根支柱</a></li>
+    <li><a href="#s-1-2" class="sub">1.2 v2 → v3 演进与废案清理</a></li>
     <li><a href="#sec-2">二 · 支柱一：四入口分治</a></li>
-    <li><a href="#sec-2" class="sub">2.1 场景二同步/流式分流</a></li>
-    <li><a href="#sec-2" class="sub">2.2 LangGraph 执行图</a></li>
-    <li><a href="#sec-2" class="sub">2.3 意图路由与双层分类</a></li>
-    <li><a href="#sec-2" class="sub">2.4 原生工具调用循环</a></li>
-    <li><a href="#sec-2" class="sub">2.5 ToolRegistry 与 MCP 工具生态</a></li>
-    <li><a href="#sec-2" class="sub">2.6 三大技能与技能注册表</a></li>
-    <li><a href="#sec-2" class="sub">2.7 周报图与危机防线</a></li>
+    <li><a href="#s-2-1" class="sub">2.1 场景二同步/流式分流</a></li>
+    <li><a href="#s-2-2" class="sub">2.2 LangGraph 执行图</a></li>
+    <li><a href="#s-2-3" class="sub">2.3 意图路由与双层分类</a></li>
+    <li><a href="#s-2-4" class="sub">2.4 原生工具调用循环</a></li>
+    <li><a href="#s-2-5" class="sub">2.5 ToolRegistry 与 MCP 工具生态</a></li>
+    <li><a href="#s-2-6" class="sub">2.6 三大技能与技能注册表</a></li>
+    <li><a href="#s-2-7" class="sub">2.7 周报图与危机防线</a></li>
+    <li><a href="#s-2-8" class="sub">2.8 V3.2 模式体系与中间件管线</a></li>
     <li><a href="#sec-3">三 · 支柱二：分层记忆系统</a></li>
-    <li><a href="#sec-3" class="sub">3.1 三层记忆与统一原子</a></li>
-    <li><a href="#sec-3" class="sub">3.2 四维守门与四条写入路径</a></li>
-    <li><a href="#sec-3" class="sub">3.3 检索三阶段与画像晋升</a></li>
+    <li><a href="#s-3-1" class="sub">3.1 三层记忆与统一原子</a></li>
+    <li><a href="#s-3-2" class="sub">3.2 四维守门与四条写入路径</a></li>
+    <li><a href="#s-3-3" class="sub">3.3 检索三阶段与画像晋升</a></li>
     <li><a href="#sec-4">四 · 支柱三：RAG 与知识库</a></li>
-    <li><a href="#sec-4" class="sub">4.1 查询理解</a></li>
-    <li><a href="#sec-4" class="sub">4.2 混合检索与消融</a></li>
-    <li><a href="#sec-4" class="sub">4.3 心理学知识库</a></li>
+    <li><a href="#s-4-1" class="sub">4.1 查询理解</a></li>
+    <li><a href="#s-4-2" class="sub">4.2 混合检索与消融</a></li>
+    <li><a href="#s-4-3" class="sub">4.3 心理学知识库</a></li>
     <li><a href="#sec-5">五 · 支柱四：数据结构与链路</a></li>
-    <li><a href="#sec-5" class="sub">5.1 核心数据模型</a></li>
-    <li><a href="#sec-5" class="sub">5.2 四条数据链路</a></li>
+    <li><a href="#s-5-1" class="sub">5.1 核心数据模型</a></li>
+    <li><a href="#s-5-2" class="sub">5.2 四条数据链路</a></li>
     <li><a href="#sec-6">六 · 支柱五：评估与工程化</a></li>
-    <li><a href="#sec-6" class="sub">6.1 九套评测与状态标签</a></li>
-    <li><a href="#sec-6" class="sub">6.2 可观测与降级</a></li>
+    <li><a href="#s-6-1" class="sub">6.1 九套评测与状态标签</a></li>
+    <li><a href="#s-6-2" class="sub">6.2 可观测与降级</a></li>
     <li><a href="#sec-7">七 · 数据链路全景图</a></li>
     <li><a href="#sec-8">八 · 秋招 JD 对标</a></li>
+    <li><a href="#s-8-1" class="sub">8.1 官方 JD 方向速览</a></li>
+    <li><a href="#s-8-2" class="sub">8.2 逐条能力映射</a></li>
+    <li><a href="#s-8-3" class="sub">8.3 覆盖度评估与差距</a></li>
     <li><a href="#sec-9">九 · 缺陷剖析与优化决策</a></li>
     <li><a href="#sec-10">十 · 简历素材包</a></li>
+    <li><a href="#s-10-1" class="sub">10.1 简历项目描述</a></li>
+    <li><a href="#s-10-2" class="sub">10.2 三十秒电梯陈述</a></li>
+    <li><a href="#s-10-3" class="sub">10.3 面试追问与应答</a></li>
   </ol>
   <div class="toc-foot">
     夜记 v3 · <code>feature/agent-report-hardening</code><br>
-    HEAD <code>db7e446</code> + 工作区 REAL 基线<br>
-    2026-09-09 · 2027 届秋招版
+    HEAD <code>ddd48d7</code> · 复核基准 2026-09-09<br>
+    REV 4.2 · 2027 届秋招版
   </div>
 </aside>
 
@@ -504,15 +537,15 @@
 
 <!-- ======================= 0 Hero ======================= -->
 <header class="hero" id="sec-0">
-  <div class="hero-kicker">NIGHT JOURNAL v3 · AGENT SYSTEM DEEP DIVE · 2027 届秋招版 · REV 4.1</div>
+  <div class="hero-kicker">NIGHT JOURNAL v3 · AGENT SYSTEM DEEP DIVE · 2027 届秋招版 · REV 4.2</div>
   <h1>夜记 Agent 体系全景（MCP 接入版）<br>—— 从四个真实入口拆解 Agent 架构</h1>
   <p class="hero-sub">
     夜记是一款生活记录 / 规划 / 自我洞察 Web 应用。当前代码必须按四个入口分别理解：
     <mark class="key">手写日记保存、卡片展开短回信、场景二同步/流式对话、周报</mark>。
     它们共享记忆、检索、安全和可观测组件，但编排并不相同：手写保存只落库、写 Chroma 并调度 digest；
     卡片展开才触发 treehole 短回信；同步对话尝试 LangGraph 六节点 single-pass，真正异常回退 legacy loop；
-    流式对话走独立的最多三轮工具循环；周报才进入 ExecutionPlanner → MultiAgentGraph。
-    本页以 2026-09-09 工作区为准（HEAD <code>db7e446</code>，含未提交的评测口径 / prompt 修复与 REAL 基线重写），明确区分 REAL、stub、oracle；已播种的质量合同与仍待入库的观察值分开写。
+    流式对话走独立的流式工具循环（工具轮次 ≤2）；周报才进入 ExecutionPlanner → MultiAgentGraph。
+    本页以 <code>ddd48d7</code>（2026-09-09）为复核基准，逐条对照源码与 <code>server/tests/eval/*/baseline.json</code>；明确区分 REAL、stub、oracle，并把"本地试跑、未入库"的观察值与已提交的质量合同分开写。
   </p>
   <div class="hero-meta">
     <span>编排 <b>LangGraph StateGraph + 自研 MultiAgentGraph</b></span>
@@ -528,13 +561,16 @@
   <div class="thesis-band">
     <div class="label">THESIS · 塔尖论点</div>
     <p>夜记 v3 是一套<em>以四个业务入口为边界、以记忆与检索为共享能力、以 ToolRegistry 为工具总线</em>的生活记录系统。
-    LangGraph 只负责场景二同步对话的 single-pass 图；最多三轮只属于独立流式/legacy loop；MultiAgentGraph 只用于周报深加工。
+    LangGraph 只负责场景二同步对话的 single-pass 图；多轮工具回填只属于独立流式/legacy loop（工具轮次 ≤2）；MultiAgentGraph 只用于周报深加工。
     UserSkillRegistry、process_info 与 multi_source（数据库字段仍名 <code>source_links_json</code>）纳入本分支交付。
     评测结论按运行模式、模型、样本量与 CI 状态披露，避免把 stub/oracle 接线结果包装成真实模型成绩。</p>
   </div>
 
   <div class="v3-band">
-    <b>本版（REV 4.1）更新了什么：</b>在第 4 版四入口事实图之上，把评测数字改成 2026-09-09 工作区 REAL 基线（含未提交的 judge/prompt 修复）。
+    <b>本版（REV 4.2）更新了什么：</b>在 4.1 的四入口事实图之上做了一次<b>逐条代码复核</b>。修正 3 处与代码相反的事实——情景记忆淘汰会<b>同步删除持久层行</b>、Neo4j 不可用时实体<b>不落库</b>（不存在 SQLite 写入路径）、<code>StreamingSafetyGuard</code> 只接在流式对话链路；
+    校准 8 处参数与字段名——时间槽位枚举数、危机词表举例、<code>target_unit / target_period</code>、多跳收敛判据、<b>2048 字符</b>快照、<b>工具轮次 ≤2</b>、checkin API 形态、Stage 顺序；
+    给 5 处数字标注来源与可复现性——RAG 质量门、树洞末轮、后端测试计数、8 目录 stub 拆分、MCP 试跑；其中 RAG 与 episodic 已用 2026-09-14 复跑验证（逐位一致）并落盘；
+    并新增 <b>2.8 节</b>补齐 V3.2 用户模式体系与中间件管线（<code>safety → mode → finalize</code>）。
     <b>已存在：</b>MCP 工具注册表——
     <code>ToolRegistry</code> 统一注册 8 本地工具 + MCP 远程工具，<code>mcp_connections.py</code> 连接层（SSE / Streamable HTTP / stdio 三传输 + 退避重启），
     <code>mcp_call_logs</code> 观测表 + Dev 面板「MCP」标签页 + stdio 全栈 E2E。<b>本分支交付范围：</b>
@@ -542,7 +578,7 @@
     ② 回信执行过程可见性——<code>chat_messages.process_info</code>（Migration 011）+ 前端 <code>LetterProcess.vue</code>，无需开发者模式即可展开"这封信 AI 做了什么"；
     ③ 计划多来源候选——<code>tasks.source_links_json</code> 每节点留存联网搜索候选（Migration 012），产品名改为 <code>multi_source</code>，只表示可追溯候选；
     ④ 基础设施修复——Neo4j 默认启动（健康检查 + 导入期 5×3s 重试）、LLMFactory 输出上限 300→2048（修复计划技能 JSON 静默截断）、
-    官方 Python 版 mcp-server-fetch 已打进镜像但保持 <b>opt-in</b>，不写成生产默认。
+    官方 Python 版 mcp-server-fetch 已写进后端镜像依赖清单（<code>pyproject.toml</code> 核心依赖 + <code>pip install -e .</code>），但保持 <b>opt-in</b>（<code>MCP_STDIOS</code> 默认空；本机 venv 当前未安装该包）。
     当前代码逐项核数为 <b>25 个 ORM Row + diary_tags 关联表 = 26 张物理表</b>；
     <code>style_preferences</code> 已由 <code>010_drop_style_preferences</code> 清理，<code>mcp_call_logs</code> 已纳入该口径。
     Migration 011 以两个 010 revision 为父节点合并迁移头，再顺接 Migration 012，<code>alembic heads</code> 仅剩一个 head。
@@ -624,8 +660,8 @@
           <text x="180" y="318">▸ RAG：30 篇 × 20 查询；2026-09-09 Qwen embedding/rerank REAL 质量门（小样本，不外推线上）</text>
           <text x="180" y="344">▸ 记忆守门：24h 窗口 Jaccard ≥ <tspan font-weight="700" fill="#44549E">0.85</tspan> 去重，危机文本禁止写入，情景记忆 LRU <tspan font-weight="700" fill="#44549E">100</tspan> 条</text>
           <text x="180" y="370">▸ 技能 REAL 30 例：Token −75.4%；full accuracy 0.767 → progressive 0.633（成本/质量取舍）</text>
-          <text x="180" y="396">▸ 生成质量（LLM-as-Judge）：共情 <tspan font-weight="700" fill="#44549E">4.87</tspan>/5 · 对抗安全 <tspan font-weight="700" fill="#44549E">5.00</tspan>/5 · 计划提案 <tspan font-weight="700" fill="#44549E">4.97</tspan>/5</text>
-          <text x="180" y="422">▸ 评测 9 套；CI 显式 8 目录不含 generation；MCP 文件仍 placeholder，REAL 试跑 model_exact 0.75 未入库</text>
+          <text x="180" y="396">▸ 生成质量（LLM-as-Judge，overall/5）：共情 <tspan font-weight="700" fill="#44549E">4.93</tspan> · 对抗 <tspan font-weight="700" fill="#44549E">4.83</tspan> · 计划提案 <tspan font-weight="700" fill="#44549E">4.97</tspan>；维度分：共情 4.87 / 对抗 safety 5.00</text>
+          <text x="180" y="422">▸ 评测 9 套；CI 显式 8 目录不含 generation；MCP 仍 placeholder，REAL 复跑 0.6667 未入库</text>
           <text x="180" y="448">▸ 降级矩阵：LangGraph 失败回退 legacy loop · bind_tools 失败回退文本协议 · RQ 失败回退线程 · Neo4j 失败仅记日志</text>
         </g>
 
@@ -638,13 +674,13 @@
     <figcaption>图 1 · 夜记 v3 Agent 体系金字塔总览（结论 → 支柱 → 事实 → 工程底座）</figcaption>
   </figure>
 
-  <h3>1.1 为什么这五根支柱恰好是秋招考点</h3>
+  <h3 id="s-1-1">1.1 为什么这五根支柱恰好是秋招考点</h3>
   <p>面向 2027 届秋招，公开官方 JD 的方向性要求集中在：
   <mark class="key">Agent 编排框架（LangChain/LangGraph）、RAG 全链路、记忆与上下文管理、工程化上线能力</mark>。
-  更内核化的岗位（腾讯智能体平台、Harness Engineering）则直接考察"Agent Loop、多 Agent 协作、Memory、Skill、任务规划、工具调用、状态管理、异常恢复"<sup><a href="#cite-5">[5]</a></sup>。
+  更内核化的岗位（腾讯智能体平台、Harness Engineering）则直接考察"Agent Loop、多 Agent 协作、Memory、Skill、任务规划、工具调用、状态管理、异常恢复"<sup><a href="#cite-3">[3]</a></sup>。
   五根支柱与这两组考察面一一对应，且 v3 补齐了 v2 报告承认的两个最大缺口：LangGraph 框架经验与原生工具调用。</p>
 
-  <h3>1.2 v2 → v3 演进与废案清理：一次"做减法"的重构</h3>
+  <h3 id="s-1-2">1.2 v2 → v3 演进与废案清理：一次"做减法"的重构</h3>
   <p>v3 不是加法迭代，而是<b>先删后建</b>：v2 时代沉淀的四个废案模块被整体移除，同时笔谈主链路完成 LangGraph 迁移。
   这个演进过程本身就是简历素材——它展示了"识别死代码 → 确认零调用 → 安全删除 → 用更标准的方案替代"的工程判断力：</p>
 
@@ -697,24 +733,24 @@
     <code>create_entry</code> 只落库、同步 Chroma、调度 digest_worker/treehole digest，不生成 reply 或 AnalysisRow；
     ② 卡片展开才走 <code>trigger_analysis</code> 生成 treehole 短回信；③ 场景二同步对话尝试
     <b>LangGraph 六节点 single-pass</b>；本分支已让执行异常向外传播并由调用方真正回退 legacy loop；
-    流式对话走独立最多三轮 loop；④ 周报才走 <b>ExecutionPlanner → MultiAgentGraph</b>。
+    流式对话走独立流式 loop（工具轮次 ≤2）；④ 周报才走 <b>ExecutionPlanner → MultiAgentGraph</b>。
     Supervisor 不是日记保存主路径。</div>
   </div>
 
-  <h3>2.1 场景二：共享准备阶段，同步与流式分开执行</h3>
+  <h3 id="s-2-1">2.1 场景二：共享准备阶段，同步与流式分开执行</h3>
   <p>入口 <span class="path">api/v1/conversation.py</span> → <span class="path">conversation_ai_service.generate_reply()</span>（流式版 <code>generate_reply_streaming()</code> 走 SSE：REPLY_START → TEXT_DELTA* → TEXT_END → REPLY_END）。
   同步与流式共享上下文准备阶段，共五个 Stage：</p>
 
   <div class="table-wrap"><table>
-    <thead><tr><th>阶段</th><th>组件 / 位置</th><th>做什么</th><th>关键参数</th></tr></thead>
+    <thead><tr><th scope="col">阶段</th><th scope="col">组件 / 位置</th><th scope="col">做什么</th><th scope="col">关键参数</th></tr></thead>
     <tbody>
-      <tr><td>Stage 1 会话路由</td><td><code>get_or_create_session</code></td><td>定位会话，取压缩历史前 300 字符作 brief_context</td><td class="num">brief[:300]</td></tr>
-      <tr><td>Stage 2 危机守卫</td><td><code>CrisisGuard.detect</code></td><td>命中危机词 → 直接返回安全回复 + 心理援助热线资源，不进任何 LLM</td><td class="num">score &lt; −0.7</td></tr>
+      <tr><td>Stage 1 危机守卫</td><td><code>CrisisGuard.detect</code></td><td>命中危机词 → 直接返回安全回复 + 心理援助热线资源，不进任何 LLM</td><td class="num">score &lt; −0.7</td></tr>
+      <tr><td>Stage 2 会话路由</td><td><code>get_or_create_session</code></td><td>定位会话，取压缩历史前 300 字符作 brief_context</td><td class="num">brief[:300]</td></tr>
       <tr><td>Stage 2.4 技能前置</td><td><code>_try_user_skill</code></td><td><b>手动 chips</b>（<code>body.skill</code> → forced_skill）直达技能；<b>自动路由</b>由意图判定。命中即返回，跳过整个 Loop</td><td>3 技能</td></tr>
       <tr><td>Stage 2.5 意图 + 槽位</td><td><code>ChatIntentClassifier</code> + <code>SlotExtractor</code></td><td>8 意图分类（规则层 + LLM 层）→ 抽取时间范围 / 情绪词 / 操作类型等 7 槽位</td><td class="num">阈值 0.9</td></tr>
       <tr><td>Stage 2.6 技能选择</td><td><code>SkillRegistry.select_skills</code></td><td>危机 / 情感 / 记忆回溯 / 实体追踪四个分析技能按预算贪心选择，结果注入情景上下文</td><td class="num">4000 tok</td></tr>
       <tr><td>Stage 3 上下文装配</td><td>RAG + 记忆 + 附件</td><td>查询改写 → 混合检索（仅 need_retrieval）→ 情景记忆召回 → 钉选日记 / 附上卡片 / 附上计划</td><td class="num">各上限 3</td></tr>
-      <tr><td>Stage 4 同步 / 流式分流</td><td><code>run_conversation_loop*</code></td><td>同步尝试六节点 LangGraph single-pass，异常回退 legacy；流式走独立工具循环</td><td class="num">图 1 pass；流式 ≤3 轮</td></tr>
+      <tr><td>Stage 4 同步 / 流式分流</td><td><code>run_conversation_loop*</code></td><td>同步尝试六节点 LangGraph single-pass，异常回退 legacy；流式走独立工具循环</td><td class="num">图 1 pass；流式工具轮 ≤2</td></tr>
       <tr><td>Stage 5 后处理</td><td>记忆 + 实体 + 追踪</td><td>情绪分 ≥ 0.3 或重度信号 → 异步写情景记忆；实体抽取入队；trace 落库</td><td class="num">写入门槛 0.3</td></tr>
     </tbody>
   </table></div>
@@ -722,7 +758,7 @@
   <figure class="diagram">
     <pre class="mermaid">
 flowchart TD
-  U["用户消息 / 附件<br/>(日记·卡片·计划)"] --> CG{"Stage 2<br/>CrisisGuard.detect"}
+  U["用户消息 / 附件<br/>(日记·卡片·计划)"] --> CG{"Stage 1<br/>CrisisGuard.detect"}
   CG -->|"危机命中"| SAFE["安全回复 + 热线资源<br/>不进 LLM · 不写记忆"]
   CG -->|"正常"| SK{"Stage 2.4 技能前置<br/>手动 chips / 意图自动"}
   SK -->|"record / insight / plan"| SR["三大技能执行<br/>命中即短路返回"]
@@ -733,21 +769,21 @@ flowchart TD
   RG --> CTX["Stage 3 上下文装配<br/>查询改写 · 混合检索 · 情景记忆 · 附件"]
   CTX --> TF["工具过滤<br/>tools = need_tools ∩ tool_map"]
   TF --> LOOP["Stage 4 Agentic Loop<br/>run_conversation_loop"]
-  LOOP --> G["同步：LangGraph 六节点 single-pass<br/>真异常回退 legacy loop<br/>流式：独立 ≤3 轮 loop"]
+  LOOP --> G["同步：LangGraph 六节点 single-pass<br/>真异常回退 legacy loop<br/>流式：独立工具 loop ≤2 轮"]
   G --> OUT2["final_response + citations"]
   OUT2 --> POST["Stage 5<br/>记忆写入(阈值0.3) · 实体抽取 · trace"]
     </pre>
     <figcaption>图 2 · 笔谈主链路：危机 → 技能前置 → 意图槽位 → 上下文 → Agentic Loop 五阶段（<code>conversation_ai_service.py</code> 实测调用链）</figcaption>
   </figure>
 
-  <h3>2.2 LangGraph 执行图：六节点 single-pass，不是三轮循环</h3>
+  <h3 id="s-2-2">2.2 LangGraph 执行图：六节点 single-pass，不是三轮循环</h3>
   <p><span class="path">services/ai/conversation_graph.py</span> 用 <code>StateGraph</code> 构建笔谈执行图，
   <span class="path">graph_nodes.py</span> 提供节点实现，<span class="path">conversation_loop.py</span> 是同步入口（默认 <code>use_graph=True</code>）。
   图结构是 <code>plan → execute_tools? → generate → postprocess</code> 的一次通过；<code>max_iterations</code> 虽在状态中存在，并不构成 LangGraph 内循环。
   分支同时修复节点吞异常导致回退不触发的问题，交付后才可宣称“真正异常回退”。</p>
 
   <div class="table-wrap"><table>
-    <thead><tr><th>节点</th><th>职责</th><th>细节</th></tr></thead>
+    <thead><tr><th scope="col">节点</th><th scope="col">职责</th><th scope="col">细节</th></tr></thead>
     <tbody>
       <tr><td><code>preprocess</code></td><td>输入清洗</td><td>安全检测、省略检测（结合 brief_context 补全指代）</td></tr>
       <tr><td><code>understand</code></td><td>语义理解</td><td>调用 <code>SlotExtractor</code> 抽槽位，生成 retrieval_query</td></tr>
@@ -769,11 +805,11 @@ flowchart TD
     前端设置页的降级横幅甚至把 LangGraph 列为被监控组件之一：<b>"Redis / Neo4j / RQ / LangGraph / 记忆层不可用时自动回退"</b>。
   </div>
 
-  <h3>2.3 意图路由：8 意图 × 三维路由表</h3>
+  <h3 id="s-2-3">2.3 意图路由：8 意图 × 三维路由表</h3>
   <p><span class="path">chat_intent_classifier.py</span> 的意图不再是简单分类，而是一张<b>路由决策表</b>——每个意图绑定模型档位、最大循环迭代数、可用工具白名单：</p>
 
   <div class="table-wrap"><table>
-    <thead><tr><th>意图</th><th>模型档位</th><th>最大迭代</th><th>工具白名单 need_tools</th></tr></thead>
+    <thead><tr><th scope="col">意图</th><th scope="col">模型档位</th><th scope="col">最大迭代</th><th scope="col">工具白名单 need_tools</th></tr></thead>
     <tbody>
       <tr><td>casual_chat 闲聊</td><td><span class="chip light">light</span></td><td class="num">1</td><td>无（直接生成）</td></tr>
       <tr><td>emotional_vent 情绪宣泄</td><td><span class="chip medium">medium</span></td><td class="num">1</td><td><code>analyze_sentiment</code></td></tr>
@@ -789,7 +825,7 @@ flowchart TD
   <p>双层结构与旧版 <code>IntentClassifier</code> 同构但为笔谈场景重写：<b>规则层</b>零 token，用关键词组打分定置信度——
   危机词命中 0.98、回溯 ≥2 词 0.92、任务指令 0.92、计划探索 0.92、情绪 ≥2 词 0.90、求助 ≥2 词 0.88，默认 0.50；
   <b>LLM 层</b>只在规则置信度 <b class="n">≤ 0.9</b> 时介入，失败降级回规则层结果。<code>SlotExtractor</code> 同样规则层先行，抽取 7 个槽位：
-  时间范围（9 种枚举 + 绝对日期）、时间表达式、情绪关键词、操作类型（search/analyze/compare/write/ask）、多任务标志、子任务列表、风格约束。</p>
+  时间范围（10 种相对标签 today…recent + <code>absolute</code>）、时间表达式、情绪关键词、操作类型（search/analyze/compare/write/ask）、多任务标志、子任务列表、风格约束。</p>
 
   <div class="metric-grid">
     <div class="metric"><div class="v">0.744</div><div class="k">REAL baseline_a 准确率（deepseek-v4-flash，250 例）</div></div>
@@ -800,10 +836,10 @@ flowchart TD
 
   <figure class="chart-figure">
     <figcaption>图 3 · 意图评测（250 例）：baseline_a 为 REAL 合同；treatment 为 stub oracle 上界，不可当作模型成绩</figcaption>
-    <div id="chart-intent" class="chart-container short" style="min-height:330px"></div>
+    <div id="chart-intent" class="chart-container short"></div>
   </figure>
 
-  <h3>2.4 原生工具调用循环：bind_tools 优先，文本协议兜底</h3>
+  <h3 id="s-2-4">2.4 原生工具调用循环：bind_tools 优先，文本协议兜底</h3>
   <p>v2 报告承认的最大缺口"无原生 Function Calling"在 v3 已解决。<span class="path">services/ai/tool_factory.py</span> 定义 <b class="n">8</b> 个本地工具：
   <code>search_diary</code>（日记检索）、<code>analyze_sentiment</code>（情绪分析）、<code>query_entity_graph</code>（实体图谱查询）、
   <code>list_todos</code>（待办列表）、<code>get_plan_progress</code>（计划进度）、<code>get_plan_detail</code>（计划详情）、
@@ -813,7 +849,7 @@ flowchart TD
   <ul class="plain">
     <li><b>原生层：</b><code>supports_native_tools(llm)</code> 通过且有工具规范时，<code>llm.bind_tools(tool_specs)</code> 绑定后由模型自主决策调用，<code>extract_native_tool_calls()</code> 解析响应——<mark class="key">真正的 Function Calling 循环</mark>；</li>
     <li><b>兜底层：</b><code>bind_tools</code> 抛异常（模型不支持 / 协议不兼容）时降级为文本标签协议，把工具规范注入 prompt 让模型以文本形式表达调用意图；</li>
-    <li><b>循环控制：</b>最多三轮属于 <code>run_conversation_loop_streaming</code> 与 legacy fallback；LangGraph 六节点图是 single-pass，不能把两者混写；</li>
+    <li><b>循环控制：</b>工具回填轮次 = <code>max(0, max_iterations − 1)</code>，即由意图档位决定的 <b>≤2 轮</b>（<code>3</code> 只是意图缺失时的兜底常量），这段逻辑属于 <code>run_conversation_loop_streaming</code> 与 legacy fallback；LangGraph 六节点图是 single-pass，不能把两者混写；</li>
     <li><b>意图过滤：</b>进入循环前按 <code>intent_result.need_tools</code> 过滤本地工具——闲聊意图拿不到任何工具，从源头降低误调用；<b>MCP 工具例外</b>：绕过白名单常驻可用集，由 LLM 自主决策是否调用（设计动机见 2.5）。</li>
   </ul>
 
@@ -828,7 +864,7 @@ flowchart TD
 
   <figure class="chart-figure">
     <figcaption>图 4 · 工具调用（40 例）：native 为 REAL，fallback 为 stub oracle；二者不可作为模型优劣的直接对比</figcaption>
-    <div id="chart-tool" class="chart-container short" style="min-height:330px"></div>
+    <div id="chart-tool" class="chart-container short"></div>
   </figure>
 
   <div class="callout">
@@ -837,13 +873,13 @@ flowchart TD
     <b>这正是我做这套对比评测的价值：它告诉我下一步优化方向是决策 prompt 与 few-shot，而不是急着换模型。</b>"（对应缺陷 D1）
   </div>
 
-  <h3>2.5 ToolRegistry 与 MCP 工具生态：本地 8 工具 + 远程 N 工具一条总线</h3>
+  <h3 id="s-2-5">2.5 ToolRegistry 与 MCP 工具生态：本地 8 工具 + 远程 N 工具一条总线</h3>
   <p>上一版报告把"MCP 未接入"列为 P0 缺口——本版已修复。<span class="path">services/ai/tool_registry.py</span> 的 <code>ToolRegistry</code>
   是<mark class="key">"Agent 能用什么工具"的唯一事实源</mark>：本地工具按请求重建（绑定 user_id），MCP 连接进程级共享（共享进程模型，
   每端点一条连接，user_id 逐调用记录）。核心设计：</p>
 
   <div class="table-wrap"><table>
-    <thead><tr><th>关注点</th><th>实现（实测）</th></tr></thead>
+    <thead><tr><th scope="col">关注点</th><th scope="col">实现（实测）</th></tr></thead>
     <tbody>
       <tr><td>配置解析</td><td><code>MCP_ENDPOINTS</code>（<code>alias:url</code>，SSE/HTTP）与 <code>MCP_STDIOS</code>（<code>alias:command args key=value</code>，子进程）——坏行逐条隔离，一条配置错误不阻塞其余端点</td></tr>
       <tr><td>三种传输</td><td>URL 以 <code>/mcp</code> 结尾自动选 <b>Streamable HTTP</b>（会话独立，重连安全），<code>/sse</code> 走 <b>SSE</b>；stdio 由 mcp SDK spawn 并托管子进程，env 键值注入且<b>永不进参数快照</b></td></tr>
@@ -851,7 +887,7 @@ flowchart TD
       <tr><td>命名空间</td><td><code>mcp__{端点别名}__{原始工具名}</code>（如 <code>mcp__tavily__search</code>），撞名拒绝注册并记 warning，工具集保持确定性；spec 原样透传，bind_tools 链路零改动</td></tr>
       <tr><td>健康与自愈</td><td>调用失败 → 指数退避重启（1s/2s/4s）后重试；重试耗尽进入 dead 后从 Agent 工具集摘除，后续懒恢复成功再重新发现，并有 dead → 摘除 → 恢复测试</td></tr>
       <tr><td>零回归约束</td><td>两个配置均为空时，registry 只含本地 8 工具，行为与接入前完全一致——纯增量改动，全量测试保证</td></tr>
-      <tr><td>观测三件套</td><td>每次调用产生 <b>S8_mcp span</b>（嵌 pipeline trace，与 S6_skills/S7b_rag 同级）+ <b><code>mcp_call_logs</code></b> 落库（transport / 状态 / 耗时 / 2KB 参数与结果快照 / trace_id 关联）+ Dev 面板「MCP」标签页（端点健康 / 工具清单 / 调用流水，可跳回链路图）</td></tr>
+      <tr><td>观测三件套</td><td>每次调用产生 <b>S8_mcp span</b>（嵌 pipeline trace，与 S6_skills/S7b_rag 同级）+ <b><code>mcp_call_logs</code></b> 落库（transport / 状态 / 耗时 / 2048 字符参数与结果快照 / trace_id 关联）+ Dev 面板「MCP」标签页（端点健康 / 工具清单 / 调用流水，可跳回链路图）</td></tr>
     </tbody>
   </table></div>
 
@@ -889,7 +925,7 @@ flowchart TD
   end
   subgraph OBS["观测"]
     SPAN["S8_mcp span<br/>嵌 pipeline trace"]
-    LOG[("mcp_call_logs<br/>2KB 快照 · best-effort")]
+    LOG[("mcp_call_logs<br/>2048 字符快照 · best-effort")]
     DEV["Dev 面板 MCP 页<br/>/dev/mcp/status·tools·calls"]
   end
   AGENT["Agentic Loop<br/>execute_tools 节点"]
@@ -915,7 +951,7 @@ flowchart TD
     调用侧保持同步阻塞语义、带 30s 超时。<b>这是把异步边界收敛到一处的架构决策，不是随手写个 run()。</b>"
   </div>
 
-  <h3>2.6 三大技能与技能注册表：产品面的 Agent 能力收口</h3>
+  <h3 id="s-2-6">2.6 三大技能与技能注册表：产品面的 Agent 能力收口</h3>
   <p>v3 把 Agent 能力收敛为用户可感知的三个技能（<span class="path">domain/skills/</span>）。最新批次把技能的注册、发现、分发收敛进
   <code>UserSkillRegistry</code> 声明式注册表：手动可选技能由 <code>UserSkillSpec</code>（id / label / description / sort）和统一签名的 run 适配器注册，
   请求校验、分发与发现端点读取同一注册表；前端笔谈输入区的 chips（自动 / 记录 / 洞悉 / 计划）渲染
@@ -923,7 +959,7 @@ flowchart TD
   但自动意图路由仍是 record / insight / plan / chat 四分类，新增自动触发技能时仍需扩展分类规则。分发器异常降级为普通聊天：</p>
 
   <div class="table-wrap"><table>
-    <thead><tr><th>技能</th><th>职责</th><th>关键参数（实测）</th><th>降级行为</th></tr></thead>
+    <thead><tr><th scope="col">技能</th><th scope="col">职责</th><th scope="col">关键参数（实测）</th><th scope="col">降级行为</th></tr></thead>
     <tbody>
       <tr>
         <td><b>记录</b><br><code>record_skill</code></td>
@@ -947,7 +983,7 @@ flowchart TD
   </table></div>
 
   <p>计划技能的三种模板对应 <code>PlanRow.template</code> 字段：<mark class="key">checkin_total</mark>（坚持 N 天打卡，累计达标自动完成）、
-  <mark class="key">timer_daily</mark>（每日累计时长，start_timer / stop_timer 计时）、<mark class="key">milestones</mark>（学习路径，节点带参考链接）。
+  <mark class="key">timer_daily</mark>（每日累计时长，checkin API 的 start / stop 计时）、<mark class="key">milestones</mark>（学习路径，节点带参考链接）。
   技能命中即短路返回 <code>skill_result</code>（前端渲染为技能结果卡片），不进入 Agentic Loop——<b>产品交互优先于技术炫技</b>，这也是"做减法"产品观的体现。</p>
 
   <h4>计划多来源候选：从一条链接到可查看的候选集合</h4>
@@ -959,10 +995,10 @@ flowchart TD
 
   <figure class="chart-figure">
     <figcaption>图 6 · 技能注入策略（REAL，30 例，deepseek-v4-flash）：Token 2763→679（−75.4%），accuracy 0.767→0.633，属于成本/质量取舍</figcaption>
-    <div id="chart-skill" class="chart-container short" style="min-height:300px"></div>
+    <div id="chart-skill" class="chart-container short"></div>
   </figure>
 
-  <h3>2.7 周报深加工：ExecutionPlanner → MultiAgentGraph</h3>
+  <h3 id="s-2-7">2.7 周报深加工：ExecutionPlanner → MultiAgentGraph</h3>
   <p>Supervisor / Worker 图不在手写日记保存路径。它由周报服务聚合本周日记、卡片与计划快照后，
   通过 <span class="path">services/ai/router.py</span> 的 <code>ExecutionPlanner</code> 调度 <code>MultiAgentGraph</code>：</p>
 
@@ -975,19 +1011,52 @@ flowchart TD
 
   <p>危机安全贯穿四道防线（v3 逐一验证均在生产调用链上）：</p>
   <div class="table-wrap"><table>
-    <thead><tr><th>防线</th><th>组件 / 位置</th><th>机制要点</th></tr></thead>
+    <thead><tr><th scope="col">防线</th><th scope="col">组件 / 位置</th><th scope="col">机制要点</th></tr></thead>
     <tbody>
       <tr><td>① 情绪估计</td><td><code>EmotionEstimator</code></td><td>三级词表加权（重度负面 / 负面 / 正面）+ 否定前缀翻转极性，总分 &lt; <b class="n">−0.7</b> 判危机</td></tr>
       <tr><td>② 危机守卫</td><td><code>CrisisGuard.detect</code></td><td>笔谈 Stage 2 与日记分析入口双前置，命中改走安全回复 + 全国心理援助热线资源</td></tr>
       <tr><td>③ 记忆守门</td><td><code>check_memory_gate</code> Gate 2</td><td>危机文本<b>禁止写入情景记忆</b>，防止污染后续所有检索与回复</td></tr>
-      <tr><td>④ 流式安全</td><td><code>StreamingSafetyGuard</code></td><td>包裹 <code>astream</code> 流式输出持续检测，命中即撤回替换为安全回复（conversation_loop 与共情 / 洞察 agent 均接入）</td></tr>
+      <tr><td>④ 流式安全</td><td><code>StreamingSafetyGuard</code></td><td>包裹 <code>astream</code> 流式输出持续检测，命中即撤回替换为安全回复（<b>当前唯一接入点是流式对话 <code>conversation_loop</code></b>；共情 / 洞察 Agent 走 <code>ainvoke</code> 非流式，未接入该 guard）</td></tr>
     </tbody>
   </table></div>
 
   <div class="callout">
     <b>四入口的面试讲法：</b>"保存日记不跑 Agent 图；卡片展开才生成 treehole 短回信；同步对话用 single-pass LangGraph，
-    流式对话保留独立最多三轮 loop；周报才跑 MultiAgentGraph。入口隔离，能力复用。"
-    （架构债的一面见缺陷 D4：两套意图分类器并存）
+    流式对话保留独立流式 loop（工具轮次 ≤2）；周报才跑 MultiAgentGraph。入口隔离，能力复用。"
+    （架构债：<code>domain/agents</code> 下 <code>IntentClassifier</code> 与 <code>ChatIntentClassifier</code> 两套意图分类器并存，本版未列为缺陷条目）
+  </div>
+
+  <h3 id="s-2-8">2.8 V3.2 用户模式体系与中间件管线：判境与表现分离</h3>
+  <p>四入口之外，v3 还有一层横切能力：<b>判境（MoodMonitor）与表现（ModePromptBuilder）分离</b>的用户模式体系，以及承载它的中间件管线。
+  它不属于"再包一层 Agent"，而是把"今天该用什么基调、能不能推进计划"变成可解释、可单测的确定性规则。</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">层</th><th scope="col">实现（实测）</th><th scope="col">机制要点</th></tr></thead>
+    <tbody>
+      <tr><td>判境层</td><td><code>services/ai/mood_monitor.py</code>（<code>MoodMonitor</code> + <code>DailyModeStore</code>）</td>
+        <td>三档模式 <code>daily</code> / <code>followup</code> / <code>introspection</code>（日常 / 跟进 / 内视），落在 <code>daily_modes</code> 表（user + date 唯一约束）</td></tr>
+      <tr><td>判据 B1（当日基线）</td><td><code>compute_trend_signal</code> + <code>decide_daily_baseline</code></td>
+        <td>7 天趋势窗口（<code>mode_trend_window_days=7</code>）；composite mood &lt; <code>0.40</code> 判"低落"；分层早返回：延续内视 → 明显低落 → 有待办张力（<code>mode_followup_needs_pending_task=True</code>）→ 日常，<b>宁可不过度倾斜</b></td></tr>
+      <tr><td>判据 B2（单轮触发）</td><td><code>should_drop_to_introspection</code></td>
+        <td>本轮情绪低于 <code>0.35</code>（<code>mode_live_emotion_threshold</code>）即切内视；运行时开关 <code>mode_enable_live_emotion_enhancement</code> 默认关闭且不写进 prompt</td></tr>
+      <tr><td>切换预算</td><td><code>consumer_can_auto_switch</code> / <code>record_in_session_auto_switch</code></td>
+        <td><b>每天自动切换最多 2 次</b>（当日基线算第一次 + 会话内最多一次），其余只能由用户手动覆盖：<code>GET / POST /api/v1/mode</code></td></tr>
+      <tr><td>表现层</td><td><code>shared/middleware/mode.py</code>（<code>ModePromptBuilder</code>，name=<code>mode</code>）</td>
+        <td>把模式渲染成 prompt：【模式语气·mode】+（仅内视档）【当前计划与状态】+ 全局底线"任何情况下都不要用『必须/赶紧/逾期警告』等方式对用户施加压力"；<b>只渲染不决策</b>，模式子系统异常时自动降级为日常档，绝不打断回复</td></tr>
+      <tr><td>中间件管线</td><td><code>shared/middleware/base.py</code>（P7）</td>
+        <td><code>MiddlewareBase</code> / <code>MiddlewareContext</code> / <code>MiddlewarePipeline</code>；默认生产管线 <code>safety → mode → finalize</code>，空管线是零成本 no-op；<code>FinalizeMiddleware</code> 在回复后按"情绪绝对值 ≥0.3 或重度信号"异步落情景记忆（危机级文本始终留痕，供安全审计）</td></tr>
+      <tr><td>前端与协议</td><td><code>features/mode/ModeBadge.vue</code> + <code>mode_state</code> 协议块</td>
+        <td>流式对话把当前模式作为 <code>mode_state</code> 块推给前端，徽标即时更新；判境结果对用户可见，但 Agent 永远观察不到阈值本身</td></tr>
+      <tr><td>写路径边界</td><td><code>domain/agents/planner_agent.py</code> + <code>features/chat/PlanModifyCard.vue</code></td>
+        <td>V3.2 把"新建提案"扩展到<b>修改既有计划</b>：<code>plan_modify</code>（<code>adjust</code> / <code>archive</code> / <code>clean</code>）仍是<b>提案-确认</b>——Agent 零写权限，用户在卡片上确认后才由前端调 REST 落库</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout">
+    <b>怎么讲这层（对应 JD 的"状态管理 / 异常恢复"）：</b>"我把'今天该用什么基调'拆成判境与表现两层：
+    判境是确定性规则（趋势窗口、阈值、一天最多两次自动切换），表现只负责把模式渲染进 system prompt，失败就退回日常档。
+    <b>模式可以纯函数单测</b>（<code>tests/unit/services/ai/test_mood_monitor.py</code>），Agent 也观察不到阈值。
+    再往上，<b>Agent 对既有计划只有提案权、没有写权限</b>——安全边界不靠 prompt 自觉，靠架构约束。"
   </div>
 </section>
 
@@ -1002,12 +1071,12 @@ flowchart TD
     v3 的变化：记忆写入路径从两条扩展到<b>四条</b>（日记异步 / 对话阈值触发 / 夜话同步 / 卡片直入），嵌入改为<b>云端优先</b>。</div>
   </div>
 
-  <h3>3.1 三层记忆 + 统一原子</h3>
+  <h3 id="s-3-1">3.1 三层记忆 + 统一原子</h3>
   <div class="table-wrap"><table>
-    <thead><tr><th>层级</th><th>类 / 持久化</th><th>容量与衰减</th><th>职责</th></tr></thead>
+    <thead><tr><th scope="col">层级</th><th scope="col">类 / 持久化</th><th scope="col">容量与衰减</th><th scope="col">职责</th></tr></thead>
     <tbody>
-      <tr><td>工作记忆</td><td><code>WorkingMemory</code> / 内存</td><td>4000 Token 总预算</td><td>单次会话 12 个上下文字段，超限按比例截断（保留 90% 预算内内容）</td></tr>
-      <tr><td>情景记忆</td><td><code>EpisodicMemory</code> / <code>EpisodicMemoryRow</code>(SQL)</td><td>LRU 上限 <b class="n">100</b> 条，半衰期 <b class="n">7</b> 天，写入重要性阈值 <b class="n">0.5</b></td><td>事件级记忆：摘要、情绪、标签、关联日记 ID、向量（懒计算）</td></tr>
+      <tr><td>工作记忆</td><td><code>WorkingMemory</code> / 内存</td><td>4000 Token 预算（按 4 个上下文域计费）</td><td>单次会话 12 个上下文字段（<code>WorkingContext</code> 键数），超限按比例截断（保留 90% 预算内内容）</td></tr>
+      <tr><td>情景记忆</td><td><code>EpisodicMemory</code> / <code>EpisodicMemoryRow</code>(SQL)</td><td>上限 <b class="n">100</b> 条（淘汰最旧），半衰期 <b class="n">7</b> 天，写入重要性阈值 <b class="n">0.5</b></td><td>事件级记忆：摘要、情绪、标签、关联日记 ID、向量（懒计算）；淘汰与持久层同步删除</td></tr>
       <tr><td>长期画像</td><td><code>LongTermMemory</code> / <code>LongTermProfileRow</code>(SQL)</td><td>每 user 一份 JSON profile</td><td>人格标签、情绪基线（主导情绪 / 波动度）、重要他人、重复话题、偏好回复风格</td></tr>
     </tbody>
   </table></div>
@@ -1018,13 +1087,13 @@ flowchart TD
   （<code>event_summary[:121]</code>、<code>reply_insight[:200]</code>）——<b>内存对象与持久化格式的边界契约</b>。
   嵌入采用 <mark class="key">云端优先</mark>：配置了 embedding API key 走 <code>ApiEmbedder</code>，否则回退本地 <code>BgeEmbedder</code>。</p>
 
-  <h3>3.2 四维守门与四条写入路径</h3>
+  <h3 id="s-3-2">3.2 四维守门与四条写入路径</h3>
   <p><span class="path">domain/memory/gate.py</span> 的 <code>check_memory_gate</code> 在写入前串行执行四道检查——回答 JD 面试高频题"记忆怎么防垃圾与污染"：</p>
   <div class="table-wrap"><table>
-    <thead><tr><th>维度</th><th>拒绝条件</th><th>参数</th></tr></thead>
+    <thead><tr><th scope="col">维度</th><th scope="col">拒绝条件</th><th scope="col">参数</th></tr></thead>
     <tbody>
       <tr><td>① 内容有效性</td><td>事件摘要为空或过短</td><td>长度 &lt; <b class="n">3</b> 字符拒绝</td></tr>
-      <tr><td>② 危机污染</td><td>命中 10 个中文高危词（自杀 / 自残 / 跳楼等）</td><td>命中即拒绝，<b>不进入任何记忆层</b></td></tr>
+      <tr><td>② 危机污染</td><td>命中 10 个中文高危词（不想活 / 自杀 / 结束生命 / 活不下去 / 想死 / 杀了 / 伤害自己 / 了结 / 跳楼 / 吃药结束）</td><td>命中即拒绝，<b>不进入任何记忆层</b></td></tr>
       <tr><td>③ 情感显著性</td><td>情绪信号弱且不重要</td><td>|mood−0.5| &lt; <b class="n">0.15</b> 且 importance &lt; <b class="n">0.4</b> 拒绝</td></tr>
       <tr><td>④ 去重</td><td>与近窗口条目近似重复</td><td><b class="n">24h</b> 窗口内字符 Jaccard ≥ <b class="n">0.85</b> 拒绝</td></tr>
     </tbody>
@@ -1032,7 +1101,7 @@ flowchart TD
 
   <p>v3 实测确认了<b>四条写入路径</b>，触发时机与异步方式各不相同——这是讲"数据链路"时的细节弹药：</p>
   <div class="table-wrap"><table>
-    <thead><tr><th>写入路径</th><th>触发时机</th><th>异步方式</th><th>守门</th></tr></thead>
+    <thead><tr><th scope="col">写入路径</th><th scope="col">触发时机</th><th scope="col">异步方式</th><th scope="col">守门</th></tr></thead>
     <tbody>
       <tr><td>日记</td><td>分析 / digest 提取完成后</td><td><code>enqueue_task(gw.persist_atom)</code> 异步</td><td>四维守门</td></tr>
       <tr><td>对话</td><td>情绪分 ≥ <b class="n">0.3</b> 或重度负面信号</td><td><code>enqueue_task(gw.persist_atom)</code> 异步</td><td>四维守门</td></tr>
@@ -1041,10 +1110,10 @@ flowchart TD
     </tbody>
   </table></div>
 
-  <h3>3.3 检索三阶段与画像晋升</h3>
+  <h3 id="s-3-3">3.3 检索三阶段与画像晋升</h3>
   <p>情景记忆检索是<b>三阶段漏斗</b>：Stage 1 按 <code>importance × 0.5^(elapsed/7天)</code> 过滤排序取 <code>top_k×5</code> 候选；
   Stage 2 有 embedder 时用向量余弦重排（最终分 = 基础分 × (1 + 相似度 × 1.0)），无 embedder 降级字符 Jaccard；
-  Stage 3 注入 reranker 时云优先 <code>qwen3-rerank</code>，本地 CrossEncoder（<code>BAAI/bge-reranker-base</code>）为降级；失败保留 Stage 2 结果。<b>主动遗忘是设计目标</b>：SQLite 持久层全量保留 payload_json，LRU 只淘汰内存索引，被晋升的洞察永不衰减。</p>
+  Stage 3 注入 reranker 时云优先 <code>qwen3-rerank</code>，本地 CrossEncoder（<code>BAAI/bge-reranker-base</code>）为降级；失败保留 Stage 2 结果。<b>主动遗忘是设计目标</b>：内存索引按"有效分衰减 + 容量上限"淘汰（<code>min(timestamp)</code> 选出最旧条目），淘汰时同步删除持久层对应行；被晋升进长期画像的洞察不参与衰减。</p>
   <p>长期画像晋升：<code>promote_from_episodic</code> 按天分组统计情绪与话题，<b class="n">连续 3 天</b>出现的 tag 自动进入
   <code>recurring_topics</code>；主导情绪变化时更新情绪基线。规则刻意可解释——"为什么晋升"一句话能答清（权衡分析见缺陷 D9）。</p>
 
@@ -1086,13 +1155,13 @@ flowchart TD
     v3 新增<b>卡片向量集合</b>（card_chunks）与<b>心理学知识库</b>（22 条离线理论 + 可降级联网搜索），检索面从日记扩展到卡片与专业知识。</div>
   </div>
 
-  <h3>4.1 查询理解：指代消解 + 陈述式改写</h3>
+  <h3 id="s-4-1">4.1 查询理解：指代消解 + 陈述式改写</h3>
   <p><span class="path">query_understander.py</span> 在检索前先"听懂"问题：规则层用指示词模式做<b>指代消解</b>（"那件事" → "之前的经历"等映射表），
   用疑问句模式做<b>陈述式改写</b>（"为什么 X" → "X 原因"、"X 怎么办" → "X 困扰"），并抽取关键词；
   LLM 层在规则置信不足时介入（规则层置信 <b class="n">0.7</b>，LLM 结果需 ≥ <b class="n">0.85</b> 才采纳，低于阈值时与规则结果合并取优）。
   改写后的 query 才进入检索——对抗"用户问'那后来呢'"这类零信息查询的第一道工程手段。</p>
 
-  <h3>4.2 混合检索：双路召回 + RRF 融合 + 交叉编码器重排</h3>
+  <h3 id="s-4-2">4.2 混合检索：双路召回 + RRF 融合 + 交叉编码器重排</h3>
   <p>  <code>HybridRetriever</code>（<span class="path">domain/rag/retriever.py</span>）默认参数：语义路 top <b class="n">20</b>（Chroma 向量）
   + 关键词路 top <b class="n">20</b>（BM25，jieba 分词，k1=1.5 / b=0.75）→ <mark class="key">RRF 融合（k=60）</mark> →
   reranker 重排 top 5：工作区默认云优先 Qwen <code>text-embedding-v3</code> + <code>qwen3-rerank</code>，本地 <code>BAAI/bge-reranker-base</code> 为降级。
@@ -1104,21 +1173,22 @@ flowchart TD
   检索面从日记扩展到卡片。</p>
 
   <figure class="chart-figure">
-    <figcaption>图 8 · 2026-09-09 Qwen embedding/rerank REAL 质量门（30 文档 × 20 查询）：展示策略取舍，不外推线上质量；committed rag/baseline.json 仍是更早的本地 embedding 快照</figcaption>
-    <div id="chart-rag" class="chart-container" style="min-height:400px"></div>
+    <figcaption>图 8 · Qwen embedding/rerank REAL 质量门（30 文档 × 20 查询）：数字已写入仓库基线 <code>rag/baseline.json</code>，2026-09-14 复跑逐位一致；本地 bge 历史快照保留在 <code>rag/BASELINE.md</code> 作对照</figcaption>
+    <div id="chart-rag" class="chart-container"></div>
   </figure>
 
   <div class="callout">
     <b>怎么讲这张图：</b>"在 2026-09-09 Qwen REAL 质量门上，BM25 单路 recall 只有 0.667（口语化表达搜不到关键词），
     向量单路 recall 0.967、MRR 1.00；RRF 融合 0.950 / 0.913，再加 qwen3-rerank 后 recall 仍 0.967、MRR 0.95。
-    它说明该固定集上的召回/排序取舍，不外推线上质量。committed <code>rag/baseline.json</code> 仍是更早的本地 embedding 快照（hybrid_rerank MRR 1.0），面试引用以当前 Qwen 路径为准。"
+    它说明该固定集上的召回/排序取舍，不外推线上质量。<b>这组数字已落盘</b>为 <code>rag/baseline.json</code>：2026-09-09 与 2026-09-14 两次运行逐位相同（embedding / 检索是确定性的）。
+    CI 无云端 key，只跑 BM25 分支并与 <code>baseline.json</code> 的 <code>bm25</code> 项对照；本地 bge 历史快照留档在 <code>rag/BASELINE.md</code>，两组差别是"召回更多（0.983）vs 首位更准（MRR 1.00）"的排序形态，不是单纯变好。"
   </div>
 
   <p>多跳迭代检索（<code>RetrievalAgent</code>，周报 MultiAgentGraph 的 Provider）：最多 <b class="n">3</b> 跳，每跳用上一轮命中片段扩展查询；
-  命中不足且已有 ≥2 条高相关结果时提前终止；改写查询与原查询相似度低于 <b class="n">0.3</b> 锚点阈值即判"查询漂移"主动停止——
+  两道收敛判据：<b>平均相关性 ≥0.3 且已收集 ≥2 条</b>时提前收敛，或<b>本跳无新命中且非首跳</b>时停止；改写查询与原查询相似度低于 <b class="n">0.3</b> 锚点阈值即判"查询漂移"主动停止——
   对"迭代检索越查越偏"这一经典失败模式的工程防御。检索上下文压缩到 <b class="n">300</b> Token 摘要供下游 Worker 消费。</p>
 
-  <h3>4.3 心理学知识库：离线理论 + 可降级联网</h3>
+  <h3 id="s-4-3">4.3 心理学知识库：离线理论 + 可降级联网</h3>
   <p>v3 新增 <span class="path">domain/knowledge/</span>，双轨设计：</p>
   <ul class="plain">
     <li><b>静态轨（洞悉技能用）：</b><code>psychology.py</code> 内置 <b class="n">22</b> 条理论条目（情绪粒度、认知重评、CBT 认知三角、反刍思维、
@@ -1162,31 +1232,31 @@ flowchart LR
     v3 新增：计划三模板字段、打卡计时表 <code>plan_checkins</code>、任务参考链接、digest 统一 worker。</div>
   </div>
 
-  <h3>5.1 核心数据模型：一张表看懂业务域</h3>
+  <h3 id="s-5-1">5.1 核心数据模型：一张表看懂业务域</h3>
   <div class="table-wrap"><table>
-    <thead><tr><th>域</th><th>模型（表）</th><th>关键字段</th><th>与 Agent 的关系</th></tr></thead>
+    <thead><tr><th scope="col">域</th><th scope="col">模型（表）</th><th scope="col">关键字段</th><th scope="col">与 Agent 的关系</th></tr></thead>
     <tbody>
       <tr><td rowspan="2">日记域</td><td><code>DiaryEntryRow</code></td><td>content / date / weather / reply / tags(N:M)</td><td>手写 <code>create_entry</code> 只落库 + Chroma + digest，不写 reply</td></tr>
       <tr><td><code>AnalysisRow</code> (1:1)</td><td>token_cost、agent_mode、execution_tier、activated_agents、intent</td><td>仅卡片展开等显式 <code>trigger_analysis</code> 路径创建；不是手写保存副作用</td></tr>
       <tr><td>卡片域</td><td><code>MemoryCardRow</code></td><td>card_id (PK) / emotion / emotions_json / event_summary / mood_score / tags_json / importance / card_type (quick/standard/guided) / diary_id (FK)</td><td>轻量记忆原子，直接同步情景记忆，也可 <code>expand_to_diary</code> 展开成日记触发完整分析；v3 另写 <code>card_chunks</code> 向量集合</td></tr>
-      <tr><td rowspan="3">计划域</td><td><code>PlanRow</code></td><td>title / motivation / source_refs_json / status (active/archived/completed) / source (manual/agent) / <b>created_from_conversation_id</b> / recurrence / target_value·unit·period / <b>template (checkin_total/timer_daily/milestones)</b></td><td>计划由对话生成（source=agent）时带对话回链与模板类型——"这个计划从哪次聊天来的"可追溯</td></tr>
+      <tr><td rowspan="3">计划域</td><td><code>PlanRow</code></td><td>title / motivation / source_refs_json / status (active/archived/completed) / source (manual/agent) / <b>created_from_conversation_id</b> / recurrence / target_value·target_unit·target_period / <b>template (checkin_total/timer_daily/milestones)</b></td><td>计划由对话生成（source=agent）时带对话回链与模板类型——"这个计划从哪次聊天来的"可追溯</td></tr>
       <tr><td><code>TaskRow</code> (1:N)</td><td>plan_id (FK) / title / note / <b>link（主参考候选）</b> / <b>source_links_json（url / title / snippet / domain / multi_source / is_primary）</b> / due_date / status (pending/done/skipped) / actual_value / completed_at</td><td>任务完成/跳过触发记忆写入；多来源候选便于查看推荐依据；读取旧 verified JSON 时做兼容映射</td></tr>
-      <tr><td><code>PlanCheckinRow</code> <span class="chip light">v3 新增</span></td><td>checkin_date / started_at / ended_at / value / status (running/done)</td><td>打卡与计时模板的执行记录：<code>start_timer / stop_timer</code> API 写入，支撑"每日累计时长"类计划</td></tr>
-      <tr><td rowspan="2">记忆域</td><td><code>EpisodicMemoryRow</code></td><td>entry_id / user_id / timestamp / importance / payload_json</td><td>情景记忆持久层（LRU 只淘汰内存索引，SQL 全量保留）</td></tr>
+      <tr><td><code>PlanCheckinRow</code> <span class="chip light">v3 新增</span></td><td>checkin_date / started_at / ended_at / value / status (running/done)</td><td>打卡与计时模板的执行记录：<code>POST /plans/{id}/checkin</code>（<code>action=start|stop</code>）写入，支撑"每日累计时长"类计划</td></tr>
+      <tr><td rowspan="2">记忆域</td><td><code>EpisodicMemoryRow</code></td><td>entry_id / user_id / timestamp / importance / payload_json</td><td>情景记忆持久层（内存与 SQL 同步淘汰，非只淘汰内存索引）</td></tr>
       <tr><td><code>LongTermProfileRow</code></td><td>user_id (PK) / profile_json / updated_at</td><td>长期画像持久层（人格标签、情绪基线、重复话题）</td></tr>
       <tr><td rowspan="3">聚合域</td><td><code>DailyDigestRow</code></td><td>(user_id, date) 唯一 / digest_json</td><td>v3 改由统一 digest worker 重建：聚合当日<b>全部日记条目</b>（LLM light 档，失败降级规则抽取），卡片段由卡片写入方自持——双段互不覆盖</td></tr>
       <tr><td><code>WeeklyReportRow</code></td><td>diary_count / card_count / avg_mood / plan_executions_json / week_tasks_json</td><td>周报聚合日记+卡片+计划执行快照，洞察场景的 heavy 档输入</td></tr>
-      <tr><td><code>DailyModeRow</code></td><td>baseline_mode (daily/followup/introspection) / mood_signals_json</td><td>当日交互模式基线，情绪信号驱动自动切换</td></tr>
+      <tr><td><code>DailyModeRow</code></td><td>baseline_mode (daily/followup/introspection) / mood_signals_json</td><td>当日交互模式基线（判境结果落库，<a href="#s-2-8">见 2.8</a>），情绪信号驱动自动切换，每天自动切换上限 2 次</td></tr>
       <tr><td rowspan="2">支撑域</td><td><code>ConversationRow</code> + <code>ChatMessageRow</code></td><td>retrieved_diary_ids / retrieved_memory_ids（消息级检索溯源）</td><td>笔谈多轮场景，检索证据随消息留痕</td></tr>
       <tr><td><code>JobRow</code> / <code>ModelProviderRow</code> / <code>FeedbackRow</code></td><td>kind/status/attempts；model_name/api_key_encrypted/tier；response_style/reason</td><td>异步任务账本、分层模型路由（密钥加密）、用户反馈回流</td></tr>
     </tbody>
   </table></div>
 
-  <p>另有<b>五张可观测表</b>贯穿所有链路：<code>llm_call_logs</code>（每次 LLM 调用的模型/层级/延迟/Token）、<code>pipeline_traces</code>（span 树）、
-  <code>agent_decisions</code>（意图与路由决策及理由）、<code>skill_activations</code>（技能激活记录）、<code>mcp_call_logs</code>（MCP 调用流水：transport / 状态 / 耗时 / 2KB 快照），
+  <p>另有<b>五张核心可观测表</b>贯穿所有链路：<code>llm_call_logs</code>（每次 LLM 调用的模型/层级/延迟/Token）、<code>pipeline_traces</code>（span 树）、
+  <code>agent_decisions</code>（意图与路由决策及理由）、<code>skill_activations</code>（技能激活记录）、<code>mcp_call_logs</code>（MCP 调用流水：transport / 状态 / 耗时 / 2048 字符快照），
   外加 <code>reply_quality</code>（LLM-as-Judge 评分落库）——这六张表是 6.2 节可观测性叙事的数据底座，也是"Agent 决策可审计"的实体证据。</p>
 
-  <h3>5.2 四条数据链路：从用户动作到 Agent 再回来</h3>
+  <h3 id="s-5-2">5.2 四条数据链路：从用户动作到 Agent 再回来</h3>
 
   <h4>链路 A · 手写日记（保存与生成解耦）</h4>
   <p>POST /diary/entries → <code>diary_service.create_entry</code> 落库 → 同步 Chroma →
@@ -1200,7 +1270,7 @@ flowchart LR
 
   <h4>链路 C · 计划（唯一的行为闭环链路，v3 三模板落地）</h4>
   <p>计划技能从对话生成 <code>PlanRow</code>（source=agent + <code>created_from_conversation_id</code> 回链 + template 三选一）→
-  里程碑模板的任务可带联网搜索所得 multi_source 多来源候选 → 用户执行：打卡模板累计签到 / 计时模板 start_timer→stop_timer 写 <code>PlanCheckinRow</code> / 里程碑任务逐个 done →
+  里程碑模板的任务可带联网搜索所得 multi_source 多来源候选 → 用户执行：打卡模板累计签到 / 计时模板 checkin(start→stop) 写 <code>PlanCheckinRow</code> / 里程碑任务逐个 done →
   任务状态变更时 <code>ContentNormalizer.from_task</code> 生成记忆原子（importance 固定 0.6，tags 含计划名）→ 经 MemoryGateway 入情景记忆 → 周报聚合统计计划执行率。
   至此<mark class="key">"计划 → 执行 → 记忆 → 洞察 → 新计划"</mark>闭环成立。</p>
 
@@ -1211,7 +1281,7 @@ flowchart LR
   <div class="callout">
     <b>实体抽取的"零 Token"设计：</b>第一层纯正则（人物：亲属称谓 / 老小阿+名；地点：城市与场所词；话题：行为与情绪词）召回，
     <mark class="key">只有正则命中候选时才进入第二层 LLM 精炼</mark>（分类、关系标注、情感倾向），把实体抽取的 LLM 成本压到"按需付费"。
-    图谱侧 Neo4j MERGE 出 <code>(User)-[MENTIONS]->(Entity)</code> 与 <code>RELATED_TO</code> 关系；Neo4j 不可用时降级 SQLite。
+    图谱侧 Neo4j MERGE 出 <code>(User)-[MENTIONS]->(Entity)</code> 与 <code>RELATED_TO</code> 关系；<b>当前实现的边界</b>：Neo4j 不可用时该次抽取的实体只记日志、不落库（<code>entity_graph.write_entity</code> 在不可用时是 no-op，<code>entity_extractor</code> 直接 return），<mark class="warn">SQLite 降级仅存在于模块 docstring，没有实际写入路径</mark>。
   </div>
 </section>
 
@@ -1222,32 +1292,32 @@ flowchart LR
     <div class="glyph">05</div>
     <div class="txt"><b>分论点：</b>"有数字"不等于"有真实成绩"。8 套原评测加本分支新增 MCP decision 共 9 套；
     每项必须同时标注 REAL / stub / oracle、模型、样本量和 CI 状态。CI 工作流当前显式列出 8 个目录，
-    不含 generation；MCP decision 文件仍是 placeholder，三次 REAL 试跑 model_exact=0.75 尚未写入合同。</div>
+    不含 generation；MCP decision 文件仍是 placeholder，REAL 试跑（2026-09-14 复跑 model_exact 0.6667 / parser 1.0000）仍未写入合同。</div>
   </div>
 
-  <h3>6.1 九套评测：运行模式、模型、样本量与 CI 状态</h3>
+  <h3 id="s-6-1">6.1 九套评测：运行模式、模型、样本量与 CI 状态</h3>
   <div class="table-wrap"><table>
-    <thead><tr><th>评测模块</th><th>模式 / 模型 / 样本</th><th>核心结果</th><th>CI 状态</th></tr></thead>
+    <thead><tr><th scope="col">评测模块</th><th scope="col">模式 / 模型 / 样本</th><th scope="col">核心结果</th><th scope="col">CI 状态</th></tr></thead>
     <tbody>
       <tr><td>意图分类</td><td><b>mixed</b>；REAL baseline_a = deepseek-v4-flash；250 例</td><td>REAL accuracy <b class="n">0.744</b>（llm_acc 0.644）；0.992 为 stub oracle 上界，不参与回归</td><td>显式 CI</td></tr>
       <tr><td>工具调用</td><td>native <b>REAL</b> / fallback <b>stub oracle</b>；40 例</td><td>native decision 0.75 / FPR 0.60；fallback 1.0 仅证明接线</td><td>显式 CI（stub 路径）</td></tr>
       <tr><td>技能激活</td><td><b>REAL</b>；deepseek-v4-flash；30 例</td><td>Token 2763→679（−75.4%），accuracy <b class="n">0.767→0.633</b></td><td>显式 CI</td></tr>
-      <tr><td>RAG 检索</td><td>固定语料；<b>30 文档 × 20 查询</b>；2026-09-09 Qwen REAL</td><td>vector / hybrid_rerank recall@5 0.967；MRR 1.00 / 0.95；committed json 仍为更早快照</td><td>显式 CI</td></tr>
+      <tr><td>RAG 检索</td><td>固定语料；<b>30 文档 × 20 查询</b>；Qwen 云端 REAL（2026-09-14 复跑一致）</td><td>vector / hybrid_rerank recall@5 0.967；MRR 1.00 / 0.95；<b>已写入 <code>baseline.json</code></b>（本地 bge 快照留档于 <code>BASELINE.md</code>）</td><td>显式 CI（无云端 key，仅比 BM25 分支）</td></tr>
       <tr><td>情景记忆</td><td><b>REAL</b>；Qwen text-embedding-v3 + qwen3-rerank；20 查询</td><td>jaccard 0.498；vector 0.348；vector_rerank 0.564</td><td>显式 CI（stub 路径仍接线）</td></tr>
       <tr><td>计划提案</td><td><b>REAL</b>；deepseek-v4-flash judge；13/13 已评</td><td>overall <b class="n">4.97</b> / 5；gentleness / 忠实度 / 安全均为 5.00</td><td>显式 CI 仅跑 stub 接线</td></tr>
-      <tr><td>生成质量</td><td><b>REAL</b>；deepseek-v4-flash；共 31 例分场景</td><td>共情 overall 4.93；洞察忠实度 4.60；多轮 coherence 1.00 / 忠实度 5.00</td><td><b>不在显式 eval job</b></td></tr>
-      <tr><td>树洞摘要</td><td><b>REAL</b>；deepseek-v4-flash；5 例</td><td>三次质量门末轮 overall 4.72 / 忠实度 5.00；committed BASELINE.md 仍为 4.35</td><td>显式 CI 仅跑 stub 接线</td></tr>
-      <tr><td>MCP decision</td><td><b>stub oracle placeholder</b>；12 例；三次 REAL 试跑未入库</td><td>文件仍 1.0 接线；试跑 model_exact 0.75 / parser 1.0，<b>不是质量合同</b></td><td>已列入显式 CI，质量门禁待写入 REAL 基线</td></tr>
+      <tr><td>生成质量</td><td><b>REAL</b>；deepseek-v4-flash；generation 套件共 31 例（图 10 另含 plan 13 例 / treehole 5 例，合计 49 例）</td><td>共情 overall 4.93；洞察忠实度 4.60；多轮 coherence 1.00 / 忠实度 5.00</td><td><b>不在显式 eval job</b></td></tr>
+      <tr><td>树洞摘要</td><td><b>REAL</b>；deepseek-v4-flash；5 例</td><td>2026-09-14 复跑 overall <b>4.77</b> / 忠实度 5.00（v4.1 记录 4.72，属 5 例样本波动），已按 REAL 结果重播种 <code>BASELINE.md</code></td><td>显式 CI 仅跑 stub 接线；该套无 <code>baseline.json</code> 门禁</td></tr>
+      <tr><td>MCP decision</td><td><b>stub oracle placeholder</b>；12 例</td><td>文件仍 1.0 接线；2026-09-14 REAL 复跑 model_exact <b>0.6667</b> / parser 1.0000（v4.1 记录 0.75——LLM 决策有波动），<b>仍不是质量合同</b></td><td>已列入显式 CI，质量门禁待写入 REAL 基线</td></tr>
     </tbody>
   </table></div>
 
   <figure class="chart-figure">
-    <figcaption>图 10 · REAL LLM-as-Judge（deepseek-v4-flash；各场景样本量见标签）：baseline 快照，不等于 CI 中实时重跑</figcaption>
-    <div id="chart-gen" class="chart-container" style="min-height:400px"></div>
+    <figcaption>图 10 · LLM-as-Judge 评分快照（deepseek-v4-flash；各场景样本量见标签）：共情 / 洞察 / 对抗 / 多轮取自 <code>generation/BASELINE.md</code>，计划提案取自 <code>plan/baseline.json</code>，树洞取自 <code>treehole/BASELINE.md</code>（2026-09-14 REAL 复跑 4.77）；均为快照，不等于 CI 中实时重跑</figcaption>
+    <div id="chart-gen" class="chart-container"></div>
   </figure>
 
   <div class="callout">
-    <b>怎么讲这张图：</b>"共情 overall 4.93、对抗安全 5.00、计划提案 4.97——产品核心场景都在 4.8+；
+    <b>怎么讲这张图：</b>"共情 overall 4.93、对抗 safety 维度 5.00（overall 4.83）、计划提案 4.97——产品核心场景都在 4.8+；
     洞察忠实度 4.60、多轮忠实度 5.00 / coherence 1.00（3/3）。旧报告里的 2.67 来自 Judge 未注入历史上下文 + 词面命中闸门，
     已不是当前工作区事实。剩余风险是样本量（多轮 n=3，mt02 词面命中仍为 no）以及 generation 不在显式 CI job。"
   </div>
@@ -1260,7 +1330,7 @@ flowchart LR
   普通 <code>pytest -q</code> 另受默认 marker 配置影响。报告口径为“9 套目录、CI 运行 8 个显式目录”，
   且 generation 不在该显式 job。stub/oracle 门禁主要拦接线回归，不能替代 REAL 质量回归。</p>
 
-  <h3>6.2 可观测性与三级降级</h3>
+  <h3 id="s-6-2">6.2 可观测性与四级降级</h3>
   <ul class="plain">
     <li><b>LLM 调用记录</b>（<code>llm_call_logs</code>）：agent_name / call_type / model / tier / latency / tokens_in·out / error / trace_id，由 <code>TracingLLMClient</code> 装饰器自动记录；</li>
     <li><b>决策记录</b>（<code>agent_decisions</code>）：意图分类、层级路由、技能激活、Worker 路由四类决策及理由——LangGraph 各节点执行情况同样进 trace；</li>
@@ -1269,21 +1339,21 @@ flowchart LR
   </ul>
 
   <div class="table-wrap"><table>
-    <thead><tr><th>降级层级</th><th>降级链</th></tr></thead>
+    <thead><tr><th scope="col">降级层级</th><th scope="col">降级链</th></tr></thead>
     <tbody>
       <tr><td>编排层</td><td><b>v3 新增</b>：LangGraph 构图/执行失败 → 回退 legacy conversation_loop（自研循环仍在维护，作为灾备）；bind_tools 抛异常 → 文本标签协议</td></tr>
       <tr><td>模型层</td><td>tier 专属 Provider → default Provider → 环境变量默认；仍不可用时由具体调用路径返回确定性 fallback 或报告 AI 不可用。<code>StubLLMClient</code> 用于测试/缺依赖环境，不是无 Key 的生产模型替身</td></tr>
       <tr><td>Worker 层</td><td>LLM 失败 / 30s 超时 → 各 Worker 自带 fallback（模板化回复）→ 合成层五级降级 → 兜底文案；digest worker LLM 失败 → 规则抽取</td></tr>
-      <tr><td>组件层</td><td>Redis 不可用 → 内存 dict；RQ 不可用 → daemon 线程执行；Neo4j 不可用 → SQLite；Chroma 不可用 → 知识检索返回空 prompt 自动省略；联网搜索 Tavily → DuckDuckGo（带失败冷却）；MySQL / SQLite 双引擎可切换</td></tr>
+      <tr><td>组件层</td><td>Redis 不可用 → 内存 dict；RQ 不可用 → daemon 线程执行；<b>Neo4j 不可用 → 实体写入被跳过（仅记日志，无 SQLite 落库路径）</b>；Chroma 不可用 → 知识检索返回空 prompt 自动省略；联网搜索 Tavily → DuckDuckGo（带失败冷却）；MySQL / SQLite 双引擎可切换</td></tr>
     </tbody>
   </table></div>
 
   <p>部署侧为 Docker Compose 六服务（mysql / redis / <b>neo4j 默认启动</b> / backend / worker / frontend；mcp-tavily 等工具容器按 <code>--profile mcp</code> 可选），
   全服务健康检查——Neo4j 从可选 profile 转为默认服务，backend / worker 依赖其健康检查，导入期 5×3s 重试对抗 Docker DNS 竞态；
-  测试数字只披露可复现的实际运行。hardening 分支曾在 Linux Docker 完成 ruff、mypy 与普通 pytest：
-  <b>1016 passed / 1 skipped / 41 deselected</b>；同口径 8 目录 stub eval 为
-  <b>29 passed / 7 skipped</b>。前端本机运行结果为 <b>43 test files / 271 tests passed</b>，
-  eslint、vue-tsc 与 Vite build 均通过。这些是分支本地验收，不冒充尚未发生的 GitHub CI；本工作区另含未提交评测修复，全量计数以合并后 CI 为准。</p>
+  测试数字只披露可复现的实际运行，并区分"仓库有产物"与"本地自述"两类。分支自述在 Linux Docker 完成 ruff、mypy 与普通 pytest：
+  <mark class="warn">报告自述的 1016 passed / 1 skipped / 41 deselected 与 8 目录 stub 的 29 passed / 7 skipped，仓库内未留日志</mark>
+  （2026-09-14 本机复跑为 <code>1017 passed / 1 skipped / 41 deselected</code>，另有 5 个失败全部是本地未安装 <code>mcp-server-fetch</code> 的 stdio 用例，CI 会装该依赖故不失败）；
+  前端 <b>43 test files / 271 tests</b> 已按源码静态复核一致（vitest 实跑受环境限制未复现），eslint、vue-tsc 与 Vite build 均通过。全量计数以合并后 CI 为准。</p>
 </section>
 
 <!-- ======================= 7 全景图 ======================= -->
@@ -1316,7 +1386,7 @@ flowchart TD
     G["generate 生成<br/>StreamingSafetyGuard"]
     PO["postprocess"]
     SK["三大技能前置<br/>record / insight / plan"]
-    STREAM["独立流式 loop<br/>工具轮 + 最终 astream ≤3 轮"]
+    STREAM["独立流式 loop<br/>工具轮 ≤2 + 最终 astream"]
   end
   subgraph WEEKLY["周报 MultiAgentGraph"]
     SUP["ExecutionPlanner → Supervisor"]
@@ -1380,57 +1450,57 @@ flowchart TD
     不再引用不可复核的市场百分比或宣称完整覆盖；状态只代表仓库里有对应实现与测试证据，不代表达到岗位要求的生产成熟度。
   </div>
 
-  <h3>8.1 官方 JD 方向速览</h3>
+  <h3 id="s-8-1">8.1 官方 JD 方向速览</h3>
   <p>腾讯公开 JD 提到智能体编排、工具调用、记忆、RAG、Function Calling、Agent Loop、Skill、任务规划、状态管理与异常恢复；
   智元公开 JD 提到 RAG 分块、向量化、检索、重排、Query 改写与 Multi-Agent 协作；上海人工智能实验室公开岗位提到推理、规划、记忆、工具使用与多智能体系统。
   这些材料用于确定准备方向，不用于推导市场占比。</p>
 
   <figure class="chart-figure">
     <figcaption>图 12 · 2027 届秋招方向性映射：来自官方 JD 的能力关键词，仅表示仓库证据强弱，不表示市场频率</figcaption>
-    <div id="chart-jd" class="chart-container" style="min-height:420px"></div>
+    <div id="chart-jd" class="chart-container"></div>
   </figure>
 
-  <h3>8.2 逐条能力映射：JD 关键词 → 夜记 v3 实现 → 面试话术</h3>
+  <h3 id="s-8-2">8.2 逐条能力映射：JD 关键词 → 夜记 v3 实现 → 面试话术</h3>
   <div class="table-wrap"><table>
-    <thead><tr><th>JD 高频要求（出处）</th><th>夜记 v3 对应实现</th><th>一句话话术</th></tr></thead>
+    <thead><tr><th scope="col">JD 高频要求（出处）</th><th scope="col">夜记 v3 对应实现</th><th scope="col">一句话话术</th></tr></thead>
     <tbody>
       <tr>
-        <td>LangChain / LangGraph 框架经验<sup><a href="#cite-4">[4]</a></sup> <span class="cover-chip cover-full">有代码证据</span></td>
+        <td>LangChain / LangGraph 框架经验<sup><a href="#cite-2">[2]</a></sup> <span class="cover-chip cover-full">有代码证据</span></td>
         <td>同步对话 LangGraph StateGraph（6 节点 single-pass）；真正异常回退 legacy loop 由本分支修复</td>
-        <td>"同步图是一次通过；最多三轮属于独立流式/legacy loop。我把两条执行语义和异常边界分开验证。"</td>
+        <td>"同步图是一次通过；多轮工具回填（≤2 轮）属于独立流式/legacy loop。我把两条执行语义和异常边界分开验证。"</td>
       </tr>
       <tr>
-        <td>工具调用 / Function Calling<sup><a href="#cite-3">[3]</a></sup><sup><a href="#cite-4">[4]</a></sup> <span class="cover-chip cover-full">v3 已覆盖</span></td>
+        <td>工具调用 / Function Calling<sup><a href="#cite-1">[1]</a></sup><sup><a href="#cite-2">[2]</a></sup> <span class="cover-chip cover-full">v3 已覆盖</span></td>
         <td>bind_tools 原生协议 + 文本标签兜底 + 8 本地 / N 远程工具；native REAL 0.75，fallback 1.0 为 stub oracle</td>
         <td>"我实现了原生 Function Calling 链路，还做了双协议评测：native 决策准确率 0.75、误调用率 0.60——<b>我主动量化了自己的短板</b>，优化方向是决策 prompt 加 few-shot 负例。"</td>
       </tr>
       <tr>
-        <td>智能体编排 / Multi-Agent 协作（Supervisor、分层调度）<sup><a href="#cite-3">[3]</a></sup><sup><a href="#cite-7">[7]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
+        <td>智能体编排 / Multi-Agent 协作（Supervisor、分层调度）<sup><a href="#cite-1">[1]</a></sup><sup><a href="#cite-5">[5]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
         <td>四入口分治：保存 / 卡片短回信 / 同步与流式对话 / 周报 MultiAgentGraph</td>
         <td>"Supervisor 只讲周报，不把它包装成日记保存主路径。"</td>
       </tr>
       <tr>
-        <td>记忆管理：短期上下文优化、长期记忆存储与检索<sup><a href="#cite-5">[5]</a></sup><sup><a href="#cite-6">[6]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
+        <td>记忆管理：短期上下文优化、长期记忆存储与检索<sup><a href="#cite-3">[3]</a></sup><sup><a href="#cite-4">[4]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
         <td>三层记忆；四维守门；7 天半衰期；连续 3 天 tag 晋升画像；统一记忆原子四源归一</td>
         <td>"记忆不是聊天记录：写入前四维守门防污染，检索时重要性乘时间衰减再语义重排，重复话题自动晋升为长期画像注入 prompt。"</td>
       </tr>
       <tr>
-        <td>上下文管理 / Context Engineering<sup><a href="#cite-4">[4]</a></sup><sup><a href="#cite-6">[6]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
+        <td>上下文管理 / Context Engineering<sup><a href="#cite-2">[2]</a></sup><sup><a href="#cite-4">[4]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
         <td>ContextCompressor 1500 Token 压缩 + WorkingMemory 4000 Token 字段预算 + 检索上下文 300 Token 压缩</td>
         <td>"多级 Token 预算控制上下文膨胀：压缩器管候选内容，工作记忆管会话字段，RAG 上下文压缩供 Worker 消费。"</td>
       </tr>
       <tr>
-        <td>RAG 全链路 + 混合检索 + Query 改写 + 评测指标<sup><a href="#cite-7">[7]</a></sup><sup><a href="#cite-10">[10]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
+        <td>RAG 全链路 + 混合检索 + Query 改写 + 评测指标<sup><a href="#cite-5">[5]</a></sup><sup><a href="#cite-8">[8]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
         <td>指代消解改写 → 向量+BM25 → RRF → 云优先 qwen3-rerank（本地 bge 降级）→ 3 跳防漂移；recall/MRR/nDCG 消融；v3 加卡片向量集合</td>
         <td>"30 文档 × 20 查询的小样本消融显示不同检索策略的取舍；它是回归基线，不证明每个环节线上都必要。"</td>
       </tr>
       <tr>
-        <td>任务规划 / Plan-and-Execute<sup><a href="#cite-5">[5]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
+        <td>任务规划 / Plan-and-Execute<sup><a href="#cite-3">[3]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
         <td>计划技能三模板 + 打卡计时 API + multi_source 多来源候选 + REAL judge 基线（13 例）+ 任务回流记忆</td>
         <td>"规划落在数据模型上：Agent 生成的计划带对话回链，三模板覆盖打卡/计时/里程碑，任务完成再回流记忆形成行为闭环。"</td>
       </tr>
       <tr>
-        <td>异常恢复 / 稳定性 / 降级<sup><a href="#cite-5">[5]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
+        <td>异常恢复 / 稳定性 / 降级<sup><a href="#cite-3">[3]</a></sup><span class="cover-chip cover-full">已覆盖</span></td>
         <td>分层降级矩阵（编排/模型/Worker/组件）+ LangGraph 执行异常回退自研 loop + 测试通过依赖注入 stub 离线运行</td>
         <td>"不同故障有明确边界：LangGraph 执行异常回退自研循环，bind_tools 不兼容回退文本协议，Redis 不可用回退内存 dict；模型无 Key 时走调用方 fallback，测试则注入 stub。"</td>
       </tr>
@@ -1440,12 +1510,12 @@ flowchart TD
         <td>"安全是纵深：输入检测、记忆隔离、路由收缩、流式拦截；多来源候选只增强可追溯性，不承诺内容真实。"</td>
       </tr>
       <tr>
-        <td>效果评估体系 / 可观测性<sup><a href="#cite-5">[5]</a></sup><span class="cover-chip cover-full">有代码证据</span></td>
+        <td>效果评估体系 / 可观测性<sup><a href="#cite-3">[3]</a></sup><span class="cover-chip cover-full">有代码证据</span></td>
         <td>9 套评测目录 + 模式/模型/样本/CI 标签 + LLM-as-Judge 落库 + MCP 调用流水 + p50/p95</td>
-        <td>"CI 当前显式跑 8 个 eval 目录（含 MCP decision），generation 不在该 job；MCP 文件仍是 12 例 stub oracle placeholder，三次 REAL 试跑 0.75 未写入合同。"</td>
+        <td>"CI 当前显式跑 8 个 eval 目录（含 MCP decision），generation 不在该 job；MCP 文件仍是 12 例 stub oracle placeholder，2026-09-14 REAL 复跑 model_exact 0.6667（v4.1 记 0.75）仍未写入合同。"</td>
       </tr>
       <tr>
-        <td>工程化：FastAPI / Docker / 队列 / 向量库<sup><a href="#cite-9">[9]</a></sup><span class="cover-chip cover-full">有代码证据</span></td>
+        <td>工程化：FastAPI / Docker / 队列 / 向量库<sup><a href="#cite-7">[7]</a></sup><span class="cover-chip cover-full">有代码证据</span></td>
         <td>FastAPI + SQLAlchemy 2.x + RQ + ChromaDB/Neo4j/Redis + Docker Compose 六服务；测试数以 CI 实跑披露</td>
         <td>"全栈交付：前后端 + worker + 数据库六服务一键起，CI 四道门禁（Ruff/Mypy/Pytest+eval/前端）全绿。"</td>
       </tr>
@@ -1462,10 +1532,10 @@ flowchart TD
     </tbody>
   </table></div>
 
-  <h3>8.3 覆盖度评估与差距应对</h3>
+  <h3 id="s-8-3">8.3 覆盖度评估与差距应对</h3>
   <figure class="chart-figure">
     <figcaption>图 13 · 架构演进证据自评：主观量尺只用于展示演进，不代表岗位覆盖率</figcaption>
-    <div id="chart-radar" class="chart-container" style="min-height:440px"></div>
+    <div id="chart-radar" class="chart-container"></div>
   </figure>
   <p>结论：仓库在主要方向上都有可指认实现，但成熟度不等于“覆盖满分”。当前最需要诚实披露的是：</p>
   <ul class="plain">
@@ -1509,7 +1579,7 @@ flowchart TD
   <div class="defect">
     <div class="d-head"><span class="d-no">D3</span><span class="d-title">MCP decision 文件仍是 placeholder，REAL 试跑未写成合同</span><span class="badge p1">P1 · 接线不等于质量</span></div>
     <dl>
-      <dt>现象</dt><dd>MCP 工具常驻可用集、绕过意图白名单；第 9 套评测的 <code>baseline.json</code> 仍是 stub oracle placeholder（model/parser 1.0）。2026-09-09 三次 REAL 质量门均打印 <code>model_exact=0.7500</code> / <code>parser_exact=1.0000</code>（12 例，deepseek-v4-flash），<b>但没有写入 baseline</b>，因此不能当质量门禁引用。</dd>
+      <dt>现象</dt><dd>MCP 工具常驻可用集、绕过意图白名单；第 9 套评测的 <code>baseline.json</code> 仍是 stub oracle placeholder（model/parser 1.0）。REAL 试跑打印 <code>model_exact</code> 0.75（2026-09-09，三次质量门）与 <b>0.6667</b>（2026-09-14 复跑）/ <code>parser_exact=1.0000</code>（12 例，deepseek-v4-flash）——<b>同一套 12 例的 LLM 决策本身有波动，且都没有写入 baseline</b>，因此不能当质量门禁引用。</dd>
       <dt>根因</dt><dd>MCP 批次优先打通传输与观测；decision 评测 harness 已能 REAL 跑，缺的是把结果写成带 <code>_mode/_model/_sample_count</code> 的合同并设阈值。</dd>
       <dt>影响</dt><dd>面试被问"MCP 工具误调用怎么办"时，目前有一次 0.75 的试跑观察，没有入库合同与回归阈值；线上一次误调用仍带来真实外部请求成本。</dd>
       <dt>优化方向</dt><dd>把三次试跑之一写入 REAL baseline，再讨论 decision ≥ 0.85 一类阈值；与 D1 的 native 0.75 分开讲：一个是本地工具、一个是 MCP 决策，都还没过合同门槛。</dd>
@@ -1588,7 +1658,7 @@ flowchart TD
 
   <h3>优化决策总表：投入产出视角</h3>
   <div class="table-wrap"><table>
-    <thead><tr><th>缺陷</th><th>档位</th><th>预估投入</th><th>不修的后果</th><th>建议</th></tr></thead>
+    <thead><tr><th scope="col">缺陷</th><th scope="col">档位</th><th scope="col">预估投入</th><th scope="col">不修的后果</th><th scope="col">建议</th></tr></thead>
     <tbody>
       <tr><td>D1 工具决策 0.75</td><td><span class="badge p0">P0</span></td><td class="num">1 天</td><td>"原生 FC"必被追问，数字难看</td><td><b>投递前必修</b>（few-shot + 工具描述）</td></tr>
       <tr><td>D2 记忆向量弱于 Jaccard</td><td><span class="badge p1">P1</span></td><td class="num">1–2 天</td><td>只讲"向量检索"会被数字打脸</td><td>用 hybrid 叙事；可选换 embedding</td></tr>
@@ -1620,28 +1690,28 @@ flowchart TD
     项目经历压缩为一句话定位 + 4 条安全 bullet。只使用可解释的代码事实；REAL 指标必须带模型和样本量，stub/oracle 不进简历成绩。
   </div>
 
-  <h3>10.1 简历项目描述（可直接粘贴）</h3>
+  <h3 id="s-10-1">10.1 简历项目描述（可直接粘贴）</h3>
   <div class="resume-block">
     <div class="rb-title">夜记 v3 · 生活记录与自我洞察 Agent 系统（个人全栈项目）</div>
     <p>独立设计并实现生活记录 / 规划 / 自我洞察 Web 应用。技术栈：Python / FastAPI / SQLAlchemy 2.x / LangGraph / MCP SDK 2.x / ChromaDB / Neo4j / Redis / RQ / Docker Compose / Vue3 / TypeScript。</p>
     <ul>
-      <li><b>四入口分治：</b>手写保存只落库 + Chroma + digest，卡片展开触发 treehole 短回信；同步对话采用六节点 single-pass LangGraph，流式对话采用独立最多三轮 loop；周报走 ExecutionPlanner → MultiAgentGraph。</li>
+      <li><b>四入口分治：</b>手写保存只落库 + Chroma + digest，卡片展开触发 treehole 短回信；同步对话采用六节点 single-pass LangGraph，流式对话采用独立流式工具循环（工具轮次 ≤2）；周报走 ExecutionPlanner → MultiAgentGraph。</li>
       <li><b>工具与技能：</b>ToolRegistry 统一 8 个本地工具与 N 个 MCP 工具，支持 SSE / Streamable HTTP / stdio；UserSkillRegistry 声明式注册记录 / 洞悉 / 计划技能，process_info 记录意图、工具、耗时与 Token。</li>
       <li><b>记忆与检索：</b>工作 / 情景 / 长期三层记忆配四维写入守门；RAG 采用向量 + BM25 + RRF + 云优先 rerank（Qwen，本地 bge 降级），并用 30 文档 × 20 查询固定集维护回归基线。</li>
       <li><b>评估与工程：</b>按 REAL / stub / oracle 分层管理 9 套评测；hardening 快照曾报后端 1016 个普通测试、前端 271 个测试，最终数字以合并后 CI 为准。</li>
     </ul>
   </div>
 
-  <h3>10.2 三十秒电梯陈述（口语版）</h3>
+  <h3 id="s-10-2">10.2 三十秒电梯陈述（口语版）</h3>
   <div class="resume-block">
     <p>"我做了一个生活记录方向的 Agent 系统，并把入口边界拆得很清楚：保存日记不跑 Agent 图，卡片展开才生成 treehole 短回信；同步对话是六节点 single-pass LangGraph，流式对话保留独立工具循环，周报才用 MultiAgentGraph。共享层包括三层记忆、混合 RAG、8+N 工具总线和可观测记录。评测按 REAL、stub、oracle 分层披露，小样本只作为回归基线，不包装成线上成绩。"
     </p>
   </div>
 
-  <h3>10.3 面试高频追问与应答要点</h3>
+  <h3 id="s-10-3">10.3 面试高频追问与应答要点</h3>
   <div class="qa-item">
     <div class="q">为什么 v3 从自研编排换成 LangGraph？</div>
-    <div class="a">结论先行：同步笔谈需要显式状态、节点边界和条件路由，LangGraph 让六阶段执行图可检查、可测试。当前图的工具节点是 single-pass，并不冒充多轮 ReAct；需要最多三轮工具回填的路径仍由独立 streaming / legacy loop 承担。<b>自研循环没有删除</b>——未被节点消费的 LangGraph 执行异常由调用层捕获并回退 legacy，故障注入测试验证了回复来源。</div>
+    <div class="a">结论先行：同步笔谈需要显式状态、节点边界和条件路由，LangGraph 让六阶段执行图可检查、可测试。当前图的工具节点是 single-pass，并不冒充多轮 ReAct；需要多轮工具回填（≤2 轮）的路径仍由独立 streaming / legacy loop 承担。<b>自研循环没有删除</b>——未被节点消费的 LangGraph 执行异常由调用层捕获并回退 legacy，故障注入测试验证了回复来源。</div>
   </div>
   <div class="qa-item">
     <div class="q">原生工具调用准确率只有 0.75，为什么还敢写在简历上？</div>
@@ -1649,15 +1719,15 @@ flowchart TD
   </div>
   <div class="qa-item">
     <div class="q">记忆为什么会"忘"？丢数据吗？</div>
-    <div class="a">三层答案：情景记忆 100 条 LRU 上限 + importance ≥ 0.5 写入阈值 + 7 天半衰期衰减——设计上就是"主动遗忘"，因为检索质量比记忆数量重要；SQL 持久层全量保留（payload_json），LRU 只淘汰内存索引；被晋升进长期画像的洞察永不衰减。</div>
+    <div class="a">三层答案：情景记忆 100 条上限 + importance ≥ 0.5 写入阈值 + 7 天半衰期衰减——设计上就是"主动遗忘"，因为检索质量比记忆数量重要；淘汰按"最旧条目"选出（<code>min(timestamp)</code>），<b>内存索引与持久层行同步删除</b>，所以被淘汰的条目确实不再保留；只有被晋升进长期画像的洞察不参与衰减。</div>
   </div>
   <div class="qa-item">
     <div class="q">RAG 为什么必须混合检索？单向量不行吗？</div>
-    <div class="a">用数字答并附边界：2026-09-09 Qwen REAL 质量门上，BM25 recall@5 为 0.667，向量为 0.967（MRR 1.00），RRF 为 0.950，qwen3-rerank 后 recall 仍 0.967、MRR 0.95。情景记忆上向量单路 0.348 反而弱于 Jaccard 0.498，重排后到 0.564——所以混合不是教条，是数据。小样本只作回归基线，不证明任一环节在所有线上查询中都不可替代。</div>
+    <div class="a">用数字答并附边界：固定集 30 文档 × 20 查询、Qwen <code>text-embedding-v3</code> + <code>qwen3-rerank</code> 云端 REAL 质量门上，BM25 recall@5 为 0.667，向量为 0.967（MRR 1.00），RRF 为 0.950，qwen3-rerank 后 recall 仍 0.967、MRR 0.95；<b>这组数字已写入 <code>rag/baseline.json</code>，2026-09-14 复跑逐位一致</b>。情景记忆上向量单路 0.348 反而弱于 Jaccard 0.498，重排后到 0.564——所以混合不是教条，是数据。小样本只作回归基线，不证明任一环节在所有线上查询中都不可替代。</div>
   </div>
   <div class="qa-item">
     <div class="q">多跳检索会不会越查越偏？</div>
-    <div class="a">会，所以做了两道守护：改写查询与原查询相似度低于 0.3 锚点阈值即判"查询漂移"停止；命中不足且已有 ≥2 条高相关结果时提前收敛。上限 3 跳，成本可控。</div>
+    <div class="a">会，所以做了三道守护：① 平均相关性 ≥0.3 且已收集 ≥2 条时提前收敛；② 本跳无新命中且非首跳时停止；③ 改写查询与原查询相似度低于 0.3 锚点阈值即判"查询漂移"停止。上限 3 跳，成本可控。</div>
   </div>
   <div class="qa-item">
     <div class="q">怎么评估一个 Agent 的好坏？</div>
@@ -1677,17 +1747,20 @@ flowchart TD
   <div class="sources">
     <h2>参考来源 · 2027 届秋招官方 JD 方向</h2>
     <ol>
-      <li id="cite-3"><span class="src-title">腾讯招聘，智能体平台研发工程师 JD：智能体编排、工具调用、记忆、RAG、Prompt Engineering、Function Calling。</span><a class="src-url" href="https://hr.tencent.com/m/jobdesc.html?postId=2079104781984645120" target="_blank" rel="noopener">https://hr.tencent.com/m/jobdesc.html?postId=2079104781984645120</a></li>
-      <li id="cite-4"><span class="src-title">腾讯招聘，智能体架构设计与开发 JD：LangChain / LangGraph 复杂推理链路、任务规划、工具调用与状态管理、RAG / Context Engineering 深度优化。</span><a class="src-url" href="https://hr.tencent.com/m/jobdesc.html?postId=2052676737472577536" target="_blank" rel="noopener">https://hr.tencent.com/m/jobdesc.html?postId=2052676737472577536</a></li>
-      <li id="cite-5"><span class="src-title">腾讯招聘，智能体 Harness Engineering JD：Agent Loop、多 Agent 协作、Memory、Skill、任务规划、工具调用、状态管理、异常恢复。</span><a class="src-url" href="https://hr.tencent.com/m/jobdesc.html?postId=1915242132004782080" target="_blank" rel="noopener">https://hr.tencent.com/m/jobdesc.html?postId=1915242132004782080</a></li>
-      <li id="cite-6"><span class="src-title">蚂蚁集团（BOSS直聘），智能体研发工程师（Agent开发）JD：LLM、RAG、Skill、记忆管理、上下文管理、tool use、ReAct、LangChain/AutoGen、Docker/K8s。</span><a class="src-url" href="https://www.zhipin.com/job_detail/f2188f89b488fb020nZ73d-8FFNS.html" target="_blank" rel="noopener">https://www.zhipin.com/job_detail/f2188f89b488fb020nZ73d-8FFNS.html</a></li>
-      <li id="cite-7"><span class="src-title">智元 AGIBOT（飞书招聘），机器人交互工程师 JD：RAG 全链路核心流程（分块、向量化、检索、重排序、生成）、混合检索、Query 改写、RAG 评测指标、Supervisor / 分层 / 流水线等 Multi-Agent 协作模式。</span><a class="src-url" href="https://agirobot.jobs.feishu.cn/socialrecruitment/m/position/detail/7669684759871113518" target="_blank" rel="noopener">https://agirobot.jobs.feishu.cn/socialrecruitment/m/position/detail/7669684759871113518</a></li>
-      <li id="cite-8"><span class="src-title">上海人工智能实验室，智能体框架研发工程师 / 青年研究员（校园招聘）JD：大语言模型、AI Agent、推理、规划、记忆、工具使用、多智能体系统。</span><a class="src-url" href="https://www.shlab.org.cn/joinus/detail/7670094181621418246?mode=1" target="_blank" rel="noopener">https://www.shlab.org.cn/joinus/detail/7670094181621418246?mode=1</a></li>
-      <li id="cite-9"><span class="src-title">BOSS直聘，AI Agent 工程师（LLM/RAG 方向）JD：基于 LLM 的 Agent 系统架构设计，构建具备规划、记忆、工具调用能力的智能体；RAG 架构与检索准确率优化。</span><a class="src-url" href="https://www.zhipin.com/job_detail/2a79bc50e4ecc3740nZ_3Nu6GFVZ.html" target="_blank" rel="noopener">https://www.zhipin.com/job_detail/2a79bc50e4ecc3740nZ_3Nu6GFVZ.html</a></li>
-      <li id="cite-10"><span class="src-title">BOSS直聘，大模型应用研发工程师 JD：知识库 / RAG 系统、多智能体（Multi-Agent）任务拆解与协作执行、Prompt / 上下文管理 / 工具调用。</span><a class="src-url" href="https://m.zhipin.com/job_detail/4f6ec27e9da7db5b0nV42dy-FFVV.html" target="_blank" rel="noopener">https://m.zhipin.com/job_detail/4f6ec27e9da7db5b0nV42dy-FFVV.html</a></li>
+      <li id="cite-1"><span class="src-title">腾讯招聘，智能体平台研发工程师 JD：智能体编排、工具调用、记忆、RAG、Prompt Engineering、Function Calling。</span><a class="src-url" href="https://hr.tencent.com/m/jobdesc.html?postId=2079104781984645120" target="_blank" rel="noopener">https://hr.tencent.com/m/jobdesc.html?postId=2079104781984645120</a></li>
+      <li id="cite-2"><span class="src-title">腾讯招聘，智能体架构设计与开发 JD：LangChain / LangGraph 复杂推理链路、任务规划、工具调用与状态管理、RAG / Context Engineering 深度优化。</span><a class="src-url" href="https://hr.tencent.com/m/jobdesc.html?postId=2052676737472577536" target="_blank" rel="noopener">https://hr.tencent.com/m/jobdesc.html?postId=2052676737472577536</a></li>
+      <li id="cite-3"><span class="src-title">腾讯招聘，智能体 Harness Engineering JD：Agent Loop、多 Agent 协作、Memory、Skill、任务规划、工具调用、状态管理、异常恢复。</span><a class="src-url" href="https://hr.tencent.com/m/jobdesc.html?postId=1915242132004782080" target="_blank" rel="noopener">https://hr.tencent.com/m/jobdesc.html?postId=1915242132004782080</a></li>
+      <li id="cite-4"><span class="src-title">蚂蚁集团（BOSS直聘），智能体研发工程师（Agent开发）JD：LLM、RAG、Skill、记忆管理、上下文管理、tool use、ReAct、LangChain/AutoGen、Docker/K8s。</span><a class="src-url" href="https://www.zhipin.com/job_detail/f2188f89b488fb020nZ73d-8FFNS.html" target="_blank" rel="noopener">https://www.zhipin.com/job_detail/f2188f89b488fb020nZ73d-8FFNS.html</a></li>
+      <li id="cite-5"><span class="src-title">智元 AGIBOT（飞书招聘），机器人交互工程师 JD：RAG 全链路核心流程（分块、向量化、检索、重排序、生成）、混合检索、Query 改写、RAG 评测指标、Supervisor / 分层 / 流水线等 Multi-Agent 协作模式。</span><a class="src-url" href="https://agirobot.jobs.feishu.cn/socialrecruitment/m/position/detail/7669684759871113518" target="_blank" rel="noopener">https://agirobot.jobs.feishu.cn/socialrecruitment/m/position/detail/7669684759871113518</a></li>
+      <li id="cite-6"><span class="src-title">上海人工智能实验室，智能体框架研发工程师 / 青年研究员（校园招聘）JD：大语言模型、AI Agent、推理、规划、记忆、工具使用、多智能体系统。</span><a class="src-url" href="https://www.shlab.org.cn/joinus/detail/7670094181621418246?mode=1" target="_blank" rel="noopener">https://www.shlab.org.cn/joinus/detail/7670094181621418246?mode=1</a></li>
+      <li id="cite-7"><span class="src-title">BOSS直聘，AI Agent 工程师（LLM/RAG 方向）JD：基于 LLM 的 Agent 系统架构设计，构建具备规划、记忆、工具调用能力的智能体；RAG 架构与检索准确率优化。</span><a class="src-url" href="https://www.zhipin.com/job_detail/2a79bc50e4ecc3740nZ_3Nu6GFVZ.html" target="_blank" rel="noopener">https://www.zhipin.com/job_detail/2a79bc50e4ecc3740nZ_3Nu6GFVZ.html</a></li>
+      <li id="cite-8"><span class="src-title">BOSS直聘，大模型应用研发工程师 JD：知识库 / RAG 系统、多智能体（Multi-Agent）任务拆解与协作执行、Prompt / 上下文管理 / 工具调用。</span><a class="src-url" href="https://m.zhipin.com/job_detail/4f6ec27e9da7db5b0nV42dy-FFVV.html" target="_blank" rel="noopener">https://m.zhipin.com/job_detail/4f6ec27e9da7db5b0nV42dy-FFVV.html</a></li>
     </ol>
   </div>
-  <p class="note">说明：架构与指标来自 <code>feature/agent-report-hardening</code> 工作区 2026-09-09（HEAD <code>db7e446</code> + 未提交的评测口径 / prompt 修复与 REAL 基线重写）。ORM 表数已按代码核为 25 个 Row + 1 张关联表。MCP decision 文件仍是 12 例 stub-oracle placeholder；三次 REAL 试跑 model_exact=0.75 未写入合同。JD 部分仅做公开岗位的方向性映射。</p>
+  <p class="note">说明：架构与指标来自 <code>feature/agent-report-hardening</code> 分支 2026-09-09（复核基准 <code>ddd48d7</code>，REV 4.2 逐条对照源码与 baseline 文件）。ORM 表数按代码核为 25 个 Row + 1 张关联表。
+  评测数字按来源分三类标注：<b>已入库且可复现</b>（intent / tool_call / skill_call / <b>rag 云端 REAL</b> / episodic / plan / generation / <b>treehole</b>）——其中 RAG 与 episodic 在 2026-09-14 复跑逐位一致，treehole 复跑 overall 4.77（v4.1 记 4.72，5 例波动）并已重播种；
+  <b>接线占位</b>（<code>mcp_decision</code> 仍是 12 例 stub-oracle placeholder，REAL 复跑 model_exact 0.6667 未写入合同）；
+  <b>本地自述</b>（测试计数无日志产物，已按 2026-09-14 复跑口径在正文标注）。JD 部分仅做公开岗位的方向性映射。</p>
 </footer>
 
 </main>
