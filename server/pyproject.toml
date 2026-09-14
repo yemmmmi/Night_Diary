@@ -39,7 +39,10 @@ dependencies = [
 
     # Official fetch MCP server (stdio) — enabled via MCP_STDIOS in .env.
     # 2026.x requires the mcp 2.x SDK (McpError→MCPError rename breaks ≤2025.4).
-    "mcp-server-fetch>=2026.6,<2027",
+    # Upper bound pinned to the range verified against mcp>=2.0: 2026.8.18
+    # resolves to mcp 1.x and would silently downgrade the SDK, so keep
+    # >=2026.6,<2026.8 and bump deliberately after re-checking the SDK pair.
+    "mcp-server-fetch>=2026.6,<2026.8",
 ]
 
 [project.optional-dependencies]
