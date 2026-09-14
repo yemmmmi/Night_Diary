@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from tests.eval._http_llm import (
     MODEL,
     REAL_MODE,
