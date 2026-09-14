@@ -108,32 +108,18 @@ def test_run_conversation_graph_with_citations() -> None:
     assert "参考来源" in final_state["final_response"]
 
 
-@pytest.mark.skipif(
-    not LANGGRAPH_AVAILABLE,
-    reason="LangGraph not installed",
-)
 def test_run_conversation_graph_error_handling() -> None:
-    """Graph error handling returns fallback response."""
-    graph = build_conversation_graph()
+    """Graph execution errors propagate to the caller's legacy fallback."""
+    class FailingGraph:
+        def invoke(self, state):
+            raise RuntimeError("graph unavailable")
 
-    # Pass an LLM that raises on invoke
-    class FailingLLM:
-        def invoke(self, prompt):
-            raise RuntimeError("LLM unavailable")
-
-        def ainvoke(self, prompt):
-            raise RuntimeError("LLM unavailable")
-
-    final_state = run_conversation_graph(
-        graph,
-        content="你好",
-        llm=FailingLLM(),
-        conversation_id="test-error",
-    )
-
-    assert "final_response" in final_state
-    # Should have fallback response, not crash
-    assert len(final_state["final_response"]) > 0
+    with pytest.raises(RuntimeError, match="graph unavailable"):
+        run_conversation_graph(
+            FailingGraph(),
+            content="你好",
+            conversation_id="test-error",
+        )
 
 
 # ── Container integration tests ─────────────────────────────────────

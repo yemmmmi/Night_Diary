@@ -28,11 +28,13 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from tests.eval._http_llm import is_transient_http_error
 from tests.eval.judge import JudgeParseError, LLMJudge
 from tests.eval.plan.conftest import capture_plan_proposal
 from tests.eval.plan.rubric_plan import PLAN_DIMENSION_KEYS, PLAN_RUBRIC
@@ -122,10 +124,21 @@ def _load_baseline() -> dict[str, Any] | None:
     return json.loads(BASELINE_JSON_PATH.read_text(encoding="utf-8"))
 
 
-def _write_baseline_json(means: dict[str, float], placeholder: bool) -> None:
+def _write_baseline_json(
+    means: dict[str, float],
+    *,
+    placeholder: bool,
+    model_name: str,
+    sample_count: int,
+) -> None:
     payload: dict[str, Any] = {key: round(means.get(key, 0.0), 2) for key in PLAN_DIMENSION_KEYS}
     payload["overall"] = round(means.get("overall", 0.0), 2)
     payload["_placeholder"] = placeholder
+    payload["_mode"] = "stub" if placeholder else "real"
+    payload["_model"] = model_name
+    payload["_sample_count"] = sample_count
+    payload["_seeded_at"] = datetime.now(UTC).isoformat()
+    payload["_runs"] = 1
     payload["_note"] = (
         "Stub mode baseline; real-mode LLM-as-Judge scoring needed for meaningful values"
         if placeholder
@@ -208,7 +221,18 @@ async def eval_report(
 
     for case in plan_cases:
         trace_id = f"eval-plan-{case['case_id']}"
-        proposal = await capture_plan_proposal(planner_agent, case, trace_id)
+        try:
+            proposal = await capture_plan_proposal(planner_agent, case, trace_id)
+        except Exception as exc:
+            if not is_transient_http_error(exc):
+                raise
+            judge_parse_errors.append(case["case_id"])
+            print(
+                f"[LLM HTTP ERROR] {case['case_id']}: {str(exc)[:160]}... "
+                "(excluded from means)"
+            )
+            rows.append(f"| {case['case_id']} | - | - | - | - | llm http error |")
+            continue
 
         if proposal is None:
             no_proposal.append(case["case_id"])
@@ -238,6 +262,16 @@ async def eval_report(
             )
             rows.append(f"| {case['case_id']} | - | - | - | - | judge parse error |")
             continue
+        except Exception as exc:
+            if not is_transient_http_error(exc):
+                raise
+            judge_parse_errors.append(case["case_id"])
+            print(
+                f"[LLM HTTP ERROR] {case['case_id']}: {str(exc)[:160]}... "
+                "(excluded from means)"
+            )
+            rows.append(f"| {case['case_id']} | - | - | - | - | llm http error |")
+            continue
 
         graded_scores = graded.scores
         overall = graded.overall
@@ -247,21 +281,21 @@ async def eval_report(
         total_tokens += tokens_in + tokens_out
 
         for key in PLAN_DIMENSION_KEYS:
-            per_dim[key].append(graded_scores.get(key, 0.0))
+            per_dim[key].append(graded_scores[key])
         overalls.append(overall)
         latencies.append(latency_ms)
 
         min_safety = case.get("min_safety")
         if min_safety is not None:
             safety_floors.append(
-                (case["case_id"], graded_scores.get("safety", 0.0), float(min_safety))
+                (case["case_id"], graded_scores["safety"], float(min_safety))
             )
 
         rows.append(
-            f"| {case['case_id']} | {graded_scores.get('actionability', 0):.1f} | "
-            f"{graded_scores.get('gentleness', 0):.1f} | "
-            f"{graded_scores.get('context_faithfulness', 0):.1f} | "
-            f"{graded_scores.get('safety', 0):.1f} | {overall:.2f} |"
+            f"| {case['case_id']} | {graded_scores['actionability']:.1f} | "
+            f"{graded_scores['gentleness']:.1f} | "
+            f"{graded_scores['context_faithfulness']:.1f} | "
+            f"{graded_scores['safety']:.1f} | {overall:.2f} |"
         )
 
     means = {key: _mean(vals) for key, vals in per_dim.items()}
@@ -287,7 +321,12 @@ async def eval_report(
         )
 
     if os.getenv("EVAL_UPDATE_BASELINE") == "1":
-        _write_baseline_json(means, placeholder=not real_mode)
+        _write_baseline_json(
+            means,
+            placeholder=not real_mode,
+            model_name=model_name,
+            sample_count=len(plan_cases),
+        )
         _update_baseline_md(model_name, len(plan_cases), means, rows, real_mode)
         print(
             f"[baseline] wrote {BASELINE_JSON_PATH.name} + {BASELINE_MD_PATH.name} "
@@ -375,6 +414,11 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any]) -> None:
         pytest.skip(
             "baseline.json is a stub-mode placeholder; reseed in real mode "
             "(LLM_API_KEY set) to record a quality contract"
+        )
+    if "_mode" not in baseline:
+        pytest.skip(
+            "baseline.json lacks mode metadata after planner prompt changes; "
+            "reseed with EVAL_UPDATE_BASELINE=1 make eval-plan"
         )
 
     regressions: list[str] = []

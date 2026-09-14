@@ -1,21 +1,27 @@
 {
+  "_placeholder": false,
+  "_mode": "real",
+  "_model": "deepseek-v4-flash",
+  "_sample_count": 30,
+  "_seeded_at": "2026-09-09T07:13:25.325504+00:00",
+  "_runs": 1,
   "full": {
-    "skill_selection_accuracy": 0.8,
-    "skill_selection_f1": 0.8857,
-    "false_activation_rate": 0.0122,
-    "missed_activation_rate": 0.1842,
+    "skill_selection_accuracy": 0.7667,
+    "skill_selection_f1": 0.9041,
+    "false_activation_rate": 0.0244,
+    "missed_activation_rate": 0.1316,
     "avg_prompt_tokens": 2763.37,
-    "avg_latency_ms": 4538.86,
+    "avg_latency_ms": 1103.08,
     "avg_disclosure_rounds": 0.0
   },
   "progressive": {
-    "skill_selection_accuracy": 0.6667,
-    "skill_selection_f1": 0.8308,
-    "false_activation_rate": 0.0,
-    "missed_activation_rate": 0.2895,
+    "skill_selection_accuracy": 0.6333,
+    "skill_selection_f1": 0.8493,
+    "false_activation_rate": 0.0488,
+    "missed_activation_rate": 0.1842,
     "avg_prompt_tokens": 678.9,
-    "avg_latency_ms": 3311.57,
-    "avg_disclosure_rounds": 0.9
+    "avg_latency_ms": 1773.7,
+    "avg_disclosure_rounds": 1.1667
   },
   "token_savings": 0.7543
 }

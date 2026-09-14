@@ -181,10 +181,13 @@ async def test_synthesize_uses_llm_when_multiple_outputs(fake_llm: Any) -> None:
         "token_budget": 1500,
         "empathy_response": "我理解你的感受。",
         "insight_response": "你最近的拖延可能与压力有关。",
+        "retrieval_context": "你上周提到项目延期后连续失眠。",
     }
     update = await supervisor.synthesize(state)
     assert update["final_response"] == fake_llm.reply
     assert fake_llm.calls  # the synthesis LLM was actually invoked
+    assert "项目延期后连续失眠" in fake_llm.calls[0]
+    assert "必须保留至少一项具体历史事实" in fake_llm.calls[0]
     assert update["total_tokens_used"] > 0
 
 

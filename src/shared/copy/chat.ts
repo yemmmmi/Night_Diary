@@ -45,8 +45,8 @@ export const chatCopy = {
   skillPlanOpen: '去计划页推进',
   skillPlanCheckin: (days: number) => `坚持 ${days} 天 · 每日打卡`,
   skillPlanTimer: (hours: number) => `每日 ${hours} 小时 · 计时推进`,
-  skillPlanNodes: (total: number, verified: number) =>
-    `共 ${total} 个学习节点 · ${verified} 个附参考链接`,
+  skillPlanNodes: (total: number, multiSource: number) =>
+    `共 ${total} 个学习节点 · ${multiSource} 个有多来源候选`,
   skillHintTitle: '也可以直接吩咐夜记',
   skillHintRecord: '记一篇日记',
   skillHintInsight: '洞悉此刻的自己',
@@ -62,4 +62,27 @@ export const chatCopy = {
   skillModeRecordTitle: '把这封信转写成一篇日记',
   skillModeInsightTitle: '以心理视角分析这封信',
   skillModePlanTitle: '把这封信整理成一个计划',
+  skillMenuHint: '输入 / 唤起技能 · ↑↓ 选择 · Enter 确认',
+  skillMenuEmpty: '没有匹配的技能',
+  /* ── 执行过程（process_info）：assistant 消息下的可折叠过程记录 ── */
+  processLabel: '执行过程',
+  processToggle: (skill: string | null | undefined, toolCount: number, seconds: number) => {
+    const parts: string[] = []
+    if (skill) parts.push(`${skill}技能`)
+    if (toolCount > 0) parts.push(`${toolCount} 次工具调用`)
+    if (seconds > 0) parts.push(`${seconds}s`)
+    return parts.length ? `执行过程 · ${parts.join(' · ')}` : '执行过程'
+  },
+  processIntentLabel: '意图识别',
+  processSkillLabel: '调用技能',
+  processSkillManual: '手动选择',
+  processSkillAuto: '自动识别',
+  processToolsLabel: '工具调用',
+  processToolSourceMcp: 'MCP',
+  processToolSourceLocal: '内置',
+  processRetrievalLabel: '上下文检索',
+  processRetrievalDiaries: (n: number) => `日记 ${n} 篇`,
+  processRetrievalMemories: (n: number) => `情景记忆 ${n} 条`,
+  processDurationLabel: '总耗时',
+  processTokensLabel: 'Token 用量',
 } as const

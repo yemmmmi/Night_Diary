@@ -14,6 +14,7 @@ vi.mock('@/shared/api/plan', () => ({
   createTask: vi.fn(async () => ({})),
   updateTaskStatus: vi.fn(async () => ({})),
   deletePlan: vi.fn(async () => {}),
+  researchTask: vi.fn(async () => ({})),
 }))
 
 import PlanScene from '@/features/plan/PlanScene.vue'
@@ -245,5 +246,96 @@ describe('PlanScene', () => {
     const { wrapper } = mountScene()
     expect(wrapper.find('[data-testid="plans-empty-manual"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="plans-empty-ai"]').exists()).toBe(true)
+  })
+
+  /* ── PR9 信息来源透明化 + 显式百分比 + milestones 入口 ── */
+
+  const milestonePlan: PlanItem = plan({
+    id: 'pm',
+    title: '学习视频剪辑',
+    template: 'milestones',
+    source: 'agent',
+    tasks: [
+      task({
+        id: 'm1',
+        title: '基础剪切',
+        status: 'pending',
+        source_links: [
+          { url: 'https://a.com/tut', title: '入门', domain: 'a.com', multi_source: true, is_primary: true },
+          { url: 'https://b.com/ref', title: '参考', domain: 'b.com', multi_source: true },
+        ],
+      }),
+      task({ id: 'm2', title: '调色', status: 'done' }),
+    ],
+  })
+
+  const checkinPlan: PlanItem = plan({
+    id: 'pc',
+    title: '坚持减肥30天',
+    template: 'checkin_total',
+    target_value: 30,
+    target_unit: '天',
+    target_period: 'total',
+    today_progress: { checkin_date: todayIso, today_checked_in: false, total_checkins: 0 },
+  })
+
+  it('milestones 计划显示显式进度百分比', async () => {
+    const { wrapper } = mountScene([milestonePlan])
+    const pct = wrapper.find('[data-testid="plan-percent"]')
+    expect(pct.exists()).toBe(true)
+    expect(pct.text()).toContain('1 / 2 节点')
+    expect(pct.text()).toContain('(50%)')
+  })
+
+  it('checkin_total 计划显示 "X / 30 天 (Z%)" 百分比', () => {
+    const { wrapper } = mountScene([checkinPlan])
+    const pct = wrapper.find('[data-testid="plan-percent"]')
+    expect(pct.text()).toContain('0 / 30 天')
+    expect(pct.text()).toContain('(0%)')
+  })
+
+  it('milestones 计划渲染"去推进"入口并展开节点列表', async () => {
+    const { wrapper } = mountScene([milestonePlan])
+    const btn = wrapper.find('[data-testid="milestone-btn"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toContain('去推进')
+    await btn.trigger('click')
+    expect(wrapper.text()).toContain('基础剪切')
+  })
+
+  it('计划级来源总览默认收起，展开显示检索用量与域名', async () => {
+    const { wrapper } = mountScene([milestonePlan])
+    await wrapper.find('[data-testid="plan-row"]').trigger('click')
+    expect(wrapper.find('[data-testid="source-overview-toggle"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('a.com')
+    await wrapper.find('[data-testid="source-overview-toggle"]').trigger('click')
+    expect(wrapper.text()).toContain('a.com')
+    expect(wrapper.text()).toContain('多来源候选 1 / 2 个节点')
+  })
+
+  it('节点"来源依据"默认收起，展开显示信源与主参考', async () => {
+    const { wrapper } = mountScene([milestonePlan])
+    await wrapper.find('[data-testid="plan-row"]').trigger('click')
+    expect(wrapper.find('[data-testid="node-sources-block"]').exists()).toBe(false)
+    const toggle = wrapper.find('[data-testid="node-sources-toggle"]')
+    expect(toggle.exists()).toBe(true)
+    await toggle.trigger('click')
+    const block = wrapper.find('[data-testid="node-sources-block"]')
+    expect(block.exists()).toBe(true)
+    expect(block.text()).toContain('主参考')
+    expect(block.text()).toContain('多来源候选')
+    expect(block.text()).toContain('a.com')
+  })
+
+  it('无信源节点显示"基于模型知识"并可"补充依据"', async () => {
+    const { wrapper } = mountScene([milestonePlan])
+    await wrapper.find('[data-testid="plan-row"]').trigger('click')
+    // m2 无 source_links → 展开其来源块（索引[1]是 m2 的 toggle）
+    await wrapper.findAll('[data-testid="node-sources-toggle"]')[1].trigger('click')
+    const block = wrapper.findAll('[data-testid="node-sources-block"]')[0]
+    expect(block.text()).toContain('基于模型既有知识生成')
+    const api = await import('@/shared/api/plan')
+    await block.find('[data-testid="node-research-btn"]').trigger('click')
+    expect(api.researchTask).toHaveBeenCalledWith('m2')
   })
 })

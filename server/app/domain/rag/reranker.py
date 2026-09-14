@@ -1,4 +1,4 @@
-"""Cross-encoder reranker with lazy loading and graceful degradation."""
+"""Cross-encoder / cloud-API reranker with lazy loading and graceful degradation."""
 
 from __future__ import annotations
 
@@ -16,6 +16,68 @@ DEFAULT_MODEL = "BAAI/bge-reranker-base"
 DEFAULT_TOP_K = 5
 
 ModelLoader = Callable[[], Any]
+
+
+class ApiRerankModel:
+    """Cohere-compatible ``/reranks`` client exposing a CrossEncoder-like ``predict``.
+
+    Used as the ``model_loader`` payload for :class:`Reranker` so cloud and local
+    backends share the same scoring / fallback path. Targets DashScope
+    ``qwen3-rerank`` (``POST {base_url}/reranks``), not the nested
+    ``text-rerank`` RPC used by legacy ``gte-rerank-v2``.
+    """
+
+    def __init__(self, *, api_key: str, base_url: str, model: str) -> None:
+        self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+
+    def predict(self, pairs: list[tuple[str, str]]) -> list[float]:
+        """Score ``(query, document)`` pairs; return one float per pair in input order."""
+        if not pairs:
+            return []
+
+        # Production callers always pass a single query; group if mixed.
+        by_query: dict[str, list[tuple[int, str]]] = {}
+        for index, (query, document) in enumerate(pairs):
+            by_query.setdefault(query, []).append((index, document))
+
+        scores = [0.0] * len(pairs)
+        for query, indexed_docs in by_query.items():
+            documents = [doc for _, doc in indexed_docs]
+            ranked = self._rerank(query, documents)
+            score_by_doc_index = {
+                int(item["index"]): float(item["relevance_score"]) for item in ranked
+            }
+            for local_i, (pair_index, _) in enumerate(indexed_docs):
+                scores[pair_index] = score_by_doc_index.get(local_i, 0.0)
+        return scores
+
+    def _rerank(self, query: str, documents: list[str]) -> list[dict[str, Any]]:
+        import httpx
+
+        url = f"{self._base_url}/reranks"
+        payload = {
+            "model": self._model,
+            "query": query,
+            "documents": documents,
+            "top_n": len(documents),
+        }
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+            body = response.json()
+        results = body.get("results")
+        if not isinstance(results, list):
+            raise ValueError(f"unexpected rerank response shape: {body!r}")
+        return results
 
 
 class Reranker:
@@ -160,3 +222,64 @@ class Reranker:
         if entry.tags:
             text += " " + " ".join(entry.tags)
         return text
+
+
+def resolve_rerank_api_key(settings: Any) -> str:
+    """Prefer ``rerank_api_key``, else reuse ``embedding_api_key`` (same DashScope key)."""
+    return (getattr(settings, "rerank_api_key", "") or getattr(settings, "embedding_api_key", "")).strip()
+
+
+def build_reranker(
+    settings: Any,
+    *,
+    top_k: int = DEFAULT_TOP_K,
+    local_files_only: bool = True,
+) -> Reranker | None:
+    """Build a cloud or local reranker from settings; return ``None`` if unavailable.
+
+    Cloud-first: when a DashScope-compatible key is present, return a
+    :class:`Reranker` backed by :class:`ApiRerankModel`. Otherwise attempt the
+    local CrossEncoder (``sentence-transformers`` + model weights). Any failure
+    degrades to ``None`` so callers can skip the rerank stage.
+    """
+    api_key = resolve_rerank_api_key(settings)
+    if api_key:
+        base_url = str(getattr(settings, "rerank_base_url", "") or "").rstrip("/")
+        model_name = str(getattr(settings, "rerank_model", "") or "qwen3-rerank")
+        logger.info(
+            "Using cloud rerank API: base_url=%s model=%s",
+            base_url,
+            model_name,
+        )
+        return Reranker(
+            model_name=model_name,
+            top_k=top_k,
+            model_loader=lambda: ApiRerankModel(
+                api_key=api_key,
+                base_url=base_url,
+                model=model_name,
+            ),
+        )
+
+    import importlib.util
+    from pathlib import Path
+
+    if importlib.util.find_spec("sentence_transformers") is None:
+        logger.info(
+            "sentence-transformers not installed and no rerank API key; "
+            "cross-encoder reranking disabled"
+        )
+        return None
+
+    models_dir = Path(getattr(settings, "models_dir", "."))
+    fine_tuned = models_dir / "reranker-night-diary"
+    model_name = str(fine_tuned) if fine_tuned.exists() else DEFAULT_MODEL
+    try:
+        return Reranker(
+            model_name=model_name,
+            top_k=top_k,
+            local_files_only=local_files_only,
+        )
+    except Exception as exc:
+        logger.warning("Reranker init skipped (%s); degrading to no-rerank: %s", model_name, exc)
+        return None

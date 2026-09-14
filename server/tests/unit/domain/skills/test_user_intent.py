@@ -36,6 +36,16 @@ class TestStrongRules:
     def test_make_plan_routes_to_plan(self) -> None:
         assert classify_user_intent("帮我做个计划，我要开始跑步").intent == "plan"
 
+    def test_how_should_i_plan_question_routes_to_plan(self) -> None:
+        # 征求意见式问句也明确在求一份计划。
+        assert (
+            classify_user_intent("你认为我该怎么规划接下来的秋招？列哪些计划").intent
+            == "plan"
+        )
+
+    def test_list_plans_request_routes_to_plan(self) -> None:
+        assert classify_user_intent("列一份计划，把秋招的每一步排出来").intent == "plan"
+
     def test_plan_word_alone_does_not_route(self) -> None:
         # "计划" alone is a weak signal, not an instruction.
         assert classify_user_intent("这个计划听起来不错").intent == "chat"

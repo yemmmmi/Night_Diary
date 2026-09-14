@@ -89,10 +89,12 @@ async def test_planner_emits_proposal_when_complete():
     planner = PlannerAgent(llm=mock_llm)
     inp = PlannerInput(
         user_input="我想早睡，每天11点前睡",  # 有目标 + 有方法
-        prior_context="",
+        prior_context="这周连续三天失眠，白天很疲惫。",
         trace_id=trace_id,
         user_id="user-1",
         conversation_id="conv-1",
+        source_refs=[{"text": "昨晚凌晨两点才睡"}],
+        current_plans_text="已有计划：晨跑",
     )
 
     with patch("app.domain.agents.planner_agent.CrisisGuard") as mock_crisis_cls:
@@ -108,6 +110,12 @@ async def test_planner_emits_proposal_when_complete():
     assert len(blocks) == 1
     assert blocks[0]["block"]["block_type"] == "plan_proposal"
     assert blocks[0]["block"]["data"]["title"] == "早睡计划"
+    prompt = mock_llm.ainvoke.await_args.args[0]
+    assert "连续三天失眠" in prompt
+    assert "凌晨两点才睡" in prompt
+    assert "已有计划：晨跑" in prompt
+    assert "做不到或暂时跳过也没关系" in prompt
+    assert "具体时机、频率或方式" in prompt
 
 
 @pytest.mark.asyncio

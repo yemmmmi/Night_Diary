@@ -20,8 +20,8 @@ from app.services.ai.mcp_connections import (
     McpCallError,
     McpLoop,
     McpTimeoutError,
-    SseMcpConnection,
     StdioMcpConnection,
+    http_connection,
 )
 from app.services.ai.tool_factory import (
     ToolFn,
@@ -64,7 +64,7 @@ class ToolRegistry:
         self._loop.start()
         self._tracer = McpCallTracer(self._container.session_factory)
         for alias, url in parse_endpoints(self._settings.mcp_endpoints).items():
-            self.register_connection(SseMcpConnection(alias, url, self._loop))
+            self.register_connection(http_connection(alias, url, self._loop))
         for alias, spec in parse_stdios(self._settings.mcp_stdios).items():
             self.register_connection(StdioMcpConnection(alias, spec, self._loop))
 
@@ -83,10 +83,15 @@ class ToolRegistry:
 
     # -- tool discovery ----------------------------------------------------
 
+    def _drop_mcp_tools(self, alias: str) -> None:
+        """Remove an endpoint's tools while retaining its connection status."""
+        for name in [n for n, e in self._mcp_tools.items() if e.alias == alias]:
+            del self._mcp_tools[name]
+        self._connections[alias].tool_count = 0
+
     def _sync_tools(self, conn: Any) -> None:
         # Drop stale entries of this alias before re-registering.
-        for name in [n for n, e in self._mcp_tools.items() if e.alias == conn.alias]:
-            del self._mcp_tools[name]
+        self._drop_mcp_tools(conn.alias)
         try:
             tools = conn.list_tools()
         except Exception as exc:
@@ -183,6 +188,8 @@ class ToolRegistry:
                 status = "error"
                 error_message = str(exc)
                 result_text = f"[{name} error]: {exc}"
+            if conn.state == "dead":
+                self._drop_mcp_tools(entry.alias)
             if span:
                 span.output_snapshot = result_text[:SNAPSHOT_RESULT_CHARS]
         self._record(

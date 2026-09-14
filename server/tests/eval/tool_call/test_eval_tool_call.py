@@ -377,6 +377,11 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any], real_mode: bool)
         pytest.skip(
             "placeholder baseline; seed with EVAL_UPDATE_BASELINE=1 make eval-tool"
         )
+    if "_mode" not in baseline:
+        pytest.skip(
+            "baseline.json lacks mode metadata; reseed with "
+            "EVAL_UPDATE_BASELINE=1 make eval-tool"
+        )
 
     regressions: list[str] = []
     for path in ("native", "fallback"):

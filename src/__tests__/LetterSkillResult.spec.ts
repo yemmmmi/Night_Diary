@@ -105,7 +105,7 @@ describe('LetterSkillResult', () => {
     expect(wrapper.text()).toContain('每日 4 小时 · 计时推进')
   })
 
-  it('summarizes a milestones plan with verified node counts', () => {
+  it('summarizes a milestones plan with multi-source node counts', () => {
     const wrapper = mountResult({
       skill: 'plan',
       plan_id: 'p3',
@@ -114,11 +114,11 @@ describe('LetterSkillResult', () => {
       target_value: null,
       target_unit: null,
       tasks: [
-        { id: 't1', title: '了解剪辑软件', note: '', link: 'https://example.com/1', verified: true },
-        { id: 't2', title: '剪出第一支短片', note: '', link: null, verified: false },
-        { id: 't3', title: '配音与字幕', note: '', link: 'https://example.com/3', verified: true },
+        { id: 't1', title: '了解剪辑软件', note: '', link: 'https://example.com/1', multi_source: true },
+        { id: 't2', title: '剪出第一支短片', note: '', link: null, multi_source: false },
+        { id: 't3', title: '配音与字幕', note: '', link: 'https://example.com/3', multi_source: true },
       ],
     })
-    expect(wrapper.text()).toContain('共 3 个学习节点 · 2 个附参考链接')
+    expect(wrapper.text()).toContain('共 3 个学习节点 · 2 个有多来源候选')
   })
 })

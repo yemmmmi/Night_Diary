@@ -23,14 +23,16 @@ from typing import Any, ClassVar
 
 import pytest
 
-# Importing the module triggers its dotenv load and exposes _HttpLLM /
-# _Message / _usage_block / _REAL_MODE / _MODEL / _is_auth_error.
-from tests.eval.generation import conftest as gen
+from tests.eval._http_llm import (
+    MODEL,
+    REAL_MODE,
+    HttpLLM,
+    Message,
+    is_auth_error,
+    usage_block,
+)
 
 DATA_DIR = Path(__file__).parent
-
-_REAL_MODE = gen._REAL_MODE
-_MODEL = gen._MODEL
 
 
 class _StubTreeHoleLLM:
@@ -53,10 +55,10 @@ class _StubTreeHoleLLM:
         ensure_ascii=False,
     )
 
-    def invoke(self, prompt: str) -> gen._Message:
-        return gen._Message(content=self._JSON, response_metadata=gen._usage_block(150, 60))
+    def invoke(self, prompt: str) -> Message:
+        return Message(content=self._JSON, response_metadata=usage_block(150, 60))
 
-    async def ainvoke(self, prompt: str) -> gen._Message:
+    async def ainvoke(self, prompt: str) -> Message:
         return self.invoke(prompt)
 
 
@@ -71,34 +73,34 @@ class _StubTreeHoleJudgeLLM:
         "reply_brevity",
     ]
 
-    def invoke(self, prompt: str) -> gen._Message:
+    def invoke(self, prompt: str) -> Message:
         body = ", ".join(f'"{k}": 4' for k in self._KEYS)
-        return gen._Message(
+        return Message(
             content=f'{{{body}, "rationale": "stub treehole judge"}}',
-            response_metadata=gen._usage_block(300, 48),
+            response_metadata=usage_block(300, 48),
         )
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _treehole_auth_preflight() -> None:
     """Skip the tree-hole eval on a dead LLM key (mirrors generation eval)."""
-    if not _REAL_MODE:
+    if not REAL_MODE:
         return
     try:
-        gen._HttpLLM(max_tokens=1, max_retries=1).invoke("ping")
+        HttpLLM(max_tokens=1, max_retries=1).invoke("ping")
     except Exception as exc:
-        if gen._is_auth_error(exc):
+        if is_auth_error(exc):
             pytest.skip(f"LLM auth failed (check LLM_API_KEY in server/.env): {exc}")
 
 
 @pytest.fixture(scope="session")
 def real_mode() -> bool:
-    return _REAL_MODE
+    return REAL_MODE
 
 
 @pytest.fixture(scope="session")
 def model_name() -> str:
-    return _MODEL if _REAL_MODE else "stub"
+    return MODEL if REAL_MODE else "stub"
 
 
 @pytest.fixture
@@ -109,7 +111,7 @@ def treehole_llm(real_mode: bool) -> Any:
     reply fails to parse and silently falls back to rules.
     """
     if real_mode:
-        return gen._HttpLLM(temperature=0.2, max_tokens=1500, json_mode=True)
+        return HttpLLM(temperature=0.2, max_tokens=1500, json_mode=True)
     return _StubTreeHoleLLM()
 
 
@@ -117,7 +119,7 @@ def treehole_llm(real_mode: bool) -> Any:
 def judge_llm(real_mode: bool) -> Any:
     """Judge LLM with the tree-hole dimension keys."""
     if real_mode:
-        return gen._HttpLLM(temperature=0.0, max_tokens=2000, json_mode=True)
+        return HttpLLM(temperature=0.0, max_tokens=3000, json_mode=True)
     return _StubTreeHoleJudgeLLM()
 
 

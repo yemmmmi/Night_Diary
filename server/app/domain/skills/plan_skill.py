@@ -5,12 +5,12 @@ Templates (PR8):
 - ``timer_daily``   — daily time goal in hours (e.g. 每天学习4小时)
 - ``milestones``    — learning path whose nodes carry reference links
   (e.g. 学剪辑). Node links come **only** from web-search results — the LLM
-  never fabricates URLs — and a link is marked verified only when it is
-  corroborated by ≥2 independent domains (cross validation).
+  never fabricates URLs — and ``multi_source`` only records that one search
+  returned candidates from at least two distinct domains.
 
 The whole generation is capped at ``_MAX_SEARCH_QUERIES`` web queries; when
 search is unavailable the nodes are still created from LLM knowledge with
-``verified=false`` and no links.
+``multi_source=false`` and no links.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import json
 import logging
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
@@ -39,21 +40,21 @@ _EXTRACT_PROMPT = """从用户输入中抽取计划参数，并判定属于哪�
 
 - checkin_total：有明确总天数目标的坚持类计划（如"坚持减肥30天""连续早起21天"）
 - timer_daily：有每日时长目标的计划（如"每天学习4小时"）
-- milestones：学习一项技能或完成一个由浅入深的课题（如"学习视频剪辑""学吉他"）
+- milestones：完成一个由浅入深的目标或课题（如"学习视频剪辑""准备秋招""备考考研""做个项目"），凡是要分阶段推进的事都算
 - none：用户其实不是想做计划
 
 只输出一个 JSON 对象，不要任何其他文字：
-{{"template": "checkin_total|timer_daily|milestones|none", "title": "简短计划名，20字以内", "motivation": "用户动机一句话，没有就留空", "days": 30, "daily_hours": 4, "topic": "要学的技能主题"}}
+{{"template": "checkin_total|timer_daily|milestones|none", "title": "简短计划名，20字以内", "motivation": "用户动机一句话，没有就留空", "days": 30, "daily_hours": 4, "topic": "要推进的目标主题"}}
 
 字段说明：days 仅 checkin_total 需要；daily_hours 仅 timer_daily 需要；topic 仅 milestones 需要。
 
 用户输入：{content}
 """
 
-_MILESTONE_PROMPT = """为「{topic}」设计一个由浅入深的学习计划。只输出一个 JSON 对象，不要任何其他文字：
-{{"tasks": [{{"title": "节点名，15字以内", "note": "这个节点学什么、练成什么，40字以内"}}]}}
+_MILESTONE_PROMPT = """为「{topic}」设计一个由浅入深、分阶段推进的计划。只输出一个 JSON 对象，不要任何其他文字：
+{{"tasks": [{{"title": "节点名，15字以内", "note": "这个节点做什么、达成什么，40字以内"}}]}}
 
-要求：{min_nodes} 到 {max_nodes} 个节点，从零基础到能独立完成一个作品；每个节点独立、可检验、顺序递进。
+要求：{min_nodes} 到 {max_nodes} 个节点，从起步到能独立完成目标；每个节点独立、可检验、顺序递进。
 """
 
 
@@ -92,28 +93,74 @@ def _clamp_number(value: Any, low: float, high: float) -> float:
     return max(low, min(high, number))
 
 
-def _find_verified_link(results: list[WebSearchResult]) -> tuple[str | None, bool]:
-    """Cross-validate search results by independent domain.
+def _find_multi_source_link(results: list[WebSearchResult]) -> tuple[str | None, bool]:
+    """Select a primary result and report whether multiple domains appeared.
 
-    Returns ``(link, verified)``: the first URL when ≥2 distinct registered
-    domains corroborate the result (verified), the first URL when only one
-    domain shows up (unverified), or ``(None, False)`` with no evidence.
+    ``multi_source`` is a provenance signal only. It does not assert that the
+    candidates agree or that any claim has been established as fact.
     """
-    if not results:
+    ranked = _rank_sources(results, "")
+    if not ranked:
         return None, False
-    from app.services.web_search_service import cross_validate_links
+    primary = ranked[0]
+    return primary["url"], primary["multi_source"]
 
-    by_domain = cross_validate_links(results)
-    first = next((r for r in results if r.url.startswith("http")), None)
-    if first is None or not by_domain:
-        return None, False
-    return first.url, len(by_domain) >= 2
+
+def _rank_sources(
+    results: list[WebSearchResult], topic: str
+) -> list[dict[str, Any]]:
+    """Deduplicate + rank web results for a node into a provenance list.
+
+    - One entry per distinct registered domain (first-URL wins per domain).
+    - ``multi_source`` is True when the same query returned candidates from
+      ≥2 distinct domains; ``is_primary`` marks the single main reference
+      that becomes ``tasks.link``.
+    - Ordering: multi-source-first, then by relevance hints (topic term presence
+      in title, then title length) for a deterministic, auditable ranking.
+    """
+    by_domain: dict[str, WebSearchResult] = {}
+    for r in results:
+        domain = urlparse(r.url).netloc.lower().removeprefix("www.")
+        if domain and domain not in by_domain:
+            by_domain[domain] = r
+
+    itemized: list[dict[str, Any]] = []
+    for domain, r in by_domain.items():
+        title_terms = sum(1 for t in topic.split() if t and t in r.title)
+        itemized.append(
+            {
+                "url": r.url,
+                "title": r.title,
+                "snippet": r.snippet,
+                "domain": domain,
+                "multi_source": False,
+                "is_primary": False,
+                "_relevance": (title_terms, -len(r.title)),
+            }
+        )
+
+    # Provenance only: multiple domains appeared in the same result set.
+    has_multi_domain = len(by_domain) >= 2
+    if has_multi_domain:
+        for item in itemized:
+            item["multi_source"] = True
+    itemized.sort(key=lambda i: (not i["multi_source"], i["_relevance"]))
+
+    for item in itemized:
+        item.pop("_relevance", None)
+    if itemized:
+        itemized[0]["is_primary"] = True
+    return itemized
 
 
 def _attach_node_links(
     topic: str, nodes: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Search reference links for nodes under the query budget."""
+    """Search reference links for nodes under the query budget.
+
+    Attaches ``search_query`` and the full ranked ``source_links`` provenance
+    list to each node, so the frontend can surface *how* the plan was built.
+    """
     from app.services import web_search_service
 
     queries_left = _MAX_SEARCH_QUERIES
@@ -123,11 +170,34 @@ def _attach_node_links(
         query = f"{topic} {node['title']} 教程 入门"
         results = search_web(query, max_results=5)
         queries_left -= 1
-        link, verified = _find_verified_link(results)
-        if link:
-            node["link"] = link
-            node["verified"] = verified
+        ranked = _rank_sources(results, topic)
+        node["search_query"] = query
+        if ranked:
+            node["source_links"] = ranked
+            node["link"] = ranked[0]["url"]
+            node["multi_source"] = ranked[0]["multi_source"]
     return nodes
+
+
+def research_node(topic: str, title: str) -> dict[str, Any]:
+    """Search again for a single milestone node and return its provenance.
+
+    Used by PR D ("补充依据") to backfill source_links on legacy nodes that
+    were created without web evidence. Respects one search per call (the
+    caller bounds how many nodes it drills within a single operation).
+    """
+    from app.services import web_search_service
+
+    query = f"{topic} {title} 教程 入门"
+    if not web_search_service.web_search_available():
+        return {"search_query": query, "source_links": []}
+    results = search_web(query, max_results=5)
+    ranked = _rank_sources(results, topic)
+    provenance: dict[str, Any] = {"search_query": query, "source_links": ranked}
+    if ranked:
+        provenance["link"] = ranked[0]["url"]
+        provenance["multi_source"] = ranked[0]["multi_source"]
+    return provenance
 
 
 def _generate_milestone_nodes(
@@ -221,6 +291,7 @@ def run(
             title=node["title"],
             note=node.get("note") or None,
             link=node.get("link"),
+            source_links=node.get("source_links"),
             source="agent",
             created_from_conversation_id=conversation_id or None,
         )
@@ -230,7 +301,7 @@ def run(
                 "title": task.title,
                 "note": task.note or "",
                 "link": task.link,
-                "verified": bool(node.get("verified")),
+                "multi_source": bool(node.get("multi_source")),
             }
         )
 
@@ -253,10 +324,10 @@ def run(
             "点击打卡开始计时，达到目标会自动提示完成。"
         )
     else:
-        verified_count = sum(1 for t in task_results if t["verified"])
+        multi_source_count = sum(1 for t in task_results if t["multi_source"])
         reply_text = (
             f"已为你创建学习计划「{title}」，共 {len(task_results)} 个节点，"
-            f"其中 {verified_count} 个节点附有交叉验证过的参考链接，"
+            f"其中 {multi_source_count} 个节点附有多来源候选，"
             "进入计划页即可按节点推进。"
         )
 

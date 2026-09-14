@@ -7,6 +7,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.infrastructure.models.conversation import ChatMessageRow, ConversationRow
@@ -101,10 +102,15 @@ def delete_conversation(db: Session, *, user_id: str, conversation_id: str) -> b
 def list_messages(db: Session, *, user_id: str, conversation_id: str) -> list[ChatMessageRow]:
     if get_conversation(db, user_id=user_id, conversation_id=conversation_id) is None:
         return []
+    # created_at is second-precision; fast skill replies can share a timestamp
+    # with the user message, so break ties user-first (chats alternate U/A).
     return (
         db.query(ChatMessageRow)
         .filter(ChatMessageRow.conversation_id == conversation_id)
-        .order_by(ChatMessageRow.created_at.asc())
+        .order_by(
+            ChatMessageRow.created_at.asc(),
+            case((ChatMessageRow.role == "user", 0), else_=1),
+        )
         .all()
     )
 
@@ -121,6 +127,7 @@ def add_message(
     attached_card_ids: list[str] | None = None,
     attached_plan_ids: list[str] | None = None,
     skill_result: dict[str, Any] | None = None,
+    process_info: dict[str, Any] | None = None,
     token_info: dict[str, Any] | None = None,
 ) -> ChatMessageRow:
     if get_conversation(db, user_id=user_id, conversation_id=conversation_id) is None:
@@ -135,6 +142,7 @@ def add_message(
         attached_card_ids=json.dumps(attached_card_ids) if attached_card_ids else None,
         attached_plan_ids=json.dumps(attached_plan_ids) if attached_plan_ids else None,
         skill_result=json.dumps(skill_result, ensure_ascii=False) if skill_result else None,
+        process_info=json.dumps(process_info, ensure_ascii=False) if process_info else None,
         token_info=json.dumps(token_info) if token_info else None,
         created_at=_now(),
     )
@@ -156,6 +164,7 @@ def add_user_message_and_reply(
     attached_card_ids: list[str] | None = None,
     attached_plan_ids: list[str] | None = None,
     skill_result: dict[str, Any] | None = None,
+    process_info: dict[str, Any] | None = None,
     token_info: dict[str, Any] | None = None,
 ) -> tuple[ChatMessageRow, ChatMessageRow]:
     user_msg = add_message(
@@ -176,6 +185,7 @@ def add_user_message_and_reply(
         retrieved_diary_ids=retrieved_diary_ids,
         retrieved_memory_ids=retrieved_memory_ids,
         skill_result=skill_result,
+        process_info=process_info,
         token_info=token_info,
     )
     touch_conversation(db, user_id=user_id, conversation_id=conversation_id)

@@ -52,4 +52,22 @@ export const planCopy = {
   checkinFailed: '打卡失败，稍后再试',
   timerFailed: '计时操作失败，稍后再试',
   nodeReference: '参考',
+  /* PR9 信息来源溯源 */
+  nodeSources: '来源依据',
+  nodeSourcesEmpty: '基于模型既有知识生成，未附联网依据',
+  nodeSourcesQuery: (query: string) => `检索：「${query}」`,
+  nodeSourceMultiSource: '多来源候选',
+  nodeSourcePrimary: '主参考',
+  nodeSourceResearch: '补充来源',
+  nodeSourceResearching: '检索中…',
+  nodeSourceFail: '检索失败，稍后再试',
+  /* PR9 计划级信息来源总览 */
+  planSourceOverview: '信息来源总览',
+  planSourceOverviewEmpty: '该计划基于模型既有知识生成，无联网来源',
+  planSourceQueries: (used: number, max: number) => `联网检索 ${used} / ${max} 次`,
+  planSourceMultiSource: (n: number, total: number) => `多来源候选 ${n} / ${total} 个节点`,
+  /* PR9 milestones 打卡/推进入口 */
+  milestoneAction: '去推进',
+  /* PR9 显式进度百分比 */
+  percentLabel: (done: string, target: string, pct: number) => `${done} / ${target} (${pct}%)`,
 } as const

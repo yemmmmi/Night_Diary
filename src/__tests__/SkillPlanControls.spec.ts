@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('@/shared/api/plan', () => ({
@@ -184,5 +184,22 @@ describe('SkillPlanControls', () => {
     const wrapper = await mountControls(templatePlan({ template: null }))
     expect(wrapper.find('[data-testid="checkin-btn"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="timer-btn"]').exists()).toBe(false)
+  })
+
+  it('renders a "去推进" button for milestones plans that emits open', async () => {
+    const milestone = templatePlan({
+      id: 'p3',
+      template: 'milestones',
+      target_value: null,
+      target_unit: null,
+      target_period: null,
+      today_progress: null,
+    })
+    const wrapper = await mountControls(milestone)
+    const btn = wrapper.find('[data-testid="milestone-btn"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toContain('去推进')
+    await btn.trigger('click')
+    expect(wrapper.emitted('open')).toHaveLength(1)
   })
 })

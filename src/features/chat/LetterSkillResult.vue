@@ -33,8 +33,8 @@ const planSummary = computed(() => {
     const hours = Number(target ?? 0)
     return chatCopy.skillPlanTimer(hours === Math.floor(hours) ? Math.floor(hours) : hours)
   }
-  const verified = tasks.filter((t) => t.verified).length
-  return chatCopy.skillPlanNodes(tasks.length, verified)
+  const multiSource = tasks.filter((t) => t.multi_source).length
+  return chatCopy.skillPlanNodes(tasks.length, multiSource)
 })
 
 function goToPlan() {

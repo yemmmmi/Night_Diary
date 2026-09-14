@@ -8,14 +8,23 @@ import {
   sendMessage,
   sendMessageStreaming,
   generateCardSummary,
+  listSkills,
   type Conversation,
   type ChatMessage,
   type GenerateCardPayload,
+  type SkillSpec,
   type UserSkill,
 } from '@/shared/api/conversation'
 import { formatApiError } from '@/shared/utils/apiError'
 import { useStreamingReply } from '@/shared/composables/useStreamingReply'
 import { resolveBackendBaseUrl } from '@/shared/composables/useBackend'
+
+/* 技能目录兜底：发现端点不可用时 chips/命令菜单仍有内容可渲染 */
+const FALLBACK_SKILLS: SkillSpec[] = [
+  { id: 'record', label: '记录', description: '把这封信转写成一篇日记' },
+  { id: 'insight', label: '洞悉', description: '以心理视角分析这封信' },
+  { id: 'plan', label: '计划', description: '把这封信整理成一个计划' },
+]
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -27,6 +36,9 @@ export const useChatStore = defineStore('chat', () => {
   const autoRetrieve = ref(true)
   /* 手动指定的 skill：null = 自动路由；发送后自动复位 */
   const selectedSkill = ref<UserSkill | null>(null)
+  /* 技能目录：chips 与 / 命令菜单的动态数据源 */
+  const skills = ref<SkillSpec[]>(FALLBACK_SKILLS)
+  const skillsLoaded = ref(false)
   const loading = ref(false)
   const sending = ref(false)
   const error = ref<string | null>(null)
@@ -233,6 +245,20 @@ export const useChatStore = defineStore('chat', () => {
     selectedSkill.value = skill
   }
 
+  /* 技能发现：后端注册表是唯一事实源；失败静默保留兜底目录 */
+  async function loadSkills() {
+    if (skillsLoaded.value) return
+    try {
+      const items = await listSkills()
+      if (items.length > 0) {
+        skills.value = items
+        skillsLoaded.value = true
+      }
+    } catch {
+      // 技能目录拉取失败不阻断笔谈；兜底目录已就位
+    }
+  }
+
   return {
     conversations,
     activeConversationId,
@@ -242,6 +268,7 @@ export const useChatStore = defineStore('chat', () => {
     pinnedPlanIds,
     autoRetrieve,
     selectedSkill,
+    skills,
     loading,
     sending,
     error,
@@ -260,5 +287,6 @@ export const useChatStore = defineStore('chat', () => {
     setPinnedCardIds,
     setPinnedPlanIds,
     selectSkill,
+    loadSkills,
   }
 })

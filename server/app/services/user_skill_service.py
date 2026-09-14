@@ -16,17 +16,14 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
-from app.domain.skills import insight_skill, plan_skill, record_skill
 from app.domain.skills.intent import IntentDecision, classify_user_intent
 from app.domain.skills.record_skill import SkillRunOutcome
+from app.domain.skills.user_skill_registry import get_user_skill_registry
 
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
 
 logger = logging.getLogger(__name__)
-
-
-SKILL_INTENTS = ("record", "insight", "plan")
 
 
 def route_intent(
@@ -49,14 +46,15 @@ def run_user_skill(
     """Run the matching user skill, or None to continue as normal chat.
 
     *skill* forces a specific skill (user-side manual selection) and skips
-    intent classification entirely; only record/insight/plan are honored.
+    intent classification entirely; only registered skills are honored.
     """
     try:
-        if skill in SKILL_INTENTS:
+        registry = get_user_skill_registry()
+        if skill is not None and registry.has(skill):
             decision = IntentDecision(intent=skill, source="manual")
         else:
             decision = route_intent(container, content)
-        if decision.intent == "chat":
+        if decision.intent == "chat" or not registry.has(decision.intent):
             return None
         logger.info(
             "user_skill routed: conversation=%s intent=%s source=%s",
@@ -66,28 +64,11 @@ def run_user_skill(
         )
 
         llm = container._llm_for_tier("medium", agent_name=f"user_skill_{decision.intent}")
-
-        if decision.intent == "record":
-            return record_skill.run(
-                db,
-                llm=llm,
-                content=content,
-                user_id=user_id,
-                conversation_id=conversation_id,
-                collection_manager=container.diary_collection,
-                container=container,
-            )
-        if decision.intent == "insight":
-            return insight_skill.run(
-                db,
-                llm=llm,
-                content=content,
-                user_id=user_id,
-                conversation_id=conversation_id,
-            )
-        return plan_skill.run(
+        return registry.run(
             db,
-            llm=llm,
+            container,
+            llm,
+            skill_id=decision.intent,
             content=content,
             user_id=user_id,
             conversation_id=conversation_id,

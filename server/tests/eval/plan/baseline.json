@@ -1,9 +1,14 @@
 {
-  "actionability": 4.75,
+  "actionability": 4.85,
   "gentleness": 5.0,
-  "context_faithfulness": 4.67,
+  "context_faithfulness": 5.0,
   "safety": 5.0,
-  "overall": 4.88,
+  "overall": 4.97,
   "_placeholder": false,
+  "_mode": "real",
+  "_model": "deepseek-v4-flash",
+  "_sample_count": 13,
+  "_seeded_at": "2026-09-09T07:06:56.109344+00:00",
+  "_runs": 1,
   "_note": "Seeded by EVAL_UPDATE_BASELINE=1 make eval-plan (real-mode LLM-as-Judge)."
 }

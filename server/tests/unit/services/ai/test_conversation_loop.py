@@ -112,6 +112,46 @@ def test_run_conversation_loop_simple_reply() -> None:
     clear_session("simple-test")
 
 
+def test_run_conversation_loop_graph_failure_falls_back_to_legacy() -> None:
+    """A graph invoke failure must reach the caller and trigger the legacy LLM loop."""
+    clear_session("graph-fallback-test")
+
+    graph = MagicMock()
+    graph.invoke.side_effect = RuntimeError("graph unavailable")
+
+    legacy_response = MagicMock()
+    legacy_response.content = "这是 legacy LLM 的回复"
+    legacy_response.response_metadata = {
+        "token_usage": {"total_tokens": 30, "prompt_tokens": 20, "completion_tokens": 10}
+    }
+    llm = MagicMock()
+    llm.invoke.return_value = legacy_response
+
+    container = MagicMock()
+    container._conversation_graph = graph
+    container._llm_for_tier.return_value = llm
+
+    with patch("app.services.ai.conversation_graph.LANGGRAPH_AVAILABLE", True):
+        result = run_conversation_loop(
+            MagicMock(),
+            container,
+            conversation_id="graph-fallback-test",
+            content="你好",
+            pinned_diaries_text="",
+            retrieved_diaries_text="",
+            episodic_text="",
+            memory_ids=[],
+            tools=None,
+            use_graph=True,
+        )
+
+    graph.invoke.assert_called_once()
+    llm.invoke.assert_called_once()
+    assert result.reply_text == "这是 legacy LLM 的回复"
+    assert result.stop_reason == "completed"
+    clear_session("graph-fallback-test")
+
+
 def test_run_conversation_loop_tool_call_executes() -> None:
     """When the LLM emits a tool call, it should be executed and re-queried."""
     clear_session("tool-test")

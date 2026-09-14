@@ -121,6 +121,7 @@ def send_message(
         attached_card_ids=body.card_ids,
         attached_plan_ids=body.plan_ids,
         skill_result=result.skill_result,
+        process_info=result.process_info,
         token_info=result.token_info,
     )
     return SendMessageResponse(

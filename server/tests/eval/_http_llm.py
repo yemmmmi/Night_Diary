@@ -21,12 +21,14 @@ from pathlib import Path
 from typing import Any
 
 _RETRY_BASE_DELAY_S = 2.0
+_RETRY_MAX_DELAY_S = 30.0
+_TRANSIENT_STATUS = frozenset({408, 409, 429, 500, 502, 503, 504})
 
 _ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 def load_local_dotenv() -> None:
-    """Load ``server/.env`` for offline eval (gitignored); does not override existing env."""
+    """Load ``server/.env`` for offline eval (gitignored); does not override non-empty env."""
     if not _ENV_FILE.is_file():
         return
     for line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
@@ -35,7 +37,8 @@ def load_local_dotenv() -> None:
             continue
         key, _, value = stripped.partition("=")
         key = key.strip()
-        if key and key not in os.environ:
+        # Treat empty compose placeholders (LLM_API_KEY=) as unset so server/.env wins.
+        if key and not os.environ.get(key, "").strip():
             os.environ[key] = value.strip()
 
 
@@ -57,6 +60,27 @@ def is_auth_error(exc: BaseException) -> bool:
         isinstance(exc, httpx.HTTPStatusError)
         and exc.response.status_code in _AUTH_ERROR_STATUSES
     )
+
+
+def is_transient_http_error(exc: BaseException) -> bool:
+    """True for retry-exhausted 5xx/429/timeouts that should not abort a whole eval."""
+    import httpx
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in _TRANSIENT_STATUS
+    return isinstance(exc, httpx.HTTPError)
+
+
+def _retry_delay_s(attempt: int, exc: BaseException) -> float:
+    import httpx
+
+    status = (
+        exc.response.status_code
+        if isinstance(exc, httpx.HTTPStatusError)
+        else None
+    )
+    base = 5.0 if status in _TRANSIENT_STATUS else _RETRY_BASE_DELAY_S
+    return min(base * (2**attempt), _RETRY_MAX_DELAY_S)
 
 
 @dataclass
@@ -94,7 +118,7 @@ class HttpLLM:
         temperature: float = 0.7,
         max_tokens: int = 600,
         json_mode: bool = False,
-        max_retries: int = 5,
+        max_retries: int = 8,
     ) -> None:
         self._temperature = temperature
         self._max_tokens = max_tokens
@@ -174,7 +198,7 @@ class HttpLLM:
                 last_exc = exc
                 if is_auth_error(exc) or attempt + 1 >= self._max_retries:
                     break
-                time.sleep(_RETRY_BASE_DELAY_S * (2**attempt))
+                time.sleep(_retry_delay_s(attempt, exc))
         assert last_exc is not None
         raise last_exc
 
@@ -200,7 +224,7 @@ class HttpLLM:
                 last_exc = exc
                 if is_auth_error(exc) or attempt + 1 >= self._max_retries:
                     break
-                await asyncio.sleep(_RETRY_BASE_DELAY_S * (2**attempt))
+                await asyncio.sleep(_retry_delay_s(attempt, exc))
         assert last_exc is not None
         raise last_exc
 

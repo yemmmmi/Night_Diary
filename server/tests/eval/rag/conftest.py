@@ -25,7 +25,6 @@ from app.config import get_settings
 from app.domain.rag.bm25 import BM25Index
 from app.domain.rag.chunker import ChunkSplitter
 from app.domain.rag.collections import DiaryCollectionManager
-from app.domain.rag.reranker import Reranker
 from app.domain.rag.types import BM25Doc, RetrievalResult
 
 DATA_DIR = Path(__file__).parent
@@ -127,15 +126,22 @@ def vector_collection(
 
 
 @pytest.fixture(scope="session")
-def reranker() -> Reranker | None:
-    """Return a usable :class:`Reranker`, or ``None`` if the model cannot load.
+def reranker() -> Any:
+    """Return a usable Reranker, or ``None`` if cloud/local backend cannot score.
 
-    We probe with a single pair: a successful rerank populates ``rerank_score``;
-    a degraded ``fallback`` leaves it ``None``. We skip the rerank branch in the
-    latter case rather than recording fallback (= RRF order) numbers as a rerank
-    baseline.
+    Prefers the cloud API when ``embedding_api_key`` / ``rerank_api_key`` is set
+    (Qwen ``qwen3-rerank``); otherwise probes the local CrossEncoder. A successful
+    rerank populates ``rerank_score``; a degraded ``fallback`` leaves it ``None``.
+    We skip the rerank branch in the latter case rather than recording fallback
+    (= RRF order) numbers as a rerank baseline.
     """
-    candidate = Reranker(top_k=5)
+    from app.domain.rag.reranker import build_reranker
+
+    settings = get_settings()
+    candidate = build_reranker(settings, top_k=5, local_files_only=True)
+    if candidate is None:
+        logger.warning("Reranker unavailable; rerank branch will be skipped")
+        return None
     probe = candidate.rerank(
         "测试查询",
         [RetrievalResult(doc_id="probe", content="这是一段用于探测的文本", diary_id="probe")],

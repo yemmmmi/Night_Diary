@@ -1,0 +1,126 @@
+[
+  {
+    "case_id": "mcp_call_01",
+    "category": "call_required",
+    "user_message": "帮我查一下明天下午日历里有什么安排",
+    "enabled_tools": ["mcp__calendar__list_events", "mcp__web__search"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {"name": "mcp__calendar__list_events", "args_required": ["date"]}
+      ]
+    }
+  },
+  {
+    "case_id": "mcp_call_02",
+    "category": "call_required",
+    "user_message": "查找公司附近营业到晚上十点的咖啡店",
+    "enabled_tools": ["mcp__maps__search_places", "mcp__web__search"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {"name": "mcp__maps__search_places", "args_required": ["query"]}
+      ]
+    }
+  },
+  {
+    "case_id": "mcp_call_03",
+    "category": "call_required",
+    "user_message": "搜索今天发布的 Python 3.14 最新消息",
+    "enabled_tools": ["mcp__web__search", "mcp__calendar__list_events"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {"name": "mcp__web__search", "args_required": ["query"]}
+      ]
+    }
+  },
+  {
+    "case_id": "mcp_call_04",
+    "category": "call_required",
+    "user_message": "看看我本周还有哪些未完成的项目任务",
+    "enabled_tools": ["mcp__project__list_tasks", "mcp__calendar__list_events"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {"name": "mcp__project__list_tasks", "args_match": {"status": "open"}}
+      ]
+    }
+  },
+  {
+    "case_id": "mcp_none_01",
+    "category": "no_call",
+    "user_message": "我今天有点累，只想随便聊聊",
+    "enabled_tools": ["mcp__web__search", "mcp__calendar__list_events"],
+    "expected": {"should_call_tool": false, "expected_tool_calls": []}
+  },
+  {
+    "case_id": "mcp_none_02",
+    "category": "no_call",
+    "user_message": "帮我把这个目标拆成三个小步骤，不需要查资料",
+    "enabled_tools": ["mcp__web__search", "mcp__project__list_tasks"],
+    "expected": {"should_call_tool": false, "expected_tool_calls": []}
+  },
+  {
+    "case_id": "mcp_none_03",
+    "category": "no_call",
+    "user_message": "解释一下什么是番茄工作法，用你已有的知识就行",
+    "enabled_tools": ["mcp__web__search", "mcp__calendar__list_events"],
+    "expected": {"should_call_tool": false, "expected_tool_calls": []}
+  },
+  {
+    "case_id": "mcp_none_04",
+    "category": "no_call",
+    "user_message": "把我刚才这句话改得更简洁",
+    "enabled_tools": ["mcp__web__search", "mcp__maps__search_places"],
+    "expected": {"should_call_tool": false, "expected_tool_calls": []}
+  },
+  {
+    "case_id": "mcp_select_01",
+    "category": "tool_selection",
+    "user_message": "找一家离西湖最近的素食餐厅",
+    "enabled_tools": ["mcp__maps__search_places", "mcp__web__search", "mcp__calendar__list_events"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {"name": "mcp__maps__search_places", "args_required": ["query"]}
+      ]
+    }
+  },
+  {
+    "case_id": "mcp_select_02",
+    "category": "tool_selection",
+    "user_message": "确认下周一上午九点我有没有会议",
+    "enabled_tools": ["mcp__calendar__list_events", "mcp__project__list_tasks", "mcp__web__search"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {"name": "mcp__calendar__list_events", "args_required": ["date"]}
+      ]
+    }
+  },
+  {
+    "case_id": "mcp_select_03",
+    "category": "tool_selection",
+    "user_message": "看看项目看板里分配给我的开放任务",
+    "enabled_tools": ["mcp__project__list_tasks", "mcp__calendar__list_events", "mcp__web__search"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {"name": "mcp__project__list_tasks", "args_match": {"status": "open"}}
+      ]
+    }
+  },
+  {
+    "case_id": "mcp_select_04",
+    "category": "tool_selection",
+    "user_message": "搜索最新发布的 FastAPI 安全公告",
+    "enabled_tools": ["mcp__web__search", "mcp__project__list_tasks", "mcp__maps__search_places"],
+    "expected": {
+      "should_call_tool": true,
+      "expected_tool_calls": [
+        {"name": "mcp__web__search", "args_required": ["query"]}
+      ]
+    }
+  }
+]

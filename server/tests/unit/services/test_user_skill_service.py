@@ -137,3 +137,57 @@ def test_manual_skill_rejects_unknown_value(db) -> None:
         )
         is None
     )
+
+
+# ── 注册表：声明式 skill 体系（TRAE 式发现/分发）──────────────────────
+
+
+class TestUserSkillRegistry:
+    def test_builtin_skills_registered_in_order(self) -> None:
+        from app.domain.skills.user_skill_registry import get_user_skill_registry
+
+        registry = get_user_skill_registry()
+        assert registry.ids() == ["record", "insight", "plan"]
+        assert registry.labels() == ["记录", "洞悉", "计划"]
+
+    def test_listing_payload_shape(self) -> None:
+        from app.domain.skills.user_skill_registry import get_user_skill_registry
+
+        items = get_user_skill_registry().listing()
+        assert [item["id"] for item in items] == ["record", "insight", "plan"]
+        assert all({"id", "label", "description"} <= set(item) for item in items)
+
+    def test_dispatch_via_registered_adapter(self, db) -> None:
+        from app.domain.skills.user_skill_registry import get_user_skill_registry
+
+        registry = get_user_skill_registry()
+        container = _container("你今天开了一整天会，有点累。")
+        outcome = registry.run(
+            db,
+            container,
+            container._llm_for_tier("medium"),
+            skill_id="record",
+            content="开了一整天会，有点累",
+            user_id="u1",
+            conversation_id="c1",
+        )
+        assert outcome is not None
+        assert outcome.skill == "record"
+
+    def test_unknown_skill_id_returns_none(self) -> None:
+        from app.domain.skills.user_skill_registry import UserSkillRegistry
+
+        registry = UserSkillRegistry()
+        assert (
+            registry.run(
+                db=None,
+                container=MagicMock(),
+                llm=_StubLLM(""),
+                skill_id="nope",
+                content="x",
+                user_id="u1",
+                conversation_id="c1",
+            )
+            is None
+        )
+        assert registry.has("nope") is False

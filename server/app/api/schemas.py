@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
 class TagBrief(BaseModel):
@@ -327,6 +327,7 @@ class MessageResponse(BaseModel):
     attached_card_ids: list[str] | None = None
     attached_plan_ids: list[str] | None = None
     skill_result: dict[str, Any] | None = None
+    process_info: dict[str, Any] | None = None
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}
@@ -345,8 +346,12 @@ class SendMessageRequest(BaseModel):
     def validate_skill(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        if value not in ("record", "insight", "plan"):
-            raise ValueError("skill 仅支持 record / insight / plan 或不传")
+        from app.domain.skills.user_skill_registry import get_user_skill_registry
+
+        registry = get_user_skill_registry()
+        if not registry.has(value):
+            allowed = " / ".join(registry.ids())
+            raise ValueError(f"skill 仅支持 {allowed} 或不传")
         return value
 
     @field_validator("diary_ids")
@@ -379,6 +384,26 @@ class SendMessageResponse(BaseModel):
 # ── Plan / Task (V3 P2) ──────────────────────────────────────────────
 
 
+class SourceLink(BaseModel):
+    """A single web-source candidate gathered for a milestone node.
+
+    ``multi_source`` only means the same search returned candidates from at
+    least two distinct domains. It is not a factual-verification claim.
+    Legacy payloads using ``verified`` are accepted on read and normalized to
+    ``multi_source``; serialization always uses the honest new field name.
+    """
+
+    url: str
+    title: str | None = None
+    snippet: str | None = None
+    domain: str | None = None
+    multi_source: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("multi_source", "verified"),
+    )
+    is_primary: bool = False
+
+
 class TaskCreateRequest(BaseModel):
     title: str = Field(max_length=200)
     note: str | None = None
@@ -395,6 +420,7 @@ class TaskResponse(BaseModel):
     title: str
     note: str | None = None
     link: str | None = None
+    source_links: list[SourceLink] = Field(default_factory=list)
     due_date: str | None = None
     status: str
     source: str
@@ -407,6 +433,7 @@ class TaskUpdateRequest(BaseModel):
     title: str | None = None
     note: str | None = None
     link: str | None = Field(default=None, max_length=500)
+    source_links: list[SourceLink] | None = None
     due_date: str | None = None
     status: str | None = Field(default=None, pattern="^(pending|done|skipped)$")
     actual_value: float | None = Field(default=None, ge=0)

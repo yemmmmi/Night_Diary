@@ -71,12 +71,16 @@ class LLMJudge:
         rubric: EvalRubric | None = None,
         *,
         mode: str = "strict",
+        max_attempts: int = 2,
     ) -> None:
         if mode not in ("strict", "lenient"):
             raise ValueError(f"mode must be 'strict' or 'lenient', got {mode!r}")
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
         self._llm = llm
         self._rubric = rubric or EvalRubric.default()
         self._mode = mode
+        self._max_attempts = max_attempts
 
     @property
     def rubric(self) -> EvalRubric:
@@ -85,29 +89,53 @@ class LLMJudge:
     def score(self, diary: str, response: str, *, history: str = "") -> JudgeResult:
         """Grade one reply; raises :class:`JudgeParseError` on unparseable output."""
         prompt = self._build_prompt(diary, response, history)
+        total_latency_ms = 0.0
+        total_tokens_in = 0
+        total_tokens_out = 0
+        last_content = ""
+        last_error: JudgeParseError | None = None
 
-        started = perf_counter()
-        raw_response = self._llm.invoke(prompt)
-        latency_ms = (perf_counter() - started) * 1000
+        for attempt in range(self._max_attempts):
+            attempt_prompt = prompt
+            if attempt:
+                keys = ", ".join(self._rubric.keys)
+                attempt_prompt += (
+                    "\n\n上次评分输出不完整。请重新输出严格 JSON，"
+                    f"必须包含这些键且不得使用空键名：{keys}。"
+                )
+            started = perf_counter()
+            raw_response = self._llm.invoke(attempt_prompt)
+            total_latency_ms += (perf_counter() - started) * 1000
+            content = getattr(raw_response, "content", raw_response)
+            last_content = str(content)
+            usage = extract_token_usage(raw_response)
+            total_tokens_in += usage["cache_hit_tokens"] + usage["cache_miss_tokens"]
+            total_tokens_out += usage["output_tokens"]
+            try:
+                scores, rationale = self._parse(last_content)
+            except JudgeParseError as exc:
+                last_error = exc
+                continue
 
-        content = getattr(raw_response, "content", raw_response)
-        usage = extract_token_usage(raw_response)
-        scores, rationale = self._parse(str(content))
-        overall = self._rubric.weighted_overall(scores)
+            return JudgeResult(
+                scores=scores,
+                overall=self._rubric.weighted_overall(scores),
+                rationale=rationale,
+                latency_ms=total_latency_ms,
+                tokens_in=total_tokens_in,
+                tokens_out=total_tokens_out,
+                raw=last_content,
+            )
 
-        return JudgeResult(
-            scores=scores,
-            overall=overall,
-            rationale=rationale,
-            latency_ms=latency_ms,
-            tokens_in=usage["cache_hit_tokens"] + usage["cache_miss_tokens"],
-            tokens_out=usage["output_tokens"],
-            raw=str(content),
-        )
+        assert last_error is not None
+        raise JudgeParseError(
+            f"judge failed after {self._max_attempts} attempts: {last_error}; "
+            f"last output={last_content[:500]!r}"
+        ) from last_error
 
     def _build_prompt(self, diary: str, response: str, history: str) -> str:
         evidence_rule = (
-            "对每个维度，必须在 rationale 中引用日记原文中的具体词句作为评分依据。"
+            "对每个维度，必须在 rationale 中引用日记原文或历史上下文中的具体词句作为评分依据。"
             if self._mode == "strict"
             else "快速整体判断即可，rationale 可简短。"
         )
@@ -133,7 +161,7 @@ class LLMJudge:
             # closing brace). Recover whatever dimension scores are visible rather
             # than failing the whole eval run on one verbose case.
             scores = self._parse_scores_fallback(content)
-            if scores:
+            if self._has_all_dimensions(scores):
                 return scores, ""
             raise JudgeParseError(f"no JSON object in judge output: {content!r}")
         blob = match.group(0)
@@ -142,7 +170,7 @@ class LLMJudge:
             data = json.loads(blob)
         except json.JSONDecodeError:
             scores = self._parse_scores_fallback(blob)
-            if not scores:
+            if not self._has_all_dimensions(scores):
                 raise JudgeParseError(f"invalid JSON in judge output: {blob[:200]!r}...") from None
             return scores, ""
 
@@ -150,30 +178,47 @@ class LLMJudge:
         for key in self._rubric.keys:
             if key in data:
                 scores[key] = _clamp_score(data[key])
-        if not scores:
-            scores = self._parse_scores_fallback(blob)
-        if not scores:
+        if not self._has_all_dimensions(scores):
+            fallback_scores = self._parse_scores_fallback(blob)
+            scores.update(fallback_scores)
+        if not self._has_all_dimensions(scores):
+            missing = [key for key in self._rubric.keys if key not in scores]
             raise JudgeParseError(
-                f"judge output had none of the rubric dimensions {self._rubric.keys}: {data}"
+                f"judge output missing rubric dimensions {missing}: {data}"
             )
 
         rationale = str(data.get("rationale", ""))
         return scores, rationale
 
     def _parse_scores_fallback(self, content: str) -> dict[str, float]:
-        """Recover numeric dimension scores when the judge JSON is slightly malformed."""
-        # Build the alternation from this judge's rubric keys so the fallback
-        # works for any configured rubric (default companion rubric *and* the
-        # plan rubric). Keys are regex-escaped to stay safe if one ever
-        # contained meta-characters.
-        keys_pattern = "|".join(re.escape(k) for k in self._rubric.keys)
-        score_field = re.compile(rf'"(?P<key>{keys_pattern})"\s*:\s*(?P<val>\d+(?:\.\d+)?)')
+        """Recover numeric dimension scores when the judge JSON is slightly malformed.
+
+        Some judge models emit empty or truncated keys (``"": 5``, ``"s5": 5``)
+        after a valid first dimension. If at least one real rubric key was
+        recovered, leftover numeric values fill the remaining dimensions in
+        rubric order. Unknown-only payloads still fail so junk JSON cannot
+        masquerade as a complete score.
+        """
+        score_field = re.compile(r'"(?P<key>[^"]*)"\s*:\s*(?P<val>\d+(?:\.\d+)?)')
         scores: dict[str, float] = {}
+        extras: list[float] = []
         for found in score_field.finditer(content):
             key = found.group("key")
-            if key in self._rubric.keys:
-                scores[key] = _clamp_score(found.group("val"))
+            if key == "rationale":
+                continue
+            value = _clamp_score(found.group("val"))
+            if key in self._rubric.keys and key not in scores:
+                scores[key] = value
+            else:
+                extras.append(value)
+        if scores:
+            for key in self._rubric.keys:
+                if key not in scores and extras:
+                    scores[key] = extras.pop(0)
         return scores
+
+    def _has_all_dimensions(self, scores: dict[str, float]) -> bool:
+        return all(key in scores for key in self._rubric.keys)
 
 
 def _clamp_score(value: Any) -> float:

@@ -118,3 +118,58 @@ class TestSseConnection:
             assert conn.call_tool("search", {"query": "q"}) == "hello"
             conn.close()
             mock_session.__aexit__.assert_awaited()
+
+
+class TestStreamableHttpConnection:
+    def test_connect_and_call_with_mocks(self, mcp_loop: McpLoop) -> None:
+        from app.services.ai.mcp_connections import StreamableHttpMcpConnection
+
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.list_tools = AsyncMock(return_value=MagicMock(tools=[]))
+        mock_resp = MagicMock()
+        mock_resp.content = [MagicMock(text="fetched")]
+        mock_session.call_tool = AsyncMock(return_value=mock_resp)
+
+        mock_cm = AsyncMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                "mcp.client.streamable_http.streamable_http_client",
+                return_value=mock_cm,
+            ),
+            patch("mcp.ClientSession", return_value=mock_session),
+        ):
+            conn = StreamableHttpMcpConnection(
+                "fake", "http://localhost:9201/mcp", mcp_loop
+            )
+            assert conn.connect() is True
+            assert conn.transport == "streamable_http"
+            assert conn.call_tool("fetch", {"url": "https://example.com"}) == "fetched"
+            conn.close()
+            mock_session.__aexit__.assert_awaited()
+
+
+class TestHttpConnectionFactory:
+    def test_mcp_path_selects_streamable_http(self, mcp_loop: McpLoop) -> None:
+        from app.services.ai.mcp_connections import (
+            StreamableHttpMcpConnection,
+            http_connection,
+        )
+
+        conn = http_connection("fetch", "http://mcp-fetch:9201/mcp", mcp_loop)
+        assert isinstance(conn, StreamableHttpMcpConnection)
+
+    def test_sse_path_selects_sse(self, mcp_loop: McpLoop) -> None:
+        from app.services.ai.mcp_connections import SseMcpConnection, http_connection
+
+        conn = http_connection("fetch", "http://mcp-fetch:9201/sse", mcp_loop)
+        assert isinstance(conn, SseMcpConnection)
+
+    def test_unknown_path_defaults_to_sse(self, mcp_loop: McpLoop) -> None:
+        from app.services.ai.mcp_connections import SseMcpConnection, http_connection
+
+        conn = http_connection("fetch", "http://mcp-fetch:9201", mcp_loop)
+        assert isinstance(conn, SseMcpConnection)

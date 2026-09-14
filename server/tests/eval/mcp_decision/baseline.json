@@ -1,0 +1,30 @@
+{
+  "_placeholder": false,
+  "_mode": "real",
+  "_model": "deepseek-v4-flash",
+  "_sample_count": 12,
+  "_date": "2026-09-14",
+  "_note": "Seeded by EVAL_UPDATE_BASELINE=1 together with MCP_DECISION_REAL=1. CI keeps running the stub-oracle path; the regression check applies to real runs only.",
+  "mode": "real",
+  "disclaimer": "Real-model scores on a fixed 12-case set; the LLM decision varies run to run, so this is a regression floor, not a product-quality claim.",
+  "model": {
+    "decision_accuracy": 0.9167,
+    "tool_name_accuracy": 0.75,
+    "argument_accuracy": 0.625,
+    "exact_match": 0.75,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.125,
+    "parse_success_rate": 1.0,
+    "avg_tool_count": 0.75
+  },
+  "parser": {
+    "decision_accuracy": 1.0,
+    "tool_name_accuracy": 1.0,
+    "argument_accuracy": 1.0,
+    "exact_match": 1.0,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "parse_success_rate": 1.0,
+    "avg_tool_count": 0.6667
+  }
+}

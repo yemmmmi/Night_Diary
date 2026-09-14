@@ -91,10 +91,6 @@ class MCPServer:
             from mcp.server import Server
             from mcp.server.stdio import stdio_server
             from mcp.types import (
-                CallToolRequestParams,
-                CallToolResult,
-                ListToolsResult,
-                PaginatedRequestParams,
                 TextContent,
                 Tool,
             )
@@ -102,31 +98,27 @@ class MCPServer:
             logger.error("mcp package not installed; run: pip install mcp")
             return
 
-        async def list_tools(
-            ctx: Any, params: PaginatedRequestParams | None
-        ) -> ListToolsResult:
-            del ctx, params  # protocol handler; request metadata not needed
-            return ListToolsResult(
-                tools=[
-                    Tool(
-                        name=spec.name,
-                        description=spec.description,
-                        input_schema=spec.parameters,
-                    )
-                    for spec in self._specs
-                ]
-            )
+        async def list_tools() -> list[Tool]:
+            return [
+                Tool(
+                    name=spec.name,
+                    description=spec.description,
+                    # MCP 2.x exposes the JSON alias at runtime; its generated
+                    # Pydantic type signature still advertises input_schema.
+                    inputSchema=spec.parameters,  # type: ignore[call-arg]
+                )
+                for spec in self._specs
+            ]
 
-        async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
-            del ctx
-            result = self.call_tool(params.name, params.arguments or {})
-            return CallToolResult(content=[TextContent(type="text", text=result)])
+        async def call_tool(
+            name: str, arguments: dict[str, Any] | None
+        ) -> list[TextContent]:
+            result = self.call_tool(name, arguments or {})
+            return [TextContent(type="text", text=result)]
 
-        server = Server(
-            "night-diary",
-            on_list_tools=list_tools,
-            on_call_tool=call_tool,
-        )
+        server = Server("night-diary")
+        server.list_tools()(list_tools)  # type: ignore[attr-defined, no-untyped-call]
+        server.call_tool()(call_tool)  # type: ignore[attr-defined, no-untyped-call]
 
         import asyncio
 
@@ -143,10 +135,6 @@ class MCPServer:
             from mcp.server import Server
             from mcp.server.sse import SseServerTransport
             from mcp.types import (
-                CallToolRequestParams,
-                CallToolResult,
-                ListToolsResult,
-                PaginatedRequestParams,
                 TextContent,
                 Tool,
             )
@@ -156,31 +144,26 @@ class MCPServer:
             logger.error("mcp/SSE deps not installed; run: pip install mcp uvicorn starlette")
             return
 
-        async def list_tools(
-            ctx: Any, params: PaginatedRequestParams | None
-        ) -> ListToolsResult:
-            del ctx, params  # protocol handler; request metadata not needed
-            return ListToolsResult(
-                tools=[
-                    Tool(
-                        name=spec.name,
-                        description=spec.description,
-                        input_schema=spec.parameters,
-                    )
-                    for spec in self._specs
-                ]
-            )
+        async def list_tools() -> list[Tool]:
+            return [
+                Tool(
+                    name=spec.name,
+                    description=spec.description,
+                    # See run_stdio: runtime alias and generated signature differ.
+                    inputSchema=spec.parameters,  # type: ignore[call-arg]
+                )
+                for spec in self._specs
+            ]
 
-        async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
-            del ctx
-            result = self.call_tool(params.name, params.arguments or {})
-            return CallToolResult(content=[TextContent(type="text", text=result)])
+        async def call_tool(
+            name: str, arguments: dict[str, Any] | None
+        ) -> list[TextContent]:
+            result = self.call_tool(name, arguments or {})
+            return [TextContent(type="text", text=result)]
 
-        server = Server(
-            "night-diary-sse",
-            on_list_tools=list_tools,
-            on_call_tool=call_tool,
-        )
+        server = Server("night-diary-sse")
+        server.list_tools()(list_tools)  # type: ignore[attr-defined, no-untyped-call]
+        server.call_tool()(call_tool)  # type: ignore[attr-defined, no-untyped-call]
         sse = SseServerTransport("/messages/")
 
         async def handle_sse(request: Any) -> Any:

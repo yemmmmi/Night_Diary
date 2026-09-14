@@ -41,6 +41,7 @@ pytestmark = pytest.mark.eval
 
 MULTITURN_CASES = Path(__file__).resolve().parents[1] / "rag" / "test_cases_multiturn.json"
 COHERENCE_THRESHOLD = 0.66  # ≥ 2 of 3 scenarios must reference earlier topics
+FAITHFULNESS_THRESHOLD = 3.5
 
 
 class _StubRetriever:
@@ -85,6 +86,12 @@ def _retrieval_from_turns(prior_turns: list[dict[str, Any]]) -> list[RetrievalRe
         )
         for turn in prior_turns
     ]
+
+
+def _history_from_turns(prior_turns: list[dict[str, Any]]) -> str:
+    return "\n".join(
+        f"- {turn.get('date', '')}: {turn.get('content', '')}" for turn in prior_turns
+    )
 
 
 def _build_graph(agent_llm: Any, knowledge_store: Any, model_name: str, retriever: Any) -> Any:
@@ -139,15 +146,23 @@ async def test_multiturn_memory_coherence(
 
         assert reply, f"{scenario['scenario_id']} produced an empty reply"
 
-        coherent = any(topic in reply for topic in topics)
-        coherent_flags.append(coherent)
+        lexical_hit = any(topic in reply for topic in topics)
 
-        graded = judge.score(final_turn["content"], reply)
-        faithfulness_scores.append(graded.scores.get("context_faithfulness", 0.0))
+        graded = judge.score(
+            final_turn["content"],
+            reply,
+            history=_history_from_turns(prior_turns),
+        )
+        faithfulness = graded.scores["context_faithfulness"]
+        # The history-aware judge is the quality gate. Literal topic matching is
+        # retained only as a diagnostic because paraphrases are valid.
+        coherent = faithfulness >= FAITHFULNESS_THRESHOLD
+        coherent_flags.append(coherent)
+        faithfulness_scores.append(faithfulness)
         overalls.append(graded.overall)
         rows.append(
-            f"| {scenario['scenario_id']} | {'✅' if coherent else '❌'} | "
-            f"{graded.scores.get('context_faithfulness', 0):.1f} | {graded.overall:.2f} |"
+            f"| {scenario['scenario_id']} | {'yes' if coherent else 'no'} | "
+            f"{'yes' if lexical_hit else 'no'} | {faithfulness:.1f} | {graded.overall:.2f} |"
         )
 
     coherence_rate = sum(coherent_flags) / len(coherent_flags) if coherent_flags else 0.0
@@ -166,8 +181,8 @@ async def test_multiturn_memory_coherence(
             f"({sum(coherent_flags)}/{len(coherent_flags)})\n"
             f"- mean context_faithfulness: **{mean_faithfulness:.2f}** / 5\n"
             f"- mean overall: **{mean_overall:.2f}** / 5\n\n"
-            "| scenario | references memory | faithfulness | overall |\n"
-            "|---|---|---|---|\n" + "\n".join(rows)
+            "| scenario | coherent | literal topic hit | faithfulness | overall |\n"
+            "|---|---|---|---|---|\n" + "\n".join(rows)
         )
         _update_baseline_section("multiturn", body)
 

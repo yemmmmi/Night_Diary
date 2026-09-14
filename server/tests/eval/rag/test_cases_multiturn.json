@@ -34,7 +34,7 @@
         "content": "昨晚稍微好了一点，但还是担心项目进度。",
         "tags": ["睡眠", "工作"],
         "expect": {
-          "must_reference_topics": ["失眠"],
+          "must_reference_topics": ["失眠", "睡眠", "项目", "加班"],
           "memory_coherence": true
         }
       }

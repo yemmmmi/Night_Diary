@@ -113,11 +113,15 @@ def fixed_now() -> float:
 
 
 # --------------------------------------------------------------------------- #
-# Injectable components: embedder (Bge or Stub) + reranker (or None)
+# Injectable components: embedder (API / Bge / Stub) + reranker (or None)
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="session")
 def real_embed_mode() -> bool:
-    """True when ``sentence-transformers`` is importable (real BGE vectors)."""
+    """True when cloud embedding API or local sentence-transformers is available."""
+    from app.config import get_settings
+
+    if get_settings().embedding_api_key.strip():
+        return True
     try:
         import sentence_transformers  # noqa: F401
     except ImportError:
@@ -127,12 +131,28 @@ def real_embed_mode() -> bool:
 
 @pytest.fixture(scope="session")
 def embedder(real_embed_mode: bool) -> Any:
-    """BgeEmbedder in real mode, StubEmbedder in stub mode.
+    """ApiEmbedder / BgeEmbedder in real mode, StubEmbedder in stub mode.
 
     The stub derives a deterministic SHA-256 vector with no semantic meaning,
     so stub-mode vector numbers are wiring smoke-checks only — they are *not*
-    evidence of P4 vectorization ROI. Real mode (BGE) is what validates that.
+    evidence of P4 vectorization ROI. Real mode (cloud API or BGE) validates that.
     """
+    from app.config import get_settings
+
+    settings = get_settings()
+    if settings.embedding_api_key.strip():
+        from app.shared.embed_utils import ApiEmbedder
+
+        logger.info(
+            "Vector branch: ApiEmbedder (%s / %s)",
+            settings.embedding_base_url,
+            settings.embedding_model,
+        )
+        return ApiEmbedder(
+            api_key=settings.embedding_api_key,
+            base_url=settings.embedding_base_url,
+            model=settings.embedding_model,
+        )
     if real_embed_mode:
         from app.shared.embed_utils import BgeEmbedder
 
@@ -140,29 +160,31 @@ def embedder(real_embed_mode: bool) -> Any:
         return BgeEmbedder()
     from app.shared.embed_utils import StubEmbedder
 
-    logger.info("Vector branch: StubEmbedder (stub mode, no sentence-transformers)")
+    logger.info("Vector branch: StubEmbedder (stub mode, no embedding API / sentence-transformers)")
     return StubEmbedder()
 
 
 @pytest.fixture(scope="session")
 def reranker(real_embed_mode: bool) -> Any:
-    """Return a usable ``Reranker`` whose cross-encoder model loaded, or ``None``.
+    """Return a usable cloud/local ``Reranker``, or ``None`` when scoring is unavailable.
 
-    Probes the lazy load directly: in stub mode (no ``sentence-transformers``)
-    or when the model cannot load (no network / broken onnx), we return
-    ``None`` and the eval *skips* the rerank branch rather than recording
-    fallback (= vector order) numbers as a rerank baseline — mirroring the RAG
-    eval's policy.
+    Prefers Qwen ``qwen3-rerank`` when a DashScope key is configured; otherwise
+    probes the local CrossEncoder. Stub / unavailable cases return ``None`` so
+    the eval *skips* the rerank branch rather than recording fallback numbers.
     """
-    if not real_embed_mode:
-        return None
-    from app.domain.rag.reranker import Reranker
+    from app.config import get_settings
+    from app.domain.rag.reranker import build_reranker
 
-    candidate = Reranker(top_k=10)
+    candidate = build_reranker(get_settings(), top_k=10, local_files_only=True)
+    if candidate is None:
+        if not real_embed_mode:
+            return None
+        logger.warning("Reranker model unavailable; rerank branch will be skipped")
+        return None
     if candidate._load_model() is None:  # type: ignore[attr-defined]
         logger.warning("Reranker model unavailable; rerank branch will be skipped")
         return None
-    logger.info("Rerank branch: Reranker model loaded")
+    logger.info("Rerank branch: Reranker model loaded (%s)", candidate.model_name)
     return candidate
 
 

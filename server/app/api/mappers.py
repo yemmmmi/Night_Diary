@@ -21,6 +21,46 @@ from app.infrastructure.models.weekly_report import WeeklyReportRow
 from app.services import model_service
 
 
+def source_links_from_json(raw: str | None) -> list[dict[str, Any]]:
+    """Read persisted source links and normalize the legacy ``verified`` key."""
+    try:
+        parsed = json.loads(raw or "[]")
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        link = dict(item)
+        if "multi_source" not in link and "verified" in link:
+            link["multi_source"] = bool(link["verified"])
+        link.pop("verified", None)
+        normalized.append(link)
+    return normalized
+
+
+def normalize_skill_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy plan-skill task flags before returning API JSON."""
+    if result.get("skill") != "plan" or not isinstance(result.get("tasks"), list):
+        return result
+    normalized = dict(result)
+    tasks: list[Any] = []
+    for item in result["tasks"]:
+        if not isinstance(item, dict):
+            tasks.append(item)
+            continue
+        task = dict(item)
+        if "multi_source" not in task and "verified" in task:
+            task["multi_source"] = bool(task["verified"])
+        task.pop("verified", None)
+        tasks.append(task)
+    normalized["tasks"] = tasks
+    return normalized
+
+
 def diary_to_response(row: DiaryEntryRow) -> DiaryResponse:
     return DiaryResponse(
         id=row.id,
@@ -79,6 +119,7 @@ def message_to_response(row: ChatMessageRow) -> MessageResponse:
     card_ids: list[str] | None = None
     plan_ids: list[str] | None = None
     skill_result: dict[str, Any] | None = None
+    process_info: dict[str, Any] | None = None
     if row.retrieved_diary_ids:
         try:
             diary_ids = json.loads(row.retrieved_diary_ids)
@@ -103,9 +144,16 @@ def message_to_response(row: ChatMessageRow) -> MessageResponse:
         try:
             parsed = json.loads(row.skill_result)
             if isinstance(parsed, dict):
-                skill_result = parsed
+                skill_result = normalize_skill_result(parsed)
         except (json.JSONDecodeError, TypeError):
             skill_result = None
+    if row.process_info:
+        try:
+            parsed = json.loads(row.process_info)
+            if isinstance(parsed, dict):
+                process_info = parsed
+        except (json.JSONDecodeError, TypeError):
+            process_info = None
     return MessageResponse(
         id=row.id,
         conversation_id=row.conversation_id,
@@ -116,5 +164,6 @@ def message_to_response(row: ChatMessageRow) -> MessageResponse:
         attached_card_ids=card_ids,
         attached_plan_ids=plan_ids,
         skill_result=skill_result,
+        process_info=process_info,
         created_at=row.created_at,
     )

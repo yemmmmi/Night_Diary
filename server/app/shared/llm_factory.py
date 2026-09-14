@@ -157,6 +157,8 @@ class LLMFactory:
                 base_url=base_url,
                 model=model_name,
                 temperature=0.7,
-                max_completion_tokens=300,
+                # 300 would truncate structured JSON outputs (e.g. plan-skill
+                # milestone nodes need ~700 tokens), silently breaking skills.
+                max_completion_tokens=2048,
             ),
         )

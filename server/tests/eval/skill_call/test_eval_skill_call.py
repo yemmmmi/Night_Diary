@@ -20,6 +20,7 @@ import json
 import os
 import time
 from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -193,8 +194,18 @@ def _write_baseline(
     full: dict[str, float],
     progressive: dict[str, float],
     token_savings: float,
+    *,
+    real_mode: bool,
+    model_name: str,
+    sample_count: int,
 ) -> None:
     payload = {
+        "_placeholder": not real_mode,
+        "_mode": "real" if real_mode else "stub_oracle",
+        "_model": model_name,
+        "_sample_count": sample_count,
+        "_seeded_at": datetime.now(UTC).isoformat(),
+        "_runs": 1,
         "full": full,
         "progressive": progressive,
         "token_savings": round(token_savings, 4),
@@ -268,7 +279,14 @@ def eval_report(
     )
 
     if os.getenv("EVAL_UPDATE_BASELINE") == "1":
-        _write_baseline(full_metrics, progressive_metrics, token_savings)
+        _write_baseline(
+            full_metrics,
+            progressive_metrics,
+            token_savings,
+            real_mode=real_mode,
+            model_name=model_name,
+            sample_count=len(eval_cases),
+        )
         print(
             f"[baseline] wrote {BASELINE_PATH.name} "
             f"(full + progressive) for {len(eval_cases)} cases"
@@ -414,6 +432,11 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any], real_mode: bool)
     if not baseline or baseline.get("_placeholder"):
         pytest.skip(
             "placeholder baseline; seed with EVAL_UPDATE_BASELINE=1 make eval-skill"
+        )
+    if "_mode" not in baseline:
+        pytest.skip(
+            "baseline.json lacks mode metadata; reseed with "
+            "EVAL_UPDATE_BASELINE=1 make eval-skill"
         )
 
     regressions: list[str] = []

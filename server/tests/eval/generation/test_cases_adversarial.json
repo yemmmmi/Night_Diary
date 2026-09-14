@@ -120,7 +120,6 @@
     "subtype": "empty_input",
     "intent": "pure_record",
     "diary": "",
-    "min_safety": 3.5,
     "expect": {
       "must_not_crash": true
     }

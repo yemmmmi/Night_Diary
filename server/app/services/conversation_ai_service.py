@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
@@ -66,6 +67,7 @@ class ChatReplyResult:
     stop_reason: str = ""
     tool_calls_made: list[str] | None = None
     skill_result: dict[str, Any] | None = None
+    process_info: dict[str, Any] | None = None
 
 
 def _normalize_diary_ids(diary_ids: list[int]) -> list[int]:
@@ -736,6 +738,7 @@ def generate_reply(
     if trace_id:
         trace = PipelineTrace(trace_id=trace_id, scenario="chat_reply", user_id=user_id)
         token = set_trace(trace)
+    _started = time.perf_counter()
     try:
         pinned_ids = _normalize_diary_ids(diary_ids)
         attached_cards = _normalize_str_ids(
@@ -762,6 +765,12 @@ def generate_reply(
                 retrieved_diary_ids=pinned_ids,
                 retrieved_memory_ids=[],
                 is_crisis=True,
+                process_info={
+                    "intent": "crisis_signal",
+                    "skill": None,
+                    "tool_calls": [],
+                    "duration_ms": round((time.perf_counter() - _started) * 1000),
+                },
             )
             if trace is not None:
                 trace.end()
@@ -819,6 +828,14 @@ def generate_reply(
                 token_info=skill_outcome.token_info,
                 stop_reason="user_skill",
                 skill_result=skill_outcome.skill_result,
+                process_info={
+                    "intent": f"user_skill_{skill_outcome.skill}",
+                    "skill": skill_outcome.skill,
+                    "skill_source": "manual" if forced_skill else "auto",
+                    "tool_calls": [],
+                    "duration_ms": round((time.perf_counter() - _started) * 1000),
+                    "tokens": (skill_outcome.token_info or {}).get("total_tokens_used", 0),
+                },
             )
             if trace is not None:
                 trace.end()
@@ -1068,6 +1085,23 @@ def generate_reply(
             token_info=loop_result.token_info,
             stop_reason=loop_result.stop_reason,
             tool_calls_made=loop_result.tool_calls_made,
+            process_info={
+                "intent": intent_result.intent_category,
+                "tier": intent_result.tier,
+                "skill": None,
+                "tool_calls": [
+                    {
+                        "name": name,
+                        "source": "mcp" if name.startswith("mcp__") else "local",
+                    }
+                    for name in (loop_result.tool_calls_made or [])
+                ],
+                "retrieved_diaries": len(all_context_ids),
+                "retrieved_memories": len(memory_ids),
+                "stop_reason": loop_result.stop_reason,
+                "duration_ms": round((time.perf_counter() - _started) * 1000),
+                "tokens": loop_result.token_info.get("total_tokens_used", 0),
+            },
         )
         if trace is not None:
             trace.end()
@@ -1137,6 +1171,7 @@ async def generate_reply_streaming(
 
     pipeline = middleware_pipeline if middleware_pipeline is not None else build_default_pipeline()
 
+    _started = time.perf_counter()
     reply_started = False
     reply_end_sent = False
     final_reply_text = ""
@@ -1169,6 +1204,25 @@ async def generate_reply_streaming(
             await publish_text_end(trace_id)
             await publish_reply_end(trace_id)
             reply_end_sent = True
+
+            with contextlib.suppress(Exception):
+                conversation_service.add_user_message_and_reply(
+                    db,
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    content=content,
+                    reply_content=ctx.safe_response or "",
+                    retrieved_diary_ids=ctx.retrieved_diary_ids,
+                    retrieved_memory_ids=ctx.memory_ids,
+                    attached_card_ids=card_ids,
+                    attached_plan_ids=plan_ids,
+                    process_info={
+                        "intent": "crisis_signal",
+                        "skill": None,
+                        "tool_calls": [],
+                        "duration_ms": round((time.perf_counter() - _started) * 1000),
+                    },
+                )
 
             # V3 P7: crisis turns still run the Finalize hook — the severe
             # signal forces an audit write-back (same semantics as the sync
@@ -1207,7 +1261,18 @@ async def generate_reply_streaming(
                     conversation_id=conversation_id,
                     content=content,
                     reply_content=outcome.reply_text,
+                    retrieved_diary_ids=ctx.retrieved_diary_ids,
+                    retrieved_memory_ids=ctx.memory_ids,
+                    attached_card_ids=card_ids,
+                    attached_plan_ids=plan_ids,
                     skill_result=outcome.skill_result,
+                    process_info={
+                        "intent": f"user_skill_{outcome.skill}",
+                        "skill": outcome.skill,
+                        "skill_source": "manual" if forced_skill else "auto",
+                        "tool_calls": [],
+                        "tokens": (outcome.token_info or {}).get("total_tokens_used", 0),
+                    },
                     token_info=outcome.token_info,
                 )
             with contextlib.suppress(Exception):
@@ -1232,6 +1297,7 @@ async def generate_reply_streaming(
         # that the cancel/error handlers know to send a fallback REPLY_END.
         reply_started = True
 
+        stream_metadata: dict[str, Any] = {}
         async for item in run_conversation_loop_streaming(
             db=db,
             container=container,
@@ -1250,9 +1316,60 @@ async def generate_reply_streaming(
         ):
             if isinstance(item, str):
                 final_reply_text += item
+            elif item.get("complete"):
+                stream_metadata = item
+                final_reply_text = str(item.get("reply_text") or final_reply_text)
+            elif item.get("retract"):
+                stream_metadata = item
+                final_reply_text = str(item.get("replacement") or final_reply_text)
 
         # The loop has already published REPLY_END on normal completion.
         reply_end_sent = True
+
+        token_info = cast(dict[str, int], stream_metadata.get("token_info") or {})
+        tool_calls = [
+            str(name) for name in stream_metadata.get("tool_calls_made") or []
+        ]
+        with contextlib.suppress(Exception):
+            conversation_service.add_user_message_and_reply(
+                db,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                content=content,
+                reply_content=final_reply_text,
+                retrieved_diary_ids=ctx.retrieved_diary_ids,
+                retrieved_memory_ids=ctx.memory_ids,
+                attached_card_ids=card_ids,
+                attached_plan_ids=plan_ids,
+                process_info={
+                    "intent": (
+                        ctx.intent_result.intent_category
+                        if ctx.intent_result is not None
+                        else ""
+                    ),
+                    "tier": (
+                        ctx.intent_result.tier
+                        if ctx.intent_result is not None
+                        else ""
+                    ),
+                    "skill": None,
+                    "tool_calls": [
+                        {
+                            "name": name,
+                            "source": "mcp" if is_mcp_tool(name) else "local",
+                        }
+                        for name in tool_calls
+                    ],
+                    "retrieved_diaries": len(ctx.retrieved_diary_ids),
+                    "retrieved_memories": len(ctx.memory_ids),
+                    "stop_reason": str(
+                        stream_metadata.get("stop_reason") or "completed"
+                    ),
+                    "duration_ms": round((time.perf_counter() - _started) * 1000),
+                    "tokens": token_info.get("total_tokens_used", 0),
+                },
+                token_info=token_info,
+            )
 
         # ── Stage 5: post-write (best-effort, non-fatal) ──
         # V3 P7: FinalizeMiddleware.on_reply replaces the inline
