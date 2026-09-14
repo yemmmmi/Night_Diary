@@ -28,9 +28,11 @@ EVAL_UPDATE_BASELINE=1 make eval-rag
 
 | 项 | 值 |
 |----|----|
-| Embedding 模型 | `BAAI/bge-small-zh-v1.5`（24M，512 维，C-MTEB 检索口碑好的最小中文模型） |
+| Embedding 模型（当前） | Qwen `text-embedding-v3`（云端，`EMBEDDING_API_KEY` 存在时 `build_embedding_function` 优先走 `ApiEmbedder`） |
+| Embedding 模型（降级） | `BAAI/bge-small-zh-v1.5`（24M，512 维；无 key 或云端不可用时回退本地） |
 | Embedding 注入方式 | `Settings.embedding_model_name` → `app.shared.embeddings.build_embedding_function` → DI 注入 `DiaryCollectionManager`（不硬编码、不裸读 env） |
-| Reranker 模型 | `BAAI/bge-reranker-base`（`Reranker` 默认，CrossEncoder） |
+| Reranker 模型（当前） | 云端 `qwen3-rerank`（`RERANK_API_KEY`，为空时复用 `EMBEDDING_API_KEY`） |
+| Reranker 模型（降级） | `BAAI/bge-reranker-base`（CrossEncoder） |
 | BGE query 指令前缀 | **不加**。BGE 官方建议 query 侧加「为这个句子生成表示以用于检索相关文章：」，但 `SentenceTransformerEmbeddingFunction` 不会自动加，production 也不会加；为保持 eval 与 production 行为一致，统一不加。若日后实验证明不加导致 Recall 显著下降（>5%），再单独开 PR 在 query 上游统一处理。 |
 | 分词 | jieba，丢弃单字 token（`len >= 2`） |
 | Chunk | `ChunkSplitter` 默认参数（chunk_size=512, overlap=50, min=128）；BM25 与向量库共用同一 splitter |
@@ -38,20 +40,42 @@ EVAL_UPDATE_BASELINE=1 make eval-rag
 | 融合 | Reciprocal Rank Fusion，`k=60` |
 | 回归容差 | 单分支相对自身 baseline 下降 > `0.05`（绝对）判定为退化 |
 
+> **云端跑法（本地复现 2026-09-14 基线）**：`EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` 位于**仓库根 `.env`**（由 docker compose 注入容器）。直接在本机 `server/` 下跑 pytest 时 pydantic 只读 `server/.env`，请先把这三个键注入进程环境，例如：
+> `Get-Content ..\.env | Where-Object { $_ -match '^(EMBEDDING_|RERANK_)' } | ForEach-Object { $i=$_.IndexOf('='); Set-Item -Path ("env:"+$_.Substring(0,$i).Trim()) -Value $_.Substring($i+1).Trim() }`
+> 未注入时向量/融合/重排三个分支会 `SKIPPED`（只报 BM25），不会被记成退化数字。
+
 ## Baseline 指标
+
+### 当前 baseline（云端 REAL）
+
+> 记录日期：2026-09-14 · 环境：Windows / Python 3.11 / Qwen `text-embedding-v3` + `qwen3-rerank` · 30 文档 × 20 查询
+> 与 `baseline.json` 一致；CI 无云端 key，只跑 BM25 分支并与其中 `bm25` 项对照。
+
+| 方案 | Recall@5 | MRR | nDCG@5 | 状态 |
+|------|----------|-----|--------|------|
+| BM25-only      | 0.6667 | 0.7500 | 0.6596 | ✅ 已记录 |
+| 向量-only       | 0.9667 | 1.0000 | 0.9688 | ✅ 已记录 |
+| 混合 RRF        | 0.9500 | 0.9125 | 0.9041 | ✅ 已记录 |
+| 混合 + Rerank   | 0.9667 | 0.9500 | 0.9283 | ✅ 已记录 |
+
+> 同一份固定集在 2026-09-09 与 2026-09-14 两次云端运行得到逐位相同的结果（embedding / 检索是确定性的），
+> 说明这组数字可复现；它仍只是**该固定集上的策略取舍**，不外推线上质量。
+
+### 历史快照（本地 BGE，2026-06-02）
 
 > 记录日期：2026-06-02 · 环境：Windows / Python 3.11.7 / bge-small-zh-v1.5 / bge-reranker-base
 
 | 方案 | Recall@5 | MRR | nDCG@5 | 状态 |
 |------|----------|-----|--------|------|
-| BM25-only      | 0.6667 | 0.7500 | 0.6596 | ✅ 已记录 |
-| 向量-only       | 0.9833 | 0.9000 | 0.9199 | ✅ 已记录 |
-| 混合 RRF        | 0.9667 | 0.8875 | 0.8839 | ✅ 已记录 |
-| 混合 + Rerank   | 0.9083 | 1.0000 | 0.9151 | ✅ 已记录 |
+| BM25-only      | 0.6667 | 0.7500 | 0.6596 | 历史记录 |
+| 向量-only       | 0.9833 | 0.9000 | 0.9199 | 历史记录 |
+| 混合 RRF        | 0.9667 | 0.8875 | 0.8839 | 历史记录 |
+| 混合 + Rerank   | 0.9083 | 1.0000 | 0.9151 | 历史记录 |
 
-> 四分支全部完成。向量分支在小语料（30 条）上 Recall@5 达 0.98，验证中文 embedding 模型有效。
-> Rerank 分支 MRR=1.0000 说明 reranker 在 20 条查询上将至少一个相关日记稳定推到首位。
-> 混合 RRF 的 Recall 略低于向量-only（0.967 vs 0.983），系小语料上 BM25 引入噪音所致——预期在更大语料上融合增益会体现。
+> 本地 BGE 与云端 Qwen 的差别是**排序形态**不同：BGE 向量单路 Recall 更高但 MRR 只有 0.90，
+> Qwen 向量单路 MRR 达 1.00；重排后两者都收敛到 Recall 0.91–0.97。换言之，向量模型换云端不是单纯"变好"，
+> 而是把"召回更多"换成"首位更准"——选型要按下游读法决定。
+> 混合 RRF 的 Recall 略低于向量-only（0.950 vs 0.967），系小语料上 BM25 引入噪音所致——预期在更大语料上融合增益会体现。
 
 ## 指标解读（小样本，趋势对照用，非硬断言）
 
