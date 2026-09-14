@@ -68,6 +68,11 @@ baseline_dirs = [
     "tests/eval/intent/",
     "tests/eval/skill_call/",
     "tests/eval/episodic/",
+    # These three used to be missing from the reseed list, so their REAL numbers
+    # never landed in the repo (the report had to label them "local run only").
+    "tests/eval/rag/",           # writes baseline.json from the cloud run
+    "tests/eval/treehole/",      # writes BASELINE.md (no baseline.json gate)
+    "tests/eval/mcp_decision/",  # writes the real-mode decision floor
 ]
 
 

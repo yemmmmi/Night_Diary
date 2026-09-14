@@ -1,14 +1,22 @@
 """Evaluate whether the model should call an MCP tool and which one.
 
-The default CI path is an explicit oracle/placeholder run. It validates the
-dataset, both protocol parsers, and reused tool-call metrics; it makes no claim
-about real-model MCP decision quality.
+Two modes, mirroring the other eval suites:
+
+* **stub-oracle** (CI, no ``LLM_API_KEY``) — validates the dataset, both protocol
+  parsers and the reused tool-call metrics; it makes no claim about real-model
+  MCP decision quality.
+* **real** (``MCP_DECISION_REAL=1`` + ``LLM_API_KEY``) — the model actually
+  decides which MCP tool to call. ``EVAL_UPDATE_BASELINE=1`` reseeds
+  ``baseline.json`` from that run, and the regression check below compares real
+  runs against it only (stub runs never grad against a real baseline).
 """
 
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +42,44 @@ EXPECTED_CATEGORIES = {
     "no_call": 4,
     "tool_selection": 4,
 }
+#: Real-model MCP decisions vary between runs (0.6667 / 0.75 observed on the same
+#: 12 cases), so the gate only blocks a clear regression rather than noise.
+REGRESSION_TOLERANCE = 0.15
+
+
+def _write_baseline(
+    model_metrics: dict[str, float],
+    parser_metrics: dict[str, float],
+    model_name: str,
+    sample_count: int,
+) -> None:
+    payload = {
+        "_placeholder": False,
+        "_mode": "real",
+        "_model": model_name,
+        "_sample_count": sample_count,
+        "_date": date.today().isoformat(),
+        "_note": (
+            "Seeded by EVAL_UPDATE_BASELINE=1 together with MCP_DECISION_REAL=1. "
+            "CI keeps running the stub-oracle path; the regression check applies "
+            "to real runs only."
+        ),
+        "mode": "real",
+        "disclaimer": (
+            "Real-model scores on a fixed 12-case set; the LLM decision varies "
+            "run to run, so this is a regression floor, not a product-quality claim."
+        ),
+        "model": {key: model_metrics[key] for key in METRIC_KEYS},
+        "parser": {key: parser_metrics[key] for key in METRIC_KEYS},
+    }
+    BASELINE_PATH.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print(
+        f"[baseline] wrote {BASELINE_PATH.name} mode=real "
+        f"model={model_name} samples={sample_count}"
+    )
 
 
 def _model_prompt(case: dict[str, Any], real_mode: bool) -> str:
@@ -78,6 +124,8 @@ def eval_report(
             "stub-oracle placeholder: scores validate harness/parsing only; "
             "they are not real MCP decision quality."
         )
+    elif os.getenv("EVAL_UPDATE_BASELINE") == "1":
+        _write_baseline(model_metrics, parser_metrics, model_name, len(mcp_cases))
     return {
         "model": model_metrics,
         "parser": parser_metrics,
@@ -130,8 +178,37 @@ def test_metrics_detect_wrong_mcp_tool(mcp_cases: list[dict[str, Any]]) -> None:
     assert metric.exact is False
 
 
-def test_placeholder_baseline_is_explicit() -> None:
+def test_baseline_declares_mode_and_metadata() -> None:
+    """The committed baseline must state which mode it was recorded in."""
     baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
-    assert baseline["_placeholder"] is True
-    assert baseline["mode"] == "stub-oracle"
-    assert "not real quality" in baseline["disclaimer"].lower()
+    mode = baseline.get("_mode", "stub-oracle")
+    assert mode in {"real", "stub-oracle"}
+    if mode == "stub-oracle":
+        assert baseline["_placeholder"] is True
+        assert baseline["mode"] == "stub-oracle"
+        assert "not real quality" in baseline["disclaimer"].lower()
+    else:
+        assert baseline["_placeholder"] is False
+        assert baseline["mode"] == "real"
+        assert baseline["_model"] and baseline["_sample_count"] == 12
+        assert baseline["_date"]
+        assert "model" in baseline and "parser" in baseline
+
+
+def test_no_regression_vs_baseline(
+    eval_report: dict[str, Any], real_mode: bool
+) -> None:
+    """Real runs are compared against the recorded real floor, never the stub one."""
+    baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+    if baseline.get("_mode") != "real":
+        pytest.skip("baseline is still the stub-oracle placeholder")
+    if not real_mode:
+        pytest.skip("stub-oracle run; real baseline is not comparable")
+
+    recorded = baseline["model"]["exact_match"]
+    current = eval_report["model"]["exact_match"]
+    assert current >= recorded - REGRESSION_TOLERANCE, (
+        f"MCP decision regressed: {current:.4f} < {recorded:.4f} "
+        f"- {REGRESSION_TOLERANCE} (reseed with "
+        "EVAL_UPDATE_BASELINE=1 MCP_DECISION_REAL=1 if the drop is expected)"
+    )
