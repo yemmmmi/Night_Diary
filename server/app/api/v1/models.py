@@ -71,6 +71,7 @@ def create_model(body: ModelCreateRequest, db: DbDep, user: CurrentUserDep) -> M
         base_url=body.base_url,
         tier=body.tier,
         is_active=body.is_active,
+        api_keys=body.api_keys,
     )
     return model_to_response(row)
 
@@ -88,6 +89,7 @@ def update_model(
         base_url=body.base_url,
         tier=body.tier,
         is_active=body.is_active,
+        api_keys=body.api_keys,
     )
     return model_to_response(row)
 

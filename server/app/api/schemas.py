@@ -85,6 +85,8 @@ class ModelCreateRequest(BaseModel):
     base_url: str = Field(min_length=1)
     tier: str = "default"
     is_active: bool = False
+    #: Optional extra keys for round-robin rotation against rate limits (D5).
+    api_keys: list[str] | None = None
 
 
 class ModelUpdateRequest(BaseModel):
@@ -93,6 +95,7 @@ class ModelUpdateRequest(BaseModel):
     base_url: str | None = None
     tier: str | None = None
     is_active: bool | None = None
+    api_keys: list[str] | None = None
 
 
 class ModelTestConnectionRequest(BaseModel):
@@ -114,6 +117,7 @@ class ModelResponse(BaseModel):
     is_active: bool
     is_default: bool
     has_api_key: bool
+    key_count: int = 1
 
 
 class ModelTierStatus(BaseModel):
