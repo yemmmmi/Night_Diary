@@ -19,4 +19,13 @@ export const diarySceneCopy = {
     '日记内容将被永久删除，此操作不可撤销。',
   cancel: '取消',
   confirmDelete: '确认删除',
+  attachImage: '添加图片',
+  attaching: '上传中…',
+  removeImage: '移除',
+  attachFailed: '图片上传失败',
+  imageTooLarge: '图片过大，上限 10MB',
+  voiceStart: '语音口述',
+  voiceStop: '停止口述',
+  voiceUnsupported: '当前浏览器不支持语音输入',
+  voiceFailed: '语音识别失败',
 } as const

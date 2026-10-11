@@ -24,15 +24,29 @@ class TagBrief(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ImageAssetResponse(BaseModel):
+    """An uploaded image asset (metadata only; the file is streamed separately)."""
+
+    id: int
+    original_filename: str
+    mime_type: str
+    size_bytes: int
+    created_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
 class DiaryCreateRequest(BaseModel):
     content: str = Field(min_length=1)
     date: datetime.date | None = None
     weather: str | None = None
+    image_asset_ids: list[int] = Field(default_factory=list, max_length=9)
 
 
 class DiaryUpdateRequest(BaseModel):
     content: str | None = Field(default=None, min_length=1)
     weather: str | None = None
+    image_asset_ids: list[int] | None = Field(default=None, max_length=9)
 
 
 class DiaryResponse(BaseModel):
@@ -41,6 +55,7 @@ class DiaryResponse(BaseModel):
     date: datetime.date | None
     weather: str | None
     reply: str | None
+    image_asset_ids: list[int] = Field(default_factory=list)
     created_at: datetime.datetime
     updated_at: datetime.datetime
 

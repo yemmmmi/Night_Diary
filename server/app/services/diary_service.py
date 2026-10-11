@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -10,6 +11,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.infrastructure.models.diary_entry import DiaryEntryRow
+from app.infrastructure.models.image_asset import ImageAssetRow
 from app.infrastructure.models.memory_card import MemoryCardRow
 from app.services.card_service import _json_to_emotions
 from app.shared.errors import DiaryNotFoundError, ValidationError
@@ -86,6 +88,63 @@ def _sync_to_chroma(
         logger.warning("Chroma sync failed for diary_id=%s: %s", entry.id, exc)
 
 
+def parse_image_asset_ids(raw: str | None) -> list[int]:
+    """Parse a persisted ``image_assets_json`` value into a list of asset ids."""
+    try:
+        parsed = json.loads(raw or "[]")
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [item for item in parsed if isinstance(item, int)]
+
+
+def _serialize_image_asset_ids(
+    db: Session,
+    image_asset_ids: list[int] | None,
+    *,
+    user_id: str,
+) -> str | None:
+    """Validate that every asset belongs to the user, then return a JSON id list."""
+    if not image_asset_ids:
+        return None
+    unique_ids = list(dict.fromkeys(image_asset_ids))
+    owned = (
+        db.query(ImageAssetRow.id)
+        .filter(ImageAssetRow.user_id == user_id)
+        .filter(ImageAssetRow.id.in_(unique_ids))
+        .all()
+    )
+    owned_ids = {row_id for (row_id,) in owned}
+    missing = [asset_id for asset_id in unique_ids if asset_id not in owned_ids]
+    if missing:
+        raise ValidationError(f"图片附件不存在或无权限：{missing}")
+    return json.dumps(unique_ids)
+
+
+def image_attachment_note(
+    db: Session,
+    entry: DiaryEntryRow,
+    *,
+    user_id: str,
+) -> str:
+    """List a diary's attached image filenames for the agent, "" when none."""
+    ids = parse_image_asset_ids(entry.image_assets_json)
+    if not ids:
+        return ""
+    rows = (
+        db.query(ImageAssetRow)
+        .filter(ImageAssetRow.user_id == user_id)
+        .filter(ImageAssetRow.id.in_(ids))
+        .all()
+    )
+    by_id = {row.id: row.original_filename for row in rows}
+    names = [by_id[asset_id] for asset_id in ids if asset_id in by_id]
+    if not names:
+        return ""
+    return "附图片：" + "、".join(names)
+
+
 def create_entry(
     db: Session,
     *,
@@ -93,6 +152,7 @@ def create_entry(
     content: str,
     entry_date: date | None = None,
     weather: str | None = None,
+    image_asset_ids: list[int] | None = None,
     collection_manager: DiaryCollectionManager | None = None,
     container: ServiceContainer | None = None,
 ) -> DiaryEntryRow:
@@ -104,6 +164,7 @@ def create_entry(
         content=content.strip(),
         weather=weather,
         date=entry_date if entry_date is not None else datetime.now(UTC).date(),
+        image_assets_json=_serialize_image_asset_ids(db, image_asset_ids, user_id=user_id),
     )
 
     db.add(entry)
@@ -192,6 +253,7 @@ def update_entry(
     user_id: str,
     content: str | None = None,
     weather: str | None = None,
+    image_asset_ids: list[int] | None = None,
     collection_manager: DiaryCollectionManager | None = None,
     container: ServiceContainer | None = None,
 ) -> DiaryEntryRow:
@@ -204,6 +266,11 @@ def update_entry(
 
     if weather is not None:
         entry.weather = weather
+
+    if image_asset_ids is not None:
+        entry.image_assets_json = _serialize_image_asset_ids(
+            db, image_asset_ids, user_id=user_id
+        )
 
     entry.updated_at = datetime.now(UTC)
     db.commit()

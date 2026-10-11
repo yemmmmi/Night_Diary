@@ -18,7 +18,7 @@ from app.infrastructure.models.feedback_record import FeedbackRow
 from app.infrastructure.models.model_provider import ModelProviderRow
 from app.infrastructure.models.tag import TagRow
 from app.infrastructure.models.weekly_report import WeeklyReportRow
-from app.services import model_service
+from app.services import diary_service, model_service
 
 
 def source_links_from_json(raw: str | None) -> list[dict[str, Any]]:
@@ -68,6 +68,7 @@ def diary_to_response(row: DiaryEntryRow) -> DiaryResponse:
         date=row.date,
         weather=row.weather,
         reply=row.reply,
+        image_asset_ids=diary_service.parse_image_asset_ids(row.image_assets_json),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

@@ -6,6 +6,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.9",
     "sqlalchemy>=2.0,<2.1",
 
     "pydantic>=2.7,<3.0",
@@ -118,6 +119,7 @@ ignore = ["E501"]
 "tests/unit/infrastructure/test_plan_models.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/unit/api/**" = ["RUF001"]
 "app/api/schemas.py" = ["RUF001"]
+"app/api/v1/uploads.py" = ["RUF001"]
 "app/services/**" = ["RUF001"]
 "app/shared/errors.py" = ["RUF001"]
 "app/services/conversation_ai_service.py" = ["RUF001", "RUF002", "RUF003"]

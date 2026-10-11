@@ -22,6 +22,7 @@ from app.api.v1 import (
     skills,
     stats,
     tags,
+    uploads,
     weekly,
 )
 
@@ -35,6 +36,7 @@ api_router.include_router(models.router)
 api_router.include_router(model_download.router)
 api_router.include_router(stats.router)
 api_router.include_router(tags.router)
+api_router.include_router(uploads.router)
 api_router.include_router(weekly.router)
 api_router.include_router(memory.router)
 api_router.include_router(export.router)

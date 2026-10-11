@@ -293,10 +293,14 @@ def _format_retrieved_diaries(db: Session, diary_ids: list[int], *, user_id: str
         date_str = entry.date.isoformat() if entry.date else "未知"
         digest_block = _day_digest_block(db, entry, user_id)
         if digest_block:
-            parts.append(f"[日记 #{entry.id} · {date_str}]\n{digest_block}")
+            body = f"[日记 #{entry.id} · {date_str}]\n{digest_block}"
         else:
             # Pre-digest data: fall back to the full-text excerpt.
-            parts.append(diary_service.format_diary_excerpt(entry))
+            body = diary_service.format_diary_excerpt(entry)
+        note = diary_service.image_attachment_note(db, entry, user_id=user_id)
+        if note:
+            body = f"{body}\n{note}"
+        parts.append(body)
     return "\n\n".join(parts)
 
 
