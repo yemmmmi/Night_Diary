@@ -123,6 +123,22 @@ npm install
 npm run dev   # http://localhost:5173
 ```
 
+### 桌面版（Windows，双击即用）
+
+桌面版用 Electron 宿主自动启动本地后端，并把界面装进原生窗口——无需 Docker、无需手动开浏览器。
+
+```powershell
+# 开发态运行（复用本地 venv 的后端）
+powershell -ExecutionPolicy Bypass -File desktop/scripts/smoke.ps1
+
+# 构建安装包（产出 desktop/release/NightDiary-<version>-setup.exe）
+powershell -ExecutionPolicy Bypass -File desktop/scripts/build-all.ps1
+```
+
+- Python 运行时由 `uv` + `python-build-standalone` 以可重定位目录交付，**不使用 PyInstaller**。
+- 运行时**不含 torch**：embedding/rerank 走云端（设置页配置 `EMBEDDING_API_KEY` / `RERANK_API_KEY`）。
+- 数据目录：`%APPDATA%/night-diary`（与后端 `data_dir` 默认一致）。
+
 ### LLM 配置
 
 - 开发时在 `server/.env` 或 `.env` 设置 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 作为默认回退
