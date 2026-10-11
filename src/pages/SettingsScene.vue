@@ -6,6 +6,7 @@ import { PhArrowLeft, PhCaretRight } from '@phosphor-icons/vue'
 import BackupManager from '@/features/settings/BackupManager.vue'
 import CustomSkillsManager from '@/features/settings/CustomSkillsManager.vue'
 import DeveloperToggle from '@/features/settings/DeveloperToggle.vue'
+import OpenAIAccessPanel from '@/features/settings/OpenAIAccessPanel.vue'
 import SettingsSection from '@/features/settings/SettingsSection.vue'
 import ThemeToggle from '@/features/settings/ThemeToggle.vue'
 import { getStats, type AppStats } from '@/shared/api/settings'
@@ -17,7 +18,7 @@ const settings = useSettingsStore()
 settings.load()
 
 const openSection = ref('general')
-const sectionIds = ['general', 'custom-skills', 'backup', 'about'] as const
+const sectionIds = ['general', 'custom-skills', 'api-access', 'backup', 'about'] as const
 const usageStats = ref<AppStats | null>(null)
 const statsLoading = ref(true)
 
@@ -126,6 +127,16 @@ watch(
         @toggle="toggleSection"
       >
         <CustomSkillsManager />
+      </SettingsSection>
+
+      <SettingsSection
+        id="api-access"
+        title="API 接入"
+        subtitle="用 OpenAI 兼容接口把夜记接到你的客户端"
+        :open="openSection === 'api-access'"
+        @toggle="toggleSection"
+      >
+        <OpenAIAccessPanel />
       </SettingsSection>
 
       <SettingsSection

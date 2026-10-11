@@ -25,13 +25,20 @@ def _now() -> datetime:
 # ── Conversations ────────────────────────────────────────────────────
 
 
+#: Sentinel title marking the conversation reserved for the OpenAI-compatible
+#: endpoint (A5). ``add_user_message_and_reply`` only auto-retitles the default
+#: "新会话", so this marker is stable and lets stateless API calls share one
+#: thread — continuity without trusting client-side history.
+API_CONVERSATION_TITLE = "API 接入"
+
+
 def create_conversation(
-    db: Session, *, user_id: str, replier_id: str = "preset-warm"
+    db: Session, *, user_id: str, replier_id: str = "preset-warm", title: str = "新会话"
 ) -> ConversationRow:
     row = ConversationRow(
         id=_new_id(),
         user_id=user_id,
-        title="新会话",
+        title=title,
         active_replier_id=replier_id,
         created_at=_now(),
         updated_at=_now(),
@@ -40,6 +47,22 @@ def create_conversation(
     db.commit()
     db.refresh(row)
     return row
+
+
+def get_or_create_api_conversation(db: Session, *, user_id: str) -> ConversationRow:
+    """Return the user's OpenAI-facade conversation, creating it on first use."""
+    row = (
+        db.query(ConversationRow)
+        .filter(
+            ConversationRow.user_id == user_id,
+            ConversationRow.title == API_CONVERSATION_TITLE,
+        )
+        .order_by(ConversationRow.created_at.asc())
+        .first()
+    )
+    if row is not None:
+        return row
+    return create_conversation(db, user_id=user_id, title=API_CONVERSATION_TITLE)
 
 
 def list_conversations(db: Session, *, user_id: str, limit: int = 50) -> list[ConversationRow]:

@@ -238,10 +238,13 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
     )
 
     from app.api.v1.error_handlers import register_error_handlers
+    from app.api.v1.openai_compat import router as openai_compat_router
     from app.api.v1.router import api_router
 
     register_error_handlers(app)
     app.include_router(api_router)
+    # A5: OpenAI-compatible facade lives at the root (/v1/...), not under /api/v1.
+    app.include_router(openai_compat_router)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
