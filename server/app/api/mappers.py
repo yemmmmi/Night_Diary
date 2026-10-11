@@ -118,6 +118,7 @@ def message_to_response(row: ChatMessageRow) -> MessageResponse:
     memory_ids: list[str] | None = None
     card_ids: list[str] | None = None
     plan_ids: list[str] | None = None
+    tag_names: list[str] | None = None
     skill_result: dict[str, Any] | None = None
     process_info: dict[str, Any] | None = None
     if row.retrieved_diary_ids:
@@ -140,6 +141,11 @@ def message_to_response(row: ChatMessageRow) -> MessageResponse:
             plan_ids = json.loads(row.attached_plan_ids)
         except (json.JSONDecodeError, TypeError):
             plan_ids = None
+    if row.attached_tag_names:
+        try:
+            tag_names = json.loads(row.attached_tag_names)
+        except (json.JSONDecodeError, TypeError):
+            tag_names = None
     if row.skill_result:
         try:
             parsed = json.loads(row.skill_result)
@@ -163,6 +169,7 @@ def message_to_response(row: ChatMessageRow) -> MessageResponse:
         retrieved_memory_ids=memory_ids,
         attached_card_ids=card_ids,
         attached_plan_ids=plan_ids,
+        attached_tag_names=tag_names,
         skill_result=skill_result,
         process_info=process_info,
         created_at=row.created_at,

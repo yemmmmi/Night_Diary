@@ -8,8 +8,10 @@ import json
 import logging
 import time
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.infrastructure.task_queue import enqueue_task
@@ -52,8 +54,16 @@ logger = logging.getLogger(__name__)
 MAX_PINNED_DIARIES = 3
 MAX_ATTACHED_CARDS = 3
 MAX_ATTACHED_PLANS = 3
+MAX_ATTACHED_TAGS = 3
 MAX_RETRIEVAL_RESULTS = 3
 MAX_EPISODIC_RESULTS = 3
+
+#: Total character budget for the explicit-reference block (B1). User-picked
+#: references are injected verbatim, so an unbounded block could dominate the
+#: prompt; we clip the tail once the budget is exhausted.
+MAX_REFERENCE_CHARS = 4000
+#: Entries rendered per referenced tag (newest first).
+MAX_TAG_ENTRIES = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,27 +162,74 @@ def _format_attached_plans(db: Session, plan_ids: list[str], *, user_id: str) ->
     return "【用户附上的计划】\n" + "\n\n".join(parts)
 
 
+def _format_attached_tags(db: Session, tag_names: list[str], *, user_id: str) -> str:
+    """Render user-referenced tags as a context block ("" when none).
+
+    Each tag contributes its newest few diary entries as short summaries, so
+    the model sees the *pattern* the user pointed at without dumping full
+    diary bodies. Lookups are user-scoped; unknown tags are skipped.
+    """
+    if not tag_names:
+        return ""
+    from app.infrastructure.models.tag import TagRow
+
+    parts: list[str] = []
+    for name in tag_names:
+        tag = db.scalar(
+            select(TagRow).where(TagRow.user_id == user_id, TagRow.name == name)
+        )
+        if tag is None:
+            logger.debug("Attached tag %r not found (skipped)", name)
+            continue
+        entries = sorted(
+            tag.diary_entries,
+            key=lambda e: (e.date or date.min, e.created_at or datetime.min),
+            reverse=True,
+        )[:MAX_TAG_ENTRIES]
+        if not entries:
+            parts.append(f"[标签 {tag.name}] （暂无日记）")
+            continue
+        lines = [f"[标签 {tag.name} · {tag.usage_count} 篇]"]
+        for entry in entries:
+            date_str = entry.date.isoformat() if entry.date else "未知"
+            excerpt = diary_service.format_diary_excerpt(entry)
+            lines.append(f"- {date_str}：{excerpt}")
+        parts.append("\n".join(lines))
+    if not parts:
+        return ""
+    return "【用户引用的标签】\n" + "\n\n".join(parts)
+
+
+def _clip_reference_block(text: str, *, limit: int = MAX_REFERENCE_CHARS) -> str:
+    """Bound the explicit-reference block so it cannot dominate the prompt."""
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "\n…（引用内容已截断）"
+
+
 def _compose_pinned_context(
     db: Session,
     pinned_ids: list[int],
     *,
     card_ids: list[str],
     plan_ids: list[str],
+    tag_names: list[str],
     user_id: str,
 ) -> str:
-    """Pinned diaries plus user-attached cards/plans, joined into one block."""
+    """Pinned diaries plus user-referenced cards/plans/tags, joined into one block."""
     pinned_text = _format_retrieved_diaries(db, pinned_ids, user_id=user_id)
     attached_blocks = [
         block
         for block in (
             _format_attached_cards(db, card_ids, user_id=user_id),
             _format_attached_plans(db, plan_ids, user_id=user_id),
+            _format_attached_tags(db, tag_names, user_id=user_id),
         )
         if block
     ]
     if not attached_blocks:
         return pinned_text
-    return pinned_text + "\n\n" + "\n\n".join(attached_blocks)
+    return _clip_reference_block(pinned_text + "\n\n" + "\n\n".join(attached_blocks))
 
 
 def _retrieve_related_diary_ids(
@@ -436,6 +493,7 @@ def _prepare_reply_context(
     trace_id: str | None,
     card_ids: list[str] | None = None,
     plan_ids: list[str] | None = None,
+    tag_names: list[str] | None = None,
     forced_skill: str | None = None,
 ) -> ReplyContext:
     """Extract Stage 1-3 from generate_reply for streaming path reuse.
@@ -453,6 +511,9 @@ def _prepare_reply_context(
     )
     attached_plans = _normalize_str_ids(
         plan_ids or [], limit=MAX_ATTACHED_PLANS, label="个计划"
+    )
+    attached_tags = _normalize_str_ids(
+        tag_names or [], limit=MAX_ATTACHED_TAGS, label="个标签"
     )
     container.ensure_ai_stack(user_id=user_id)
 
@@ -697,6 +758,7 @@ def _prepare_reply_context(
         pinned_ids,
         card_ids=attached_cards,
         plan_ids=attached_plans,
+        tag_names=attached_tags,
         user_id=user_id,
     )
     retrieved_text = _format_retrieved_diaries(db, retrieved_ids, user_id=user_id)
@@ -746,6 +808,7 @@ def generate_reply(
     trace_id: str | None = None,
     card_ids: list[str] | None = None,
     plan_ids: list[str] | None = None,
+    tag_names: list[str] | None = None,
     forced_skill: str | None = None,
 ) -> ChatReplyResult:
     """Build chat context and generate an assistant reply via the Agentic Loop.
@@ -775,6 +838,9 @@ def generate_reply(
         )
         attached_plans = _normalize_str_ids(
             plan_ids or [], limit=MAX_ATTACHED_PLANS, label="个计划"
+        )
+        attached_tags = _normalize_str_ids(
+            tag_names or [], limit=MAX_ATTACHED_TAGS, label="个标签"
         )
         container.ensure_ai_stack(user_id=user_id)
 
@@ -1026,6 +1092,7 @@ def generate_reply(
             pinned_ids,
             card_ids=attached_cards,
             plan_ids=attached_plans,
+            tag_names=attached_tags,
             user_id=user_id,
         )
         retrieved_text = _format_retrieved_diaries(db, retrieved_ids, user_id=user_id)
@@ -1174,6 +1241,7 @@ async def generate_reply_streaming(
     middleware_pipeline: MiddlewarePipeline | None = None,
     card_ids: list[str] | None = None,
     plan_ids: list[str] | None = None,
+    tag_names: list[str] | None = None,
     forced_skill: str | None = None,
 ) -> None:
     """Real streaming (P3): _prepare_reply_context -> run_conversation_loop_streaming -> post-write.
@@ -1220,6 +1288,7 @@ async def generate_reply_streaming(
             trace_id=trace_id or None,
             card_ids=card_ids,
             plan_ids=plan_ids,
+            tag_names=tag_names,
             forced_skill=forced_skill,
         )
 
@@ -1247,6 +1316,7 @@ async def generate_reply_streaming(
                     retrieved_memory_ids=ctx.memory_ids,
                     attached_card_ids=card_ids,
                     attached_plan_ids=plan_ids,
+                    attached_tag_names=tag_names,
                     process_info={
                         "intent": "crisis_signal",
                         "skill": None,
@@ -1296,6 +1366,7 @@ async def generate_reply_streaming(
                     retrieved_memory_ids=ctx.memory_ids,
                     attached_card_ids=card_ids,
                     attached_plan_ids=plan_ids,
+                    attached_tag_names=tag_names,
                     skill_result=outcome.skill_result,
                     process_info={
                         "intent": f"user_skill_{outcome.skill}",
@@ -1372,6 +1443,7 @@ async def generate_reply_streaming(
                 retrieved_memory_ids=ctx.memory_ids,
                 attached_card_ids=card_ids,
                 attached_plan_ids=plan_ids,
+                attached_tag_names=tag_names,
                 process_info={
                     "intent": (
                         ctx.intent_result.intent_category

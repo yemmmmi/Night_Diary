@@ -164,6 +164,7 @@ def test_compose_pinned_context_includes_attached_cards_and_plans(db_session) ->
         [],
         card_ids=[card.card_id],
         plan_ids=[plan.id],
+        tag_names=[],
         user_id="default",
     )
 
@@ -183,11 +184,52 @@ def test_compose_pinned_context_skips_unknown_ids(db_session) -> None:
         [],
         card_ids=["missing-card"],
         plan_ids=["missing-plan"],
+        tag_names=["missing-tag"],
         user_id="default",
     )
 
     assert "【用户附上的卡片】" not in text
     assert "【用户附上的计划】" not in text
+    assert "【用户引用的标签】" not in text
+
+
+def test_compose_pinned_context_includes_attached_tags(db_session) -> None:
+    """引用的标签把带该标签的日记摘要注入上下文，按用户隔离。"""
+    from app.infrastructure.models.diary_entry import DiaryEntryRow
+    from app.infrastructure.models.tag import TagRow
+    from app.services import diary_service
+
+    tag = TagRow(name="睡眠", color="#8B5CF6", user_id="default", usage_count=1)
+    db_session.add(tag)
+    db_session.flush()
+
+    diary_service.create_entry(db_session, user_id="default", content="昨晚又失眠到三点")
+    entry = db_session.query(DiaryEntryRow).first()
+    entry.tags = [tag]
+    db_session.commit()
+
+    text = conversation_ai_service._compose_pinned_context(
+        db_session,
+        [],
+        card_ids=[],
+        plan_ids=[],
+        tag_names=["睡眠"],
+        user_id="default",
+    )
+    assert "【用户引用的标签】" in text
+    assert "睡眠" in text
+    assert "昨晚又失眠到三点" in text
+
+    # 其他用户引用同名标签拿不到数据（租户隔离）。
+    other = conversation_ai_service._compose_pinned_context(
+        db_session,
+        [],
+        card_ids=[],
+        plan_ids=[],
+        tag_names=["睡眠"],
+        user_id="someone-else",
+    )
+    assert "【用户引用的标签】" not in other
 
 
 # ── PR-4: generate_card_from_conversation ──

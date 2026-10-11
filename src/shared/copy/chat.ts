@@ -25,12 +25,17 @@ export const chatCopy = {
   pickPlanHint: '进行中的计划 · 最多 3 个',
   pickPlanEmpty: '暂无可附的计划',
   removePlanPin: '取下这一个',
+  pickTag: '引用标签',
+  pickTagHint: '带标签的日记 · 最多 3 个',
+  pickTagEmpty: '暂无标签',
+  removeTagPin: '取下这个标签',
   writingLabel: '夜记正在写…',
   letterNoteCount: (count: number) => `参考了 ${count} 篇日记`,
-  letterAttachNote: (cards: number, plans: number) => {
+  letterAttachNote: (cards: number, plans: number, tags = 0) => {
     const parts: string[] = []
     if (cards > 0) parts.push(`${cards} 张卡片`)
     if (plans > 0) parts.push(`${plans} 个计划`)
+    if (tags > 0) parts.push(`${tags} 个标签`)
     return parts.length ? `附上 ${parts.join('、')}` : ''
   },
   generateCard: '存为记忆卡片',

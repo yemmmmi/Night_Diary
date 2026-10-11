@@ -33,6 +33,7 @@ export const useChatStore = defineStore('chat', () => {
   const pinnedDiaryIds = ref<number[]>([])
   const pinnedCardIds = ref<string[]>([])
   const pinnedPlanIds = ref<string[]>([])
+  const pinnedTagNames = ref<string[]>([])
   const autoRetrieve = ref(true)
   /* 手动指定的 skill：null = 自动路由；发送后自动复位 */
   const selectedSkill = ref<UserSkill | null>(null)
@@ -158,6 +159,8 @@ export const useChatStore = defineStore('chat', () => {
                 pinnedCardIds.value.length > 0 ? pinnedCardIds.value : undefined,
               plan_ids:
                 pinnedPlanIds.value.length > 0 ? pinnedPlanIds.value : undefined,
+              tag_names:
+                pinnedTagNames.value.length > 0 ? pinnedTagNames.value : undefined,
               auto_retrieve: autoRetrieve.value,
               skill,
             },
@@ -204,6 +207,7 @@ export const useChatStore = defineStore('chat', () => {
       diary_ids: pinnedDiaryIds.value,
       card_ids: pinnedCardIds.value,
       plan_ids: pinnedPlanIds.value,
+      tag_names: pinnedTagNames.value,
       auto_retrieve: autoRetrieve.value,
       skill: selectedSkill.value ?? undefined,
     })
@@ -241,6 +245,10 @@ export const useChatStore = defineStore('chat', () => {
     pinnedPlanIds.value = ids.slice(0, 3)
   }
 
+  function setPinnedTagNames(names: string[]) {
+    pinnedTagNames.value = names.slice(0, 3)
+  }
+
   function selectSkill(skill: UserSkill | null) {
     selectedSkill.value = skill
   }
@@ -266,6 +274,7 @@ export const useChatStore = defineStore('chat', () => {
     pinnedDiaryIds,
     pinnedCardIds,
     pinnedPlanIds,
+    pinnedTagNames,
     autoRetrieve,
     selectedSkill,
     skills,
@@ -286,6 +295,7 @@ export const useChatStore = defineStore('chat', () => {
     pinDiary,
     setPinnedCardIds,
     setPinnedPlanIds,
+    setPinnedTagNames,
     selectSkill,
     loadSkills,
   }
