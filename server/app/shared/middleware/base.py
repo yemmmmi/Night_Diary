@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from app.services.container import ServiceContainer
 
+from app.shared.tool_approval import ApprovalDecision
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,6 +75,33 @@ class MiddlewareBase:
     def on_reply(self, ctx: MiddlewareContext) -> None:
         """Post-reply side effects (e.g. async memory write-back). Default: no-op."""
 
+    # ── Fine-grained lifecycle hooks (D3) ─────────────────────────────────
+    # Every hook is optional and best-effort: the pipeline isolates exceptions,
+    # so a misbehaving middleware never breaks the turn.
+
+    def pre_intent(self, content: str, ctx: MiddlewareContext) -> str:
+        """Transform the user content before intent classification."""
+        return content
+
+    def post_intent(self, ctx: MiddlewareContext) -> None:
+        """Observe the classified intent (available on ``ctx.intent``)."""
+
+    def pre_tool_call(
+        self, tool_name: str, tool_args: dict[str, Any], ctx: MiddlewareContext
+    ) -> ApprovalDecision | None:
+        """Approve, block, or rewrite a tool call. ``None`` = no opinion."""
+        return None
+
+    def post_tool_call(self, tool_name: str, result: str, ctx: MiddlewareContext) -> str:
+        """Transform or observe a tool result before it re-enters the loop."""
+        return result
+
+    def pre_persist(self, ctx: MiddlewareContext) -> None:
+        """Run before the reply turn is persisted (e.g. redaction)."""
+
+    def post_persist(self, ctx: MiddlewareContext) -> None:
+        """Run after the reply turn is persisted."""
+
 
 class MiddlewarePipeline:
     """Ordered, optionally-empty list of middlewares.
@@ -110,6 +139,67 @@ class MiddlewarePipeline:
                     middleware.name,
                     exc,
                 )
+
+    # ── Fine-grained lifecycle runners (D3) ───────────────────────────────
+    # Same contract as run_on_reply: best-effort, errors logged and swallowed.
+
+    def apply_pre_intent(self, content: str, ctx: MiddlewareContext) -> str:
+        for middleware in self._middlewares:
+            try:
+                content = middleware.pre_intent(content, ctx)
+            except Exception as exc:
+                logger.warning("Middleware %s pre_intent failed: %s", middleware.name, exc)
+        return content
+
+    def run_post_intent(self, ctx: MiddlewareContext) -> None:
+        for middleware in self._middlewares:
+            try:
+                middleware.post_intent(ctx)
+            except Exception as exc:
+                logger.warning("Middleware %s post_intent failed: %s", middleware.name, exc)
+
+    def pre_tool_call(
+        self, tool_name: str, tool_args: dict[str, Any], ctx: MiddlewareContext
+    ) -> ApprovalDecision | None:
+        """Fold ``pre_tool_call`` over the pipeline.
+
+        The last non-``None`` decision wins; a blocking decision short-circuits
+        the remaining middlewares (a deny can never be overridden downstream).
+        """
+        decision: ApprovalDecision | None = None
+        for middleware in self._middlewares:
+            try:
+                candidate = middleware.pre_tool_call(tool_name, tool_args, ctx)
+            except Exception as exc:
+                logger.warning("Middleware %s pre_tool_call failed: %s", middleware.name, exc)
+                continue
+            if candidate is not None:
+                decision = candidate
+                if not candidate.allowed:
+                    break
+        return decision
+
+    def post_tool_call(self, tool_name: str, result: str, ctx: MiddlewareContext) -> str:
+        for middleware in self._middlewares:
+            try:
+                result = middleware.post_tool_call(tool_name, result, ctx)
+            except Exception as exc:
+                logger.warning("Middleware %s post_tool_call failed: %s", middleware.name, exc)
+        return result
+
+    def run_pre_persist(self, ctx: MiddlewareContext) -> None:
+        for middleware in self._middlewares:
+            try:
+                middleware.pre_persist(ctx)
+            except Exception as exc:
+                logger.warning("Middleware %s pre_persist failed: %s", middleware.name, exc)
+
+    def run_post_persist(self, ctx: MiddlewareContext) -> None:
+        for middleware in self._middlewares:
+            try:
+                middleware.post_persist(ctx)
+            except Exception as exc:
+                logger.warning("Middleware %s post_persist failed: %s", middleware.name, exc)
 
 
 __all__ = ["MiddlewareBase", "MiddlewareContext", "MiddlewarePipeline"]
