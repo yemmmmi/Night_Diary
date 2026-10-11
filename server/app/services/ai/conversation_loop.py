@@ -57,6 +57,7 @@ from app.shared.tool_protocol import (
     strip_tool_tags,
     supports_native_tools,
 )
+from app.shared.untrusted_content import wrap_untrusted
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -154,13 +155,17 @@ def _execute_tool(
     tool_args: dict[str, Any],
     tools: dict[str, ToolFn],
 ) -> str:
-    """Execute a single tool call, returning a result string."""
+    """Execute a single tool call, returning a result string.
+
+    Tool output is fenced as untrusted data before it can enter the LLM
+    context: MCP servers and external fetches may carry prompt-injection text.
+    """
     fn = tools.get(tool_name)
     if fn is None:
         return f"[{tool_name}]: 未知工具"
     try:
         result = fn(**tool_args)
-        return f"[{tool_name}]: {result}"
+        return f"[{tool_name}]: {wrap_untrusted(str(result), source=tool_name)}"
     except Exception as exc:
         logger.warning("Tool %s failed: %s", tool_name, exc)
         return f"[{tool_name} error]: {exc}"
