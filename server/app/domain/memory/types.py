@@ -6,6 +6,10 @@ from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 
+#: Maximum length of the user-authored 「关于我」 text (B2). Shared by the storage
+#: layer, the frozen-block builder, and the API schema so the limit has one home.
+MAX_ABOUT_CHARS = 600
+
 
 class EpisodicEntry(BaseModel):
     """A single episodic memory item derived from a diary analysis turn.

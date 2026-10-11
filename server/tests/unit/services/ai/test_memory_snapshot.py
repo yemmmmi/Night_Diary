@@ -52,6 +52,33 @@ def test_blank_inputs_are_ignored() -> None:
     assert block.empty
 
 
+def test_block_includes_user_about_first() -> None:
+    block = build_frozen_memory_block(
+        user_about="我是夜班护士", profile_style="温和", profile_topics=["失眠"]
+    )
+    assert "我是夜班护士" in block.text
+    # User-authored content is the highest-signal part → placed before the
+    # system-inferred style/topics so it survives truncation.
+    assert block.text.index("用户自述") < block.text.index("偏好风格")
+
+
+def test_user_about_alone_is_enough() -> None:
+    block = build_frozen_memory_block(user_about="我更喜欢被称呼「你」。")
+    assert not block.empty
+    assert "我更喜欢被称呼" in block.text
+    assert block.budget.used_chars == len(block.text)
+
+
+def test_about_prioritised_when_over_cap() -> None:
+    block = build_frozen_memory_block(
+        user_about="字" * 200, profile_style="x" * 200, cap=60
+    )
+    assert block.budget.over_budget
+    assert block.budget.consolidated
+    assert "用户自述" in block.text
+    assert len(block.text) <= 60
+
+
 def test_budget_to_dict_roundtrip() -> None:
     block = build_frozen_memory_block(profile_style="冷静")
     data = block.budget.to_dict()

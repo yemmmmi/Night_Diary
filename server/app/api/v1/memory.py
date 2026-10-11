@@ -14,6 +14,8 @@ from app.api.schemas import (
     EpisodicEntryResponse,
     EpisodicEntryUpdateRequest,
     MemoryOverviewResponse,
+    UserAboutResponse,
+    UserAboutUpdateRequest,
     UserProfileResponse,
 )
 from app.services import memory_service
@@ -75,4 +77,24 @@ def get_overview(container: ContainerDep, user: CurrentUserDep) -> MemoryOvervie
     container.ensure_memory(user_id=str(user.id))
     return MemoryOverviewResponse.model_validate(
         memory_service.get_overview(container, user_id=str(user.id))
+    )
+
+
+@router.get("/about", response_model=UserAboutResponse)
+def get_about(container: ContainerDep, user: CurrentUserDep) -> UserAboutResponse:
+    container.ensure_memory(user_id=str(user.id))
+    return UserAboutResponse.model_validate(
+        memory_service.get_about(container, user_id=str(user.id))
+    )
+
+
+@router.put("/about", response_model=UserAboutResponse)
+def update_about(
+    body: UserAboutUpdateRequest,
+    container: ContainerDep,
+    user: CurrentUserDep,
+) -> UserAboutResponse:
+    container.ensure_memory(user_id=str(user.id))
+    return UserAboutResponse.model_validate(
+        memory_service.update_about(container, content=body.content, user_id=str(user.id))
     )

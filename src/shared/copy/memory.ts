@@ -34,6 +34,18 @@ export const memoryCopy = {
   responseStyle: '偏好的回应风格',
   none: '暂无',
 
+  // About me (user-authored, B2)
+  aboutTitle: '关于我',
+  aboutDesc: '画像由夜记推断，这里由你自述。写下的内容会随每封信一起交给夜记。',
+  aboutPlaceholder: '比如：我是夜班护士，常失眠；希望回信温和一点，少用感叹号……',
+  aboutSave: '保存',
+  aboutSaving: '保存中……',
+  aboutSaved: '已保存',
+  aboutDirty: '有未保存的修改',
+  aboutCharCount: (n: number, max: number) => `${n} / ${max}`,
+  aboutEmptyHint: '还没有写下关于你的介绍，写几句，夜记会更懂你。',
+  aboutSaveError: '保存「关于我」失败',
+
   // Episodic
   episodicTitle: '情节记忆',
   episodicDesc: '一条条具体的事件与心情。记忆卡片会沉淀为这里的情节记忆。',

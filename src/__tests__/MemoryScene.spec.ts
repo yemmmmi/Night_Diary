@@ -12,10 +12,18 @@ vi.mock('vue-router', () => ({
 const listEpisodic = vi.hoisted(() => vi.fn(async (): Promise<EpisodicEntry[]> => []))
 const getProfile = vi.hoisted(() => vi.fn(async () => null))
 const getOverview = vi.hoisted(() => vi.fn(async (): Promise<MemoryOverview | null> => null))
+const getAbout = vi.hoisted(() =>
+  vi.fn(async (): Promise<UserAbout> => ({ content: '', updated_at: 0, max_chars: 600 })),
+)
+const updateAbout = vi.hoisted(() =>
+  vi.fn(async (content: string): Promise<UserAbout> => ({ content, updated_at: 1, max_chars: 600 })),
+)
 vi.mock('@/shared/api/memory', () => ({
   listEpisodic,
   getProfile,
   getOverview,
+  getAbout,
+  updateAbout,
   updateEpisodic: vi.fn(async () => ({})),
   deleteEpisodic: vi.fn(async () => undefined),
 }))
@@ -50,7 +58,7 @@ vi.mock('@/shared/api/plan', () => ({
 
 import MemoryScene from '@/pages/MemoryScene.vue'
 import { toIsoDate, startOfWeekMonday, endOfWeekSunday, parseLocalDate } from '@/shared/utils/diaryFormat'
-import type { EpisodicEntry, MemoryOverview } from '@/shared/api/memory'
+import type { EpisodicEntry, MemoryOverview, UserAbout } from '@/shared/api/memory'
 import type { MoodTrendPoint } from '@/shared/api/card'
 import type { WeeklyReport } from '@/shared/api/weekly'
 
@@ -117,6 +125,12 @@ describe('MemoryScene', () => {
     listEpisodic.mockResolvedValue([])
     getProfile.mockResolvedValue(null)
     getOverview.mockResolvedValue(null)
+    getAbout.mockResolvedValue({ content: '', updated_at: 0, max_chars: 600 })
+    updateAbout.mockImplementation(async (content: string) => ({
+      content,
+      updated_at: 1,
+      max_chars: 600,
+    }))
     getMoodTrends.mockResolvedValue([])
     listCards.mockResolvedValue([])
     listWeekly.mockResolvedValue([])
@@ -216,5 +230,31 @@ describe('MemoryScene', () => {
     expect(wrapper.findAll('[data-testid="episodic-row"]')).toHaveLength(0)
     expect(wrapper.find('.memory-blank').exists()).toBe(true)
     expect(wrapper.text()).toContain('还没有情节记忆')
+  })
+
+  it('renders the user-authored 关于我 editor with existing content', async () => {
+    getAbout.mockResolvedValue({ content: '我是夜班护士', updated_at: 5, max_chars: 600 })
+
+    const { wrapper } = mountScene()
+    await flushPromises()
+
+    const input = wrapper.find('[data-testid="about-input"]')
+    expect((input.element as HTMLTextAreaElement).value).toBe('我是夜班护士')
+    expect(wrapper.find('[data-testid="about-counter"]').text()).toContain('600')
+  })
+
+  it('saves trimmed 关于我 content through the store', async () => {
+    const { wrapper } = mountScene()
+    await flushPromises()
+
+    const input = wrapper.find('[data-testid="about-input"]')
+    await input.setValue('  希望回信温和一点  ')
+    const saveBtn = wrapper.find('[data-testid="about-save"]')
+    expect(saveBtn.attributes('disabled')).toBeUndefined()
+
+    await saveBtn.trigger('click')
+    await flushPromises()
+
+    expect(updateAbout).toHaveBeenCalledWith('希望回信温和一点')
   })
 })

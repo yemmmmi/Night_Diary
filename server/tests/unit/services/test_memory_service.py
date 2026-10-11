@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 from app.domain.memory.types import (
+    MAX_ABOUT_CHARS,
     EmotionBaseline,
     EpisodicEntry,
     ImportantPerson,
@@ -160,3 +161,29 @@ def test_update_episodic_not_found(memory_ctx) -> None:
 
     with pytest.raises(NotFoundError):
         memory_service.update_episodic(memory_ctx, "missing", event_summary="x")
+
+
+def test_get_about_default_empty(memory_ctx) -> None:
+    about = memory_service.get_about(memory_ctx)
+    assert about["content"] == ""
+    assert about["updated_at"] == 0.0
+    assert about["max_chars"] == MAX_ABOUT_CHARS
+
+
+def test_update_about_roundtrip_and_clamp(memory_ctx) -> None:
+    saved = memory_service.update_about(memory_ctx, content="  我是一名程序员  ")
+    assert saved["content"] == "我是一名程序员"
+    assert saved["updated_at"] > 0
+
+    assert memory_service.get_about(memory_ctx)["content"] == "我是一名程序员"
+
+    over = memory_service.update_about(memory_ctx, content="字" * (MAX_ABOUT_CHARS + 50))
+    assert len(over["content"]) == MAX_ABOUT_CHARS
+
+
+def test_update_about_is_user_scoped(memory_ctx) -> None:
+    memory_service.update_about(memory_ctx, content="Alice", user_id="u1")
+    memory_service.update_about(memory_ctx, content="Bob", user_id="u2")
+
+    assert memory_service.get_about(memory_ctx, user_id="u1")["content"] == "Alice"
+    assert memory_service.get_about(memory_ctx, user_id="u2")["content"] == "Bob"

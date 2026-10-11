@@ -18,8 +18,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from app.domain.memory.types import MAX_ABOUT_CHARS
+
 #: Hard character cap for the frozen memory block.
-MEMORY_BLOCK_MAX_CHARS = 800
+MEMORY_BLOCK_MAX_CHARS = 1200
 
 #: Maximum number of recurring topics kept before consolidation kicks in.
 MAX_TOPICS = 8
@@ -63,10 +65,17 @@ def build_frozen_memory_block(
     *,
     profile_style: str = "",
     profile_topics: list[str] | None = None,
+    user_about: str = "",
     cap: int = MEMORY_BLOCK_MAX_CHARS,
 ) -> FrozenMemoryBlock:
-    """Assemble the frozen memory block, consolidating when over budget."""
+    """Assemble the frozen memory block, consolidating when over budget.
+
+    The user-authored 「关于我」 (``user_about``, B2) is placed first — it is the
+    highest-signal, user-owned content, so when the block overflows it is the
+    system-inferred style/topics that get trimmed first.
+    """
     style = (profile_style or "").strip()
+    about = (user_about or "").strip()
     topics = [topic.strip() for topic in (profile_topics or []) if topic and topic.strip()]
 
     consolidated = False
@@ -75,6 +84,8 @@ def build_frozen_memory_block(
         consolidated = True
 
     lines = [_HEADER]
+    if about:
+        lines.append(f"- 用户自述：{about}")
     if style:
         lines.append(f"- 偏好风格：{style}")
     if topics:
@@ -106,6 +117,7 @@ def build_frozen_memory_block(
 
 
 __all__ = [
+    "MAX_ABOUT_CHARS",
     "MEMORY_BLOCK_MAX_CHARS",
     "MAX_TOPICS",
     "FrozenMemoryBlock",

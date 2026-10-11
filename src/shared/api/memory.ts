@@ -50,6 +50,13 @@ export interface MemoryOverview {
   profile_built: boolean
 }
 
+/** User-authored 「关于我」 — complements the system-inferred long-term profile. */
+export interface UserAbout {
+  content: string
+  updated_at: number
+  max_chars: number
+}
+
 export async function listEpisodic(): Promise<EpisodicEntry[]> {
   const client = await getHttpClient()
   const { data } = await client.get<EpisodicEntry[]>('/api/v1/memory/episodic')
@@ -82,5 +89,17 @@ export async function getProfile(): Promise<UserProfile | null> {
 export async function getOverview(): Promise<MemoryOverview> {
   const client = await getHttpClient()
   const { data } = await client.get<MemoryOverview>('/api/v1/memory/overview')
+  return data
+}
+
+export async function getAbout(): Promise<UserAbout> {
+  const client = await getHttpClient()
+  const { data } = await client.get<UserAbout>('/api/v1/memory/about')
+  return data
+}
+
+export async function updateAbout(content: string): Promise<UserAbout> {
+  const client = await getHttpClient()
+  const { data } = await client.put<UserAbout>('/api/v1/memory/about', { content })
   return data
 }
