@@ -50,6 +50,10 @@ WorkerRunner = Callable[[MultiAgentState], Awaitable[dict[str, Any]]]
 WorkerFallback = Callable[[MultiAgentState], dict[str, Any]]
 
 DEFAULT_WORKER_TIMEOUT_S = 30.0
+#: Max workers running concurrently within a phase (D4). Borrowed from Hermes'
+#: delegate_task default concurrency of 3; keeps a fan-out bounded even when a
+#: future phase activates many workers.
+DEFAULT_MAX_CONCURRENCY = 3
 PROVIDER_PHASE = 0  # retrieval — produces context consumed by later phases
 CONSUMER_PHASE = 1  # empathy / insight — read retrieval context
 
@@ -98,6 +102,7 @@ class MultiAgentGraph:
         phases: dict[str, int],
         *,
         worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
+        max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         context_compressor: ContextEngine | None = None,
     ) -> None:
         self._supervisor = supervisor
@@ -105,6 +110,7 @@ class MultiAgentGraph:
         self._fallbacks = fallbacks
         self._phases = phases
         self._timeout = worker_timeout_s
+        self._max_concurrency = max(1, max_concurrency)
         self._compressor = context_compressor
 
     async def invoke(self, state: MultiAgentState) -> MultiAgentState:
@@ -154,8 +160,12 @@ class MultiAgentGraph:
                 phase_label,
                 input_snapshot={"workers": phase_workers},
             ) as span:
+                semaphore = asyncio.Semaphore(self._max_concurrency)
                 results = await asyncio.gather(
-                    *(self._run_safe(name, cast(MultiAgentState, merged)) for name in phase_workers),
+                    *(
+                        self._run_safe(name, cast(MultiAgentState, merged), semaphore)
+                        for name in phase_workers
+                    ),
                     return_exceptions=True,
                 )
                 if span:
@@ -195,11 +205,25 @@ class MultiAgentGraph:
         _merge(merged, synth_update)
         return cast(MultiAgentState, merged)
 
-    async def _run_safe(self, name: str, state: MultiAgentState) -> dict[str, Any]:
+    async def _run_safe(
+        self,
+        name: str,
+        state: MultiAgentState,
+        semaphore: asyncio.Semaphore | None = None,
+    ) -> dict[str, Any]:
         runner = self._workers[name]
         fallback = self._fallbacks[name]
+
+        async def _bounded() -> dict[str, Any]:
+            # Semaphore acquisition is inside the timeout so a saturated phase
+            # can never hang a worker past its budget.
+            if semaphore is None:
+                return await runner(state)
+            async with semaphore:
+                return await runner(state)
+
         try:
-            return await asyncio.wait_for(runner(state), timeout=self._timeout)
+            return await asyncio.wait_for(_bounded(), timeout=self._timeout)
         except asyncio.TimeoutError:  # noqa: UP041
             logger.warning("worker %s timed out after %.1fs, using fallback", name, self._timeout)
             update = dict(fallback(state))
@@ -219,6 +243,7 @@ class MultiAgentGraphBuilder:
         self,
         *,
         worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
+        max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         context_compressor: ContextEngine | None = None,
     ) -> None:
         self._supervisor: SupervisorAgent | None = None
@@ -226,6 +251,7 @@ class MultiAgentGraphBuilder:
         self._fallbacks: dict[str, WorkerFallback] = {}
         self._phases: dict[str, int] = {}
         self._timeout = worker_timeout_s
+        self._max_concurrency = max(1, max_concurrency)
         self._compressor = context_compressor
 
     def set_supervisor(self, supervisor: SupervisorAgent) -> MultiAgentGraphBuilder:
@@ -254,6 +280,7 @@ class MultiAgentGraphBuilder:
             self._fallbacks,
             self._phases,
             worker_timeout_s=self._timeout,
+            max_concurrency=self._max_concurrency,
             context_compressor=self._compressor,
         )
 
@@ -265,6 +292,7 @@ def create_multi_agent_graph(
     insight_agent: Any,
     *,
     worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
     context_compressor: ContextEngine | None = None,
 ) -> MultiAgentGraph:
     """Wire the three Worker agents into a graph with correct phases/fallbacks.
@@ -283,6 +311,7 @@ def create_multi_agent_graph(
 
     builder = MultiAgentGraphBuilder(
         worker_timeout_s=worker_timeout_s,
+        max_concurrency=max_concurrency,
         context_compressor=context_compressor,
     )
     builder.set_supervisor(supervisor)
@@ -311,6 +340,7 @@ def create_multi_agent_graph(
 
 
 __all__ = [
+    "DEFAULT_MAX_CONCURRENCY",
     "DEFAULT_WORKER_TIMEOUT_S",
     "MultiAgentGraph",
     "MultiAgentGraphBuilder",
