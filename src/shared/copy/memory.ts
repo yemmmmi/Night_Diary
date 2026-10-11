@@ -31,7 +31,6 @@ export const memoryCopy = {
   volatility: '情绪波动',
   importantPeople: '重要的人',
   recurringTopics: '反复出现的话题',
-  responseStyle: '偏好的回应风格',
   none: '暂无',
 
   // About me (user-authored, B2)
@@ -45,6 +44,12 @@ export const memoryCopy = {
   aboutCharCount: (n: number, max: number) => `${n} / ${max}`,
   aboutEmptyHint: '还没有写下关于你的介绍，写几句，夜记会更懂你。',
   aboutSaveError: '保存「关于我」失败',
+
+  // Reply personality (E1)
+  personalityTitle: '回信人格',
+  personalityDesc: '选择夜记回信时的口吻与长度。与「日常 / 跟进 / 内视」的当下状态互不冲突。',
+  personalityLength: (min: number, max: number) => `约 ${min}-${max} 字`,
+  personalitySaveError: '保存回信人格失败',
 
   // Episodic
   episodicTitle: '情节记忆',

@@ -210,6 +210,63 @@ def update_about(
     return {"content": cleaned, "updated_at": updated_at, "max_chars": MAX_ABOUT_CHARS}
 
 
+# ── Reply personality preset (E1) ──────────────────────────────────────
+
+
+def _personality_payload(key: str | None) -> dict[str, Any]:
+    from app.domain.agents.prompts import (
+        normalize_personality_key,
+        personality_label,
+        personality_preset_options,
+    )
+
+    normalized = normalize_personality_key(key)
+    return {
+        "key": normalized,
+        "label": personality_label(normalized),
+        "presets": personality_preset_options(),
+    }
+
+
+def get_personality(
+    container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID
+) -> dict[str, Any]:
+    """Return the user's chosen 回信人格 preset (E1) plus the option list.
+
+    The choice lives on the long-term profile's ``preferred_response_style``
+    field — the same value the empathy agent (diary reply) already consumes — so
+    both scenes share one user preference. Without a profile it falls back to the
+    default preset.
+    """
+    store = SqliteLongTermProfileStore(container.session_factory)
+    profile = store.get_profile(user_id)
+    return _personality_payload(profile.preferred_response_style if profile else None)
+
+
+def update_personality(
+    container: ServiceContainer, *, key: str, user_id: str = DEFAULT_USER_ID
+) -> dict[str, Any]:
+    """Persist the chosen 回信人格 preset, invalidating cached sessions.
+
+    Cached conversation sessions hold the old ``profile_style`` (the personality
+    block is rendered from that session cache), so they are dropped to force a
+    rebuild on the next turn.
+    """
+    from app.domain.agents.prompts import normalize_personality_key
+    from app.domain.memory.types import UserProfile
+
+    normalized = normalize_personality_key(key)
+    store = SqliteLongTermProfileStore(container.session_factory)
+    profile = store.get_profile(user_id) or UserProfile()
+    profile.preferred_response_style = normalized
+    store.save_profile(user_id, profile)
+
+    from app.services.ai.session_context import invalidate_user_sessions
+
+    invalidate_user_sessions(user_id)
+    return _personality_payload(normalized)
+
+
 def get_overview(container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
     """Return counts summarising the durable memory layers."""
     store = SqliteEpisodicMemoryStore(container.session_factory)

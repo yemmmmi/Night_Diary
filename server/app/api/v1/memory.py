@@ -7,17 +7,20 @@ agent remembers. Working (session) memory is intentionally not exposed.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from app.api.deps import ContainerDep, CurrentUserDep
 from app.api.schemas import (
     EpisodicEntryResponse,
     EpisodicEntryUpdateRequest,
     MemoryOverviewResponse,
+    PersonalityResponse,
+    PersonalityUpdateRequest,
     UserAboutResponse,
     UserAboutUpdateRequest,
     UserProfileResponse,
 )
+from app.domain.agents.prompts import is_personality_key
 from app.services import memory_service
 
 router = APIRouter(prefix="/memory", tags=["memory"])
@@ -97,4 +100,28 @@ def update_about(
     container.ensure_memory(user_id=str(user.id))
     return UserAboutResponse.model_validate(
         memory_service.update_about(container, content=body.content, user_id=str(user.id))
+    )
+
+
+@router.get("/personality", response_model=PersonalityResponse)
+def get_personality(container: ContainerDep, user: CurrentUserDep) -> PersonalityResponse:
+    """The user's chosen 回信人格 preset (E1) plus the selectable options."""
+    container.ensure_memory(user_id=str(user.id))
+    return PersonalityResponse.model_validate(
+        memory_service.get_personality(container, user_id=str(user.id))
+    )
+
+
+@router.put("/personality", response_model=PersonalityResponse)
+def update_personality(
+    body: PersonalityUpdateRequest,
+    container: ContainerDep,
+    user: CurrentUserDep,
+) -> PersonalityResponse:
+    """Set the 回信人格 preset (orthogonal to the auto-decided mode)."""
+    if not is_personality_key(body.key):
+        raise HTTPException(status_code=400, detail=f"invalid personality: {body.key}")
+    container.ensure_memory(user_id=str(user.id))
+    return PersonalityResponse.model_validate(
+        memory_service.update_personality(container, key=body.key, user_id=str(user.id))
     )

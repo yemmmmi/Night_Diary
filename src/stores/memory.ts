@@ -4,14 +4,17 @@ import { ref } from 'vue'
 import {
   getAbout,
   getOverview,
+  getPersonality,
   getProfile,
   listEpisodic,
   updateAbout,
   updateEpisodic,
+  updatePersonality,
   deleteEpisodic,
   type EpisodicEntry,
   type EpisodicEntryUpdate,
   type MemoryOverview,
+  type Personality,
   type UserAbout,
   type UserProfile,
 } from '@/shared/api/memory'
@@ -23,6 +26,7 @@ export const useMemoryStore = defineStore('memory', () => {
   const profile = ref<UserProfile | null>(null)
   const overview = ref<MemoryOverview | null>(null)
   const about = ref<UserAbout | null>(null)
+  const personality = ref<Personality | null>(null)
   const loading = ref(false)
   const saving = ref(false)
   const error = ref<string | null>(null)
@@ -31,16 +35,18 @@ export const useMemoryStore = defineStore('memory', () => {
     loading.value = true
     error.value = null
     try {
-      const [ep, pr, ov, ab] = await Promise.all([
+      const [ep, pr, ov, ab, ps] = await Promise.all([
         listEpisodic(),
         getProfile(),
         getOverview(),
         getAbout(),
+        getPersonality(),
       ])
       episodic.value = ep
       profile.value = pr
       overview.value = ov
       about.value = ab
+      personality.value = ps
     } catch (err) {
       error.value = formatApiError(err, memoryCopy.loadError)
       throw err
@@ -56,6 +62,22 @@ export const useMemoryStore = defineStore('memory', () => {
       about.value = await updateAbout(content)
     } catch (err) {
       error.value = formatApiError(err, memoryCopy.aboutSaveError)
+      throw err
+    } finally {
+      saving.value = false
+    }
+  }
+
+  async function savePersonality(key: string): Promise<void> {
+    saving.value = true
+    error.value = null
+    try {
+      personality.value = await updatePersonality(key)
+      // The server stores the choice on the long-term profile too; mirror it
+      // locally so the profile block stays consistent without a refetch.
+      if (profile.value) profile.value.preferred_response_style = key
+    } catch (err) {
+      error.value = formatApiError(err, memoryCopy.personalitySaveError)
       throw err
     } finally {
       saving.value = false
@@ -99,11 +121,13 @@ export const useMemoryStore = defineStore('memory', () => {
     profile,
     overview,
     about,
+    personality,
     loading,
     saving,
     error,
     loadAll,
     saveAbout,
+    savePersonality,
     saveEpisodic,
     removeEpisodic,
   }
