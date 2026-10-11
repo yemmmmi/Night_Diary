@@ -80,6 +80,14 @@ class Settings(BaseSettings):
     def uploads_dir(self) -> str:
         return str(Path(self.data_dir) / "uploads")
 
+    # ---- Desktop mode: serve the built frontend as a same-origin SPA ----
+    frontend_dir: str = Field(
+        default="",
+        description="Directory of the built frontend (index.html + assets) served "
+        "as a static SPA at '/'. Empty disables static serving "
+        "(dev via Vite / Docker via nginx).",
+    )
+
     # ---- Redis (optional, for production caching) ----
     redis_url: str = Field(
         default="",

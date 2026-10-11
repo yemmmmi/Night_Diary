@@ -53,6 +53,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Night Diary backend")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--data-dir", type=str, default=None)
+    parser.add_argument("--frontend-dir", type=str, default=None)
     return parser.parse_args(argv)
 
 
@@ -266,6 +267,18 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
         """Dev helper — lets the frontend detect a stale backend process."""
         return {"version": _app_build_version()}
 
+    # Desktop mode: serve the built SPA at '/' when a frontend dir is provided.
+    # Explicit routes (/health, /ready, /api/v1/*, /v1/*) are registered above,
+    # so they take precedence over this catch-all mount.
+    if cfg.frontend_dir and Path(cfg.frontend_dir).is_dir():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount(
+            "/",
+            StaticFiles(directory=cfg.frontend_dir, html=True),
+            name="frontend",
+        )
+
     return app
 
 
@@ -279,6 +292,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.data_dir:
         os.environ["DATA_DIR"] = args.data_dir
+    if args.frontend_dir:
+        os.environ["FRONTEND_DIR"] = args.frontend_dir
 
     get_settings.cache_clear()
     application = create_app()
