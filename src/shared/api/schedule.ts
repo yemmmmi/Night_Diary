@@ -3,12 +3,17 @@ import { getHttpClient } from '@/shared/api/http'
 export interface ScheduledTaskKind {
   kind: string
   label: string
+  default_mode: string
+  allowed_modes: string[]
 }
 
 export interface ScheduledTask {
   id: string
   kind: string
   kind_label: string
+  mode: string
+  mode_label: string
+  sink: string
   cron_expr: string
   payload: Record<string, unknown>
   enabled: boolean
@@ -34,12 +39,16 @@ export interface ScheduledTaskCreate {
   cron_expr: string
   payload?: Record<string, unknown>
   enabled?: boolean
+  mode?: string
+  sink?: string
 }
 
 export interface ScheduledTaskUpdate {
   cron_expr?: string
   payload?: Record<string, unknown>
   enabled?: boolean
+  mode?: string
+  sink?: string
 }
 
 export async function listKinds(): Promise<ScheduledTaskKind[]> {

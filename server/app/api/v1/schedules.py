@@ -26,16 +26,26 @@ router = APIRouter(prefix="/schedules", tags=["schedule"])
 
 
 def _to_response(data: dict[str, Any]) -> ScheduledTaskResponse:
+    mode = data.get("mode", "script")
     return ScheduledTaskResponse(
         **data,
         kind_label=svc.TASK_KINDS.get(data["kind"], data["kind"]),
+        mode_label=svc.TASK_MODES.get(mode, mode),
     )
 
 
 @router.get("/kinds", response_model=list[ScheduledTaskKindResponse])
 def list_kinds() -> list[ScheduledTaskKindResponse]:
-    """The task kinds the UI can offer (kind → human label)."""
-    return [ScheduledTaskKindResponse(kind=k, label=v) for k, v in svc.TASK_KINDS.items()]
+    """The task kinds the UI can offer (kind → label + supported modes)."""
+    return [
+        ScheduledTaskKindResponse(
+            kind=k,
+            label=v,
+            default_mode=svc.KIND_DEFAULT_MODE[k],
+            allowed_modes=sorted(svc.KIND_ALLOWED_MODES[k]),
+        )
+        for k, v in svc.TASK_KINDS.items()
+    ]
 
 
 @router.get("", response_model=list[ScheduledTaskResponse])
@@ -56,6 +66,8 @@ def create_schedule(
         cron_expr=body.cron_expr,
         payload=body.payload,
         enabled=body.enabled,
+        mode=body.mode,
+        sink=body.sink,
     )
     return _to_response(data)
 
@@ -81,6 +93,8 @@ def update_schedule(
         cron_expr=body.cron_expr,
         payload=body.payload,
         enabled=body.enabled,
+        mode=body.mode,
+        sink=body.sink,
     )
     return _to_response(data)
 

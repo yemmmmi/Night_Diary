@@ -22,8 +22,12 @@ def no_enqueue(monkeypatch):
 def test_list_kinds(authed_client: TestClient) -> None:
     resp = authed_client.get("/api/v1/schedules/kinds")
     assert resp.status_code == 200
-    kinds = {item["kind"] for item in resp.json()}
-    assert {"daily_review", "weekly_insight", "plan_reminder"} <= kinds
+    items = {item["kind"]: item for item in resp.json()}
+    assert {"daily_review", "weekly_insight", "plan_reminder"} <= set(items)
+    assert items["daily_review"]["default_mode"] == "script"
+    assert set(items["daily_review"]["allowed_modes"]) == {"script", "agent"}
+    assert items["weekly_insight"]["default_mode"] == "agent"
+    assert items["plan_reminder"]["allowed_modes"] == ["script"]
 
 
 def test_create_and_list(authed_client: TestClient) -> None:
@@ -35,10 +39,31 @@ def test_create_and_list(authed_client: TestClient) -> None:
     body = resp.json()
     assert body["kind_label"] == "每日回顾"
     assert body["next_run_at"] is not None
+    assert body["mode"] == "script"
+    assert body["mode_label"] == "纯数据（零 LLM）"
+    assert body["sink"] == "inbox"
 
     listing = authed_client.get("/api/v1/schedules")
     assert listing.status_code == 200
     assert [t["id"] for t in listing.json()] == [body["id"]]
+
+
+def test_create_with_explicit_mode(authed_client: TestClient) -> None:
+    resp = authed_client.post(
+        "/api/v1/schedules",
+        json={"kind": "daily_review", "cron_expr": "0 22 * * *", "mode": "agent"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["mode"] == "agent"
+    assert resp.json()["mode_label"] == "生成型（走 LLM）"
+
+
+def test_create_rejects_mode_not_allowed_for_kind(authed_client: TestClient) -> None:
+    resp = authed_client.post(
+        "/api/v1/schedules",
+        json={"kind": "plan_reminder", "cron_expr": "0 9 * * *", "mode": "agent"},
+    )
+    assert resp.status_code == 422
 
 
 def test_create_rejects_unknown_kind(authed_client: TestClient) -> None:

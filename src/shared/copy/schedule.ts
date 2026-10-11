@@ -8,6 +8,8 @@ export const scheduleCopy = {
   // Create form
   createTitle: '新建定时任务',
   kindLabel: '任务类型',
+  modeLabel: '执行方式',
+  modeHint: '纯数据任务不调用模型；生成型任务会请模型写一段回顾。',
   cronLabel: '调度时间（cron）',
   cronPlaceholder: '0 22 * * *',
   cronHint: '五段式：分 时 日 月 周。如「0 22 * * *」表示每天 22:00。',
@@ -56,5 +58,11 @@ export const scheduleCopy = {
     daily_review: '每日回顾',
     weekly_insight: '每周洞察',
     plan_reminder: '计划提醒',
+  } as Record<string, string>,
+
+  // Fallback labels for execution modes (E3).
+  modes: {
+    script: '纯数据',
+    agent: '生成型',
   } as Record<string, string>,
 } as const

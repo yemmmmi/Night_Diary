@@ -32,11 +32,15 @@ class SqliteScheduledTaskStore:
         payload_json: str,
         enabled: bool,
         next_run_at: datetime | None,
+        mode: str = "script",
+        sink: str = "inbox",
     ) -> ScheduledTaskRow:
         with self._session_factory() as session:
             row = ScheduledTaskRow(
                 user_id=user_id,
                 kind=kind,
+                mode=mode,
+                sink=sink,
                 cron_expr=cron_expr,
                 payload_json=payload_json,
                 enabled=enabled,
@@ -74,6 +78,8 @@ class SqliteScheduledTaskStore:
         payload_json: str | None = None,
         enabled: bool | None = None,
         next_run_at: object = _UNSET,
+        mode: str | None = None,
+        sink: str | None = None,
     ) -> ScheduledTaskRow | None:
         with self._session_factory() as session:
             row = session.get(ScheduledTaskRow, task_id)
@@ -85,6 +91,10 @@ class SqliteScheduledTaskStore:
                 row.payload_json = payload_json
             if enabled is not None:
                 row.enabled = enabled
+            if mode is not None:
+                row.mode = mode
+            if sink is not None:
+                row.sink = sink
             if next_run_at is not _UNSET:
                 row.next_run_at = next_run_at  # type: ignore[assignment]
             session.commit()
