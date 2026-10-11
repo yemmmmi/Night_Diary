@@ -10,6 +10,7 @@ import pytest
 
 from app.domain.agents.types import ChatIntentResult
 from app.services.ai.conversation_loop import (
+    _apply_custom_skills,
     _needs_tool_call,
     run_conversation_loop,
     run_conversation_loop_streaming,
@@ -611,3 +612,63 @@ async def test_plan_exploration_streaming_routes_to_planner_agent() -> None:
         assert llm.astream_prompts == []
 
     clear_session("conv-plan-stream")
+
+
+# ── A2: custom-skill prompt injection ──────────────────────────────────
+
+
+class _SkillContainer:
+    """Container backed by a real SQLite store for custom-skill tests."""
+
+    def __init__(self, session_factory) -> None:
+        self.session_factory = session_factory
+
+
+def _skill_ctx(tmp_path):
+    from sqlalchemy.orm import sessionmaker
+
+    from app.infrastructure.database import create_db_engine, init_db
+
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'conv-skills.db'}")
+    init_db(engine)
+    return _SkillContainer(sessionmaker(bind=engine, autoflush=False, autocommit=False))
+
+
+def test_apply_custom_skills_injects_when_triggered(tmp_path) -> None:
+    from app.services import custom_skill_service as svc
+
+    ctx = _skill_ctx(tmp_path)
+    svc.create_skill(
+        ctx,
+        user_id="u1",
+        name="跑步复盘",
+        description="",
+        triggers=["跑步"],
+        instruction="先问配速。",
+    )
+    prompt = _apply_custom_skills(
+        "BASE", container=ctx, user_id="u1", content="今天跑步五公里"
+    )
+    assert prompt.startswith("BASE")
+    assert "跑步复盘" in prompt
+
+
+def test_apply_custom_skills_noop_when_not_triggered(tmp_path) -> None:
+    from app.services import custom_skill_service as svc
+
+    ctx = _skill_ctx(tmp_path)
+    svc.create_skill(
+        ctx, user_id="u1", name="跑步复盘", description="", triggers=["跑步"], instruction="先问配速。"
+    )
+    assert (
+        _apply_custom_skills("BASE", container=ctx, user_id="u1", content="随便聊聊") == "BASE"
+    )
+
+
+def test_apply_custom_skills_degrades_on_error() -> None:
+    class _Boom:
+        @property
+        def session_factory(self):
+            raise RuntimeError("db down")
+
+    assert _apply_custom_skills("BASE", container=_Boom(), user_id="u1", content="跑步") == "BASE"

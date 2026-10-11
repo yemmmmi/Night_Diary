@@ -92,6 +92,7 @@ def init_db(engine: Engine) -> None:
     from app.infrastructure.models import skill_activation as _skill_activation_models  # noqa: F401
     from app.infrastructure.models import tag as _tag_models  # noqa: F401
     from app.infrastructure.models import user as _user_models  # noqa: F401
+    from app.infrastructure.models import user_skill as _user_skill_models  # noqa: F401
     from app.infrastructure.models import weekly_report as _weekly_report_models  # noqa: F401
 
     Base.metadata.create_all(engine)

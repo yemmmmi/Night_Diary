@@ -8,6 +8,7 @@ from app.api.v1 import (
     auth,
     card,
     conversation,
+    custom_skills,
     dev,
     diary,
     export,
@@ -42,4 +43,5 @@ api_router.include_router(plan.router)
 api_router.include_router(plan.tasks_router)
 api_router.include_router(mode.router)
 api_router.include_router(skills.router)
+api_router.include_router(custom_skills.router)
 api_router.include_router(schedules.router)

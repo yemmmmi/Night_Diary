@@ -8,6 +8,12 @@ from typing import Any, Literal
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from app.domain.memory.types import MAX_ABOUT_CHARS
+from app.domain.skills.custom_skill import (
+    MAX_DESCRIPTION_CHARS,
+    MAX_INSTRUCTION_CHARS,
+    MAX_NAME_CHARS,
+    MAX_TRIGGERS,
+)
 
 
 class TagBrief(BaseModel):
@@ -638,3 +644,52 @@ class PlanUndoResult(BaseModel):
     entity_id: str
     action: str
     restored: str
+
+
+# ── Custom skills (A2) ─────────────────────────────────────────────────
+
+
+class CustomSkillResponse(BaseModel):
+    """A user-authored, reviewed custom skill (read-only at reply time)."""
+
+    id: int
+    name: str
+    description: str = ""
+    triggers: list[str] = Field(default_factory=list)
+    instruction: str
+    enabled: bool = True
+    version: int = 1
+    created_at: float = 0.0
+    updated_at: float = 0.0
+
+
+class CustomSkillCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_NAME_CHARS)
+    description: str = Field(default="", max_length=MAX_DESCRIPTION_CHARS)
+    triggers: list[str] = Field(min_length=1, max_length=MAX_TRIGGERS)
+    instruction: str = Field(min_length=1, max_length=MAX_INSTRUCTION_CHARS)
+    enabled: bool = True
+
+
+class CustomSkillUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_NAME_CHARS)
+    description: str = Field(default="", max_length=MAX_DESCRIPTION_CHARS)
+    triggers: list[str] = Field(min_length=1, max_length=MAX_TRIGGERS)
+    instruction: str = Field(min_length=1, max_length=MAX_INSTRUCTION_CHARS)
+    enabled: bool | None = None
+
+
+class CustomSkillVersionResponse(BaseModel):
+    """One prior revision of a custom skill (newest first)."""
+
+    version: int
+    name: str = ""
+    description: str = ""
+    triggers: list[str] = Field(default_factory=list)
+    instruction: str = ""
+    enabled: bool = True
+    created_at: float = 0.0
+
+
+class CustomSkillToggleRequest(BaseModel):
+    enabled: bool

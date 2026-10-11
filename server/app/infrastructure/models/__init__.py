@@ -22,6 +22,10 @@ from app.infrastructure.models.scheduled_task import (
     ScheduledTaskRow,
     ScheduledTaskRunRow,
 )
+from app.infrastructure.models.user_skill import (
+    UserSkillRow,
+    UserSkillVersionRow,
+)
 
 __all__ = [
     "DailyDigestRow",
@@ -36,4 +40,6 @@ __all__ = [
     "ScheduledTaskRow",
     "ScheduledTaskRunRow",
     "TaskRow",
+    "UserSkillRow",
+    "UserSkillVersionRow",
 ]
