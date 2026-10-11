@@ -112,9 +112,9 @@ class TestBuildToolMap:
         reg, _ = _registry(session_factory)
         tools = reg.build_tool_map(user_id="u1")
         assert tools is not None
-        assert "search_diary" in tools  # 本地 8 个
+        assert "search_diary" in tools  # 本地 9 个
         assert "mcp__fake__echo" in tools  # MCP 1 个
-        assert len(tools) == 9
+        assert len(tools) == 10
 
     def test_llm_unavailable_returns_none(self, session_factory) -> None:
         reg, _ = _registry(session_factory)

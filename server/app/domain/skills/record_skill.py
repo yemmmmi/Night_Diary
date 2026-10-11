@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.domain.skills.disclosure import format_skill_doc_reference
 from app.services import diary_service
 from app.shared.llm import LLMClient, message_text
 
@@ -56,12 +57,19 @@ def run(
     conversation_id: str = "",
     collection_manager: Any = None,
     container: Any = None,
+    skill_doc: str = "",
 ) -> SkillRunOutcome:
-    """Transcribe *content* into a diary entry and persist it."""
+    """Transcribe *content* into a diary entry and persist it.
+
+    *skill_doc* is the skill's Level-1 disclosure body, appended to the prompt
+    as a contract reference (no-op when empty).
+    """
     diary_text = ""
     if llm is not None:
         try:
-            response = llm.invoke(_RECORD_PROMPT.format(content=content[:2000]))
+            prompt = _RECORD_PROMPT.format(content=content[:2000])
+            prompt += format_skill_doc_reference(skill_doc)
+            response = llm.invoke(prompt)
             diary_text = message_text(response).strip()
         except Exception as exc:
             logger.warning("record skill LLM failed, storing raw input: %s", exc)

@@ -163,6 +163,7 @@ _INTENT_LLM_PROMPT = """判断用户这句话最想做什么，四选一：
 - plan：想制定一个计划、开始坚持做某事、养成习惯、学一项技能
 - chat：普通聊天、倾诉、提问、或其他
 
+{catalog}
 只输出一个小写单词：record / insight / plan / chat，不要任何其他内容。
 
 用户输入：{content}
@@ -172,11 +173,17 @@ _INTENT_LLM_PROMPT = """判断用户这句话最想做什么，四选一：
 def classify_user_intent(
     text: str,
     llm: LLMClient | None = None,
+    *,
+    skill_catalog: str = "",
 ) -> IntentDecision:
     """Route *text* to one of the user skills, or ``"chat"``.
 
     Strong rules first; a goal-shaped plan sentence routes to ``plan``; a
     weak signal triggers the light-LLM fallback; anything else is chat.
+
+    *skill_catalog* is the Level-0 skill metadata block injected into the
+    fallback prompt so the router sees the registered skills (and their
+    descriptions) instead of a fixed hard-coded list.
     """
     text = (text or "").strip()
     if not text:
@@ -196,7 +203,8 @@ def classify_user_intent(
         return IntentDecision(intent="chat", source="default")
 
     try:
-        response = llm.invoke(_INTENT_LLM_PROMPT.format(content=text[:500]))
+        prompt = _INTENT_LLM_PROMPT.format(content=text[:500], catalog=skill_catalog)
+        response = llm.invoke(prompt)
         answer = message_text(response).strip().lower()
         for intent in USER_INTENTS:
             if intent in answer:

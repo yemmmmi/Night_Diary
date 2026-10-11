@@ -48,6 +48,11 @@ logger = logging.getLogger(__name__)
 # Default directory containing SKILL.md files (relative to this module).
 DEFAULT_SKILL_DOCS_DIR = Path(__file__).resolve().parent / "skill_docs"
 
+#: SKILL.md documents for user-callable skills (record / insight / plan).
+#: Kept in a subdirectory so the analysis-skill eval set that globs the parent
+#: directory is unaffected by these runtime-disclosure documents.
+USER_SKILL_DOCS_DIR = DEFAULT_SKILL_DOCS_DIR / "user"
+
 # Section marker for the one-line summary.
 _SUMMARY_HEADER = "## 一句话摘要"
 

@@ -25,12 +25,20 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class UserSkillSpec:
-    """Declarative identity of one user-callable skill."""
+    """Declarative identity of one user-callable skill.
+
+    ``doc_path`` names the SKILL.md file (relative to
+    :data:`app.domain.skills.skill_loader.USER_SKILL_DOCS_DIR`) that carries the
+    skill's Level-1 disclosure body; ``token_cost`` is the estimated cost of
+    loading it, surfaced in the Level-0 catalog.
+    """
 
     id: str
     label: str
     description: str
     sort: int = 0
+    doc_path: str = ""
+    token_cost: int = 0
 
 
 #: Unified adapter signature: (db, *, llm, content, user_id, conversation_id, container).
@@ -55,6 +63,13 @@ class UserSkillRegistry:
     def has(self, skill_id: str) -> bool:
         return skill_id in self._specs
 
+    def spec(self, skill_id: str) -> UserSkillSpec | None:
+        return self._specs.get(skill_id)
+
+    def specs(self) -> list[UserSkillSpec]:
+        """All specs in display order (used by progressive disclosure)."""
+        return self._sorted()
+
     def ids(self) -> list[str]:
         return [spec.id for spec in self._sorted()]
 
@@ -78,8 +93,14 @@ class UserSkillRegistry:
         content: str,
         user_id: str,
         conversation_id: str,
+        skill_doc: str = "",
     ) -> SkillRunOutcome | None:
-        """Dispatch one skill via its registered adapter."""
+        """Dispatch one skill via its registered adapter.
+
+        *skill_doc* is the skill's Level-1 disclosure body (SKILL.md) loaded
+        on demand by the caller; adapters forward it so the skill can ground
+        its generation in the documented contract.
+        """
         run = self._runs.get(skill_id)
         if run is None:
             return None
@@ -90,6 +111,7 @@ class UserSkillRegistry:
             user_id=user_id,
             conversation_id=conversation_id,
             container=container,
+            skill_doc=skill_doc,
         )
         return outcome
 
@@ -108,6 +130,7 @@ def create_user_skill_registry() -> UserSkillRegistry:
         user_id: str,
         conversation_id: str,
         container: ServiceContainer,
+        skill_doc: str = "",
     ) -> Any:
         from app.domain.skills import record_skill
 
@@ -119,6 +142,7 @@ def create_user_skill_registry() -> UserSkillRegistry:
             conversation_id=conversation_id,
             collection_manager=container.diary_collection,
             container=container,
+            skill_doc=skill_doc,
         )
 
     def _run_insight(
@@ -129,11 +153,17 @@ def create_user_skill_registry() -> UserSkillRegistry:
         user_id: str,
         conversation_id: str,
         container: ServiceContainer,
+        skill_doc: str = "",
     ) -> Any:
         from app.domain.skills import insight_skill
 
         return insight_skill.run(
-            db, llm=llm, content=content, user_id=user_id, conversation_id=conversation_id
+            db,
+            llm=llm,
+            content=content,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            skill_doc=skill_doc,
         )
 
     def _run_plan(
@@ -144,24 +174,51 @@ def create_user_skill_registry() -> UserSkillRegistry:
         user_id: str,
         conversation_id: str,
         container: ServiceContainer,
+        skill_doc: str = "",
     ) -> Any:
         from app.domain.skills import plan_skill
 
         return plan_skill.run(
-            db, llm=llm, content=content, user_id=user_id, conversation_id=conversation_id
+            db,
+            llm=llm,
+            content=content,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            skill_doc=skill_doc,
         )
 
     registry = UserSkillRegistry()
     registry.register(
-        UserSkillSpec(id="record", label="记录", description="把这封信转写成一篇日记", sort=1),
+        UserSkillSpec(
+            id="record",
+            label="记录",
+            description="把这封信转写成一篇日记",
+            sort=1,
+            doc_path="record.md",
+            token_cost=180,
+        ),
         _run_record,
     )
     registry.register(
-        UserSkillSpec(id="insight", label="洞悉", description="以心理视角分析这封信", sort=2),
+        UserSkillSpec(
+            id="insight",
+            label="洞悉",
+            description="以心理视角分析这封信",
+            sort=2,
+            doc_path="insight.md",
+            token_cost=220,
+        ),
         _run_insight,
     )
     registry.register(
-        UserSkillSpec(id="plan", label="计划", description="把这封信整理成一个计划", sort=3),
+        UserSkillSpec(
+            id="plan",
+            label="计划",
+            description="把这封信整理成一个计划",
+            sort=3,
+            doc_path="plan.md",
+            token_cost=200,
+        ),
         _run_plan,
     )
     return registry

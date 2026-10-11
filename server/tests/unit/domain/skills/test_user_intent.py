@@ -99,3 +99,22 @@ class TestLLMFallback:
 
 def test_empty_text_is_chat() -> None:
     assert classify_user_intent("").intent == "chat"
+
+
+class TestSkillCatalog:
+    def test_catalog_injected_into_fallback_prompt(self) -> None:
+        llm = _llm("plan")
+        classify_user_intent(
+            "帮我看看这个问题",
+            llm=llm,
+            skill_catalog="- record（记录）：把这封信转写成一篇日记",
+        )
+        prompt = llm.invoke.call_args.args[0]
+        assert "record" in prompt
+        assert "转写成一篇日记" in prompt
+
+    def test_no_catalog_keeps_prompt_lean(self) -> None:
+        llm = _llm("chat")
+        classify_user_intent("帮我看看这个问题", llm=llm)
+        prompt = llm.invoke.call_args.args[0]
+        assert "转写成一篇日记" not in prompt

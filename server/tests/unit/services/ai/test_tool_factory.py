@@ -11,9 +11,11 @@ from app.services.ai.tool_factory import (
     TOOLSET_PLAN,
     build_tool_specs,
     create_diary_search_tool,
+    create_summarize_diaries_tool,
     group_by_toolset,
     toolset_for_tool,
 )
+from app.services.ai.utils import summarize_diary_results
 
 
 def test_build_retrieval_tools_accesses_date_and_tags() -> None:
@@ -116,3 +118,79 @@ def test_group_by_toolset() -> None:
     assert grouped[TOOLSET_PLAN] == ["list_todos"]
     assert grouped[TOOLSET_EXTERNAL] == ["get_weather_info"]
     assert grouped["mcp:fetch"] == ["mcp__fetch__get_url"]
+
+
+# ── A6: compound retrieval tool ──────────────────────────────────────────
+
+
+def _hits(*specs: tuple[str, str, str]) -> list[RetrievalResult]:
+    return [
+        RetrievalResult(
+            doc_id=f"doc-{i}",
+            content=content,
+            diary_id=str(i),
+            score=0.9,
+            date=date,
+            tags=tags,
+        )
+        for i, (date, tags, content) in enumerate(specs, start=1)
+    ]
+
+
+def test_summarize_tool_aggregates_hits() -> None:
+    retriever = MagicMock()
+    retriever.retrieve.return_value = _hits(
+        ("2026-06-25", "工作", "加班到很晚"),
+        ("2026-06-26", "工作,疲惫", "又加班了"),
+        ("2026-06-27", "休息", "终于休息"),
+    )
+    tool = create_summarize_diaries_tool(retriever)
+    result = tool(query="加班")
+
+    assert "共命中 3 条" in result
+    assert "2026-06-25 ~ 2026-06-27" in result
+    assert "工作(2)" in result
+    retriever.retrieve.assert_called_once_with("加班", top_k=20)
+
+
+def test_summarize_tool_filters_by_tag() -> None:
+    retriever = MagicMock()
+    retriever.retrieve.return_value = _hits(
+        ("2026-06-25", "工作", "加班到很晚"),
+        ("2026-06-27", "休息", "终于休息"),
+    )
+    tool = create_summarize_diaries_tool(retriever)
+    result = tool(query="最近", tag="休息")
+
+    assert "共命中 1 条" in result
+    assert "终于休息" in result
+    assert "加班到很晚" not in result
+
+
+def test_summarize_tool_caps_items() -> None:
+    retriever = MagicMock()
+    retriever.retrieve.return_value = _hits(
+        *[(f"2026-06-{d:02d}", "日常", f"第{d}篇") for d in range(1, 13)]
+    )
+    tool = create_summarize_diaries_tool(retriever)
+    result = tool(query="日记", max_items=3)
+
+    assert "仅展示前 3 条" in result
+
+
+def test_summarize_tool_degrades_on_error() -> None:
+    retriever = MagicMock()
+    retriever.retrieve.side_effect = RuntimeError("boom")
+    tool = create_summarize_diaries_tool(retriever)
+    assert "暂时不可用" in tool(query="x")
+
+
+def test_summarize_tool_empty_results() -> None:
+    retriever = MagicMock()
+    retriever.retrieve.return_value = []
+    tool = create_summarize_diaries_tool(retriever)
+    assert "未找到" in tool(query="x")
+
+
+def test_summarize_helper_empty() -> None:
+    assert summarize_diary_results([]) == "未找到匹配的历史日记。"
