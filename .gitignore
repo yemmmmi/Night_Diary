@@ -69,3 +69,10 @@ server/scripts/finetune/output/
 *.xmind
 ~$*.docx
 *.docx
+
+# Desktop (Electron) build artifacts
+desktop/node_modules/
+desktop/dist/
+desktop/resources/
+desktop/release/
+desktop/.cache/

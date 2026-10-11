@@ -1,0 +1,42 @@
+appId: com.nightdiary.desktop
+productName: Night Diary
+# 本地产出安装包即可，不做任何自动发布（避免 CI 环境触发 publish 探测）。
+publish: null
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+extraResources:
+  - from: resources/runtime
+    to: runtime
+  - from: ../server
+    to: server
+    filter:
+      - "**/*"
+      - "!**/__pycache__/**"
+      - "!**/.venv/**"
+      - "!**/tests/**"
+      - "!**/.pytest_cache/**"
+      - "!**/.mypy_cache/**"
+      - "!**/.ruff_cache/**"
+      - "!**/*.egg-info/**"
+      - "!**/.env"
+      - "!**/*.db"
+      - "!**/*.sqlite"
+      - "!**/training/**"
+  - from: ../dist
+    to: frontend
+win:
+  target:
+    - nsis
+  artifactName: NightDiary-${version}-setup.${ext}
+  # 无代码签名证书；同时避免下载 winCodeSign（其压缩包含 macOS 符号链接，
+  # 在未开启开发者模式的 Windows 上解压会因无权限创建符号链接而失败）。
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: 夜记
