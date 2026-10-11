@@ -81,7 +81,7 @@ _DAILY_REVIEW_PROMPT = (
 #: Per-thread/task flag set while a task body runs; blocks task creation.
 _TASK_EXECUTION: ContextVar[bool] = ContextVar("scheduled_task_execution", default=False)
 
-_container: Any = None
+_container: ServiceContainer | None = None
 _container_lock = threading.Lock()
 
 
