@@ -37,6 +37,13 @@ def _now_utc() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _changes() -> Any:
+    """Lazy accessor for the change-log service (avoids import cycles)."""
+    from app.services import plan_change_service
+
+    return plan_change_service
+
+
 # ── Plan operations ───────────────────────────────────────────────────
 
 
@@ -54,6 +61,9 @@ def create_plan(
     target_unit: str | None = None,
     target_period: str | None = None,
     template: str | None = None,
+    proposal_id: str | None = None,
+    conversation_id: str | None = None,
+    message_id: str | None = None,
 ) -> PlanRow:
     row = PlanRow(
         id=_new_id(),
@@ -74,6 +84,17 @@ def create_plan(
     db.commit()
     db.refresh(row)
     logger.info("Created plan id=%s user=%s source=%s", row.id, user_id, source)
+    _changes().safe_record(
+        db,
+        user_id=user_id,
+        entity_type="plan",
+        entity_id=row.id,
+        action="create",
+        after=_changes().snapshot_plan(db, row),
+        proposal_id=proposal_id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
     return row
 
 
@@ -95,21 +116,61 @@ def get_plan(db: Session, *, plan_id: str, user_id: str) -> PlanRow:
 
 
 def update_plan(
-    db: Session, *, plan_id: str, user_id: str, **fields: Any
+    db: Session,
+    *,
+    plan_id: str,
+    user_id: str,
+    proposal_id: str | None = None,
+    conversation_id: str | None = None,
+    message_id: str | None = None,
+    **fields: Any,
 ) -> PlanRow:
     row = get_plan(db, plan_id=plan_id, user_id=user_id)
+    before = _changes().snapshot_plan(db, row)
     for key, value in fields.items():
         if hasattr(row, key) and value is not None:
             setattr(row, key, value)
     db.commit()
     db.refresh(row)
+    _changes().safe_record(
+        db,
+        user_id=user_id,
+        entity_type="plan",
+        entity_id=row.id,
+        action="update",
+        before=before,
+        after=_changes().snapshot_plan(db, row),
+        proposal_id=proposal_id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
     return row
 
 
-def delete_plan(db: Session, *, plan_id: str, user_id: str) -> None:
+def delete_plan(
+    db: Session,
+    *,
+    plan_id: str,
+    user_id: str,
+    proposal_id: str | None = None,
+    conversation_id: str | None = None,
+    message_id: str | None = None,
+) -> None:
     row = get_plan(db, plan_id=plan_id, user_id=user_id)
+    before = _changes().snapshot_plan(db, row)
     db.delete(row)
     db.commit()
+    _changes().safe_record(
+        db,
+        user_id=user_id,
+        entity_type="plan",
+        entity_id=plan_id,
+        action="delete",
+        before=before,
+        proposal_id=proposal_id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
 
 
 # ── Task operations ───────────────────────────────────────────────────
@@ -127,6 +188,9 @@ def create_task(
     due_date: str | None = None,
     source: str = "manual",
     created_from_conversation_id: str | None = None,
+    proposal_id: str | None = None,
+    conversation_id: str | None = None,
+    message_id: str | None = None,
 ) -> TaskRow:
     parsed_due = date.fromisoformat(due_date) if due_date else None
     row = TaskRow(
@@ -145,6 +209,17 @@ def create_task(
     db.add(row)
     db.commit()
     db.refresh(row)
+    _changes().safe_record(
+        db,
+        user_id=user_id,
+        entity_type="task",
+        entity_id=row.id,
+        action="create",
+        after=_changes().snapshot_task(row),
+        proposal_id=proposal_id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
     return row
 
 
@@ -184,8 +259,12 @@ def update_task_status(
     user_id: str,
     status: str,
     container: Any | None = None,
+    proposal_id: str | None = None,
+    conversation_id: str | None = None,
+    message_id: str | None = None,
 ) -> TaskRow:
     row = get_task(db, task_id=task_id, user_id=user_id)
+    before = _changes().snapshot_task(row)
     old_status = row.status
     row.status = status
     if status == "done":
@@ -194,6 +273,19 @@ def update_task_status(
         row.completed_at = None
     db.commit()
     db.refresh(row)
+
+    _changes().safe_record(
+        db,
+        user_id=user_id,
+        entity_type="task",
+        entity_id=row.id,
+        action="update",
+        before=before,
+        after=_changes().snapshot_task(row),
+        proposal_id=proposal_id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
 
     if (
         container is not None
@@ -239,9 +331,17 @@ def _persist_task_memory(
 
 
 def update_task(
-    db: Session, *, task_id: str, user_id: str, **fields: Any
+    db: Session,
+    *,
+    task_id: str,
+    user_id: str,
+    proposal_id: str | None = None,
+    conversation_id: str | None = None,
+    message_id: str | None = None,
+    **fields: Any,
 ) -> TaskRow:
     row = get_task(db, task_id=task_id, user_id=user_id)
+    before = _changes().snapshot_task(row)
     for key, value in fields.items():
         # Coerce due_date strings to date objects so the ORM Date column
         # accepts them (mirrors create_task's parsing). SQL backends like
@@ -255,13 +355,45 @@ def update_task(
             setattr(row, key, value)
     db.commit()
     db.refresh(row)
+    _changes().safe_record(
+        db,
+        user_id=user_id,
+        entity_type="task",
+        entity_id=row.id,
+        action="update",
+        before=before,
+        after=_changes().snapshot_task(row),
+        proposal_id=proposal_id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
     return row
 
 
-def delete_task(db: Session, *, task_id: str, user_id: str) -> None:
+def delete_task(
+    db: Session,
+    *,
+    task_id: str,
+    user_id: str,
+    proposal_id: str | None = None,
+    conversation_id: str | None = None,
+    message_id: str | None = None,
+) -> None:
     row = get_task(db, task_id=task_id, user_id=user_id)
+    before = _changes().snapshot_task(row)
     db.delete(row)
     db.commit()
+    _changes().safe_record(
+        db,
+        user_id=user_id,
+        entity_type="task",
+        entity_id=task_id,
+        action="delete",
+        before=before,
+        proposal_id=proposal_id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
 
 
 def get_today_tasks(db: Session, *, user_id: str) -> list[TaskRow]:
