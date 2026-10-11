@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,6 +40,15 @@ def test_configure_hf_environment_sets_cache_dirs(tmp_path, monkeypatch) -> None
         in Path(__import__("os").environ["HF_HOME"]).as_posix()
     )
     assert __import__("os").environ["HF_ENDPOINT"] == "https://hf-mirror.com"
+
+
+def test_configure_hf_environment_ignores_non_allowlisted_endpoint(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("HF_ENDPOINT", raising=False)
+    settings = Settings(data_dir=str(tmp_path), hf_endpoint="http://evil.example.com")
+
+    configure_hf_environment(settings)
+
+    assert "HF_ENDPOINT" not in os.environ
 
 
 def test_snapshot_marks_ready_when_marker_exists(tmp_path) -> None:

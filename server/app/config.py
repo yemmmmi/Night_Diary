@@ -139,6 +139,14 @@ class Settings(BaseSettings):
         description="JWT token expiration in minutes (default: 7 days)",
     )
 
+    # ---- Outbound request guard (C5) ----
+    allow_private_model_hosts: bool = Field(
+        default=True,
+        description="Permit LLM endpoint probes against loopback/RFC1918 hosts "
+        "(self-hosted Ollama / LM Studio / vLLM). Cloud-metadata and link-local "
+        "ranges are always blocked. Set False to forbid all private targets.",
+    )
+
     # ---- CORS ----
     cors_origins: str = Field(
         default="",
@@ -194,8 +202,7 @@ class Settings(BaseSettings):
     )
     rerank_base_url: str = Field(
         default="https://dashscope.aliyuncs.com/compatible-api/v1",
-        description="Base URL of the Cohere-compatible rerank endpoint "
-        "(POST {base}/reranks).",
+        description="Base URL of the Cohere-compatible rerank endpoint " "(POST {base}/reranks).",
     )
     rerank_model: str = Field(
         default="qwen3-rerank",
