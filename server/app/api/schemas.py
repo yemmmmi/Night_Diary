@@ -303,6 +303,51 @@ class UserAboutUpdateRequest(BaseModel):
     content: str = Field(default="", max_length=MAX_ABOUT_CHARS)
 
 
+# ── Scheduled tasks (A4) ───────────────────────────────────────────────
+
+
+class ScheduledTaskCreateRequest(BaseModel):
+    kind: str = Field(min_length=1, max_length=32)
+    cron_expr: str = Field(min_length=1, max_length=128)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class ScheduledTaskUpdateRequest(BaseModel):
+    cron_expr: str | None = Field(default=None, min_length=1, max_length=128)
+    payload: dict[str, Any] | None = None
+    enabled: bool | None = None
+
+
+class ScheduledTaskKindResponse(BaseModel):
+    kind: str
+    label: str
+
+
+class ScheduledTaskResponse(BaseModel):
+    id: str
+    kind: str
+    kind_label: str = ""
+    cron_expr: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+    next_run_at: datetime.datetime | None = None
+    last_run_at: datetime.datetime | None = None
+    last_status: str | None = None
+    created_at: datetime.datetime | None = None
+
+
+class ScheduledTaskRunResponse(BaseModel):
+    id: int
+    task_id: str
+    kind: str
+    status: str
+    summary: str | None = None
+    error: str | None = None
+    started_at: datetime.datetime | None = None
+    finished_at: datetime.datetime | None = None
+
+
 class ModelDownloadItemResponse(BaseModel):
     key: str
     repo_id: str

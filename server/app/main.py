@@ -151,6 +151,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         sentinel_task = run_quality_sentinel_loop(app)
     except Exception as exc:
         logger.warning("Quality sentinel not started: %s", exc)
+
+    # A4: user-orchestrable scheduled tasks — one in-process loop that
+    # enqueues due tasks on an interval. Best-effort; never blocks startup.
+    scheduler_task = None
+    try:
+        from app.services.scheduler import run_scheduler_loop
+
+        scheduler_task = run_scheduler_loop(app)
+    except Exception as exc:
+        logger.warning("Scheduler not started: %s", exc)
     yield
     # ── Graceful shutdown (robustness P0-1) ─────────────────────────────
     # 1. Stop accepting new fire-and-forget background tasks.
@@ -169,6 +179,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         sentinel_task.cancel()
         with suppress(asyncio.CancelledError):
             await sentinel_task
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await scheduler_task
     requeue_task.cancel()
     with suppress(asyncio.CancelledError):
         await requeue_task

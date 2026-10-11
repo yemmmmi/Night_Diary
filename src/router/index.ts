@@ -74,6 +74,12 @@ export const appRoutes: RouteRecordRaw[] = [
     component: () => import('@/pages/MemoryScene.vue'),
   },
   {
+    path: '/schedules',
+    name: 'schedules',
+    component: () => import('@/pages/ScheduleScene.vue'),
+    meta: { skipOnboarding: true },
+  },
+  {
     path: '/chat',
     name: 'chat',
     component: () => import('@/pages/ChatScene.vue'),

@@ -235,6 +235,19 @@ class Settings(BaseSettings):
         description="Number of recent replies sampled per quality scan.",
     )
 
+    # ---- 定时任务调度 (A4) ----
+    scheduler_enabled: bool = Field(
+        default=True,
+        description="Run the in-process scheduler loop for user-orchestrable "
+        "recurring tasks (daily review / weekly insight / plan reminder). "
+        "Disabling keeps task definitions but never dispatches them.",
+    )
+    scheduler_interval_s: int = Field(
+        default=60,
+        ge=10,
+        description="Seconds between scheduler passes that enqueue due tasks.",
+    )
+
     # ---- User-mode judgement thresholds (V3.x mode system) ----
     # See docs/superpowers/specs/2026-08-18-v3x-mode-system-design.md sec.3.
     # Weights are "layered signal" semantics, not model-tunable params; the

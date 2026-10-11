@@ -18,6 +18,10 @@ from app.infrastructure.models.plan import (
     TaskRow,
 )
 from app.infrastructure.models.reply_quality import ReplyQualityRow
+from app.infrastructure.models.scheduled_task import (
+    ScheduledTaskRow,
+    ScheduledTaskRunRow,
+)
 
 __all__ = [
     "DailyDigestRow",
@@ -29,5 +33,7 @@ __all__ = [
     "PlanCheckinRow",
     "PlanRow",
     "ReplyQualityRow",
+    "ScheduledTaskRow",
+    "ScheduledTaskRunRow",
     "TaskRow",
 ]
