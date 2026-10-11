@@ -78,7 +78,27 @@ class SessionContext:
     profile_topics: list[str] = field(default_factory=list)
     usage: UsageAccumulator = field(default_factory=UsageAccumulator)
     pinned_diary_ids: list[int] = field(default_factory=list)
+    #: Frozen memory block (D6) — assembled once at session start and reused
+    #: verbatim for every turn so the system prompt keeps a stable prefix.
+    frozen_memory_block: str = ""
+    memory_budget: dict[str, Any] = field(default_factory=dict)
     _turn_messages: list[dict[str, str]] = field(default_factory=list)
+
+    def refresh_frozen_memory(self) -> None:
+        """(Re)build the frozen memory block from the cached long-term profile.
+
+        Called once when the session is created (after the profile is loaded).
+        The block is intentionally *not* refreshed on every turn — freezing it
+        is what preserves the provider's prefix cache for the whole session.
+        """
+        from app.services.ai.memory_snapshot import build_frozen_memory_block
+
+        block = build_frozen_memory_block(
+            profile_style=self.profile_style,
+            profile_topics=self.profile_topics,
+        )
+        self.frozen_memory_block = block.text
+        self.memory_budget = block.budget.to_dict()
 
     def add_turn(self, user_message: str, reply: str) -> None:
         """Append a user+assistant turn and compress if over budget."""
@@ -154,6 +174,8 @@ class SessionContext:
             "profile_topics": list(self.profile_topics),
             "usage": self.usage.summary(),
             "pinned_diary_ids": list(self.pinned_diary_ids),
+            "frozen_memory_block": self.frozen_memory_block,
+            "memory_budget": dict(self.memory_budget),
             # Only keep recent turn messages (older ones are in compressed_history)
             "turn_messages": list(self._turn_messages[-20:]),
         }
@@ -177,6 +199,14 @@ class SessionContext:
             turn_count=usage_data.get("turn_count", 0),
         )
         ctx._turn_messages = list(data.get("turn_messages", []))
+        frozen = data.get("frozen_memory_block")
+        if frozen:
+            ctx.frozen_memory_block = str(frozen)
+            ctx.memory_budget = dict(data.get("memory_budget", {}))
+        else:
+            # Snapshot predates D6 (or was built before the profile loaded):
+            # rebuild the block from the restored profile fields.
+            ctx.refresh_frozen_memory()
         return ctx
 
     def _persist_to_l2(self) -> None:
@@ -413,6 +443,9 @@ def get_or_create_session(
             ctx.profile_topics = list(profile.recurring_topics or [])
         except Exception as exc:
             logger.warning("SessionContext profile load failed: %s", exc)
+
+    # Freeze the memory block once, now that the profile is known (D6).
+    ctx.refresh_frozen_memory()
 
     _sessions[conversation_id] = ctx  # L1
     _evict_lru_if_needed()
