@@ -207,3 +207,40 @@ export async function abortStreaming(
   )
   return data
 }
+
+/* ── B3: 对话级回退与记忆撤销 ── */
+
+export interface RollbackResponse {
+  removed_message_ids: string[]
+  removed_memories: number
+  messages: ChatMessage[]
+}
+
+export interface RegenerateResponse {
+  removed_message_ids: string[]
+  removed_memories: number
+  reply: ChatMessage
+  messages: ChatMessage[]
+}
+
+export async function rollbackMessages(
+  conversationId: string,
+  messageId: string,
+): Promise<RollbackResponse> {
+  const client = await getHttpClient()
+  const { data } = await client.post<RollbackResponse>(
+    `/api/v1/conversations/${conversationId}/messages/${messageId}/rollback`,
+  )
+  return data
+}
+
+export async function regenerateReply(
+  conversationId: string,
+  messageId: string,
+): Promise<RegenerateResponse> {
+  const client = await getHttpClient()
+  const { data } = await client.post<RegenerateResponse>(
+    `/api/v1/conversations/${conversationId}/messages/${messageId}/regenerate`,
+  )
+  return data
+}

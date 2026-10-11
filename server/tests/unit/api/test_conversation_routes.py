@@ -301,3 +301,130 @@ def test_send_message_streaming_unknown_conversation_404(
         json={"content": "你好"},
     )
     assert response.status_code == 404
+
+
+# ── B3: rollback / regenerate ────────────────────────────────────────
+
+
+def _send(authed_client: TestClient, conversation_id: str, content: str) -> dict:
+    """Send a message with a stubbed reply and return the response body."""
+    with patch(
+        "app.api.v1.conversation.conversation_ai_service.generate_reply",
+        return_value=ChatReplyResult(
+            reply_text=f"回信：{content}",
+            retrieved_diary_ids=[],
+            retrieved_memory_ids=[],
+        ),
+    ):
+        response = authed_client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={"content": content, "auto_retrieve": False},
+        )
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_rollback_removes_target_message_and_after(authed_client: TestClient) -> None:
+    """回退删除目标消息及其之后的所有消息, 返回剩余历史。"""
+    conversation_id = _create_conversation(authed_client)
+    _send(authed_client, conversation_id, "第一句")
+    second = _send(authed_client, conversation_id, "第二句")
+
+    user2_id = second["message"]["id"]
+    reply2_id = second["reply"]["id"]
+
+    response = authed_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/{user2_id}/rollback",
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["removed_message_ids"] == [user2_id, reply2_id]
+    assert body["removed_memories"] == 0
+    assert [m["role"] for m in body["messages"]] == ["user", "assistant"]
+
+    history = authed_client.get(f"/api/v1/conversations/{conversation_id}/messages")
+    assert history.status_code == 200
+    assert len(history.json()) == 2
+
+
+def test_rollback_to_assistant_reply_only_removes_that_reply(
+    authed_client: TestClient,
+) -> None:
+    """回退到回信本身时只删除该回信。"""
+    conversation_id = _create_conversation(authed_client)
+    first = _send(authed_client, conversation_id, "第一句")
+
+    reply1_id = first["reply"]["id"]
+    response = authed_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/{reply1_id}/rollback",
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["removed_message_ids"] == [reply1_id]
+    assert [m["role"] for m in body["messages"]] == ["user"]
+
+
+def test_rollback_unknown_message_404(authed_client: TestClient) -> None:
+    conversation_id = _create_conversation(authed_client)
+    response = authed_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/does-not-exist/rollback",
+    )
+    assert response.status_code == 404
+
+
+def test_regenerate_replaces_assistant_reply(authed_client: TestClient) -> None:
+    """重新生成删除目标回信并依据来信产出新回信。"""
+    conversation_id = _create_conversation(authed_client)
+    first = _send(authed_client, conversation_id, "第一句")
+    user1_id = first["message"]["id"]
+    reply1_id = first["reply"]["id"]
+
+    with patch(
+        "app.api.v1.conversation.conversation_ai_service.generate_reply",
+        return_value=ChatReplyResult(
+            reply_text="重写后的回信",
+            retrieved_diary_ids=[],
+            retrieved_memory_ids=[],
+        ),
+    ) as mock_generate:
+        response = authed_client.post(
+            f"/api/v1/conversations/{conversation_id}/messages/{reply1_id}/regenerate",
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["removed_message_ids"] == [reply1_id]
+    assert body["reply"]["content"] == "重写后的回信"
+    assert body["reply"]["id"] != reply1_id
+    assert [m["role"] for m in body["messages"]] == ["user", "assistant"]
+    # Regeneration reuses the preceding user message's content.
+    assert mock_generate.call_args.kwargs["content"] == "第一句"
+
+    history = authed_client.get(f"/api/v1/conversations/{conversation_id}/messages")
+    assert history.status_code == 200
+    rows = history.json()
+    assert len(rows) == 2
+    assert rows[0]["id"] == user1_id
+    assert rows[1]["content"] == "重写后的回信"
+
+
+def test_regenerate_rejects_user_message(authed_client: TestClient) -> None:
+    """只能重新生成夜记的回信, 来信不可重生成。"""
+    conversation_id = _create_conversation(authed_client)
+    first = _send(authed_client, conversation_id, "第一句")
+
+    response = authed_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/"
+        f"{first['message']['id']}/regenerate",
+    )
+    assert response.status_code == 422
+
+
+def test_regenerate_unknown_message_404(authed_client: TestClient) -> None:
+    conversation_id = _create_conversation(authed_client)
+    response = authed_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/does-not-exist/regenerate",
+    )
+    assert response.status_code == 404

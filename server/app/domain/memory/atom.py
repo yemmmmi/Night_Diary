@@ -50,6 +50,8 @@ class UnifiedMemoryAtom(BaseModel):
     event_date: date | None = None
     diary_id: int | None = None
     conversation_id: str | None = None
+    #: Chat message that produced this atom (B3 provenance for rollback undo).
+    source_message_id: str | None = None
     user_id: str = "default"
 
     def to_episodic_entry(self, timestamp: float) -> EpisodicEntryShim:
@@ -71,6 +73,7 @@ class UnifiedMemoryAtom(BaseModel):
             mood_score=self.mood_score,
             event_date=self.event_date.isoformat() if self.event_date else None,
             emotions=self.emotions,
+            source_message_id=self.source_message_id,
         )
 
 
@@ -93,6 +96,7 @@ class EpisodicEntryShim(BaseModel):
     mood_score: float = Field(default=0.5, ge=0.0, le=1.0)
     event_date: str | None = None
     emotions: list[str] = Field(default_factory=list)
+    source_message_id: str | None = None
 
 
 __all__ = ["EntityRef", "EpisodicEntryShim", "Source", "UnifiedMemoryAtom"]

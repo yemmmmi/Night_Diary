@@ -106,4 +106,5 @@ class FinalizeMiddleware(MiddlewareBase):
             user_id=ctx.user_id,
             emotion_label=emotion_label,
             emotion_score=score,
+            source_message_id=ctx.reply_message_id or None,
         )

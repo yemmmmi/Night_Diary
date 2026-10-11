@@ -117,6 +117,36 @@ def delete_episodic(
     _sync_live_episodic(container)
 
 
+def delete_by_source_messages(
+    container: ServiceContainer,
+    *,
+    user_id: str,
+    message_ids: list[str],
+) -> int:
+    """Delete episodic entries produced by the given chat messages (B3).
+
+    Used when a conversation rollback removes turns: entries written by those
+    turns carry ``source_message_id`` and must be undone so the memory store
+    stays consistent with the (now shorter) conversation. Returns how many
+    entries were removed. Best-effort at the call site; raises only on store
+    errors.
+    """
+    if not message_ids:
+        return 0
+    wanted = set(message_ids)
+    store = SqliteEpisodicMemoryStore(container.session_factory)
+    entry_ids = [
+        entry.entry_id
+        for entry in store.load_entries(user_id)
+        if entry.entry_id and entry.source_message_id in wanted
+    ]
+    if not entry_ids:
+        return 0
+    store.delete_entries(user_id, entry_ids)
+    _sync_live_episodic(container)
+    return len(entry_ids)
+
+
 def _profile_to_dict(profile: UserProfile) -> dict[str, Any]:
     return {
         "personality_tags": list(profile.personality_tags),

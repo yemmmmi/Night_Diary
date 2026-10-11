@@ -150,11 +150,14 @@ class ContentNormalizer:
         user_id: str = "default",
         emotion_label: str | None = None,
         emotion_score: float | None = None,
+        source_message_id: str | None = None,
     ) -> UnifiedMemoryAtom:
         """Convert a conversation turn to a UnifiedMemoryAtom.
 
         Conversation messages are unstructured text, so emotion is estimated
-        via EmotionEstimator unless explicitly provided.
+        via EmotionEstimator unless explicitly provided. *source_message_id*
+        (B3) records the chat message this atom came from so a rollback can
+        delete the turn's memory writes.
         """
         with trace_span(
             "S1_normalize",
@@ -180,6 +183,7 @@ class ContentNormalizer:
                 importance=min(abs(emotion_score) + 0.3, 1.0),
                 reply_insight=(reply_text or "")[:200],
                 conversation_id=conversation_id or None,
+                source_message_id=source_message_id,
                 user_id=user_id,
             )
             if span:
