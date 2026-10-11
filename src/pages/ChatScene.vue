@@ -5,6 +5,7 @@ import { chatCopy } from '@/shared/copy/chat'
 import { listDiaryEntries, type DiaryEntry } from '@/shared/api/diary'
 import { listCards, type MemoryCard } from '@/shared/api/card'
 import { listPlans, type PlanItem } from '@/shared/api/plan'
+import { listTags, type Tag } from '@/shared/api/tags'
 import { useChatStore } from '@/stores/chat'
 import { useSettingsStore } from '@/stores/settings'
 import { useDevStore } from '@/stores/dev'
@@ -15,6 +16,7 @@ import LetterMessage from '@/features/chat/LetterMessage.vue'
 import ChatInput from '@/features/chat/ChatInput.vue'
 import DiaryReferencePicker from '@/features/chat/DiaryReferencePicker.vue'
 import PlanReferencePicker from '@/features/chat/PlanReferencePicker.vue'
+import TagReferencePicker from '@/features/chat/TagReferencePicker.vue'
 import InkGrinding from '@/shared/components/InkGrinding.vue'
 import DevPipelinePanel from '@/features/dev/DevPipelinePanel.vue'
 import ModeBadge from '@/features/mode/ModeBadge.vue'
@@ -35,6 +37,7 @@ const cardGenerated = ref(false)
 const diaryCatalog = ref<DiaryEntry[]>([])
 const referenceCards = ref<MemoryCard[]>([])
 const planCatalog = ref<PlanItem[]>([])
+const tagCatalog = ref<Tag[]>([])
 const modeBadge = ref<InstanceType<typeof ModeBadge> | null>(null)
 const chatInput = ref<InstanceType<typeof ChatInput> | null>(null)
 const pendingUserText = ref<string | null>(null)
@@ -87,18 +90,21 @@ const writingLetterVisible = computed(
 
 async function loadReferenceData() {
   try {
-    const [diaries, cards, plans] = await Promise.all([
+    const [diaries, cards, plans, tags] = await Promise.all([
       listDiaryEntries({ limit: 50 }),
       listCards(),
       listPlans('active'),
+      listTags(),
     ])
     diaryCatalog.value = diaries
     referenceCards.value = cards
     planCatalog.value = plans
+    tagCatalog.value = tags
   } catch {
     diaryCatalog.value = []
     referenceCards.value = []
     planCatalog.value = []
+    tagCatalog.value = []
   }
 }
 
@@ -367,6 +373,10 @@ watch(
             <PlanReferencePicker
               v-model="chatStore.pinnedPlanIds"
               :plans="planCatalog"
+            />
+            <TagReferencePicker
+              v-model="chatStore.pinnedTagNames"
+              :tags="tagCatalog"
             />
           </div>
           <div class="chat-scene__composer-row">
