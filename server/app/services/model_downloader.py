@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 from app.config import Settings, get_settings
+from app.shared.url_guard import ALLOWED_HF_HOSTS, safe_join, validate_outbound_url
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,17 @@ def configure_hf_environment(settings: Settings) -> None:
     os.environ.setdefault("HF_HOME", models_dir)
     os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", models_dir)
     if settings.hf_endpoint:
-        os.environ.setdefault("HF_ENDPOINT", settings.hf_endpoint)
+        endpoint_error = validate_outbound_url(
+            settings.hf_endpoint, allow_private=False, allow_hosts=ALLOWED_HF_HOSTS
+        )
+        if endpoint_error:
+            logger.warning(
+                "Ignoring hf_endpoint %r — %s; falling back to default HuggingFace host",
+                settings.hf_endpoint,
+                endpoint_error,
+            )
+        else:
+            os.environ.setdefault("HF_ENDPOINT", settings.hf_endpoint)
     # If all required models are cached locally, force offline mode to
     # avoid slow network HEAD checks at startup.
     if all(_is_ready(repo, settings) for _, repo in REQUIRED_MODELS):
@@ -66,7 +77,8 @@ def configure_hf_environment(settings: Settings) -> None:
 
 
 def _ready_marker_path(settings: Settings, repo_id: str) -> Path:
-    return Path(settings.models_dir) / ".ready" / repo_id.replace("/", "--")
+    # safe_join refuses any repo_id that would resolve outside models_dir.
+    return safe_join(settings.models_dir, ".ready", repo_id.replace("/", "--"))
 
 
 def _is_ready(repo_id: str, settings: Settings) -> bool:

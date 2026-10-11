@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+from app.config import Settings
 from app.services import model_service
 from app.shared.errors import ModelProviderNotFoundError, ValidationError
 
@@ -136,3 +137,29 @@ def test_validate_model_connection_rejects_401() -> None:
         )
     assert err is not None
     assert "401" in err
+
+
+def test_validate_model_connection_blocks_metadata_host() -> None:
+    err = model_service.validate_model_connection("http://169.254.169.254/v1", "sk-test")
+    assert err is not None
+    assert "元数据" in err
+
+
+def test_validate_model_connection_blocks_private_when_disabled() -> None:
+    settings = Settings(allow_private_model_hosts=False)
+    err = model_service.validate_model_connection(
+        "http://127.0.0.1:11434/v1", "sk-test", settings=settings
+    )
+    assert err is not None
+    assert "内网" in err
+
+
+def test_validate_model_connection_allows_loopback_by_default() -> None:
+    class Resp:
+        status_code = 200
+
+    with patch.object(model_service, "_external_http_client") as mock_client:
+        mock_client.return_value.__enter__.return_value.get.return_value = Resp()
+        assert (
+            model_service.validate_model_connection("http://127.0.0.1:11434/v1", "sk-test") is None
+        )
