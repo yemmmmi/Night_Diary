@@ -72,7 +72,7 @@ class TestLLMFallback:
 
     def test_weak_signal_uses_llm(self) -> None:
         decision = classify_user_intent("帮我看看这个问题", llm=_llm("plan"))
-        assert decision == IntentDecision(intent="plan", source="llm")
+        assert decision == IntentDecision(intent="plan", source="llm", confidence=0.7)
 
     def test_weak_signal_without_llm_stays_chat(self) -> None:
         decision = classify_user_intent("帮我看看这个问题", llm=None)
@@ -84,7 +84,7 @@ class TestLLMFallback:
         decision = classify_user_intent(
             "我最近总感到焦虑，晚上睡不着", llm=_llm("insight")
         )
-        assert decision == IntentDecision(intent="insight", source="llm")
+        assert decision == IntentDecision(intent="insight", source="llm", confidence=0.7)
 
     def test_llm_garbage_degrades_to_chat(self) -> None:
         decision = classify_user_intent("帮我看看这个问题", llm=_llm("随便什么"))
@@ -99,6 +99,61 @@ class TestLLMFallback:
 
 def test_empty_text_is_chat() -> None:
     assert classify_user_intent("").intent == "chat"
+
+
+class TestConfidenceAndClarification:
+    """B4: the router exposes a confidence and flags ambiguous skill leans."""
+
+    def test_strong_rule_is_confident(self) -> None:
+        decision = classify_user_intent("帮我记一篇日记")
+        assert decision.confidence >= 0.9
+        assert decision.should_clarify is False
+
+    def test_goal_rule_is_confident(self) -> None:
+        decision = classify_user_intent("我想坚持减肥30天")
+        assert decision.confidence >= 0.9
+        assert decision.should_clarify is False
+
+    def test_clear_chat_is_confident(self) -> None:
+        decision = classify_user_intent("今天天气真好")
+        assert decision.confidence == 1.0
+        assert decision.should_clarify is False
+
+    def test_bare_word_default_confidence_does_not_clarify(self) -> None:
+        decision = classify_user_intent("帮我看看这个问题", llm=_llm("plan"))
+        assert decision.confidence == 0.7
+        assert decision.should_clarify is False
+
+    def test_low_confidence_skill_asks_to_clarify(self) -> None:
+        decision = classify_user_intent(
+            "帮我看看这个", llm=_llm('{"intent": "insight", "confidence": 0.3}')
+        )
+        assert decision.intent == "insight"
+        assert decision.should_clarify is True
+
+    def test_confident_skill_json_does_not_clarify(self) -> None:
+        decision = classify_user_intent(
+            "帮我看看这个", llm=_llm('{"intent": "plan", "confidence": 0.92}')
+        )
+        assert decision.intent == "plan"
+        assert decision.should_clarify is False
+
+    def test_low_confidence_chat_never_clarifies(self) -> None:
+        # 不确定的 chat 不会写任何东西, 没有需要追问的错误提案。
+        decision = classify_user_intent(
+            "帮我看看这个", llm=_llm('{"intent": "chat", "confidence": 0.2}')
+        )
+        assert decision.intent == "chat"
+        assert decision.should_clarify is False
+
+    def test_manual_selection_never_clarifies(self) -> None:
+        assert IntentDecision(intent="record", source="manual").should_clarify is False
+
+    def test_json_wrapped_in_code_fence_is_parsed(self) -> None:
+        reply = '```json\n{"intent": "record", "confidence": 0.4}\n```'
+        decision = classify_user_intent("帮我看看这个", llm=_llm(reply))
+        assert decision.intent == "record"
+        assert decision.should_clarify is True
 
 
 class TestSkillCatalog:

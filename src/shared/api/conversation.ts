@@ -74,7 +74,23 @@ export interface PlanSkillResult {
   tasks: PlanSkillNode[]
 }
 
-export type SkillResult = RecordSkillResult | InsightSkillResult | PlanSkillResult
+/* 歧义澄清：意图不明确时不下结论，给出可一键澄清的选项（B4） */
+export interface ClarifyOption {
+  skill: string
+  label: string
+  prefill: string
+}
+
+export interface ClarificationSkillResult {
+  skill: 'clarify'
+  options: ClarifyOption[]
+}
+
+export type SkillResult =
+  | RecordSkillResult
+  | InsightSkillResult
+  | PlanSkillResult
+  | ClarificationSkillResult
 
 /* 用户可手动指定的技能：取值来自 GET /api/v1/skills 的动态发现 */
 export type UserSkill = string

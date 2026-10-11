@@ -99,6 +99,36 @@ def test_dispatch_failure_degrades_to_none(db) -> None:
     )
 
 
+# ── B4: 意图不明确时追问而非猜测 ─────────────────────────────────────
+
+
+def test_ambiguous_skill_lean_returns_clarification(db) -> None:
+    container = _container('{"intent": "record", "confidence": 0.3}')
+    outcome = user_skill_service.run_user_skill(
+        db, container, conversation_id="c1", content="帮我看看这个", user_id="u1"
+    )
+    assert outcome is not None
+    assert outcome.skill == "clarify"
+    assert outcome.skill_result["skill"] == "clarify"
+    assert [option["skill"] for option in outcome.skill_result["options"]] == [
+        "record",
+        "insight",
+        "plan",
+        "chat",
+    ]
+    # 澄清轮只提问，不写任何领域产物（没有 diary_id）。
+    assert "diary_id" not in outcome.skill_result
+
+
+def test_confident_llm_route_does_not_clarify(db) -> None:
+    # 高置信度不会被拦截为澄清；后续由具体技能处理（此处只验证不返回 clarify）。
+    container = _container('{"intent": "insight", "confidence": 0.95}')
+    outcome = user_skill_service.run_user_skill(
+        db, container, conversation_id="c1", content="我最近很迷茫，帮我看看", user_id="u1"
+    )
+    assert outcome is None or outcome.skill != "clarify"
+
+
 # ── 手动指定 skill：跳过意图分类，内容无需触发词 ──────────────────────
 
 
