@@ -23,11 +23,17 @@ TOOL_CALL_PATTERN = re.compile(r"<tool>(\w+)</tool>\s*<args>(.*?)</args>", re.DO
 
 @dataclass(frozen=True, slots=True)
 class ToolSpec:
-    """Schema description for a tool, used in native function calling."""
+    """Schema description for a tool, used in native function calling.
+
+    ``toolset`` groups tools into logical families (memory / plan / external, or
+    ``mcp:<alias>`` for a specific MCP endpoint) so the harness can enable or
+    disable whole groups instead of enumerating individual tools.
+    """
 
     name: str
     description: str
     parameters: dict[str, Any]  # JSON Schema
+    toolset: str = "misc"
 
 
 @dataclass

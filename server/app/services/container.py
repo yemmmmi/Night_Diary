@@ -450,7 +450,7 @@ class ServiceContainer:
             return self._multi_agent_graph
 
         # Lazy imports — only loaded when multi-agent graph is actually built.
-        from app.domain.agents.context_compressor import ContextCompressor
+        from app.domain.agents.context_engine import build_context_engine
         from app.domain.agents.empathy_agent import EmpathyAgent
         from app.domain.agents.graph import create_multi_agent_graph
         from app.domain.agents.insight_agent import InsightAgent
@@ -472,7 +472,7 @@ class ServiceContainer:
             decision_logger=self.decision_logger,
             llm_tracer=self.llm_tracer,
         )
-        context_compressor = ContextCompressor(llm=llm)
+        context_compressor = build_context_engine(self.settings.context_engine, llm=llm)
         graph = create_multi_agent_graph(
             supervisor,
             EmpathyAgent(

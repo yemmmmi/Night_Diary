@@ -1,4 +1,4 @@
-"""MultiAgentGraph — pure-asyncio orchestration of the Supervisor + Workers.
+﻿"""MultiAgentGraph — pure-asyncio orchestration of the Supervisor + Workers.
 
 V1 used LangGraph to wire the multi-agent pipeline. V2 deliberately drops that
 dependency (it is not in ``pyproject.toml``): the graph here is a small,
@@ -38,7 +38,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, cast, get_origin, get_type_hints
 
-from app.domain.agents.context_compressor import ContextCompressor, prepare_compressed_history
+from app.domain.agents.context_compressor import prepare_compressed_history
+from app.domain.agents.context_engine import ContextEngine
 from app.domain.agents.state import MultiAgentState
 from app.domain.agents.supervisor import SupervisorAgent
 from app.shared.pipeline_trace import trace_span
@@ -97,7 +98,7 @@ class MultiAgentGraph:
         phases: dict[str, int],
         *,
         worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
-        context_compressor: ContextCompressor | None = None,
+        context_compressor: ContextEngine | None = None,
     ) -> None:
         self._supervisor = supervisor
         self._workers = workers
@@ -218,7 +219,7 @@ class MultiAgentGraphBuilder:
         self,
         *,
         worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
-        context_compressor: ContextCompressor | None = None,
+        context_compressor: ContextEngine | None = None,
     ) -> None:
         self._supervisor: SupervisorAgent | None = None
         self._workers: dict[str, WorkerRunner] = {}
@@ -264,7 +265,7 @@ def create_multi_agent_graph(
     insight_agent: Any,
     *,
     worker_timeout_s: float = DEFAULT_WORKER_TIMEOUT_S,
-    context_compressor: ContextCompressor | None = None,
+    context_compressor: ContextEngine | None = None,
 ) -> MultiAgentGraph:
     """Wire the three Worker agents into a graph with correct phases/fallbacks.
 

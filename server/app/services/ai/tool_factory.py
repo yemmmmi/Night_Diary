@@ -18,6 +18,25 @@ logger = logging.getLogger(__name__)
 
 ToolFn = Callable[..., str]
 
+#: Logical tool families. ``Settings.enabled_toolsets`` filters by these names;
+#: MCP endpoints get their own ``mcp:<alias>`` toolset (see ``toolset_for_tool``).
+TOOLSET_MEMORY = "memory"
+TOOLSET_PLAN = "plan"
+TOOLSET_EXTERNAL = "external"
+TOOLSET_MCP_PREFIX = "mcp:"
+
+#: Built-in tool → toolset. MCP tools are grouped dynamically by endpoint alias.
+LOCAL_TOOL_TOOLSETS: dict[str, str] = {
+    "search_diary": TOOLSET_MEMORY,
+    "analyze_sentiment": TOOLSET_MEMORY,
+    "query_entity_graph": TOOLSET_MEMORY,
+    "list_todos": TOOLSET_PLAN,
+    "get_plan_progress": TOOLSET_PLAN,
+    "get_plan_detail": TOOLSET_PLAN,
+    "get_weather_info": TOOLSET_EXTERNAL,
+    "get_user_address": TOOLSET_EXTERNAL,
+}
+
 
 def _get_config_value(db: Session, key: str, default: str = "") -> str:
     row = db.query(AppConfigRow).filter(AppConfigRow.key == key).first()
@@ -305,16 +324,19 @@ def build_tool_specs() -> list[ToolSpec]:
                 },
                 "required": ["query"],
             },
+            toolset=TOOLSET_MEMORY,
         ),
         ToolSpec(
             name="get_weather_info",
             description="查询用户地址的当前天气",
             parameters={"type": "object", "properties": {}},
+            toolset=TOOLSET_EXTERNAL,
         ),
         ToolSpec(
             name="get_user_address",
             description="获取用户设置的地址信息",
             parameters={"type": "object", "properties": {}},
+            toolset=TOOLSET_EXTERNAL,
         ),
         ToolSpec(
             name="analyze_sentiment",
@@ -326,6 +348,7 @@ def build_tool_specs() -> list[ToolSpec]:
                 },
                 "required": ["text"],
             },
+            toolset=TOOLSET_MEMORY,
         ),
         ToolSpec(
             name="query_entity_graph",
@@ -338,6 +361,7 @@ def build_tool_specs() -> list[ToolSpec]:
                     "max_depth": {"type": "integer", "description": "关系查询深度，默认2"},
                 },
             },
+            toolset=TOOLSET_MEMORY,
         ),
         ToolSpec(
             name="list_todos",
@@ -357,6 +381,7 @@ def build_tool_specs() -> list[ToolSpec]:
                     },
                 },
             },
+            toolset=TOOLSET_PLAN,
         ),
         ToolSpec(
             name="get_plan_progress",
@@ -368,6 +393,7 @@ def build_tool_specs() -> list[ToolSpec]:
                 },
                 "required": ["plan_id"],
             },
+            toolset=TOOLSET_PLAN,
         ),
         ToolSpec(
             name="get_plan_detail",
@@ -379,6 +405,7 @@ def build_tool_specs() -> list[ToolSpec]:
                 },
                 "required": ["plan_id"],
             },
+            toolset=TOOLSET_PLAN,
         ),
     ]
 
@@ -410,3 +437,23 @@ def specs_for_names(names: list[str]) -> list[ToolSpec]:
     all_specs = {s.name: s for s in build_tool_specs()}
     all_specs.update(_dynamic_specs)
     return [all_specs[n] for n in names if n in all_specs]
+
+
+def mcp_alias_of(name: str) -> str:
+    """Return the endpoint alias embedded in an ``mcp__{alias}__{tool}`` name."""
+    return name[len(MCP_TOOL_PREFIX):].split("__", 1)[0]
+
+
+def toolset_for_tool(name: str) -> str:
+    """Map a tool name to its toolset (``mcp:<alias>`` for MCP tools)."""
+    if is_mcp_tool(name):
+        return f"{TOOLSET_MCP_PREFIX}{mcp_alias_of(name)}"
+    return LOCAL_TOOL_TOOLSETS.get(name, "misc")
+
+
+def group_by_toolset(names: list[str]) -> dict[str, list[str]]:
+    """Group tool names by toolset, preserving first-seen order within a group."""
+    grouped: dict[str, list[str]] = {}
+    for name in names:
+        grouped.setdefault(toolset_for_tool(name), []).append(name)
+    return grouped
