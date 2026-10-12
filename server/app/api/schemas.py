@@ -330,6 +330,7 @@ class MessageResponse(BaseModel):
     retrieved_memory_ids: list[str] | None = None
     attached_card_ids: list[str] | None = None
     attached_plan_ids: list[str] | None = None
+    attached_tag_names: list[str] | None = None
     skill_result: dict[str, Any] | None = None
     process_info: dict[str, Any] | None = None
     created_at: datetime.datetime
@@ -342,6 +343,7 @@ class SendMessageRequest(BaseModel):
     diary_ids: list[int] = Field(default_factory=list)
     card_ids: list[str] = Field(default_factory=list)
     plan_ids: list[str] = Field(default_factory=list)
+    tag_names: list[str] = Field(default_factory=list)
     auto_retrieve: bool = True
     skill: str | None = None
 
@@ -377,6 +379,13 @@ class SendMessageRequest(BaseModel):
     def validate_plan_ids(cls, value: list[str]) -> list[str]:
         if len(value) > 3:
             raise ValueError("最多附上 3 个计划")
+        return value
+
+    @field_validator("tag_names")
+    @classmethod
+    def validate_tag_names(cls, value: list[str]) -> list[str]:
+        if len(value) > 3:
+            raise ValueError("最多引用 3 个标签")
         return value
 
 

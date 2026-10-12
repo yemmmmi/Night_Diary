@@ -107,6 +107,7 @@ def send_message(
         trace_id=trace_id,
         card_ids=body.card_ids,
         plan_ids=body.plan_ids,
+        tag_names=body.tag_names,
         forced_skill=body.skill,
     )
 
@@ -120,6 +121,7 @@ def send_message(
         retrieved_memory_ids=result.retrieved_memory_ids,
         attached_card_ids=body.card_ids,
         attached_plan_ids=body.plan_ids,
+        attached_tag_names=body.tag_names,
         skill_result=result.skill_result,
         process_info=result.process_info,
         token_info=result.token_info,
@@ -183,6 +185,7 @@ async def send_message_streaming(
             trace_id=trace_id,
             card_ids=body.card_ids,
             plan_ids=body.plan_ids,
+            tag_names=body.tag_names,
             forced_skill=body.skill,
         )
     )

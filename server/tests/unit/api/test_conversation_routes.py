@@ -166,6 +166,53 @@ def test_send_message_with_attached_cards_and_plans(authed_client: TestClient) -
     assert user_row["attached_plan_ids"] == [plan_id]
 
 
+def test_send_message_rejects_too_many_attached_tags(authed_client: TestClient) -> None:
+    conversation_id = _create_conversation(authed_client)
+    response = authed_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"content": "测试", "tag_names": ["a", "b", "c", "d"]},
+    )
+    assert response.status_code == 422
+
+
+def test_send_message_with_attached_tags(authed_client: TestClient) -> None:
+    """引用标签随信落库: 响应回显、历史可回读, 回信侧不带引用。"""
+    conversation_id = _create_conversation(authed_client)
+    tag_name = authed_client.post(
+        "/api/v1/tags",
+        json={"name": "睡眠", "color": "#8B5CF6"},
+    ).json()["name"]
+
+    with patch(
+        "app.api.v1.conversation.conversation_ai_service.generate_reply",
+        return_value=ChatReplyResult(
+            reply_text="我看了你标了「睡眠」的日记。",
+            retrieved_diary_ids=[],
+            retrieved_memory_ids=[],
+        ),
+    ) as mock_generate:
+        sent = authed_client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            json={
+                "content": "帮我总结下睡眠相关的记录",
+                "tag_names": [tag_name],
+                "auto_retrieve": False,
+            },
+        )
+
+    assert sent.status_code == 201
+    body = sent.json()
+    assert body["message"]["attached_tag_names"] == [tag_name]
+    assert body["reply"]["attached_tag_names"] is None
+    assert mock_generate.call_args.kwargs["tag_names"] == [tag_name]
+
+    history = authed_client.get(f"/api/v1/conversations/{conversation_id}/messages")
+    assert history.status_code == 200
+    user_row = history.json()[0]
+    assert user_row["role"] == "user"
+    assert user_row["attached_tag_names"] == [tag_name]
+
+
 # ── V3 P0: streaming endpoint ────────────────────────────────────────
 
 

@@ -138,6 +138,7 @@ def _run_lightweight_migrations(engine: Engine) -> None:
             "token_info": "TEXT",
             "attached_card_ids": "TEXT",
             "attached_plan_ids": "TEXT",
+            "attached_tag_names": "TEXT",
             "skill_result": "TEXT",
         },
         "diary_entries": {"user_id": "VARCHAR(64)"},

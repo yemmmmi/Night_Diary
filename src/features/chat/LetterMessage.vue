@@ -50,6 +50,9 @@ const attachNoteItems = computed(() => {
   for (const planId of props.message.attached_plan_ids ?? []) {
     items.push(props.planLabels?.[planId] ?? `计划 #${planId.slice(0, 6)}`)
   }
+  for (const tagName of props.message.attached_tag_names ?? []) {
+    items.push(`标签 · ${tagName}`)
+  }
   return items
 })
 
@@ -57,6 +60,7 @@ const attachNoteLabel = computed(() =>
   chatCopy.letterAttachNote(
     (props.message.attached_card_ids ?? []).length,
     (props.message.attached_plan_ids ?? []).length,
+    (props.message.attached_tag_names ?? []).length,
   ),
 )
 

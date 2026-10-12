@@ -126,6 +126,7 @@ def add_message(
     retrieved_memory_ids: list[str] | None = None,
     attached_card_ids: list[str] | None = None,
     attached_plan_ids: list[str] | None = None,
+    attached_tag_names: list[str] | None = None,
     skill_result: dict[str, Any] | None = None,
     process_info: dict[str, Any] | None = None,
     token_info: dict[str, Any] | None = None,
@@ -141,6 +142,9 @@ def add_message(
         retrieved_memory_ids=json.dumps(retrieved_memory_ids) if retrieved_memory_ids else None,
         attached_card_ids=json.dumps(attached_card_ids) if attached_card_ids else None,
         attached_plan_ids=json.dumps(attached_plan_ids) if attached_plan_ids else None,
+        attached_tag_names=(
+            json.dumps(attached_tag_names, ensure_ascii=False) if attached_tag_names else None
+        ),
         skill_result=json.dumps(skill_result, ensure_ascii=False) if skill_result else None,
         process_info=json.dumps(process_info, ensure_ascii=False) if process_info else None,
         token_info=json.dumps(token_info) if token_info else None,
@@ -163,6 +167,7 @@ def add_user_message_and_reply(
     retrieved_memory_ids: list[str] | None = None,
     attached_card_ids: list[str] | None = None,
     attached_plan_ids: list[str] | None = None,
+    attached_tag_names: list[str] | None = None,
     skill_result: dict[str, Any] | None = None,
     process_info: dict[str, Any] | None = None,
     token_info: dict[str, Any] | None = None,
@@ -175,6 +180,7 @@ def add_user_message_and_reply(
         content=content,
         attached_card_ids=attached_card_ids,
         attached_plan_ids=attached_plan_ids,
+        attached_tag_names=attached_tag_names,
     )
     reply_msg = add_message(
         db,

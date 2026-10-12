@@ -54,6 +54,9 @@ vi.mock('@/shared/api/card', () => ({ listCards }))
 const listPlans = vi.hoisted(() => vi.fn(async () => [] as PlanItem[]))
 vi.mock('@/shared/api/plan', () => ({ listPlans }))
 
+const listTags = vi.hoisted(() => vi.fn(async () => [] as { id: number; name: string; color: string; usage_count: number; created_at: string }[]))
+vi.mock('@/shared/api/tags', () => ({ listTags }))
+
 const getCurrentMode = vi.hoisted(() => vi.fn(async () => ({ mode: 'daily', display_name: '日常' })))
 const overrideMode = vi.hoisted(() => vi.fn(async () => ({ mode: 'daily', display_name: '日常' })))
 vi.mock('@/shared/api/mode', () => ({ getCurrentMode, overrideMode }))
@@ -215,6 +218,7 @@ describe('ChatScene', () => {
     listDiaryEntries.mockResolvedValue([])
     listCards.mockResolvedValue([])
     listPlans.mockResolvedValue([])
+    listTags.mockResolvedValue([])
     listConversations.mockResolvedValue([])
     getMessages.mockResolvedValue([])
     sendMessage.mockResolvedValue({
@@ -338,6 +342,35 @@ describe('ChatScene', () => {
         content: '今天有点累',
         card_ids: ['card-1'],
         plan_ids: ['plan-1'],
+      }),
+    )
+  })
+
+  it('references tags and sends them with the message', async () => {
+    listTags.mockResolvedValue([
+      { id: 1, name: '睡眠', color: '#8B5CF6', usage_count: 3, created_at: '2026-01-01T21:00:00' },
+      { id: 2, name: '空标签', color: '#6B7280', usage_count: 0, created_at: '2026-01-01T21:00:00' },
+    ])
+    const { wrapper, chatStore } = mountScene({ messages: [msg('m1', 'user', '今天有点累')] })
+    await flushPromises()
+
+    await wrapper.find('[data-testid="tag-picker__add"]').trigger('click')
+    const tagItems = wrapper.findAll('[data-testid="tag-picker__item"]')
+    expect(tagItems).toHaveLength(1)
+    expect(tagItems[0].text()).toContain('#睡眠')
+    await tagItems[0].trigger('click')
+    expect(chatStore.pinnedTagNames).toEqual(['睡眠'])
+    expect(wrapper.find('[data-testid="tag-picker__chip"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="letter-input"] textarea').setValue('看看睡眠记录')
+    await wrapper.find('[data-testid="letter-send"]').trigger('click')
+    await flushPromises()
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({
+        content: '看看睡眠记录',
+        tag_names: ['睡眠'],
       }),
     )
   })

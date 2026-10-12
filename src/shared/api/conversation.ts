@@ -35,6 +35,7 @@ export interface ChatMessage {
   retrieved_memory_ids?: string[]
   attached_card_ids?: string[]
   attached_plan_ids?: string[]
+  attached_tag_names?: string[]
   skill_result?: SkillResult | null
   process_info?: ProcessInfo | null
   created_at: string
@@ -95,6 +96,7 @@ export interface SendMessagePayload {
   diary_ids?: number[]
   card_ids?: string[]
   plan_ids?: string[]
+  tag_names?: string[]
   auto_retrieve?: boolean
   skill?: UserSkill
 }
