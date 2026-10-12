@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
+from app.domain.memory.types import MAX_ABOUT_CHARS
+
 
 class TagBrief(BaseModel):
     id: int
@@ -287,6 +289,18 @@ class MemoryOverviewResponse(BaseModel):
     episodic_from_diaries: int
     card_total: int
     profile_built: bool
+
+
+class UserAboutResponse(BaseModel):
+    """User-authored 「关于我」 (B2) — injected at the frozen prompt prefix."""
+
+    content: str = ""
+    updated_at: float = 0.0
+    max_chars: int = MAX_ABOUT_CHARS
+
+
+class UserAboutUpdateRequest(BaseModel):
+    content: str = Field(default="", max_length=MAX_ABOUT_CHARS)
 
 
 class ModelDownloadItemResponse(BaseModel):

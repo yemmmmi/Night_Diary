@@ -2,14 +2,17 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import {
+  getAbout,
   getOverview,
   getProfile,
   listEpisodic,
+  updateAbout,
   updateEpisodic,
   deleteEpisodic,
   type EpisodicEntry,
   type EpisodicEntryUpdate,
   type MemoryOverview,
+  type UserAbout,
   type UserProfile,
 } from '@/shared/api/memory'
 import { formatApiError } from '@/shared/utils/apiError'
@@ -19,6 +22,7 @@ export const useMemoryStore = defineStore('memory', () => {
   const episodic = ref<EpisodicEntry[]>([])
   const profile = ref<UserProfile | null>(null)
   const overview = ref<MemoryOverview | null>(null)
+  const about = ref<UserAbout | null>(null)
   const loading = ref(false)
   const saving = ref(false)
   const error = ref<string | null>(null)
@@ -27,19 +31,34 @@ export const useMemoryStore = defineStore('memory', () => {
     loading.value = true
     error.value = null
     try {
-      const [ep, pr, ov] = await Promise.all([
+      const [ep, pr, ov, ab] = await Promise.all([
         listEpisodic(),
         getProfile(),
         getOverview(),
+        getAbout(),
       ])
       episodic.value = ep
       profile.value = pr
       overview.value = ov
+      about.value = ab
     } catch (err) {
       error.value = formatApiError(err, memoryCopy.loadError)
       throw err
     } finally {
       loading.value = false
+    }
+  }
+
+  async function saveAbout(content: string): Promise<void> {
+    saving.value = true
+    error.value = null
+    try {
+      about.value = await updateAbout(content)
+    } catch (err) {
+      error.value = formatApiError(err, memoryCopy.aboutSaveError)
+      throw err
+    } finally {
+      saving.value = false
     }
   }
 
@@ -79,10 +98,12 @@ export const useMemoryStore = defineStore('memory', () => {
     episodic,
     profile,
     overview,
+    about,
     loading,
     saving,
     error,
     loadAll,
+    saveAbout,
     saveEpisodic,
     removeEpisodic,
   }

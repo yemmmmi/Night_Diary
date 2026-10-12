@@ -12,9 +12,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from app.domain.memory.types import MAX_ABOUT_CHARS
 from app.infrastructure.memory_repository import (
     SqliteEpisodicMemoryStore,
     SqliteLongTermProfileStore,
+    SqliteUserAboutStore,
 )
 from app.infrastructure.models.memory_card import MemoryCardRow
 
@@ -145,6 +147,37 @@ def get_profile(
     if profile is None:
         return None
     return _profile_to_dict(profile)
+
+
+def get_about(container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
+    """Return the user-authored 「关于我」 text (B2).
+
+    Complements the system-inferred long-term profile: this is what the user
+    says about themselves, editable from the Memory Library page.
+    """
+    store = SqliteUserAboutStore(container.session_factory)
+    record = store.get_about(user_id)
+    content, updated_at = record if record is not None else ("", 0.0)
+    return {"content": content, "updated_at": updated_at, "max_chars": MAX_ABOUT_CHARS}
+
+
+def update_about(
+    container: ServiceContainer, *, content: str, user_id: str = DEFAULT_USER_ID
+) -> dict[str, Any]:
+    """Persist the user-authored 「关于我」 text, clamped to the char budget.
+
+    Cached conversation sessions for the user are invalidated so the next turn
+    rebuilds its frozen memory block with the new text (D6 prefix is otherwise
+    frozen for the session's lifetime).
+    """
+    cleaned = (content or "").strip()[:MAX_ABOUT_CHARS]
+    store = SqliteUserAboutStore(container.session_factory)
+    updated_at = store.save_about(user_id, cleaned)
+
+    from app.services.ai.session_context import invalidate_user_sessions
+
+    invalidate_user_sessions(user_id)
+    return {"content": cleaned, "updated_at": updated_at, "max_chars": MAX_ABOUT_CHARS}
 
 
 def get_overview(container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:

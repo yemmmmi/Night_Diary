@@ -65,17 +65,22 @@ class SessionContext:
 
     Attributes:
         conversation_id: The conversation this context belongs to.
+        user_id: Owner of the conversation (used to invalidate the frozen block
+            when the user edits their 「关于我」).
         compressed_history: Sliding-window compressed chat history.
         profile_style: Cached preferred_response_style from long-term profile.
         profile_topics: Cached recurring_topics from long-term profile.
+        user_about: User-authored 「关于我」 text (B2), frozen into the block.
         usage: Token usage accumulator across all turns.
         pinned_diary_ids: Diary entries pinned for this session.
     """
 
     conversation_id: str
+    user_id: str = "default"
     compressed_history: str = ""
     profile_style: str = ""
     profile_topics: list[str] = field(default_factory=list)
+    user_about: str = ""
     usage: UsageAccumulator = field(default_factory=UsageAccumulator)
     pinned_diary_ids: list[int] = field(default_factory=list)
     #: Frozen memory block (D6) — assembled once at session start and reused
@@ -96,6 +101,7 @@ class SessionContext:
         block = build_frozen_memory_block(
             profile_style=self.profile_style,
             profile_topics=self.profile_topics,
+            user_about=self.user_about,
         )
         self.frozen_memory_block = block.text
         self.memory_budget = block.budget.to_dict()
@@ -169,9 +175,11 @@ class SessionContext:
         """Serialize session state for Redis persistence (L2 cache)."""
         return {
             "conversation_id": self.conversation_id,
+            "user_id": self.user_id,
             "compressed_history": self.compressed_history,
             "profile_style": self.profile_style,
             "profile_topics": list(self.profile_topics),
+            "user_about": self.user_about,
             "usage": self.usage.summary(),
             "pinned_diary_ids": list(self.pinned_diary_ids),
             "frozen_memory_block": self.frozen_memory_block,
@@ -185,9 +193,11 @@ class SessionContext:
         """Reconstruct a SessionContext from a Redis snapshot."""
         ctx = cls(
             conversation_id=data.get("conversation_id", ""),
+            user_id=data.get("user_id", "default"),
             compressed_history=data.get("compressed_history", ""),
             profile_style=data.get("profile_style", ""),
             profile_topics=list(data.get("profile_topics", [])),
+            user_about=data.get("user_about", ""),
             pinned_diary_ids=list(data.get("pinned_diary_ids", [])),
         )
         usage_data = data.get("usage", {})
@@ -420,7 +430,7 @@ def get_or_create_session(
         return ctx
 
     # Create new
-    ctx = SessionContext(conversation_id=conversation_id)
+    ctx = SessionContext(conversation_id=conversation_id, user_id=user_id)
 
     # Restart recovery (P1-3): rebuild recent history from DB messages when
     # neither L1 nor L2 has this session (e.g. restart without Redis).
@@ -444,6 +454,17 @@ def get_or_create_session(
         except Exception as exc:
             logger.warning("SessionContext profile load failed: %s", exc)
 
+    # Load the user-authored 「关于我」 (B2) so it freezes into the block below.
+    if container is not None and getattr(container, "session_factory", None) is not None:
+        try:
+            from app.infrastructure.memory_repository import SqliteUserAboutStore
+
+            record = SqliteUserAboutStore(container.session_factory).get_about(user_id)
+            if record is not None and isinstance(record[0], str):
+                ctx.user_about = record[0]
+        except Exception as exc:
+            logger.debug("SessionContext about load failed (best-effort): %s", exc)
+
     # Freeze the memory block once, now that the profile is known (D6).
     ctx.refresh_frozen_memory()
 
@@ -462,6 +483,34 @@ def clear_session(conversation_id: str) -> None:
     from app.infrastructure.redis_client import cache_delete
 
     cache_delete(_session_key(conversation_id))
+
+
+def invalidate_user_sessions(user_id: str) -> int:
+    """Drop cached sessions owned by *user_id*, returning how many were dropped.
+
+    The frozen memory block is intentionally immutable for a session's lifetime
+    (D6 prefix caching), so a mid-session edit to the user's 「关于我」 (B2) would
+    otherwise not take effect until the session restarts. Called after the about
+    text is saved to force a rebuild on the next turn.
+
+    Only L1-resident sessions are dropped; a session evicted to L2 (Redis) will
+    still rebuild its block when it is next restored with a missing block, so the
+    staleness window is bounded by the L2 TTL (30 min).
+    """
+    from app.infrastructure.redis_client import cache_delete
+
+    victims = [
+        conv_id
+        for conv_id, ctx in _sessions.items()
+        if getattr(ctx, "user_id", "default") == user_id
+    ]
+    for conv_id in victims:
+        _sessions.pop(conv_id, None)
+        try:
+            cache_delete(_session_key(conv_id))
+        except Exception as exc:  # best-effort: L2 may be unavailable
+            logger.debug("invalidate_user_sessions L2 delete failed: %s", exc)
+    return len(victims)
 
 
 def get_active_session_count() -> int:
@@ -498,4 +547,5 @@ __all__ = [
     "get_active_session_count",
     "get_or_create_session",
     "get_session_cache_stats",
+    "invalidate_user_sessions",
 ]

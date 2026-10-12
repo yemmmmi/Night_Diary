@@ -24,3 +24,18 @@ class LongTermProfileRow(Base):
     user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     profile_json: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[float] = mapped_column(Float)
+
+
+class UserAboutRow(Base):
+    """User-authored self-description ("关于我").
+
+    Kept separate from :class:`LongTermProfileRow` (which is *system-inferred*):
+    this is what the user says about themselves — background, preferences,
+    expected tone. Injected at the frozen system-prompt prefix (B2/D6).
+    """
+
+    __tablename__ = "user_abouts"
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    content: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[float] = mapped_column(Float, default=0.0)

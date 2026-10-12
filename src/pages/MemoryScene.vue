@@ -2,6 +2,7 @@
 import { computed, onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+import AboutMeEditor from '@/features/memory/AboutMeEditor.vue'
 import CardsSection from '@/features/memory/CardsSection.vue'
 import EpisodicEntryCard from '@/features/memory/EpisodicEntryCard.vue'
 import MoodTrendChart from '@/features/memory/MoodTrendChart.vue'
@@ -41,6 +42,13 @@ const pendingDeleteId = ref<string | null>(null)
 const profile = computed(() => memoryStore.profile)
 const overview = computed(() => memoryStore.overview)
 const episodic = computed(() => memoryStore.episodic)
+const about = computed(() => memoryStore.about)
+const aboutMaxChars = computed(() => about.value?.max_chars ?? 600)
+const aboutContent = computed(() => about.value?.content ?? '')
+
+async function onSaveAbout(content: string) {
+  await memoryStore.saveAbout(content)
+}
 
 // ── 情绪趋势（后端聚合，前端补零在 MoodTrendChart 内完成） ────────
 const trendPoints = ref<MoodTrendPoint[]>([])
@@ -230,6 +238,18 @@ onActivated(() => {
         <p class="memory-blank__title">{{ copy.profileEmpty }}</p>
         <p class="memory-blank__hint">{{ copy.profileEmptyHint }}</p>
       </div>
+    </section>
+
+    <!-- ── 关于我：用户自述 ────────────────────────────────────── -->
+    <section class="memory-section">
+      <h2 class="memory-section__title">{{ copy.aboutTitle }}</h2>
+      <p class="memory-section__desc">{{ copy.aboutDesc }}</p>
+      <AboutMeEditor
+        :content="aboutContent"
+        :max-chars="aboutMaxChars"
+        :saving="memoryStore.saving"
+        @save="onSaveAbout"
+      />
     </section>
 
     <!-- ── 情节记忆：细线行 ────────────────────────────────────── -->

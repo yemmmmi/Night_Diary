@@ -154,6 +154,63 @@ def test_snapshot_without_frozen_block_rebuilds_from_profile() -> None:
     assert "理性" in restored.frozen_memory_block
 
 
+# ── User-authored 「关于我」 (B2) ──────────────────────────────────────
+
+
+def test_frozen_block_includes_user_about() -> None:
+    ctx = SessionContext(conversation_id="about-frozen")
+    ctx.user_about = "我是自由职业者，喜欢被称作「你」。"
+    ctx.refresh_frozen_memory()
+    assert "自由职业者" in ctx.frozen_memory_block
+
+
+def test_snapshot_roundtrip_preserves_user_about() -> None:
+    ctx = SessionContext(conversation_id="about-snap")
+    ctx.user_about = "偏理性"
+    ctx.refresh_frozen_memory()
+
+    restored = SessionContext.from_snapshot(ctx.to_snapshot())
+    assert restored.user_about == "偏理性"
+    assert "偏理性" in restored.frozen_memory_block
+
+
+def test_get_or_create_session_loads_user_about(tmp_path) -> None:
+    from sqlalchemy.orm import sessionmaker
+
+    from app.infrastructure.database import create_db_engine, init_db
+    from app.infrastructure.memory_repository import SqliteUserAboutStore
+
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'about.db'}")
+    init_db(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    SqliteUserAboutStore(factory).save_about("u1", "我是夜班护士")
+
+    container = MagicMock()
+    container.session_factory = factory
+    container.long_term_memory = None
+
+    clear_session("about-load")
+    ctx = get_or_create_session("about-load", container=container, user_id="u1")
+    assert ctx.user_id == "u1"
+    assert ctx.user_about == "我是夜班护士"
+    assert "我是夜班护士" in ctx.frozen_memory_block
+    clear_session("about-load")
+
+
+def test_invalidate_user_sessions_drops_only_owner() -> None:
+    clear_session("inv-a")
+    clear_session("inv-b")
+    get_or_create_session("inv-a", user_id="u1")
+    get_or_create_session("inv-b", user_id="u2")
+
+    dropped = sc.invalidate_user_sessions("u1")
+
+    assert dropped == 1
+    assert "inv-a" not in sc._sessions
+    assert "inv-b" in sc._sessions
+    clear_session("inv-b")
+
+
 # ── LRU eviction + cache stats (P6 Task 2) ─────────────────────────────
 
 
