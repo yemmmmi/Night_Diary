@@ -13,6 +13,7 @@ from app.config import Settings, get_settings
 from app.infrastructure.models.model_provider import TIER_VALUES, ModelProviderRow
 from app.infrastructure.security import decrypt_api_key, encrypt_api_key
 from app.shared.errors import ModelProviderNotFoundError, ValidationError
+from app.shared.url_guard import validate_outbound_url
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +126,12 @@ def _chat_completions_url(base_url: str) -> str:
 
 
 def _external_http_client() -> httpx.Client:
-    """Outbound LLM probe client — bypass system proxy to avoid Clash rewriting loopback/API."""
-    return httpx.Client(timeout=10.0, trust_env=False)
+    """Outbound LLM probe client — bypass system proxy to avoid Clash rewriting loopback/API.
+
+    ``follow_redirects=False`` (httpx default, made explicit) keeps a probe from
+    being bounced to an unvetted host, complementing :mod:`app.shared.url_guard`.
+    """
+    return httpx.Client(timeout=10.0, trust_env=False, follow_redirects=False)
 
 
 def _probe_models_list(client: httpx.Client, url: str, headers: dict[str, str]) -> httpx.Response:
@@ -158,9 +163,12 @@ def validate_model_connection(
     api_key: str,
     *,
     model_name: str = "deepseek-chat",
+    settings: Settings | None = None,
 ) -> str | None:
-    if not base_url.startswith(("http://", "https://")):
-        return "Base URL 格式错误"
+    resolved = settings or get_settings()
+    guard_error = validate_outbound_url(base_url, allow_private=resolved.allow_private_model_hosts)
+    if guard_error:
+        return guard_error
 
     headers = {"Authorization": f"Bearer {api_key}"}
     last_status: int | None = None
@@ -216,7 +224,9 @@ def test_stored_model_connection(
         return "未配置 API 地址"
     resolved = settings or get_settings()
     api_key = decrypt_api_key(row.api_key_encrypted, resolved)
-    return validate_model_connection(row.base_url, api_key, model_name=row.model_name)
+    return validate_model_connection(
+        row.base_url, api_key, model_name=row.model_name, settings=resolved
+    )
 
 
 def create_model(
@@ -232,7 +242,7 @@ def create_model(
     settings: Settings | None = None,
 ) -> ModelProviderRow:
     tier = _validate_tier(tier)
-    error = validate_model_connection(base_url, api_key, model_name=model_name)
+    error = validate_model_connection(base_url, api_key, model_name=model_name, settings=settings)
     if error:
         raise ValidationError(error)
 
@@ -285,7 +295,9 @@ def update_model(
         test_key = api_key
         test_model = model_name or row.model_name
         if test_url:
-            error = validate_model_connection(test_url, test_key, model_name=test_model)
+            error = validate_model_connection(
+                test_url, test_key, model_name=test_model, settings=resolved_settings
+            )
             if error:
                 raise ValidationError(error)
         row.api_key_encrypted = encrypt_api_key(api_key, resolved_settings)
