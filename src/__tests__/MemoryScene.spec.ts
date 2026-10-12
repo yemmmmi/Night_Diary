@@ -18,12 +18,28 @@ const getAbout = vi.hoisted(() =>
 const updateAbout = vi.hoisted(() =>
   vi.fn(async (content: string): Promise<UserAbout> => ({ content, updated_at: 1, max_chars: 600 })),
 )
+const getPersonality = vi.hoisted(() =>
+  vi.fn(async (): Promise<Personality> => ({
+    key: 'warm',
+    label: '温和陪伴',
+    presets: [
+      { key: 'warm', label: '温和陪伴', min_chars: 60, max_chars: 300 },
+      { key: 'pragmatic', label: '理性教练', min_chars: 60, max_chars: 260 },
+      { key: 'calm', label: '简洁记事', min_chars: 40, max_chars: 160 },
+    ],
+  })),
+)
+const updatePersonality = vi.hoisted(() =>
+  vi.fn(async (key: string): Promise<Personality> => ({ key, label: key, presets: [] })),
+)
 vi.mock('@/shared/api/memory', () => ({
   listEpisodic,
   getProfile,
   getOverview,
   getAbout,
   updateAbout,
+  getPersonality,
+  updatePersonality,
   updateEpisodic: vi.fn(async () => ({})),
   deleteEpisodic: vi.fn(async () => undefined),
 }))
@@ -58,7 +74,7 @@ vi.mock('@/shared/api/plan', () => ({
 
 import MemoryScene from '@/pages/MemoryScene.vue'
 import { toIsoDate, startOfWeekMonday, endOfWeekSunday, parseLocalDate } from '@/shared/utils/diaryFormat'
-import type { EpisodicEntry, MemoryOverview, UserAbout } from '@/shared/api/memory'
+import type { EpisodicEntry, MemoryOverview, Personality, UserAbout } from '@/shared/api/memory'
 import type { MoodTrendPoint } from '@/shared/api/card'
 import type { WeeklyReport } from '@/shared/api/weekly'
 
@@ -130,6 +146,20 @@ describe('MemoryScene', () => {
       content,
       updated_at: 1,
       max_chars: 600,
+    }))
+    getPersonality.mockResolvedValue({
+      key: 'warm',
+      label: '温和陪伴',
+      presets: [
+        { key: 'warm', label: '温和陪伴', min_chars: 60, max_chars: 300 },
+        { key: 'pragmatic', label: '理性教练', min_chars: 60, max_chars: 260 },
+        { key: 'calm', label: '简洁记事', min_chars: 40, max_chars: 160 },
+      ],
+    })
+    updatePersonality.mockImplementation(async (key: string) => ({
+      key,
+      label: key,
+      presets: [],
     }))
     getMoodTrends.mockResolvedValue([])
     listCards.mockResolvedValue([])
@@ -256,5 +286,21 @@ describe('MemoryScene', () => {
     await flushPromises()
 
     expect(updateAbout).toHaveBeenCalledWith('希望回信温和一点')
+  })
+
+  it('renders 回信人格 presets and saves the chosen one', async () => {
+    const { wrapper } = mountScene()
+    await flushPromises()
+
+    const picker = wrapper.find('[data-testid="personality-picker"]')
+    expect(picker.exists()).toBe(true)
+    expect(wrapper.find('[data-testid="personality-warm"]').classes()).toContain(
+      'personality__card--active',
+    )
+
+    await wrapper.find('[data-testid="personality-pragmatic"]').trigger('click')
+    await flushPromises()
+
+    expect(updatePersonality).toHaveBeenCalledWith('pragmatic')
   })
 })

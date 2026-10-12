@@ -257,11 +257,11 @@ def test_finalize_diary_without_entry_returns_none_atom():
 
 
 def test_build_default_pipeline_contains_expected_middlewares():
-    """默认管道含 Safety + Mode + Approval + Finalize 四个中间件。"""
+    """默认管道含 Safety + Mode + Personality + Approval + Finalize 五个中间件。"""
     pipeline = build_default_pipeline()
     assert pipeline.is_empty is False
     names = [mw.name for mw in pipeline._middlewares]  # type: ignore[attr-defined]
-    assert names == ["safety", "mode", "tool_approval", "finalize"]
+    assert names == ["safety", "mode", "personality", "tool_approval", "finalize"]
 
 
 # ── Fine-grained lifecycle hooks (D3) ─────────────────────────────────

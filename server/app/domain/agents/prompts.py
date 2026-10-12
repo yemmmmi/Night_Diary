@@ -13,6 +13,8 @@ files under ``app/services/ai/prompts/`` if richer prompt management is needed.
 
 from __future__ import annotations
 
+from typing import Any
+
 # ─────────────────────────── Empathy Agent ────────────────────────────
 
 # prompt-version: empathy_v2.1 (2026-06-27) — 去机器自指, 改为不宣布身份的人话开场
@@ -72,6 +74,76 @@ def normalize_style_key(style: str | None) -> str:
     if key in EMPATHY_STYLE_INSTRUCTIONS:
         return key
     return STYLE_KEY_ALIASES.get(key, "warm")
+
+
+# ─────────────────────── Personality Presets (E1) ───────────────────────
+# prompt-version: personality_v1.0 (2026-10-11) — E1: 用户可选的「回信人格」preset,
+# 与 V3.x 三档模式 (日常/跟进/内视) 正交: 模式决定「此刻说什么」, 人格决定「以什么口吻、
+# 多长来说」。人格的语气文案复用 EMPATHY_STYLE_INSTRUCTIONS (单一事实来源), 这里只补
+# 展示名与长度预算, 保证日记回信 (empathy agent) 与会话 (conversation loop) 用同一套资产。
+#
+# 展示名 (前端可见): warm=温和陪伴 / pragmatic=理性教练 / calm=简洁记事。
+PERSONALITY_PRESETS: dict[str, dict[str, Any]] = {
+    "warm": {"label": "温和陪伴", "min_chars": 60, "max_chars": 300},
+    "pragmatic": {"label": "理性教练", "min_chars": 60, "max_chars": 260},
+    "calm": {"label": "简洁记事", "min_chars": 40, "max_chars": 160},
+}
+
+#: 默认人格 (与 EMPATHY_STYLE_INSTRUCTIONS 的默认 warm 保持一致)。
+DEFAULT_PERSONALITY_KEY = "warm"
+
+#: 全局底线: 任何人格都不得对用户施压 (与 ModePromptBuilder 的底线同源)。
+PERSONALITY_NO_PRESSURE_BOTTOM_LINE = (
+    "无论何种人格, 任何情况下都不要用『必须/赶紧/逾期警告』等方式对用户施加压力。"
+)
+
+
+def normalize_personality_key(key: str | None) -> str:
+    """归一化任意人格输入 (含旧 key / 别名) 到 ``PERSONALITY_PRESETS`` 的 key。
+
+    空值或未知值回落到 :data:`DEFAULT_PERSONALITY_KEY`, 保证链路始终取到有效人格。
+    """
+    normalized = normalize_style_key(key)
+    return normalized if normalized in PERSONALITY_PRESETS else DEFAULT_PERSONALITY_KEY
+
+
+def is_personality_key(key: str | None) -> bool:
+    """``key`` 是否为可接受的人格输入 (canonical key 或历史别名)。"""
+    if not key:
+        return False
+    candidate = key.strip().lower()
+    return candidate in PERSONALITY_PRESETS or candidate in STYLE_KEY_ALIASES
+
+
+def personality_label(key: str | None) -> str:
+    """人格的展示名 (温和陪伴 / 理性教练 / 简洁记事)。"""
+    return str(PERSONALITY_PRESETS[normalize_personality_key(key)]["label"])
+
+
+def personality_preset_options() -> list[dict[str, Any]]:
+    """可序列化的 preset 列表 (供 API / 前端渲染选择器)。"""
+    return [
+        {
+            "key": key,
+            "label": preset["label"],
+            "min_chars": preset["min_chars"],
+            "max_chars": preset["max_chars"],
+        }
+        for key, preset in PERSONALITY_PRESETS.items()
+    ]
+
+
+def build_personality_directive(key: str | None) -> str:
+    """渲染注入系统提示的【回信人格】块 (语气 + 长度 + 不施压底线)。"""
+    normalized = normalize_personality_key(key)
+    preset = PERSONALITY_PRESETS[normalized]
+    tone = EMPATHY_STYLE_INSTRUCTIONS[normalized]
+    return (
+        f"【回信人格·{preset['label']}】\n"
+        f"{tone}\n"
+        f"回信长度：约 {preset['min_chars']}-{preset['max_chars']} 个汉字。\n"
+        f"{PERSONALITY_NO_PRESSURE_BOTTOM_LINE}"
+    )
 
 
 EMPATHY_CRISIS_BLOCK = (
@@ -222,6 +294,7 @@ SUPERVISOR_FALLBACK_RESPONSE = (
 
 
 __all__ = [
+    "DEFAULT_PERSONALITY_KEY",
     "EMPATHY_BASE",
     "EMPATHY_CRISIS_BLOCK",
     "EMPATHY_CRISIS_FALLBACK",
@@ -233,9 +306,16 @@ __all__ = [
     "INSIGHT_REPORT_SYSTEM",
     "INSIGHT_SYSTEM",
     "INTENT_CLASSIFY_PROMPT",
+    "PERSONALITY_NO_PRESSURE_BOTTOM_LINE",
+    "PERSONALITY_PRESETS",
     "STYLE_KEY_ALIASES",
     "SUPERVISOR_FALLBACK_RESPONSE",
     "SUPERVISOR_SYNTHESIZE_PROMPT",
     "SUPERVISOR_WORKER_LABELS",
+    "build_personality_directive",
+    "is_personality_key",
+    "normalize_personality_key",
     "normalize_style_key",
+    "personality_label",
+    "personality_preset_options",
 ]

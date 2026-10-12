@@ -785,7 +785,14 @@ async def run_conversation_loop_streaming(
             # Request-scoped session + precomputed mode for presentation
             # middlewares such as ModePromptBuilder. Kept in ``extra`` so
             # unrelated middlewares never depend on a specific key.
-            extra={"db": db, "current_mode": current_mode},
+            # ``personality`` (E1) carries the user's chosen 回信人格 preset
+            # (session-cached ``preferred_response_style``) for
+            # PersonalityPromptBuilder — orthogonal to the mode.
+            extra={
+                "db": db,
+                "current_mode": current_mode,
+                "personality": getattr(session, "profile_style", "") or "",
+            },
         )
         system_prompt = middleware_pipeline.apply_system_prompt(system_prompt, mw_ctx)
         # Best-effort mode for the mode_state event.

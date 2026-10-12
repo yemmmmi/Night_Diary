@@ -57,6 +57,21 @@ export interface UserAbout {
   max_chars: number
 }
 
+/** A selectable 回信人格 preset (E1) — tone + length, orthogonal to the mode. */
+export interface PersonalityPreset {
+  key: string
+  label: string
+  min_chars: number
+  max_chars: number
+}
+
+/** The user's chosen 回信人格 preset plus the full option list. */
+export interface Personality {
+  key: string
+  label: string
+  presets: PersonalityPreset[]
+}
+
 export async function listEpisodic(): Promise<EpisodicEntry[]> {
   const client = await getHttpClient()
   const { data } = await client.get<EpisodicEntry[]>('/api/v1/memory/episodic')
@@ -101,5 +116,17 @@ export async function getAbout(): Promise<UserAbout> {
 export async function updateAbout(content: string): Promise<UserAbout> {
   const client = await getHttpClient()
   const { data } = await client.put<UserAbout>('/api/v1/memory/about', { content })
+  return data
+}
+
+export async function getPersonality(): Promise<Personality> {
+  const client = await getHttpClient()
+  const { data } = await client.get<Personality>('/api/v1/memory/personality')
+  return data
+}
+
+export async function updatePersonality(key: string): Promise<Personality> {
+  const client = await getHttpClient()
+  const { data } = await client.put<Personality>('/api/v1/memory/personality', { key })
   return data
 }

@@ -309,6 +309,28 @@ class UserAboutUpdateRequest(BaseModel):
     content: str = Field(default="", max_length=MAX_ABOUT_CHARS)
 
 
+# ── Reply personality presets (E1) ─────────────────────────────────────
+
+
+class PersonalityPresetResponse(BaseModel):
+    key: str
+    label: str
+    min_chars: int
+    max_chars: int
+
+
+class PersonalityResponse(BaseModel):
+    """The user's chosen 回信人格 preset plus the full option list."""
+
+    key: str
+    label: str
+    presets: list[PersonalityPresetResponse] = Field(default_factory=list)
+
+
+class PersonalityUpdateRequest(BaseModel):
+    key: str = Field(min_length=1, max_length=32)
+
+
 # ── Scheduled tasks (A4) ───────────────────────────────────────────────
 
 
