@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -12,8 +13,59 @@ from app.config import Settings, get_settings
 from app.infrastructure.models.model_provider import TIER_VALUES, ModelProviderRow
 from app.infrastructure.security import decrypt_api_key, encrypt_api_key
 from app.shared.errors import ModelProviderNotFoundError, ValidationError
+from app.shared.url_guard import validate_outbound_url
 
 logger = logging.getLogger(__name__)
+
+
+def _decode_extra_keys(raw: str | None) -> list[str]:
+    """Parse the encrypted extra-key JSON list (defensive: bad data → [])."""
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        logger.warning("model provider api_keys_encrypted is not valid JSON; ignoring")
+        return []
+    if not isinstance(data, list):
+        return []
+    return [str(token) for token in data if token]
+
+
+def _encode_extra_keys(keys: list[str] | None, settings: Settings | None) -> str | None:
+    """Encrypt extra keys into a JSON list; empty/None → NULL."""
+    if not keys:
+        return None
+    encrypted = [encrypt_api_key(key, settings) for key in keys if key]
+    return json.dumps(encrypted) if encrypted else None
+
+
+def provider_api_keys(row: ModelProviderRow, settings: Settings | None = None) -> list[str]:
+    """Return the provider's decrypted credential pool (primary first).
+
+    Legacy rows with only ``api_key_encrypted`` yield a single key, so the
+    caller behaves exactly as before. Order is preserved and duplicates are
+    dropped so the same credential is never retried twice.
+    """
+    resolved = settings or get_settings()
+    keys: list[str] = []
+    if row.api_key_encrypted:
+        try:
+            keys.append(decrypt_api_key(row.api_key_encrypted, resolved))
+        except Exception as exc:
+            logger.warning("provider id=%s primary key decrypt failed: %s", row.id, exc)
+    for token in _decode_extra_keys(row.api_keys_encrypted):
+        try:
+            keys.append(decrypt_api_key(token, resolved))
+        except Exception as exc:
+            logger.warning("provider id=%s extra key decrypt failed: %s", row.id, exc)
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for key in keys:
+        if key and key not in seen:
+            seen.add(key)
+            ordered.append(key)
+    return ordered
 
 
 def list_models(db: Session, *, user_id: str) -> list[ModelProviderRow]:
@@ -74,8 +126,12 @@ def _chat_completions_url(base_url: str) -> str:
 
 
 def _external_http_client() -> httpx.Client:
-    """Outbound LLM probe client — bypass system proxy to avoid Clash rewriting loopback/API."""
-    return httpx.Client(timeout=10.0, trust_env=False)
+    """Outbound LLM probe client — bypass system proxy to avoid Clash rewriting loopback/API.
+
+    ``follow_redirects=False`` (httpx default, made explicit) keeps a probe from
+    being bounced to an unvetted host, complementing :mod:`app.shared.url_guard`.
+    """
+    return httpx.Client(timeout=10.0, trust_env=False, follow_redirects=False)
 
 
 def _probe_models_list(client: httpx.Client, url: str, headers: dict[str, str]) -> httpx.Response:
@@ -107,9 +163,12 @@ def validate_model_connection(
     api_key: str,
     *,
     model_name: str = "deepseek-chat",
+    settings: Settings | None = None,
 ) -> str | None:
-    if not base_url.startswith(("http://", "https://")):
-        return "Base URL 格式错误"
+    resolved = settings or get_settings()
+    guard_error = validate_outbound_url(base_url, allow_private=resolved.allow_private_model_hosts)
+    if guard_error:
+        return guard_error
 
     headers = {"Authorization": f"Bearer {api_key}"}
     last_status: int | None = None
@@ -165,7 +224,9 @@ def test_stored_model_connection(
         return "未配置 API 地址"
     resolved = settings or get_settings()
     api_key = decrypt_api_key(row.api_key_encrypted, resolved)
-    return validate_model_connection(row.base_url, api_key, model_name=row.model_name)
+    return validate_model_connection(
+        row.base_url, api_key, model_name=row.model_name, settings=resolved
+    )
 
 
 def create_model(
@@ -177,10 +238,11 @@ def create_model(
     base_url: str,
     tier: str = "default",
     is_active: bool = False,
+    api_keys: list[str] | None = None,
     settings: Settings | None = None,
 ) -> ModelProviderRow:
     tier = _validate_tier(tier)
-    error = validate_model_connection(base_url, api_key, model_name=model_name)
+    error = validate_model_connection(base_url, api_key, model_name=model_name, settings=settings)
     if error:
         raise ValidationError(error)
 
@@ -188,6 +250,7 @@ def create_model(
         user_id=user_id,
         model_name=model_name,
         api_key_encrypted=encrypt_api_key(api_key, settings),
+        api_keys_encrypted=_encode_extra_keys(api_keys, settings),
         base_url=base_url,
         tier=tier,
         is_active=is_active,
@@ -213,6 +276,7 @@ def update_model(
     base_url: str | None = None,
     tier: str | None = None,
     is_active: bool | None = None,
+    api_keys: list[str] | None = None,
     settings: Settings | None = None,
 ) -> ModelProviderRow:
     row = get_model(db, model_id, user_id=user_id)
@@ -224,12 +288,16 @@ def update_model(
         row.base_url = base_url
     if tier is not None:
         row.tier = _validate_tier(tier)
+    if api_keys is not None:
+        row.api_keys_encrypted = _encode_extra_keys(api_keys, resolved_settings)
     if api_key is not None:
         test_url = (base_url or row.base_url) or ""
         test_key = api_key
         test_model = model_name or row.model_name
         if test_url:
-            error = validate_model_connection(test_url, test_key, model_name=test_model)
+            error = validate_model_connection(
+                test_url, test_key, model_name=test_model, settings=resolved_settings
+            )
             if error:
                 raise ValidationError(error)
         row.api_key_encrypted = encrypt_api_key(api_key, resolved_settings)
@@ -251,6 +319,9 @@ def delete_model(db: Session, model_id: int, *, user_id: str) -> None:
 
 def model_to_public_dict(row: ModelProviderRow) -> dict[str, Any]:
     """API-safe projection — never exposes the encrypted key."""
+    key_count = (1 if row.api_key_encrypted else 0) + len(
+        _decode_extra_keys(row.api_keys_encrypted)
+    )
     return {
         "id": row.id,
         "model_name": row.model_name,
@@ -259,6 +330,7 @@ def model_to_public_dict(row: ModelProviderRow) -> dict[str, Any]:
         "is_active": row.is_active,
         "is_default": row.is_default,
         "has_api_key": bool(row.api_key_encrypted),
+        "key_count": key_count,
     }
 
 

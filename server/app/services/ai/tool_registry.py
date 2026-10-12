@@ -24,6 +24,7 @@ from app.services.ai.mcp_connections import (
     http_connection,
 )
 from app.services.ai.tool_factory import (
+    TOOLSET_MCP_PREFIX,
     ToolFn,
     build_tool_map,
     namespaced_tool_name,
@@ -114,6 +115,7 @@ class ToolRegistry:
                 name=full,
                 description=getattr(tool, "description", "") or full,
                 parameters=schema,
+                toolset=f"{TOOLSET_MCP_PREFIX}{conn.alias}",
             )
             self._mcp_tools[full] = _McpToolEntry(conn.alias, tool.name, spec)
             specs[full] = spec

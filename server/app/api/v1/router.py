@@ -8,6 +8,7 @@ from app.api.v1 import (
     auth,
     card,
     conversation,
+    custom_skills,
     dev,
     diary,
     export,
@@ -17,9 +18,11 @@ from app.api.v1 import (
     model_download,
     models,
     plan,
+    schedules,
     skills,
     stats,
     tags,
+    uploads,
     weekly,
 )
 
@@ -33,6 +36,7 @@ api_router.include_router(models.router)
 api_router.include_router(model_download.router)
 api_router.include_router(stats.router)
 api_router.include_router(tags.router)
+api_router.include_router(uploads.router)
 api_router.include_router(weekly.router)
 api_router.include_router(memory.router)
 api_router.include_router(export.router)
@@ -41,3 +45,5 @@ api_router.include_router(plan.router)
 api_router.include_router(plan.tasks_router)
 api_router.include_router(mode.router)
 api_router.include_router(skills.router)
+api_router.include_router(custom_skills.router)
+api_router.include_router(schedules.router)

@@ -80,6 +80,7 @@ def init_db(engine: Engine) -> None:
     from app.infrastructure.models import daily_digest as _daily_digest_models  # noqa: F401
     from app.infrastructure.models import diary_entry as _diary_entry_models  # noqa: F401
     from app.infrastructure.models import feedback_record as _feedback_record_models  # noqa: F401
+    from app.infrastructure.models import image_asset as _image_asset_models  # noqa: F401
     from app.infrastructure.models import job as _job_models  # noqa: F401
     from app.infrastructure.models import llm_call_log as _llm_call_log_models  # noqa: F401
     from app.infrastructure.models import mcp_call_log as _mcp_call_log_models  # noqa: F401
@@ -88,9 +89,11 @@ def init_db(engine: Engine) -> None:
     from app.infrastructure.models import model_provider as _model_provider_models  # noqa: F401
     from app.infrastructure.models import plan as _plan_models  # noqa: F401
     from app.infrastructure.models import reply_quality as _reply_quality_models  # noqa: F401
+    from app.infrastructure.models import scheduled_task as _scheduled_task_models  # noqa: F401
     from app.infrastructure.models import skill_activation as _skill_activation_models  # noqa: F401
     from app.infrastructure.models import tag as _tag_models  # noqa: F401
     from app.infrastructure.models import user as _user_models  # noqa: F401
+    from app.infrastructure.models import user_skill as _user_skill_models  # noqa: F401
     from app.infrastructure.models import weekly_report as _weekly_report_models  # noqa: F401
 
     Base.metadata.create_all(engine)
@@ -138,6 +141,7 @@ def _run_lightweight_migrations(engine: Engine) -> None:
             "token_info": "TEXT",
             "attached_card_ids": "TEXT",
             "attached_plan_ids": "TEXT",
+            "attached_tag_names": "TEXT",
             "skill_result": "TEXT",
         },
         "diary_entries": {"user_id": "VARCHAR(64)"},

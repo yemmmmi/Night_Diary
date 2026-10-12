@@ -164,6 +164,7 @@ def test_compose_pinned_context_includes_attached_cards_and_plans(db_session) ->
         [],
         card_ids=[card.card_id],
         plan_ids=[plan.id],
+        tag_names=[],
         user_id="default",
     )
 
@@ -183,11 +184,52 @@ def test_compose_pinned_context_skips_unknown_ids(db_session) -> None:
         [],
         card_ids=["missing-card"],
         plan_ids=["missing-plan"],
+        tag_names=["missing-tag"],
         user_id="default",
     )
 
     assert "【用户附上的卡片】" not in text
     assert "【用户附上的计划】" not in text
+    assert "【用户引用的标签】" not in text
+
+
+def test_compose_pinned_context_includes_attached_tags(db_session) -> None:
+    """引用的标签把带该标签的日记摘要注入上下文，按用户隔离。"""
+    from app.infrastructure.models.diary_entry import DiaryEntryRow
+    from app.infrastructure.models.tag import TagRow
+    from app.services import diary_service
+
+    tag = TagRow(name="睡眠", color="#8B5CF6", user_id="default", usage_count=1)
+    db_session.add(tag)
+    db_session.flush()
+
+    diary_service.create_entry(db_session, user_id="default", content="昨晚又失眠到三点")
+    entry = db_session.query(DiaryEntryRow).first()
+    entry.tags = [tag]
+    db_session.commit()
+
+    text = conversation_ai_service._compose_pinned_context(
+        db_session,
+        [],
+        card_ids=[],
+        plan_ids=[],
+        tag_names=["睡眠"],
+        user_id="default",
+    )
+    assert "【用户引用的标签】" in text
+    assert "睡眠" in text
+    assert "昨晚又失眠到三点" in text
+
+    # 其他用户引用同名标签拿不到数据（租户隔离）。
+    other = conversation_ai_service._compose_pinned_context(
+        db_session,
+        [],
+        card_ids=[],
+        plan_ids=[],
+        tag_names=["睡眠"],
+        user_id="someone-else",
+    )
+    assert "【用户引用的标签】" not in other
 
 
 # ── PR-4: generate_card_from_conversation ──
@@ -1027,3 +1069,53 @@ class TestFilterTools:
     def test_no_tools_at_all(self) -> None:
         assert conversation_ai_service._filter_tools(None, ["search_diary"]) is None
         assert conversation_ai_service._filter_tools({"search_diary": lambda **k: ""}, []) is None
+
+    def test_enabled_toolsets_none_keeps_everything(self) -> None:
+        all_tools = {
+            "search_diary": lambda **k: "",
+            "list_todos": lambda **k: "",
+            "mcp__tavily__search": lambda **k: "",
+        }
+        result = conversation_ai_service._filter_tools(
+            all_tools, ["search_diary", "list_todos"], None
+        )
+        assert set(result) == {"search_diary", "list_todos", "mcp__tavily__search"}
+
+    def test_enabled_toolsets_drops_disabled_family(self) -> None:
+        all_tools = {"search_diary": lambda **k: "", "list_todos": lambda **k: ""}
+        result = conversation_ai_service._filter_tools(
+            all_tools, ["search_diary", "list_todos"], {"plan"}
+        )
+        assert set(result) == {"list_todos"}
+
+    def test_enabled_toolsets_filters_mcp_by_alias(self) -> None:
+        all_tools = {
+            "mcp__tavily__search": lambda **k: "",
+            "mcp__fetch__get_url": lambda **k: "",
+        }
+        result = conversation_ai_service._filter_tools(all_tools, [], {"mcp:tavily"})
+        assert set(result) == {"mcp__tavily__search"}
+
+    def test_enabled_toolsets_can_disable_all(self) -> None:
+        all_tools = {"search_diary": lambda **k: "", "mcp__tavily__search": lambda **k: ""}
+        assert conversation_ai_service._filter_tools(all_tools, ["search_diary"], {"plan"}) is None
+
+
+class TestEnabledToolsets:
+    def test_empty_setting_means_all_enabled(self) -> None:
+        container = MagicMock()
+        container.settings.enabled_toolsets = ""
+        assert conversation_ai_service._enabled_toolsets(container) is None
+
+    def test_parses_comma_separated_names(self) -> None:
+        container = MagicMock()
+        container.settings.enabled_toolsets = "memory, mcp:tavily ,plan"
+        assert conversation_ai_service._enabled_toolsets(container) == {
+            "memory",
+            "mcp:tavily",
+            "plan",
+        }
+
+    def test_missing_settings_degrades_to_all(self) -> None:
+        container = MagicMock(spec=[])
+        assert conversation_ai_service._enabled_toolsets(container) is None

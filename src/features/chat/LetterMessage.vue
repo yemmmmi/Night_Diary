@@ -16,10 +16,15 @@ const props = defineProps<{
   showActions?: boolean
   generating?: boolean
   generated?: boolean
+  /** 回退/重新生成进行中：禁用信末操作，避免并发改写历史。 */
+  busy?: boolean
 }>()
 
 const emit = defineEmits<{
   generateCard: []
+  clarify: [prefill: string]
+  regenerate: []
+  rollback: []
 }>()
 
 const isNight = computed(() => props.message.role === 'assistant')
@@ -50,6 +55,9 @@ const attachNoteItems = computed(() => {
   for (const planId of props.message.attached_plan_ids ?? []) {
     items.push(props.planLabels?.[planId] ?? `计划 #${planId.slice(0, 6)}`)
   }
+  for (const tagName of props.message.attached_tag_names ?? []) {
+    items.push(`标签 · ${tagName}`)
+  }
   return items
 })
 
@@ -57,6 +65,7 @@ const attachNoteLabel = computed(() =>
   chatCopy.letterAttachNote(
     (props.message.attached_card_ids ?? []).length,
     (props.message.attached_plan_ids ?? []).length,
+    (props.message.attached_tag_names ?? []).length,
   ),
 )
 
@@ -72,8 +81,18 @@ function toggleAttachNote() {
 }
 
 function onGenerateCard() {
-  if (props.generating) return
+  if (props.generating || props.busy) return
   emit('generateCard')
+}
+
+function onRegenerate() {
+  if (props.busy || props.generating) return
+  emit('regenerate')
+}
+
+function onRollback() {
+  if (props.busy || props.generating) return
+  emit('rollback')
 }
 </script>
 
@@ -93,6 +112,7 @@ function onGenerateCard() {
     <LetterSkillResult
       v-if="message.role === 'assistant' && message.skill_result"
       :result="message.skill_result"
+      @clarify="emit('clarify', $event)"
     />
 
     <LetterProcess
@@ -153,10 +173,29 @@ function onGenerateCard() {
         type="button"
         class="letter__link"
         data-testid="letter-card-link"
-        :disabled="generating"
+        :disabled="generating || busy"
         @click="onGenerateCard"
       >
         {{ generating ? chatCopy.cardGenerating : chatCopy.generateCard }}
+      </button>
+      <button
+        type="button"
+        class="letter__link"
+        data-testid="letter-regenerate"
+        :disabled="busy || generating"
+        @click="onRegenerate"
+      >
+        {{ busy ? chatCopy.regenerating : chatCopy.regenerate }}
+      </button>
+      <button
+        type="button"
+        class="letter__link"
+        data-testid="letter-rollback"
+        :disabled="busy || generating"
+        :title="chatCopy.rollbackHint"
+        @click="onRollback"
+      >
+        {{ chatCopy.rollback }}
       </button>
     </footer>
   </article>
@@ -252,6 +291,10 @@ function onGenerateCard() {
 
 .letter__foot {
   margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.875rem;
 }
 
 .letter__link {

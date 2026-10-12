@@ -12,9 +12,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from app.domain.memory.types import MAX_ABOUT_CHARS
 from app.infrastructure.memory_repository import (
     SqliteEpisodicMemoryStore,
     SqliteLongTermProfileStore,
+    SqliteUserAboutStore,
 )
 from app.infrastructure.models.memory_card import MemoryCardRow
 
@@ -115,6 +117,36 @@ def delete_episodic(
     _sync_live_episodic(container)
 
 
+def delete_by_source_messages(
+    container: ServiceContainer,
+    *,
+    user_id: str,
+    message_ids: list[str],
+) -> int:
+    """Delete episodic entries produced by the given chat messages (B3).
+
+    Used when a conversation rollback removes turns: entries written by those
+    turns carry ``source_message_id`` and must be undone so the memory store
+    stays consistent with the (now shorter) conversation. Returns how many
+    entries were removed. Best-effort at the call site; raises only on store
+    errors.
+    """
+    if not message_ids:
+        return 0
+    wanted = set(message_ids)
+    store = SqliteEpisodicMemoryStore(container.session_factory)
+    entry_ids = [
+        entry.entry_id
+        for entry in store.load_entries(user_id)
+        if entry.entry_id and entry.source_message_id in wanted
+    ]
+    if not entry_ids:
+        return 0
+    store.delete_entries(user_id, entry_ids)
+    _sync_live_episodic(container)
+    return len(entry_ids)
+
+
 def _profile_to_dict(profile: UserProfile) -> dict[str, Any]:
     return {
         "personality_tags": list(profile.personality_tags),
@@ -145,6 +177,94 @@ def get_profile(
     if profile is None:
         return None
     return _profile_to_dict(profile)
+
+
+def get_about(container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
+    """Return the user-authored 「关于我」 text (B2).
+
+    Complements the system-inferred long-term profile: this is what the user
+    says about themselves, editable from the Memory Library page.
+    """
+    store = SqliteUserAboutStore(container.session_factory)
+    record = store.get_about(user_id)
+    content, updated_at = record if record is not None else ("", 0.0)
+    return {"content": content, "updated_at": updated_at, "max_chars": MAX_ABOUT_CHARS}
+
+
+def update_about(
+    container: ServiceContainer, *, content: str, user_id: str = DEFAULT_USER_ID
+) -> dict[str, Any]:
+    """Persist the user-authored 「关于我」 text, clamped to the char budget.
+
+    Cached conversation sessions for the user are invalidated so the next turn
+    rebuilds its frozen memory block with the new text (D6 prefix is otherwise
+    frozen for the session's lifetime).
+    """
+    cleaned = (content or "").strip()[:MAX_ABOUT_CHARS]
+    store = SqliteUserAboutStore(container.session_factory)
+    updated_at = store.save_about(user_id, cleaned)
+
+    from app.services.ai.session_context import invalidate_user_sessions
+
+    invalidate_user_sessions(user_id)
+    return {"content": cleaned, "updated_at": updated_at, "max_chars": MAX_ABOUT_CHARS}
+
+
+# ── Reply personality preset (E1) ──────────────────────────────────────
+
+
+def _personality_payload(key: str | None) -> dict[str, Any]:
+    from app.domain.agents.prompts import (
+        normalize_personality_key,
+        personality_label,
+        personality_preset_options,
+    )
+
+    normalized = normalize_personality_key(key)
+    return {
+        "key": normalized,
+        "label": personality_label(normalized),
+        "presets": personality_preset_options(),
+    }
+
+
+def get_personality(
+    container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID
+) -> dict[str, Any]:
+    """Return the user's chosen 回信人格 preset (E1) plus the option list.
+
+    The choice lives on the long-term profile's ``preferred_response_style``
+    field — the same value the empathy agent (diary reply) already consumes — so
+    both scenes share one user preference. Without a profile it falls back to the
+    default preset.
+    """
+    store = SqliteLongTermProfileStore(container.session_factory)
+    profile = store.get_profile(user_id)
+    return _personality_payload(profile.preferred_response_style if profile else None)
+
+
+def update_personality(
+    container: ServiceContainer, *, key: str, user_id: str = DEFAULT_USER_ID
+) -> dict[str, Any]:
+    """Persist the chosen 回信人格 preset, invalidating cached sessions.
+
+    Cached conversation sessions hold the old ``profile_style`` (the personality
+    block is rendered from that session cache), so they are dropped to force a
+    rebuild on the next turn.
+    """
+    from app.domain.agents.prompts import normalize_personality_key
+    from app.domain.memory.types import UserProfile
+
+    normalized = normalize_personality_key(key)
+    store = SqliteLongTermProfileStore(container.session_factory)
+    profile = store.get_profile(user_id) or UserProfile()
+    profile.preferred_response_style = normalized
+    store.save_profile(user_id, profile)
+
+    from app.services.ai.session_context import invalidate_user_sessions
+
+    invalidate_user_sessions(user_id)
+    return _personality_payload(normalized)
 
 
 def get_overview(container: ServiceContainer, *, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:

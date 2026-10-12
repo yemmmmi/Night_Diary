@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
+from app.domain.skills.disclosure import format_skill_doc_reference
 from app.domain.skills.record_skill import SkillRunOutcome
 from app.services import plan_service
 from app.services.web_search_service import WebSearchResult, search_web
@@ -230,13 +231,16 @@ def run(
     content: str,
     user_id: str,
     conversation_id: str = "",
+    skill_doc: str = "",
 ) -> SkillRunOutcome | None:
     """Create a plan from *content*; None → fall back to normal chat."""
     if llm is None:
         return None
 
     try:
-        response = llm.invoke(_EXTRACT_PROMPT.format(content=content[:1000]))
+        extract_prompt = _EXTRACT_PROMPT.format(content=content[:1000])
+        extract_prompt += format_skill_doc_reference(skill_doc)
+        response = llm.invoke(extract_prompt)
         params = _parse_json_dict(message_text(response))
     except Exception as exc:
         logger.warning("plan skill extraction failed: %s", exc)
@@ -280,6 +284,7 @@ def run(
         target_unit=target_unit,
         target_period=target_period,
         template=template,
+        conversation_id=conversation_id or None,
     )
 
     task_results: list[dict[str, Any]] = []
@@ -294,6 +299,7 @@ def run(
             source_links=node.get("source_links"),
             source="agent",
             created_from_conversation_id=conversation_id or None,
+            conversation_id=conversation_id or None,
         )
         task_results.append(
             {

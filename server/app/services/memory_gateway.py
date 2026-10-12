@@ -140,9 +140,12 @@ class MemoryGateway:
         mood_score: float = 0.5,
         emotions: list[str] | None = None,
         event_date: str | None = None,
+        source_message_id: str | None = None,
     ) -> bool:
         """Store an episodic entry and trigger long-term promotion.
 
+        *source_message_id* records the chat message that produced this entry
+        (B3 provenance) so a conversation rollback can undo the turn's writes.
         Returns ``True`` if the entry was stored, ``False`` if it was below
         threshold or memory is unavailable.  Never raises.
         """
@@ -198,6 +201,7 @@ class MemoryGateway:
                 mood_score=mood_score,
                 emotions=emotions or [],
                 event_date=event_date,
+                source_message_id=source_message_id,
             )
 
             try:
@@ -244,6 +248,7 @@ class MemoryGateway:
             mood_score=atom.mood_score,
             emotions=atom.emotions,
             event_date=atom.event_date.isoformat() if atom.event_date else None,
+            source_message_id=atom.source_message_id,
         )
 
     @staticmethod

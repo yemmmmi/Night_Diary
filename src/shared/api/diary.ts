@@ -6,6 +6,7 @@ export interface DiaryEntry {
   date: string | null
   weather: string | null
   reply: string | null
+  image_asset_ids?: number[]
   created_at: string
   updated_at: string
 }
@@ -14,11 +15,13 @@ export interface DiaryCreatePayload {
   content: string
   date?: string | null
   weather?: string | null
+  image_asset_ids?: number[]
 }
 
 export interface DiaryUpdatePayload {
   content?: string
   weather?: string | null
+  image_asset_ids?: number[]
 }
 
 export interface ListDiaryParams {

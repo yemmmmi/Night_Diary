@@ -25,6 +25,8 @@ const sendMessage = vi.hoisted(() => vi.fn())
 const sendMessageStreaming = vi.hoisted(() => vi.fn())
 const generateCardSummary = vi.hoisted(() => vi.fn())
 const abortStreaming = vi.hoisted(() => vi.fn(async () => ({ cancelled: true })))
+const rollbackMessages = vi.hoisted(() => vi.fn())
+const regenerateReply = vi.hoisted(() => vi.fn())
 const listSkills = vi.hoisted(() =>
   vi.fn(async () => [
     { id: 'record', label: '记录', description: '把这封信转写成一篇日记' },
@@ -42,6 +44,8 @@ vi.mock('@/shared/api/conversation', () => ({
   sendMessageStreaming,
   generateCardSummary,
   abortStreaming,
+  rollbackMessages,
+  regenerateReply,
   listSkills,
 }))
 
@@ -53,6 +57,9 @@ vi.mock('@/shared/api/card', () => ({ listCards }))
 
 const listPlans = vi.hoisted(() => vi.fn(async () => [] as PlanItem[]))
 vi.mock('@/shared/api/plan', () => ({ listPlans }))
+
+const listTags = vi.hoisted(() => vi.fn(async () => [] as { id: number; name: string; color: string; usage_count: number; created_at: string }[]))
+vi.mock('@/shared/api/tags', () => ({ listTags }))
 
 const getCurrentMode = vi.hoisted(() => vi.fn(async () => ({ mode: 'daily', display_name: '日常' })))
 const overrideMode = vi.hoisted(() => vi.fn(async () => ({ mode: 'daily', display_name: '日常' })))
@@ -215,6 +222,7 @@ describe('ChatScene', () => {
     listDiaryEntries.mockResolvedValue([])
     listCards.mockResolvedValue([])
     listPlans.mockResolvedValue([])
+    listTags.mockResolvedValue([])
     listConversations.mockResolvedValue([])
     getMessages.mockResolvedValue([])
     sendMessage.mockResolvedValue({
@@ -338,6 +346,35 @@ describe('ChatScene', () => {
         content: '今天有点累',
         card_ids: ['card-1'],
         plan_ids: ['plan-1'],
+      }),
+    )
+  })
+
+  it('references tags and sends them with the message', async () => {
+    listTags.mockResolvedValue([
+      { id: 1, name: '睡眠', color: '#8B5CF6', usage_count: 3, created_at: '2026-01-01T21:00:00' },
+      { id: 2, name: '空标签', color: '#6B7280', usage_count: 0, created_at: '2026-01-01T21:00:00' },
+    ])
+    const { wrapper, chatStore } = mountScene({ messages: [msg('m1', 'user', '今天有点累')] })
+    await flushPromises()
+
+    await wrapper.find('[data-testid="tag-picker__add"]').trigger('click')
+    const tagItems = wrapper.findAll('[data-testid="tag-picker__item"]')
+    expect(tagItems).toHaveLength(1)
+    expect(tagItems[0].text()).toContain('#睡眠')
+    await tagItems[0].trigger('click')
+    expect(chatStore.pinnedTagNames).toEqual(['睡眠'])
+    expect(wrapper.find('[data-testid="tag-picker__chip"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="letter-input"] textarea').setValue('看看睡眠记录')
+    await wrapper.find('[data-testid="letter-send"]').trigger('click')
+    await flushPromises()
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({
+        content: '看看睡眠记录',
+        tag_names: ['睡眠'],
       }),
     )
   })
@@ -577,5 +614,57 @@ describe('ChatScene', () => {
     expect(getMessages).toHaveBeenCalledWith('c1')
     expect(wrapper.text()).toContain('明天会轻一些')
     expect(wrapper.find('[data-testid="letter-streaming"]').exists()).toBe(false)
+  })
+
+  it('regenerates the latest reply from the letter action bar', async () => {
+    regenerateReply.mockResolvedValue({
+      removed_message_ids: ['m2'],
+      removed_memories: 0,
+      reply: msg('m2-new', 'assistant', '换个说法：早点歇着'),
+      messages: [msg('m1', 'user', '今天有点累'), msg('m2-new', 'assistant', '换个说法：早点歇着')],
+    })
+    const { wrapper } = mountScene({
+      messages: [msg('m1', 'user', '今天有点累'), msg('m2', 'assistant', '早点休息')],
+    })
+    await flushPromises()
+
+    const button = wrapper.find('[data-testid="letter-regenerate"]')
+    expect(button.exists()).toBe(true)
+    expect(button.text()).toContain('重新生成')
+
+    await button.trigger('click')
+    await flushPromises()
+    await flushMacrotasks()
+
+    expect(regenerateReply).toHaveBeenCalledWith('c1', 'm2')
+    expect(wrapper.text()).toContain('换个说法：早点歇着')
+    expect(wrapper.text()).not.toContain('早点休息')
+  })
+
+  it('rolls the last exchange back and refills the composer', async () => {
+    rollbackMessages.mockResolvedValue({
+      removed_message_ids: ['m1', 'm2'],
+      removed_memories: 1,
+      messages: [],
+    })
+    const { wrapper } = mountScene({
+      messages: [msg('m1', 'user', '今天有点累'), msg('m2', 'assistant', '早点休息')],
+    })
+    await flushPromises()
+
+    const button = wrapper.find('[data-testid="letter-rollback"]')
+    expect(button.exists()).toBe(true)
+    expect(button.text()).toContain('回退到此处')
+
+    await button.trigger('click')
+    await flushPromises()
+    await flushMacrotasks()
+
+    // 「回退到此处」撤下这封回信与对应的来信（上一轮往来）
+    expect(rollbackMessages).toHaveBeenCalledWith('c1', 'm1')
+    expect(wrapper.findAll('[data-testid="letter"]')).toHaveLength(0)
+
+    const textarea = wrapper.find('[data-testid="letter-input"] textarea')
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('今天有点累')
   })
 })

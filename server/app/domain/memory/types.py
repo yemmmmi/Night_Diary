@@ -6,6 +6,10 @@ from typing import Any, Protocol, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 
+#: Maximum length of the user-authored 「关于我」 text (B2). Shared by the storage
+#: layer, the frozen-block builder, and the API schema so the limit has one home.
+MAX_ABOUT_CHARS = 600
+
 
 class EpisodicEntry(BaseModel):
     """A single episodic memory item derived from a diary analysis turn.
@@ -32,6 +36,9 @@ class EpisodicEntry(BaseModel):
     mood_score: float = Field(default=0.5, ge=0.0, le=1.0)
     emotions: list[str] = Field(default_factory=list)
     event_date: str | None = None  # ISO date string (YYYY-MM-DD)
+    # ── B3: provenance — the chat message that produced this entry ──
+    # Lets a conversation rollback undo the memory writes of the removed turn.
+    source_message_id: str | None = None
     # ── V3 P4: vector for retrieval (lazy-computed by EpisodicMemory) ──
     embedding: list[float] | None = None
 

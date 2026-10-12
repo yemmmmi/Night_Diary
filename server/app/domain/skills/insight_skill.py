@@ -14,6 +14,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.domain.knowledge.psychology import PsychologyEntry, retrieve_psychology
+from app.domain.skills.disclosure import format_skill_doc_reference
 from app.domain.skills.record_skill import SkillRunOutcome
 from app.shared.llm import LLMClient, message_text
 
@@ -51,6 +52,7 @@ def run(
     content: str,
     user_id: str,
     conversation_id: str = "",
+    skill_doc: str = "",
 ) -> SkillRunOutcome | None:
     """Analyze the user's inner state; None → fall back to normal chat."""
     if llm is None:
@@ -61,6 +63,7 @@ def run(
         knowledge=_format_knowledge(entries),
         content=content[:2000],
     )
+    prompt += format_skill_doc_reference(skill_doc)
     response = llm.invoke(prompt)
     analysis = message_text(response).strip()
     if not analysis:

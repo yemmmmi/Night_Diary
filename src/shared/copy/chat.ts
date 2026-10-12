@@ -25,17 +25,28 @@ export const chatCopy = {
   pickPlanHint: '进行中的计划 · 最多 3 个',
   pickPlanEmpty: '暂无可附的计划',
   removePlanPin: '取下这一个',
+  pickTag: '引用标签',
+  pickTagHint: '带标签的日记 · 最多 3 个',
+  pickTagEmpty: '暂无标签',
+  removeTagPin: '取下这个标签',
   writingLabel: '夜记正在写…',
   letterNoteCount: (count: number) => `参考了 ${count} 篇日记`,
-  letterAttachNote: (cards: number, plans: number) => {
+  letterAttachNote: (cards: number, plans: number, tags = 0) => {
     const parts: string[] = []
     if (cards > 0) parts.push(`${cards} 张卡片`)
     if (plans > 0) parts.push(`${plans} 个计划`)
+    if (tags > 0) parts.push(`${tags} 个标签`)
     return parts.length ? `附上 ${parts.join('、')}` : ''
   },
   generateCard: '存为记忆卡片',
   cardGenerating: '收入中…',
   cardSavedInline: '已收入记忆',
+  /* ── B3: 信末回退与重新生成 ── */
+  regenerate: '重新生成',
+  regenerating: '重写中…',
+  rollback: '回退到此处',
+  rollingBack: '回退中…',
+  rollbackHint: '撤下这封回信与对应的来信，并收回它写下的记忆',
   dateDivider: (date: string) => date,
   skillRecordLabel: '已录入日记',
   skillRecordExpand: '展开全文',
@@ -43,6 +54,7 @@ export const chatCopy = {
   skillInsightLabel: '洞悉 · 心理视角',
   skillPlanLabel: '已创建计划',
   skillPlanOpen: '去计划页推进',
+  skillClarifyLabel: '夜记想先确认一下',
   skillPlanCheckin: (days: number) => `坚持 ${days} 天 · 每日打卡`,
   skillPlanTimer: (hours: number) => `每日 ${hours} 小时 · 计时推进`,
   skillPlanNodes: (total: number, multiSource: number) =>

@@ -1,0 +1,312 @@
+[
+  {
+    "case_id": "sr_amb_01",
+    "category": "ambiguous_skill",
+    "text": "帮我看看这段",
+    "expected_outcome": "clarify",
+    "expected_source": "llm",
+    "stub_intent": "record",
+    "stub_confidence": 0.3,
+    "notes": "弱信号 + LLM 勉强猜 record，应澄清"
+  },
+  {
+    "case_id": "sr_amb_02",
+    "category": "ambiguous_skill",
+    "text": "我想聊聊最近的事",
+    "expected_outcome": "clarify",
+    "expected_source": "llm",
+    "stub_intent": "record",
+    "stub_confidence": 0.35,
+    "notes": "弱信号，record/chat 之间摇摆，应澄清"
+  },
+  {
+    "case_id": "sr_amb_03",
+    "category": "ambiguous_skill",
+    "text": "感觉心里堵得慌",
+    "expected_outcome": "clarify",
+    "expected_source": "llm",
+    "stub_intent": "insight",
+    "stub_confidence": 0.4,
+    "notes": "情绪词但意图模糊，倾向 insight 且低置信"
+  },
+  {
+    "case_id": "sr_amb_04",
+    "category": "ambiguous_skill",
+    "text": "我有点迷茫",
+    "expected_outcome": "clarify",
+    "expected_source": "llm",
+    "stub_intent": "insight",
+    "stub_confidence": 0.45,
+    "notes": "迷茫可解读为洞察或闲聊，应澄清"
+  },
+  {
+    "case_id": "sr_amb_05",
+    "category": "ambiguous_skill",
+    "text": "最近压力有点大",
+    "expected_outcome": "clarify",
+    "expected_source": "llm",
+    "stub_intent": "plan",
+    "stub_confidence": 0.2,
+    "notes": "弱信号，plan 猜测极不确定，应澄清"
+  },
+  {
+    "case_id": "sr_amb_06",
+    "category": "ambiguous_skill",
+    "text": "帮我整理下这个想法",
+    "expected_outcome": "clarify",
+    "expected_source": "llm",
+    "stub_intent": "plan",
+    "stub_confidence": 0.3,
+    "notes": "整理可记日记也可理计划，应澄清"
+  },
+  {
+    "case_id": "sr_conf_01",
+    "category": "confident_skill",
+    "text": "帮我看看我最近到底在想什么",
+    "expected_outcome": "insight",
+    "expected_source": "llm",
+    "stub_intent": "insight",
+    "stub_confidence": 0.9,
+    "notes": "自我剖析意图明确，高置信直连 insight"
+  },
+  {
+    "case_id": "sr_conf_02",
+    "category": "confident_skill",
+    "text": "我想把这段心路历程留下来",
+    "expected_outcome": "record",
+    "expected_source": "llm",
+    "stub_intent": "record",
+    "stub_confidence": 0.88,
+    "notes": "留存意图明确，直连 record"
+  },
+  {
+    "case_id": "sr_conf_03",
+    "category": "confident_skill",
+    "text": "帮我理一下接下来要做的事",
+    "expected_outcome": "plan",
+    "expected_source": "llm",
+    "stub_intent": "plan",
+    "stub_confidence": 0.85,
+    "notes": "规划意图明确，直连 plan"
+  },
+  {
+    "case_id": "sr_conf_04",
+    "category": "confident_skill",
+    "text": "我最近情绪起伏好大",
+    "expected_outcome": "insight",
+    "expected_source": "llm",
+    "stub_intent": "insight",
+    "stub_confidence": 0.8,
+    "notes": "情绪梳理意图明确，直连 insight"
+  },
+  {
+    "case_id": "sr_conf_05",
+    "category": "confident_skill",
+    "text": "我想记录下这段感受",
+    "expected_outcome": "record",
+    "expected_source": "llm",
+    "stub_intent": "record",
+    "stub_confidence": 0.86,
+    "notes": "记录意图明确，直连 record"
+  },
+  {
+    "case_id": "sr_conf_06",
+    "category": "confident_skill",
+    "text": "帮我看看怎么调整作息",
+    "expected_outcome": "plan",
+    "expected_source": "llm",
+    "stub_intent": "plan",
+    "stub_confidence": 0.82,
+    "notes": "改变作息可成计划，高置信直连 plan"
+  },
+  {
+    "case_id": "sr_chat_01",
+    "category": "low_conf_chat",
+    "text": "有点烦",
+    "expected_outcome": "chat",
+    "expected_source": "llm",
+    "stub_intent": "chat",
+    "stub_confidence": 0.3,
+    "notes": "低置信 chat 不应澄清（无写入风险）"
+  },
+  {
+    "case_id": "sr_chat_02",
+    "category": "low_conf_chat",
+    "text": "感觉还行吧",
+    "expected_outcome": "chat",
+    "expected_source": "llm",
+    "stub_intent": "chat",
+    "stub_confidence": 0.25,
+    "notes": "低置信 chat 静默走普通聊天"
+  },
+  {
+    "case_id": "sr_chat_03",
+    "category": "low_conf_chat",
+    "text": "我想静静",
+    "expected_outcome": "chat",
+    "expected_source": "llm",
+    "stub_intent": "chat",
+    "stub_confidence": 0.2,
+    "notes": "低置信 chat，不应打扰用户"
+  },
+  {
+    "case_id": "sr_chat_04",
+    "category": "low_conf_chat",
+    "text": "最近没什么感觉",
+    "expected_outcome": "chat",
+    "expected_source": "llm",
+    "stub_intent": "chat",
+    "stub_confidence": 0.35,
+    "notes": "弱信号但意图为 chat，不澄清"
+  },
+  {
+    "case_id": "sr_rule_01",
+    "category": "strong_rule",
+    "text": "帮我记一篇日记",
+    "expected_outcome": "record",
+    "expected_source": "rule",
+    "stub_intent": "record",
+    "stub_confidence": 0.9,
+    "notes": "强规则命中 record，零 LLM 直连"
+  },
+  {
+    "case_id": "sr_rule_02",
+    "category": "strong_rule",
+    "text": "写篇日记",
+    "expected_outcome": "record",
+    "expected_source": "rule",
+    "stub_intent": "record",
+    "stub_confidence": 0.9,
+    "notes": "强规则命中 record"
+  },
+  {
+    "case_id": "sr_rule_03",
+    "category": "strong_rule",
+    "text": "帮我分析一下",
+    "expected_outcome": "insight",
+    "expected_source": "rule",
+    "stub_intent": "insight",
+    "stub_confidence": 0.9,
+    "notes": "强规则命中 insight"
+  },
+  {
+    "case_id": "sr_rule_04",
+    "category": "strong_rule",
+    "text": "制定一个计划",
+    "expected_outcome": "plan",
+    "expected_source": "rule",
+    "stub_intent": "plan",
+    "stub_confidence": 0.9,
+    "notes": "强规则命中 plan"
+  },
+  {
+    "case_id": "sr_rule_05",
+    "category": "strong_rule",
+    "text": "我到底想要什么",
+    "expected_outcome": "insight",
+    "expected_source": "rule",
+    "stub_intent": "insight",
+    "stub_confidence": 0.9,
+    "notes": "强规则命中 insight"
+  },
+  {
+    "case_id": "sr_rule_06",
+    "category": "strong_rule",
+    "text": "记下今天",
+    "expected_outcome": "record",
+    "expected_source": "rule",
+    "stub_intent": "record",
+    "stub_confidence": 0.9,
+    "notes": "强规则命中 record"
+  },
+  {
+    "case_id": "sr_goal_01",
+    "category": "goal_rule",
+    "text": "我想坚持跑步30天",
+    "expected_outcome": "plan",
+    "expected_source": "goal_rule",
+    "stub_intent": "plan",
+    "stub_confidence": 0.9,
+    "notes": "数字目标 + 坚持 → goal_rule 直连 plan"
+  },
+  {
+    "case_id": "sr_goal_02",
+    "category": "goal_rule",
+    "text": "打算每天早起",
+    "expected_outcome": "plan",
+    "expected_source": "goal_rule",
+    "stub_intent": "plan",
+    "stub_confidence": 0.9,
+    "notes": "打算 + 每天 → goal_rule 直连 plan"
+  },
+  {
+    "case_id": "sr_goal_03",
+    "category": "goal_rule",
+    "text": "计划每天背50个单词",
+    "expected_outcome": "plan",
+    "expected_source": "goal_rule",
+    "stub_intent": "plan",
+    "stub_confidence": 0.9,
+    "notes": "计划 + 每天 → goal_rule 直连 plan"
+  },
+  {
+    "case_id": "sr_noise_01",
+    "category": "no_signal_chat",
+    "text": "你好呀",
+    "expected_outcome": "chat",
+    "expected_source": "default",
+    "stub_intent": "chat",
+    "stub_confidence": 0.9,
+    "notes": "无弱信号 → 默认 chat，零 LLM"
+  },
+  {
+    "case_id": "sr_noise_02",
+    "category": "no_signal_chat",
+    "text": "今天天气不错",
+    "expected_outcome": "chat",
+    "expected_source": "default",
+    "stub_intent": "chat",
+    "stub_confidence": 0.9,
+    "notes": "无弱信号 → 默认 chat"
+  },
+  {
+    "case_id": "sr_noise_03",
+    "category": "no_signal_chat",
+    "text": "哈哈哈哈哈",
+    "expected_outcome": "chat",
+    "expected_source": "default",
+    "stub_intent": "chat",
+    "stub_confidence": 0.9,
+    "notes": "无弱信号 → 默认 chat"
+  },
+  {
+    "case_id": "sr_noise_04",
+    "category": "no_signal_chat",
+    "text": "早上好",
+    "expected_outcome": "chat",
+    "expected_source": "default",
+    "stub_intent": "chat",
+    "stub_confidence": 0.9,
+    "notes": "无弱信号 → 默认 chat"
+  },
+  {
+    "case_id": "sr_empty_01",
+    "category": "empty",
+    "text": "",
+    "expected_outcome": "chat",
+    "expected_source": "default",
+    "stub_intent": "chat",
+    "stub_confidence": 0.9,
+    "notes": "空输入 → 默认 chat"
+  },
+  {
+    "case_id": "sr_empty_02",
+    "category": "empty",
+    "text": "   ",
+    "expected_outcome": "chat",
+    "expected_source": "default",
+    "stub_intent": "chat",
+    "stub_confidence": 0.9,
+    "notes": "纯空白 → 默认 chat"
+  }
+]

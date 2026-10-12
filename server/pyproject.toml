@@ -6,6 +6,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.9",
     "sqlalchemy>=2.0,<2.1",
 
     "pydantic>=2.7,<3.0",
@@ -103,6 +104,7 @@ ignore = ["E501"]
 "app/domain/agents/retrieval_agent.py" = ["RUF001"]
 "app/domain/agents/supervisor.py" = ["RUF001"]
 "app/domain/agents/context_compressor.py" = ["RUF001"]
+"app/domain/agents/subtask.py" = ["RUF001"]
 "app/domain/agents/planner_agent.py" = ["RUF001", "RUF002", "RUF003"]
 "app/domain/agents/plan_completeness.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/unit/domain/agents/**" = ["RUF001"]
@@ -117,6 +119,7 @@ ignore = ["E501"]
 "tests/unit/infrastructure/test_plan_models.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/unit/api/**" = ["RUF001"]
 "app/api/schemas.py" = ["RUF001"]
+"app/api/v1/uploads.py" = ["RUF001"]
 "app/services/**" = ["RUF001"]
 "app/shared/errors.py" = ["RUF001"]
 "app/services/conversation_ai_service.py" = ["RUF001", "RUF002", "RUF003"]
@@ -127,6 +130,7 @@ ignore = ["E501"]
 "tests/eval/rubric.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/eval/generation/**" = ["RUF001", "RUF002", "RUF003"]
 "tests/eval/treehole/**" = ["RUF001", "RUF002", "RUF003"]
+"tests/eval/skill_routing/**" = ["RUF001", "RUF002", "RUF003"]
 "tests/eval/_http_llm.py" = ["RUF001"]
 "tests/eval/_stub_llm.py" = ["RUF001"]
 "tests/eval/tool_call/**" = ["RUF001"]
@@ -138,7 +142,9 @@ ignore = ["E501"]
 "app/shared/emotion_estimator.py" = ["RUF001"]
 "app/shared/crisis_guard.py" = ["RUF001"]
 "app/shared/middleware/*" = ["RUF001", "RUF002", "RUF003"]
+"app/shared/tool_approval.py" = ["RUF001"]
 "tests/unit/shared/test_middleware.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/unit/shared/test_tool_approval.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/unit/shared/test_graceful_shutdown.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/unit/infrastructure/test_task_queue_graceful.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/unit/shared/test_crisis_guard.py" = ["RUF001"]
@@ -154,6 +160,8 @@ ignore = ["E501"]
 "app/domain/skills/memory_recall_skill.py" = ["RUF001"]
 "app/domain/skills/skill_loader.py" = ["RUF001"]
 "app/domain/skills/injection.py" = ["RUF001"]
+"app/domain/skills/disclosure.py" = ["RUF001"]
+"tests/unit/domain/skills/test_disclosure.py" = ["RUF001"]
 "app/shared/tool_protocol.py" = ["RUF001"]
 "tests/unit/domain/test_orchestrator.py" = ["RUF001"]
 "scripts/seed_dev_traces.py" = ["RUF001", "RUF002", "RUF003"]
@@ -197,4 +205,5 @@ addopts = "-ra -m 'not eval'"
 asyncio_mode = "auto"
 markers = [
     "eval: offline RAG/generation eval; excluded from the default test run",
+    "security: cross-tenant isolation / trust-boundary regression gate (C4)",
 ]

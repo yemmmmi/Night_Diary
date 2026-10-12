@@ -21,6 +21,7 @@ import re
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from app.domain.agents.context_engine import ContextEngine, register_engine
 from app.domain.agents.retrieval_agent import lexical_similarity
 from app.shared.llm import LLMClient, message_text
 from app.shared.token_utils import estimate_tokens
@@ -88,6 +89,8 @@ def _entry_content(entry: dict[str, Any]) -> str:
 
 class ContextCompressor:
     """Rank, filter, summarise, and greedily pack history into a token budget."""
+
+    name = "compressor"
 
     MAX_CONTEXT_TOKENS = DEFAULT_MAX_CONTEXT_TOKENS
 
@@ -182,9 +185,76 @@ class ContextCompressor:
         return unified
 
 
+_REFERENCE_ID_KEYS = ("diary_id", "id", "entry_id", "doc_id")
+
+
+def _entry_reference(entry: Mapping[str, Any]) -> str | None:
+    for key in _REFERENCE_ID_KEYS:
+        value = entry.get(key)
+        if value not in (None, ""):
+            return f"diary:{value}"
+    return None
+
+
+class ReferenceContextEngine:
+    """Lossless-reference engine: compressed text + a source-id footer.
+
+    Delegates ranking/packing to :class:`ContextCompressor` but keeps the
+    original diary ids the compressor would otherwise drop when it summarises,
+    so downstream tracing never loses the pointer back to the raw entry. This is
+    the concrete realisation of the "无损引用" extension point (opt-in via
+    ``Settings.context_engine = "reference"``).
+    """
+
+    name = "reference"
+
+    def __init__(
+        self,
+        *,
+        max_tokens: int = DEFAULT_MAX_CONTEXT_TOKENS,
+        llm: LLMClient | None = None,
+        similarity: SimilarityFn | None = None,
+        episodic_boost: float = 0.2,
+    ) -> None:
+        self._compressor = ContextCompressor(
+            max_tokens=max_tokens,
+            llm=llm,
+            similarity=similarity,
+            episodic_boost=episodic_boost,
+        )
+
+    def compress(
+        self,
+        current_content: str,
+        *,
+        candidates: list[dict[str, Any]] | None = None,
+        episodic: list[dict[str, Any]] | None = None,
+    ) -> str:
+        text = self._compressor.compress(
+            current_content, candidates=candidates, episodic=episodic
+        )
+        if not text:
+            return ""
+
+        refs: list[str] = []
+        seen: set[str] = set()
+        for entry in [*(episodic or []), *(candidates or [])]:
+            ref = _entry_reference(entry)
+            if ref and ref not in seen:
+                seen.add(ref)
+                refs.append(ref)
+        if not refs:
+            return text
+        return f"{text}\n\n[引用] {' '.join(refs)}"
+
+
+register_engine(ContextCompressor.name, ContextCompressor)
+register_engine(ReferenceContextEngine.name, ReferenceContextEngine)
+
+
 def prepare_compressed_history(
     state: Mapping[str, Any],
-    compressor: ContextCompressor | None = None,
+    compressor: ContextEngine | None = None,
 ) -> dict[str, str]:
     """Graph prep-step: compress ``episodic_context`` into ``compressed_history``."""
     episodic = state.get("episodic_context") or []
@@ -227,6 +297,7 @@ def memory_context_from_state(state: Mapping[str, Any]) -> str:
 __all__ = [
     "DEFAULT_MAX_CONTEXT_TOKENS",
     "ContextCompressor",
+    "ReferenceContextEngine",
     "is_low_density",
     "memory_context_from_state",
     "prepare_compressed_history",

@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 
 from app.domain.memory.types import (
+    MAX_ABOUT_CHARS,
     EmotionBaseline,
     EpisodicEntry,
     ImportantPerson,
@@ -160,3 +161,76 @@ def test_update_episodic_not_found(memory_ctx) -> None:
 
     with pytest.raises(NotFoundError):
         memory_service.update_episodic(memory_ctx, "missing", event_summary="x")
+
+
+def test_delete_by_source_messages_undoes_only_tagged_entries(memory_ctx) -> None:
+    """B3: 回退撤销只删除由被回退消息产生的记忆条目。"""
+    store = SqliteEpisodicMemoryStore(memory_ctx.session_factory)
+    now = time.time()
+    tagged = EpisodicEntry(
+        event_summary="今晚很焦虑",
+        emotion="焦虑",
+        reply_insight="先深呼吸。",
+        source="chat",
+        timestamp=now,
+        importance=0.8,
+        entry_id="tagged",
+        source_message_id="msg-1",
+    )
+    keeper = EpisodicEntry(
+        event_summary="散步",
+        emotion="平静",
+        reply_insight="",
+        source="card",
+        timestamp=now - 10,
+        importance=0.6,
+        entry_id="keeper",
+        source_message_id="msg-2",
+    )
+    store.upsert_entry("default", tagged)
+    store.upsert_entry("default", keeper)
+
+    removed = memory_service.delete_by_source_messages(
+        memory_ctx, user_id="default", message_ids=["msg-1", "msg-unknown"]
+    )
+
+    assert removed == 1
+    remaining = memory_service.list_episodic(memory_ctx)
+    assert [e["entry_id"] for e in remaining] == ["keeper"]
+
+
+def test_delete_by_source_messages_noop_without_ids(memory_ctx) -> None:
+    store = SqliteEpisodicMemoryStore(memory_ctx.session_factory)
+    store.upsert_entry(
+        "default",
+        _card_entry("散步", "平静", time.time(), entry_id="a"),
+    )
+
+    assert memory_service.delete_by_source_messages(memory_ctx, user_id="default", message_ids=[]) == 0
+    assert len(memory_service.list_episodic(memory_ctx)) == 1
+
+
+def test_get_about_default_empty(memory_ctx) -> None:
+    about = memory_service.get_about(memory_ctx)
+    assert about["content"] == ""
+    assert about["updated_at"] == 0.0
+    assert about["max_chars"] == MAX_ABOUT_CHARS
+
+
+def test_update_about_roundtrip_and_clamp(memory_ctx) -> None:
+    saved = memory_service.update_about(memory_ctx, content="  我是一名程序员  ")
+    assert saved["content"] == "我是一名程序员"
+    assert saved["updated_at"] > 0
+
+    assert memory_service.get_about(memory_ctx)["content"] == "我是一名程序员"
+
+    over = memory_service.update_about(memory_ctx, content="字" * (MAX_ABOUT_CHARS + 50))
+    assert len(over["content"]) == MAX_ABOUT_CHARS
+
+
+def test_update_about_is_user_scoped(memory_ctx) -> None:
+    memory_service.update_about(memory_ctx, content="Alice", user_id="u1")
+    memory_service.update_about(memory_ctx, content="Bob", user_id="u2")
+
+    assert memory_service.get_about(memory_ctx, user_id="u1")["content"] == "Alice"
+    assert memory_service.get_about(memory_ctx, user_id="u2")["content"] == "Bob"

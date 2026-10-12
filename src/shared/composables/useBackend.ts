@@ -35,6 +35,11 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function resolveBackendBaseUrl(): Promise<string> {
+  const injected =
+    typeof window !== 'undefined' ? window.__NIGHT_DIARY__?.backendUrl : undefined
+  if (typeof injected === 'string' && injected.length > 0) {
+    return injected
+  }
   return import.meta.env.VITE_API_BASE_URL ?? DEFAULT_DEV_BASE_URL
 }
 

@@ -14,15 +14,32 @@ additive and never blocks a normal reply.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from app.shared.llm import LLMClient, message_text
 
 logger = logging.getLogger(__name__)
 
 USER_INTENTS = ("record", "insight", "plan", "chat")
+
+#: Intents that actually *do* something (write a diary / analyse / build a
+#: plan). Only these are worth a clarifying question when the router is
+#: unsure — a low-confidence ``chat`` degrades silently to normal chat.
+SKILL_INTENTS = ("record", "insight", "plan")
+
+#: Below this router confidence a leaning-toward-a-skill answer is treated as
+#: a guess and the user is asked to disambiguate instead.
+CLARIFY_THRESHOLD = 0.5
+
+#: Confidence when the router LLM returns a bare intent word without a score.
+_DEFAULT_LLM_CONFIDENCE = 0.7
+
+#: Confidence for a degraded (no-LLM / unparseable) routing decision.
+_AMBIGUOUS_CONFIDENCE = 0.3
 
 RECORD_STRONG: tuple[str, ...] = (
     "帮我记一篇日记",
@@ -139,7 +156,23 @@ WEAK_SIGNALS: tuple[str, ...] = (
 @dataclass(frozen=True, slots=True)
 class IntentDecision:
     intent: str  # one of USER_INTENTS
-    source: str  # "rule" | "goal_rule" | "llm" | "default"
+    source: str  # "rule" | "goal_rule" | "llm" | "default" | "manual"
+    confidence: float = 1.0
+
+    @property
+    def should_clarify(self) -> bool:
+        """True when the router leaned toward a skill but was not sure.
+
+        Only an LLM answer can be uncertain enough to warrant asking — a
+        strong rule, a goal-shaped plan sentence or a manual selection is
+        always trusted. A low-confidence ``chat`` never clarifies (nothing
+        would be written, so there is no wrong proposal to prevent).
+        """
+        return (
+            self.source == "llm"
+            and self.intent in SKILL_INTENTS
+            and self.confidence < CLARIFY_THRESHOLD
+        )
 
 
 def _match_strong(text: str) -> str | None:
@@ -163,44 +196,94 @@ _INTENT_LLM_PROMPT = """判断用户这句话最想做什么，四选一：
 - plan：想制定一个计划、开始坚持做某事、养成习惯、学一项技能
 - chat：普通聊天、倾诉、提问、或其他
 
-只输出一个小写单词：record / insight / plan / chat，不要任何其他内容。
+{catalog}
+只输出一个 JSON，不要任何其他内容：
+{{"intent": "record / insight / plan / chat", "confidence": 0.0 到 1.0}}
+
+confidence 是你的把握程度：很确定给 0.9 以上；如果用户意图模棱两可、你只是勉强猜的，给 0.5 以下。
 
 用户输入：{content}
 """
 
 
+def _match_intent_word(text: str) -> str | None:
+    """Return the first known intent word contained in *text*, or None."""
+    for intent in USER_INTENTS:
+        if intent in text:
+            return intent
+    return None
+
+
+def _coerce_confidence(value: Any) -> float:
+    """Clamp *value* into [0, 1], falling back to the default on garbage."""
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return _DEFAULT_LLM_CONFIDENCE
+
+
+def _parse_llm_answer(answer: str) -> tuple[str | None, float]:
+    """Parse the router LLM reply into ``(intent, confidence)``.
+
+    Accepts the JSON contract (``{"intent": ..., "confidence": ...}``) and,
+    for robustness, a bare intent word (older prompt / mock).
+    """
+    cleaned = (answer or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+
+    try:
+        data = json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError, TypeError):
+        data = None
+
+    if isinstance(data, dict):
+        intent = _match_intent_word(str(data.get("intent", "")).strip().lower())
+        return intent, _coerce_confidence(data.get("confidence"))
+    return _match_intent_word(cleaned.lower()), _DEFAULT_LLM_CONFIDENCE
+
+
 def classify_user_intent(
     text: str,
     llm: LLMClient | None = None,
+    *,
+    skill_catalog: str = "",
 ) -> IntentDecision:
     """Route *text* to one of the user skills, or ``"chat"``.
 
     Strong rules first; a goal-shaped plan sentence routes to ``plan``; a
     weak signal triggers the light-LLM fallback; anything else is chat.
+
+    *skill_catalog* is the Level-0 skill metadata block injected into the
+    fallback prompt so the router sees the registered skills (and their
+    descriptions) instead of a fixed hard-coded list.
     """
     text = (text or "").strip()
     if not text:
-        return IntentDecision(intent="chat", source="default")
+        return IntentDecision(intent="chat", source="default", confidence=1.0)
 
     strong = _match_strong(text)
     if strong is not None:
-        return IntentDecision(intent=strong, source="rule")
+        return IntentDecision(intent=strong, source="rule", confidence=0.95)
 
     if PLAN_GOAL_PATTERN.search(text):
-        return IntentDecision(intent="plan", source="goal_rule")
+        return IntentDecision(intent="plan", source="goal_rule", confidence=0.9)
 
     if not _has_weak_signal(text):
-        return IntentDecision(intent="chat", source="default")
+        return IntentDecision(intent="chat", source="default", confidence=1.0)
 
     if llm is None:
-        return IntentDecision(intent="chat", source="default")
+        return IntentDecision(
+            intent="chat", source="default", confidence=_AMBIGUOUS_CONFIDENCE
+        )
 
     try:
-        response = llm.invoke(_INTENT_LLM_PROMPT.format(content=text[:500]))
-        answer = message_text(response).strip().lower()
-        for intent in USER_INTENTS:
-            if intent in answer:
-                return IntentDecision(intent=intent, source="llm")
+        prompt = _INTENT_LLM_PROMPT.format(content=text[:500], catalog=skill_catalog)
+        response = llm.invoke(prompt)
+        intent, confidence = _parse_llm_answer(message_text(response))
+        if intent is not None:
+            return IntentDecision(intent=intent, source="llm", confidence=confidence)
     except Exception as exc:
         logger.info("intent LLM fallback failed: %s", exc)
-    return IntentDecision(intent="chat", source="default")
+    return IntentDecision(intent="chat", source="default", confidence=_AMBIGUOUS_CONFIDENCE)

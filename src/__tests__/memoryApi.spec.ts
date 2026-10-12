@@ -2,7 +2,17 @@ import axios from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { mockAxiosClient } from '@/__tests__/helpers/mockAxiosClient'
-import { getOverview, getProfile, listEpisodic, updateEpisodic, deleteEpisodic } from '@/shared/api/memory'
+import {
+  getAbout,
+  getOverview,
+  getPersonality,
+  getProfile,
+  listEpisodic,
+  updateAbout,
+  updateEpisodic,
+  updatePersonality,
+  deleteEpisodic,
+} from '@/shared/api/memory'
 import { resetHttpClient } from '@/shared/api/http'
 
 vi.mock('axios', () => {
@@ -45,6 +55,7 @@ const sampleOverview = {
 describe('memory API', () => {
   const get = vi.fn()
   const patch = vi.fn()
+  const put = vi.fn()
   const del = vi.fn()
 
   afterEach(() => {
@@ -112,5 +123,51 @@ describe('memory API', () => {
 
     await deleteEpisodic('a1')
     expect(del).toHaveBeenCalledWith('/api/v1/memory/episodic/a1')
+  })
+
+  it('fetches the user-authored 关于我 text', async () => {
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get }) as never)
+    get.mockResolvedValue({ data: { content: '我是夜班护士', updated_at: 7, max_chars: 600 } })
+
+    const result = await getAbout()
+    expect(get).toHaveBeenCalledWith('/api/v1/memory/about')
+    expect(result.content).toBe('我是夜班护士')
+    expect(result.max_chars).toBe(600)
+  })
+
+  it('updates the 关于我 text', async () => {
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ put }) as never)
+    put.mockResolvedValue({ data: { content: '希望温和一点', updated_at: 8, max_chars: 600 } })
+
+    const result = await updateAbout('希望温和一点')
+    expect(put).toHaveBeenCalledWith('/api/v1/memory/about', { content: '希望温和一点' })
+    expect(result.content).toBe('希望温和一点')
+  })
+
+  it('fetches the 回信人格 preset', async () => {
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ get }) as never)
+    get.mockResolvedValue({
+      data: {
+        key: 'warm',
+        label: '温和陪伴',
+        presets: [{ key: 'warm', label: '温和陪伴', min_chars: 60, max_chars: 300 }],
+      },
+    })
+
+    const result = await getPersonality()
+    expect(get).toHaveBeenCalledWith('/api/v1/memory/personality')
+    expect(result.key).toBe('warm')
+    expect(result.presets).toHaveLength(1)
+  })
+
+  it('updates the 回信人格 preset', async () => {
+    vi.mocked(axios.create).mockReturnValue(mockAxiosClient({ put }) as never)
+    put.mockResolvedValue({
+      data: { key: 'pragmatic', label: '理性教练', presets: [] },
+    })
+
+    const result = await updatePersonality('pragmatic')
+    expect(put).toHaveBeenCalledWith('/api/v1/memory/personality', { key: 'pragmatic' })
+    expect(result.key).toBe('pragmatic')
   })
 })

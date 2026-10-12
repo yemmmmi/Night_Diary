@@ -93,3 +93,40 @@ def test_list_entries_excludes_future_dated_entries_before_date_to(authed_client
     )
     assert listing.status_code == 200
     assert listing.json() == []
+
+
+def _upload_png(authed_client: TestClient) -> int:
+    response = authed_client.post(
+        "/api/v1/uploads/images",
+        files={"file": ("海边.png", b"\x89PNG\r\n\x1a\npayload", "image/png")},
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
+def test_create_and_update_diary_with_image_attachments(authed_client: TestClient) -> None:
+    asset_id = _upload_png(authed_client)
+
+    created = authed_client.post(
+        "/api/v1/diary/entries",
+        json={"content": "带图片的日记", "image_asset_ids": [asset_id]},
+    )
+    assert created.status_code == 201
+    assert created.json()["image_asset_ids"] == [asset_id]
+
+    diary_id = created.json()["id"]
+    updated = authed_client.put(
+        f"/api/v1/diary/entries/{diary_id}",
+        json={"image_asset_ids": []},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["image_asset_ids"] == []
+
+
+def test_create_diary_rejects_unknown_image_asset(authed_client: TestClient) -> None:
+    response = authed_client.post(
+        "/api/v1/diary/entries",
+        json={"content": "引用不存在的图片", "image_asset_ids": [4242]},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]

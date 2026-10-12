@@ -1,0 +1,21 @@
+{
+  "name": "night-diary-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Night Diary desktop host (Electron shell + local Python backend).",
+  "author": "Night Diary",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "dev": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --win nsis --config electron-builder.yml --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "~5.6.3",
+    "vitest": "^3.0.5"
+  }
+}

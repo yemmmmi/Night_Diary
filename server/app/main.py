@@ -53,6 +53,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Night Diary backend")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--data-dir", type=str, default=None)
+    parser.add_argument("--frontend-dir", type=str, default=None)
     return parser.parse_args(argv)
 
 
@@ -151,6 +152,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         sentinel_task = run_quality_sentinel_loop(app)
     except Exception as exc:
         logger.warning("Quality sentinel not started: %s", exc)
+
+    # A4: user-orchestrable scheduled tasks — one in-process loop that
+    # enqueues due tasks on an interval. Best-effort; never blocks startup.
+    scheduler_task = None
+    try:
+        from app.services.scheduler import run_scheduler_loop
+
+        scheduler_task = run_scheduler_loop(app)
+    except Exception as exc:
+        logger.warning("Scheduler not started: %s", exc)
     yield
     # ── Graceful shutdown (robustness P0-1) ─────────────────────────────
     # 1. Stop accepting new fire-and-forget background tasks.
@@ -169,6 +180,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         sentinel_task.cancel()
         with suppress(asyncio.CancelledError):
             await sentinel_task
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await scheduler_task
     requeue_task.cancel()
     with suppress(asyncio.CancelledError):
         await requeue_task
@@ -224,10 +239,13 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
     )
 
     from app.api.v1.error_handlers import register_error_handlers
+    from app.api.v1.openai_compat import router as openai_compat_router
     from app.api.v1.router import api_router
 
     register_error_handlers(app)
     app.include_router(api_router)
+    # A5: OpenAI-compatible facade lives at the root (/v1/...), not under /api/v1.
+    app.include_router(openai_compat_router)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
@@ -249,6 +267,18 @@ def create_app(settings=None) -> FastAPI:  # type: ignore[no-untyped-def]
         """Dev helper — lets the frontend detect a stale backend process."""
         return {"version": _app_build_version()}
 
+    # Desktop mode: serve the built SPA at '/' when a frontend dir is provided.
+    # Explicit routes (/health, /ready, /api/v1/*, /v1/*) are registered above,
+    # so they take precedence over this catch-all mount.
+    if cfg.frontend_dir and Path(cfg.frontend_dir).is_dir():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount(
+            "/",
+            StaticFiles(directory=cfg.frontend_dir, html=True),
+            name="frontend",
+        )
+
     return app
 
 
@@ -262,6 +292,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.data_dir:
         os.environ["DATA_DIR"] = args.data_dir
+    if args.frontend_dir:
+        os.environ["FRONTEND_DIR"] = args.frontend_dir
 
     get_settings.cache_clear()
     application = create_app()

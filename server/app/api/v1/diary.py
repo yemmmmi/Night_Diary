@@ -48,6 +48,7 @@ def create_entry(
         content=body.content,
         entry_date=body.date,
         weather=body.weather,
+        image_asset_ids=body.image_asset_ids,
         collection_manager=container.diary_collection,
         container=container,
     )
@@ -74,6 +75,7 @@ def update_entry(
         user_id=str(user.id),
         content=body.content,
         weather=body.weather,
+        image_asset_ids=body.image_asset_ids,
         collection_manager=container.diary_collection,
         container=container,
     )

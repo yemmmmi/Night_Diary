@@ -43,7 +43,15 @@ vi.mock('@/shared/api/dev', () => ({
   getDevPipeline: vi.fn(async () => ({})),
 }))
 
+vi.mock('@/shared/api/uploads', () => ({
+  ACCEPTED_IMAGE_TYPES: 'image/jpeg,image/png,image/webp',
+  MAX_IMAGE_BYTES: 10 * 1024 * 1024,
+  uploadImage: vi.fn(),
+  fetchImageObjectUrl: vi.fn(async (id: number) => `blob:${id}`),
+}))
+
 import DiaryScene from '@/pages/DiaryScene.vue'
+import * as diaryApi from '@/shared/api/diary'
 
 const entryFixture: DiaryEntry = {
   id: 7,
@@ -149,5 +157,27 @@ describe('DiaryScene（稿纸）', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="diary-delete"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="diary-export"]').exists()).toBe(false)
+  })
+
+  it('加载已有图片附件并渲染缩略图', async () => {
+    fetchEntry.mockResolvedValueOnce({ ...entryFixture, image_asset_ids: [3] })
+    const { wrapper } = mountScene()
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="image-attachment"]')).toHaveLength(1)
+  })
+
+  it('保存时把图片附件 id 一并提交', async () => {
+    fetchEntry.mockResolvedValueOnce({ ...entryFixture, image_asset_ids: [3] })
+    const { wrapper } = mountScene()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="diary-save"]').trigger('click')
+    await flushPromises()
+
+    expect(diaryApi.updateDiaryEntry).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ image_asset_ids: [3] }),
+    )
   })
 })

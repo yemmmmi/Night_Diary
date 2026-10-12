@@ -7,6 +7,14 @@ from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
+from app.domain.memory.types import MAX_ABOUT_CHARS
+from app.domain.skills.custom_skill import (
+    MAX_DESCRIPTION_CHARS,
+    MAX_INSTRUCTION_CHARS,
+    MAX_NAME_CHARS,
+    MAX_TRIGGERS,
+)
+
 
 class TagBrief(BaseModel):
     id: int
@@ -16,15 +24,29 @@ class TagBrief(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ImageAssetResponse(BaseModel):
+    """An uploaded image asset (metadata only; the file is streamed separately)."""
+
+    id: int
+    original_filename: str
+    mime_type: str
+    size_bytes: int
+    created_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
 class DiaryCreateRequest(BaseModel):
     content: str = Field(min_length=1)
     date: datetime.date | None = None
     weather: str | None = None
+    image_asset_ids: list[int] = Field(default_factory=list, max_length=9)
 
 
 class DiaryUpdateRequest(BaseModel):
     content: str | None = Field(default=None, min_length=1)
     weather: str | None = None
+    image_asset_ids: list[int] | None = Field(default=None, max_length=9)
 
 
 class DiaryResponse(BaseModel):
@@ -33,6 +55,7 @@ class DiaryResponse(BaseModel):
     date: datetime.date | None
     weather: str | None
     reply: str | None
+    image_asset_ids: list[int] = Field(default_factory=list)
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
@@ -85,6 +108,8 @@ class ModelCreateRequest(BaseModel):
     base_url: str = Field(min_length=1)
     tier: str = "default"
     is_active: bool = False
+    #: Optional extra keys for round-robin rotation against rate limits (D5).
+    api_keys: list[str] | None = None
 
 
 class ModelUpdateRequest(BaseModel):
@@ -93,6 +118,7 @@ class ModelUpdateRequest(BaseModel):
     base_url: str | None = None
     tier: str | None = None
     is_active: bool | None = None
+    api_keys: list[str] | None = None
 
 
 class ModelTestConnectionRequest(BaseModel):
@@ -114,6 +140,7 @@ class ModelResponse(BaseModel):
     is_active: bool
     is_default: bool
     has_api_key: bool
+    key_count: int = 1
 
 
 class ModelTierStatus(BaseModel):
@@ -285,6 +312,97 @@ class MemoryOverviewResponse(BaseModel):
     profile_built: bool
 
 
+class UserAboutResponse(BaseModel):
+    """User-authored 「关于我」 (B2) — injected at the frozen prompt prefix."""
+
+    content: str = ""
+    updated_at: float = 0.0
+    max_chars: int = MAX_ABOUT_CHARS
+
+
+class UserAboutUpdateRequest(BaseModel):
+    content: str = Field(default="", max_length=MAX_ABOUT_CHARS)
+
+
+# ── Reply personality presets (E1) ─────────────────────────────────────
+
+
+class PersonalityPresetResponse(BaseModel):
+    key: str
+    label: str
+    min_chars: int
+    max_chars: int
+
+
+class PersonalityResponse(BaseModel):
+    """The user's chosen 回信人格 preset plus the full option list."""
+
+    key: str
+    label: str
+    presets: list[PersonalityPresetResponse] = Field(default_factory=list)
+
+
+class PersonalityUpdateRequest(BaseModel):
+    key: str = Field(min_length=1, max_length=32)
+
+
+# ── Scheduled tasks (A4) ───────────────────────────────────────────────
+
+
+class ScheduledTaskCreateRequest(BaseModel):
+    kind: str = Field(min_length=1, max_length=32)
+    cron_expr: str = Field(min_length=1, max_length=128)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+    #: E3 — ``script`` (zero-LLM) or ``agent`` (LLM). Defaults to the kind's mode.
+    mode: str | None = Field(default=None, max_length=16)
+    #: E4 — result-delivery channel; defaults to the in-app mailbox.
+    sink: str | None = Field(default=None, max_length=32)
+
+
+class ScheduledTaskUpdateRequest(BaseModel):
+    cron_expr: str | None = Field(default=None, min_length=1, max_length=128)
+    payload: dict[str, Any] | None = None
+    enabled: bool | None = None
+    mode: str | None = Field(default=None, max_length=16)
+    sink: str | None = Field(default=None, max_length=32)
+
+
+class ScheduledTaskKindResponse(BaseModel):
+    kind: str
+    label: str
+    #: E3 — the mode used when none is supplied, and the modes this kind allows.
+    default_mode: str = "script"
+    allowed_modes: list[str] = Field(default_factory=list)
+
+
+class ScheduledTaskResponse(BaseModel):
+    id: str
+    kind: str
+    kind_label: str = ""
+    mode: str = "script"
+    mode_label: str = ""
+    sink: str = "inbox"
+    cron_expr: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+    next_run_at: datetime.datetime | None = None
+    last_run_at: datetime.datetime | None = None
+    last_status: str | None = None
+    created_at: datetime.datetime | None = None
+
+
+class ScheduledTaskRunResponse(BaseModel):
+    id: int
+    task_id: str
+    kind: str
+    status: str
+    summary: str | None = None
+    error: str | None = None
+    started_at: datetime.datetime | None = None
+    finished_at: datetime.datetime | None = None
+
+
 class ModelDownloadItemResponse(BaseModel):
     key: str
     repo_id: str
@@ -326,6 +444,7 @@ class MessageResponse(BaseModel):
     retrieved_memory_ids: list[str] | None = None
     attached_card_ids: list[str] | None = None
     attached_plan_ids: list[str] | None = None
+    attached_tag_names: list[str] | None = None
     skill_result: dict[str, Any] | None = None
     process_info: dict[str, Any] | None = None
     created_at: datetime.datetime
@@ -338,6 +457,7 @@ class SendMessageRequest(BaseModel):
     diary_ids: list[int] = Field(default_factory=list)
     card_ids: list[str] = Field(default_factory=list)
     plan_ids: list[str] = Field(default_factory=list)
+    tag_names: list[str] = Field(default_factory=list)
     auto_retrieve: bool = True
     skill: str | None = None
 
@@ -375,10 +495,34 @@ class SendMessageRequest(BaseModel):
             raise ValueError("最多附上 3 个计划")
         return value
 
+    @field_validator("tag_names")
+    @classmethod
+    def validate_tag_names(cls, value: list[str]) -> list[str]:
+        if len(value) > 3:
+            raise ValueError("最多引用 3 个标签")
+        return value
+
 
 class SendMessageResponse(BaseModel):
     message: MessageResponse
     reply: MessageResponse
+
+
+class RollbackResponse(BaseModel):
+    """Result of rolling a conversation back to before a message (B3)."""
+
+    removed_message_ids: list[str]
+    removed_memories: int
+    messages: list[MessageResponse]
+
+
+class RegenerateResponse(BaseModel):
+    """Result of regenerating an assistant reply (B3)."""
+
+    removed_message_ids: list[str]
+    removed_memories: int
+    reply: MessageResponse
+    messages: list[MessageResponse]
 
 
 # ── Plan / Task (V3 P2) ──────────────────────────────────────────────
@@ -412,6 +556,10 @@ class TaskCreateRequest(BaseModel):
     plan_id: str | None = None
     source: str = Field(default="manual", pattern="^(manual|agent)$")
     created_from_conversation_id: str | None = None
+    #: A3: change-log linkage (see TaskUpdateRequest).
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
 
 
 class TaskResponse(BaseModel):
@@ -437,6 +585,11 @@ class TaskUpdateRequest(BaseModel):
     due_date: str | None = None
     status: str | None = Field(default=None, pattern="^(pending|done|skipped)$")
     actual_value: float | None = Field(default=None, ge=0)
+    #: A3: link the change to the agent proposal / chat reply that caused it,
+    #: so the change can be listed and undone per conversation.
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
 
 
 class PlanCreateRequest(BaseModel):
@@ -455,6 +608,11 @@ class PlanCreateRequest(BaseModel):
     template: str | None = Field(
         default=None, pattern="^(checkin_total|timer_daily|milestones)$"
     )
+    #: A3: link the change to the agent proposal / chat reply that caused it,
+    #: so the change can be listed and undone per conversation.
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
 
 
 class CheckinCreateRequest(BaseModel):
@@ -512,3 +670,80 @@ class PlanUpdateRequest(BaseModel):
     target_value: float | None = Field(default=None, ge=0)
     target_unit: str | None = Field(default=None, max_length=16)
     target_period: str | None = Field(default=None, pattern="^(daily|weekly|total)$")
+    #: A3: change-log linkage (see TaskUpdateRequest).
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
+
+
+class PlanChangeResponse(BaseModel):
+    """A recorded plan/task change (A3) — powers the undo entry."""
+
+    id: str
+    entity_type: str
+    entity_id: str
+    action: str
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
+    undone: bool = False
+    created_at: str
+
+
+class PlanUndoResult(BaseModel):
+    """Outcome of replaying one change's snapshot."""
+
+    id: str
+    entity_type: str
+    entity_id: str
+    action: str
+    restored: str
+
+
+# ── Custom skills (A2) ─────────────────────────────────────────────────
+
+
+class CustomSkillResponse(BaseModel):
+    """A user-authored, reviewed custom skill (read-only at reply time)."""
+
+    id: int
+    name: str
+    description: str = ""
+    triggers: list[str] = Field(default_factory=list)
+    instruction: str
+    enabled: bool = True
+    version: int = 1
+    created_at: float = 0.0
+    updated_at: float = 0.0
+
+
+class CustomSkillCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_NAME_CHARS)
+    description: str = Field(default="", max_length=MAX_DESCRIPTION_CHARS)
+    triggers: list[str] = Field(min_length=1, max_length=MAX_TRIGGERS)
+    instruction: str = Field(min_length=1, max_length=MAX_INSTRUCTION_CHARS)
+    enabled: bool = True
+
+
+class CustomSkillUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_NAME_CHARS)
+    description: str = Field(default="", max_length=MAX_DESCRIPTION_CHARS)
+    triggers: list[str] = Field(min_length=1, max_length=MAX_TRIGGERS)
+    instruction: str = Field(min_length=1, max_length=MAX_INSTRUCTION_CHARS)
+    enabled: bool | None = None
+
+
+class CustomSkillVersionResponse(BaseModel):
+    """One prior revision of a custom skill (newest first)."""
+
+    version: int
+    name: str = ""
+    description: str = ""
+    triggers: list[str] = Field(default_factory=list)
+    instruction: str = ""
+    enabled: bool = True
+    created_at: float = 0.0
+
+
+class CustomSkillToggleRequest(BaseModel):
+    enabled: bool

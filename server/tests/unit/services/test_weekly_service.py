@@ -257,3 +257,78 @@ def test_weekly_to_response_defaults_for_legacy_rows(db_session) -> None:
     response = weekly_to_response(row)
     assert response.plan_executions == []
     assert response.week_tasks == []
+
+
+# ── D4: weekly multi-dimensional analysis ────────────────────────────────
+
+
+def _week_slices(db_session):
+    start, end = weekly_service.week_bounds()
+    diaries = weekly_service._diaries_in_week(
+        db_session, user_id="default", start=start, end=end
+    )
+    cards = weekly_service._cards_in_week(
+        db_session, user_id="default", start=start, end=end
+    )
+    plans_data = weekly_service._plans_in_week(
+        db_session, user_id="default", start=start, end=end
+    )
+    return diaries, cards, plans_data
+
+
+def test_dimension_subtasks_isolate_each_slice(db_session) -> None:
+    """每个维度只携带自己的数据切片, 不泄露其它维度的原始文本."""
+    _seed_week(db_session)
+    diaries, cards, plans_data = _week_slices(db_session)
+
+    subtasks = weekly_service._dimension_subtasks(diaries, cards, plans_data)
+    by_name = {t.name: t for t in subtasks}
+
+    assert "情绪曲线" in by_name
+    assert "生活事件" in by_name
+    # 情绪维度不应包含日记原文.
+    assert "今天过得还不错" not in by_name["情绪曲线"].context
+    # 事件维度不应包含卡片摘要.
+    assert "散步" not in by_name["生活事件"].context
+
+
+def test_dimension_subtasks_skip_empty_dimensions(db_session) -> None:
+    """没有数据的维度不应生成子任务."""
+    diary_service.create_entry(db_session, user_id="default", content="今天读了会儿书。")
+    diaries, cards, plans_data = _week_slices(db_session)
+
+    names = {t.name for t in weekly_service._dimension_subtasks(diaries, cards, plans_data)}
+    assert "生活事件" in names
+    assert "情绪曲线" not in names
+    assert "计划执行" not in names
+
+
+def test_weekly_dimension_block_empty_without_data() -> None:
+    assert (
+        weekly_service._weekly_dimension_block(
+            _planner(), [], [], {"active_plans": [], "week_tasks": []}
+        )
+        == ""
+    )
+
+
+def test_weekly_dimension_block_empty_without_llm(db_session) -> None:
+    _seed_week(db_session)
+    diaries, cards, plans_data = _week_slices(db_session)
+    no_llm = ExecutionPlanner(
+        llm_by_tier={},
+        decision_logger=InMemoryAgentDecisionLogger(),
+        multi_agent_enabled=False,
+    )
+
+    assert weekly_service._weekly_dimension_block(no_llm, diaries, cards, plans_data) == ""
+
+
+def test_weekly_dimension_block_summarizes_with_llm(db_session) -> None:
+    _seed_week(db_session)
+    diaries, cards, plans_data = _week_slices(db_session)
+
+    block = weekly_service._weekly_dimension_block(_planner(), diaries, cards, plans_data)
+
+    assert "情绪曲线" in block
+    assert "生活事件" in block

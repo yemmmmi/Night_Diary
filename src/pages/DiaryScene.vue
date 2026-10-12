@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
 import DiaryEditor from '@/features/diary/DiaryEditor.vue'
+import ImageAttachments from '@/features/diary/ImageAttachments.vue'
+import VoiceDictationButton from '@/features/diary/VoiceDictationButton.vue'
 import CardDiaryPromptPanel from '@/features/diary/CardDiaryPromptPanel.vue'
 import EmotionStamp from '@/shared/components/EmotionStamp.vue'
 import GameButton from '@/shared/components/GameButton.vue'
@@ -34,6 +36,7 @@ const cardStore = useCardStore()
 const settings = useSettingsStore()
 
 const content = ref('')
+const attachments = ref<number[]>([])
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -124,6 +127,7 @@ async function loadEntry() {
   if (!diaryId.value) {
     diaryStore.clearCurrent()
     content.value = ''
+    attachments.value = []
     saveState.value = 'idle'
     return
   }
@@ -131,6 +135,7 @@ async function loadEntry() {
   try {
     const entry = await diaryStore.fetchEntry(diaryId.value)
     content.value = entry.content ?? ''
+    attachments.value = entry.image_asset_ids ?? []
     saveState.value = 'idle'
   } catch (err) {
     loadError.value = formatApiError(err, copy.loadFailed)
@@ -146,6 +151,7 @@ async function persist(showFeedback = true) {
     if (isEditing.value && diaryId.value) {
       await diaryStore.saveEntry(diaryId.value, {
         content: trimmed,
+        image_asset_ids: attachments.value,
       })
       if (showFeedback) setSaveState('saved')
       else setSaveState('idle')
@@ -157,6 +163,7 @@ async function persist(showFeedback = true) {
     const created = await diaryStore.createEntry({
       content: trimmed,
       date: targetDate.value,
+      image_asset_ids: attachments.value,
     })
     setSaveState('saved')
     await router.replace(`/write/${created.id}`)
@@ -173,6 +180,12 @@ async function onAutosave(value: string) {
 
 async function onSaveClick() {
   await persist(true)
+}
+
+function onTranscript(text: string) {
+  const chunk = text.trim()
+  if (!chunk) return
+  content.value = content.value ? `${content.value}${chunk}` : chunk
 }
 
 function exportMarkdown() {
@@ -253,6 +266,10 @@ onMounted(async () => {
       <CardDiaryPromptPanel v-if="linkedCard && !loadError" :card="linkedCard" />
 
       <div v-if="!loadError" class="diary-sheet__body">
+        <div class="diary-sheet__tools">
+          <VoiceDictationButton @transcript="onTranscript" />
+          <ImageAttachments v-model="attachments" />
+        </div>
         <DiaryEditor v-model="content" :placeholder="editorPlaceholder" @autosave="onAutosave" />
       </div>
 
@@ -395,6 +412,16 @@ onMounted(async () => {
 .diary-sheet__body :deep(.diary-editor__input) {
   font-size: 1.05rem;
   line-height: 2.15;
+}
+
+.diary-sheet__tools {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.625rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--color-border);
 }
 
 .diary-sheet__stamps {

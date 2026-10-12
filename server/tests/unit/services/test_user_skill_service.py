@@ -40,6 +40,16 @@ class _StubLLM:
         yield self._reply
 
 
+class _CapturingLLM(_StubLLM):
+    def __init__(self, reply: str) -> None:
+        super().__init__(reply)
+        self.prompts: list[str] = []
+
+    def invoke(self, prompt: str) -> _Msg:
+        self.prompts.append(prompt)
+        return super().invoke(prompt)
+
+
 def _container(llm_reply: str = "回复") -> MagicMock:
     container = MagicMock()
     container._llm_for_tier = MagicMock(return_value=_StubLLM(llm_reply))
@@ -87,6 +97,36 @@ def test_dispatch_failure_degrades_to_none(db) -> None:
         )
         is None
     )
+
+
+# ── B4: 意图不明确时追问而非猜测 ─────────────────────────────────────
+
+
+def test_ambiguous_skill_lean_returns_clarification(db) -> None:
+    container = _container('{"intent": "record", "confidence": 0.3}')
+    outcome = user_skill_service.run_user_skill(
+        db, container, conversation_id="c1", content="帮我看看这个", user_id="u1"
+    )
+    assert outcome is not None
+    assert outcome.skill == "clarify"
+    assert outcome.skill_result["skill"] == "clarify"
+    assert [option["skill"] for option in outcome.skill_result["options"]] == [
+        "record",
+        "insight",
+        "plan",
+        "chat",
+    ]
+    # 澄清轮只提问，不写任何领域产物（没有 diary_id）。
+    assert "diary_id" not in outcome.skill_result
+
+
+def test_confident_llm_route_does_not_clarify(db) -> None:
+    # 高置信度不会被拦截为澄清；后续由具体技能处理（此处只验证不返回 clarify）。
+    container = _container('{"intent": "insight", "confidence": 0.95}')
+    outcome = user_skill_service.run_user_skill(
+        db, container, conversation_id="c1", content="我最近很迷茫，帮我看看", user_id="u1"
+    )
+    assert outcome is None or outcome.skill != "clarify"
 
 
 # ── 手动指定 skill：跳过意图分类，内容无需触发词 ──────────────────────
@@ -191,3 +231,31 @@ class TestUserSkillRegistry:
             is None
         )
         assert registry.has("nope") is False
+
+    def test_specs_carry_disclosure_metadata(self) -> None:
+        from app.domain.skills.user_skill_registry import get_user_skill_registry
+
+        for spec in get_user_skill_registry().specs():
+            assert spec.doc_path
+            assert spec.token_cost > 0
+
+
+# ── A1: Level-1 progressive disclosure into the skill prompt ─────────────
+
+
+def test_level1_body_injected_into_record_prompt(db) -> None:
+    llm = _CapturingLLM("你今天整理了房间。")
+    container = MagicMock()
+    container._llm_for_tier = MagicMock(return_value=llm)
+    container.diary_collection = None
+
+    outcome = user_skill_service.run_user_skill(
+        db,
+        container,
+        conversation_id="c1",
+        content="帮我记一篇日记：整理了房间",
+        user_id="u1",
+    )
+    assert outcome is not None
+    assert outcome.skill == "record"
+    assert any("技能契约参考" in prompt for prompt in llm.prompts)

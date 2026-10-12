@@ -31,8 +31,25 @@ export const memoryCopy = {
   volatility: '情绪波动',
   importantPeople: '重要的人',
   recurringTopics: '反复出现的话题',
-  responseStyle: '偏好的回应风格',
   none: '暂无',
+
+  // About me (user-authored, B2)
+  aboutTitle: '关于我',
+  aboutDesc: '画像由夜记推断，这里由你自述。写下的内容会随每封信一起交给夜记。',
+  aboutPlaceholder: '比如：我是夜班护士，常失眠；希望回信温和一点，少用感叹号……',
+  aboutSave: '保存',
+  aboutSaving: '保存中……',
+  aboutSaved: '已保存',
+  aboutDirty: '有未保存的修改',
+  aboutCharCount: (n: number, max: number) => `${n} / ${max}`,
+  aboutEmptyHint: '还没有写下关于你的介绍，写几句，夜记会更懂你。',
+  aboutSaveError: '保存「关于我」失败',
+
+  // Reply personality (E1)
+  personalityTitle: '回信人格',
+  personalityDesc: '选择夜记回信时的口吻与长度。与「日常 / 跟进 / 内视」的当下状态互不冲突。',
+  personalityLength: (min: number, max: number) => `约 ${min}-${max} 字`,
+  personalitySaveError: '保存回信人格失败',
 
   // Episodic
   episodicTitle: '情节记忆',

@@ -76,6 +76,18 @@ class Settings(BaseSettings):
     def logs_dir(self) -> str:
         return str(Path(self.data_dir) / "logs")
 
+    @property
+    def uploads_dir(self) -> str:
+        return str(Path(self.data_dir) / "uploads")
+
+    # ---- Desktop mode: serve the built frontend as a same-origin SPA ----
+    frontend_dir: str = Field(
+        default="",
+        description="Directory of the built frontend (index.html + assets) served "
+        "as a static SPA at '/'. Empty disables static serving "
+        "(dev via Vite / Docker via nginx).",
+    )
+
     # ---- Redis (optional, for production caching) ----
     redis_url: str = Field(
         default="",
@@ -107,6 +119,21 @@ class Settings(BaseSettings):
         "become child-process env vars. Paths with spaces are unsupported.",
     )
 
+    # ---- Agent harness ----
+    context_engine: str = Field(
+        default="compressor",
+        description="Context-management engine for the agent pipeline. "
+        "'compressor' (default) is the relevance-ranked sliding-window engine; "
+        "'reference' keeps source diary ids alongside the compressed text. "
+        "Unknown names fall back to the default.",
+    )
+    enabled_toolsets: str = Field(
+        default="",
+        description="Comma-separated toolset allow-list (memory, plan, external, "
+        "and/or 'mcp:<alias>' for a specific MCP endpoint). Empty = every toolset "
+        "enabled. Filters the intent-gated tool subset without touching MCP wiring.",
+    )
+
     # ---- Security ----
     model_key_secret: str = Field(
         default="",
@@ -122,6 +149,14 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = Field(
         default=10080,
         description="JWT token expiration in minutes (default: 7 days)",
+    )
+
+    # ---- Outbound request guard (C5) ----
+    allow_private_model_hosts: bool = Field(
+        default=True,
+        description="Permit LLM endpoint probes against loopback/RFC1918 hosts "
+        "(self-hosted Ollama / LM Studio / vLLM). Cloud-metadata and link-local "
+        "ranges are always blocked. Set False to forbid all private targets.",
     )
 
     # ---- CORS ----
@@ -179,8 +214,7 @@ class Settings(BaseSettings):
     )
     rerank_base_url: str = Field(
         default="https://dashscope.aliyuncs.com/compatible-api/v1",
-        description="Base URL of the Cohere-compatible rerank endpoint "
-        "(POST {base}/reranks).",
+        description="Base URL of the Cohere-compatible rerank endpoint " "(POST {base}/reranks).",
     )
     rerank_model: str = Field(
         default="qwen3-rerank",
@@ -218,6 +252,19 @@ class Settings(BaseSettings):
         ge=1,
         le=20,
         description="Number of recent replies sampled per quality scan.",
+    )
+
+    # ---- 定时任务调度 (A4) ----
+    scheduler_enabled: bool = Field(
+        default=True,
+        description="Run the in-process scheduler loop for user-orchestrable "
+        "recurring tasks (daily review / weekly insight / plan reminder). "
+        "Disabling keeps task definitions but never dispatches them.",
+    )
+    scheduler_interval_s: int = Field(
+        default=60,
+        ge=10,
+        description="Seconds between scheduler passes that enqueue due tasks.",
     )
 
     # ---- User-mode judgement thresholds (V3.x mode system) ----

@@ -257,8 +257,119 @@ def test_finalize_diary_without_entry_returns_none_atom():
 
 
 def test_build_default_pipeline_contains_expected_middlewares():
-    """默认管道含 Safety + Mode + Finalize 三个中间件。"""
+    """默认管道含 Safety + Mode + Personality + Approval + Finalize 五个中间件。"""
     pipeline = build_default_pipeline()
     assert pipeline.is_empty is False
     names = [mw.name for mw in pipeline._middlewares]  # type: ignore[attr-defined]
-    assert names == ["safety", "mode", "finalize"]
+    assert names == ["safety", "mode", "personality", "tool_approval", "finalize"]
+
+
+# ── Fine-grained lifecycle hooks (D3) ─────────────────────────────────
+
+
+class _HookRecorder(MiddlewareBase):
+    def __init__(self, name: str, calls: list[str]) -> None:
+        self.name = name
+        self._calls = calls
+
+    def pre_intent(self, content: str, ctx: MiddlewareContext) -> str:
+        self._calls.append(f"pre_intent:{self.name}")
+        return f"{content}+{self.name}"
+
+    def post_intent(self, ctx: MiddlewareContext) -> None:
+        self._calls.append(f"post_intent:{self.name}")
+
+    def post_tool_call(self, tool_name: str, result: str, ctx: MiddlewareContext) -> str:
+        self._calls.append(f"post_tool_call:{self.name}")
+        return f"{result}|{self.name}"
+
+    def pre_persist(self, ctx: MiddlewareContext) -> None:
+        self._calls.append(f"pre_persist:{self.name}")
+
+    def post_persist(self, ctx: MiddlewareContext) -> None:
+        self._calls.append(f"post_persist:{self.name}")
+
+
+def test_apply_pre_intent_folds_in_registration_order():
+    """pre_intent 按注册顺序 fold 内容变换。"""
+    calls: list[str] = []
+    pipeline = MiddlewarePipeline([_HookRecorder("a", calls), _HookRecorder("b", calls)])
+    out = pipeline.apply_pre_intent("raw", _ctx())
+    assert calls == ["pre_intent:a", "pre_intent:b"]
+    assert out == "raw+a+b"
+
+
+def test_run_post_intent_and_persist_hooks_run_all():
+    """post_intent / pre_persist / post_persist 逐个执行。"""
+    calls: list[str] = []
+    pipeline = MiddlewarePipeline([_HookRecorder("a", calls), _HookRecorder("b", calls)])
+    pipeline.run_post_intent(_ctx())
+    pipeline.run_pre_persist(_ctx())
+    pipeline.run_post_persist(_ctx())
+    assert calls == [
+        "post_intent:a",
+        "post_intent:b",
+        "pre_persist:a",
+        "pre_persist:b",
+        "post_persist:a",
+        "post_persist:b",
+    ]
+
+
+def test_post_tool_call_folds_result():
+    """post_tool_call 按注册顺序变换工具结果。"""
+    calls: list[str] = []
+    pipeline = MiddlewarePipeline([_HookRecorder("a", calls), _HookRecorder("b", calls)])
+    out = pipeline.post_tool_call("search", "result", _ctx())
+    assert out == "result|a|b"
+
+
+def test_pre_tool_call_none_when_no_opinion():
+    """无中间件表态时 pre_tool_call 返回 None。"""
+    pipeline = MiddlewarePipeline([_HookRecorder("a", [])])
+    assert pipeline.pre_tool_call("search", {}, _ctx()) is None
+
+
+def test_pre_tool_call_last_non_none_wins():
+    """多个中间件表态时最后一个非 None 决策胜出。"""
+    from app.shared.tool_approval import ApprovalDecision
+
+    class _Allow(MiddlewareBase):
+        name = "allow"
+
+        def pre_tool_call(self, tool_name, tool_args, ctx):
+            return ApprovalDecision(True, reason="allow")
+
+    class _Deny(MiddlewareBase):
+        name = "deny"
+
+        def pre_tool_call(self, tool_name, tool_args, ctx):
+            return ApprovalDecision(False, reason="deny")
+
+    allow_pipeline = MiddlewarePipeline([_Allow(), _HookRecorder("x", [])])
+    assert allow_pipeline.pre_tool_call("t", {}, _ctx()).allowed is True
+
+    # deny 短路：其后中间件不再被调用（记录器应无任何调用）
+    calls: list[str] = []
+    deny_pipeline = MiddlewarePipeline([_Deny(), _Allow(), _HookRecorder("after", calls)])
+    decision = deny_pipeline.pre_tool_call("t", {}, _ctx())
+    assert decision.allowed is False
+    assert calls == []
+
+
+def test_hook_error_is_isolated():
+    """任一 hook 抛异常仅记录，不阻断后续中间件与主流程。"""
+
+    class _Boom(MiddlewareBase):
+        name = "boom"
+
+        def pre_intent(self, content, ctx):
+            raise RuntimeError("boom")
+
+        def post_tool_call(self, tool_name, result, ctx):
+            raise RuntimeError("boom")
+
+    calls: list[str] = []
+    pipeline = MiddlewarePipeline([_Boom(), _HookRecorder("after", calls)])
+    assert pipeline.apply_pre_intent("raw", _ctx()) == "raw+after"
+    assert pipeline.post_tool_call("t", "r", _ctx()) == "r|after"

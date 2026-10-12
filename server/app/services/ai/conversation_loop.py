@@ -50,6 +50,7 @@ from app.shared.streaming_events import (
     publish_text_end,
 )
 from app.shared.streaming_safety import StreamingSafetyGuard
+from app.shared.tool_approval import evaluate_tool_call
 from app.shared.tool_protocol import (
     build_tool_hint,
     extract_native_tool_calls,
@@ -84,6 +85,41 @@ def _current_date_context() -> str:
     now = datetime.now(_BEIJING_TZ)
     weekday_cn = "星期" + "一二三四五六日"[now.weekday()]
     return f'\n\n## 当前日期\n今天是 {now.strftime("%Y-%m-%d")} {weekday_cn}。用户说「昨天」「明天」等相对日期时，请以此日期为基准计算。'
+
+
+def _apply_frozen_memory(system_prompt: str, session: Any) -> str:
+    """Append the session-frozen memory block at a fixed prefix position (D6).
+
+    The block is assembled once at session start and never changes mid-session,
+    so the base prompt + memory block form a stable prefix that the provider's
+    automatic prefix cache can reuse across turns. Volatile context (retrieved
+    diaries, chat history, the user message) stays *after* this point.
+    """
+    block = getattr(session, "frozen_memory_block", "")
+    if block:
+        return f"{system_prompt}\n\n{block}"
+    return system_prompt
+
+
+def _apply_custom_skills(
+    system_prompt: str, *, container: Any, user_id: str, content: str
+) -> str:
+    """Append the triggered custom-skill block (A2) after the frozen prefix.
+
+    Volatile by design: present only when one of the user's enabled custom
+    skills has a trigger occurring in the current message. Best-effort — any
+    failure degrades to no block, so a custom skill can never break a reply.
+    """
+    try:
+        from app.services.custom_skill_service import build_custom_skill_block
+
+        block = build_custom_skill_block(container, user_id=user_id, content=content)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("custom skill block failed (best-effort): %s", exc)
+        return system_prompt
+    if block:
+        return f"{system_prompt}\n\n{block}"
+    return system_prompt
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,21 +190,56 @@ def _execute_tool(
     tool_name: str,
     tool_args: dict[str, Any],
     tools: dict[str, ToolFn],
+    *,
+    middleware_pipeline: MiddlewarePipeline | None = None,
+    ctx: MiddlewareContext | None = None,
+    approved_write_tools: frozenset[str] | None = None,
 ) -> str:
     """Execute a single tool call, returning a result string.
 
-    Tool output is fenced as untrusted data before it can enter the LLM
-    context: MCP servers and external fetches may carry prompt-injection text.
+    Two cross-cutting guards wrap execution:
+
+    * C2 approval gate — write tools are refused unless approved. The same
+      evaluator backs the pipeline's ``pre_tool_call`` hook, so the hard gate
+      and the hook surface can never diverge.
+    * C1 trust boundary — tool output is fenced as untrusted data before it can
+      enter the LLM context (MCP servers and external fetches may carry
+      prompt-injection text).
     """
     fn = tools.get(tool_name)
     if fn is None:
         return f"[{tool_name}]: 未知工具"
+
+    decision = evaluate_tool_call(tool_name, approved=approved_write_tools or frozenset())
+    if not decision.allowed:
+        logger.warning("Tool %s blocked by approval gate: %s", tool_name, decision.reason)
+        return f"[{tool_name} blocked]: {decision.reason}"
+
+    has_hooks = middleware_pipeline is not None and not middleware_pipeline.is_empty
+    hook_ctx = ctx
+    if has_hooks:
+        if hook_ctx is None:
+            hook_ctx = MiddlewareContext(scenario="conversation")
+        assert middleware_pipeline is not None  # narrow for type-checkers
+        hook_decision = middleware_pipeline.pre_tool_call(tool_name, tool_args, hook_ctx)
+        if hook_decision is not None:
+            if not hook_decision.allowed:
+                logger.warning(
+                    "Tool %s blocked by pre_tool_call: %s", tool_name, hook_decision.reason
+                )
+                return f"[{tool_name} blocked]: {hook_decision.reason}"
+            if hook_decision.args is not None:
+                tool_args = hook_decision.args
+
     try:
-        result = fn(**tool_args)
-        return f"[{tool_name}]: {wrap_untrusted(str(result), source=tool_name)}"
+        result = wrap_untrusted(str(fn(**tool_args)), source=tool_name)
     except Exception as exc:
         logger.warning("Tool %s failed: %s", tool_name, exc)
         return f"[{tool_name} error]: {exc}"
+
+    if has_hooks and hook_ctx is not None and middleware_pipeline is not None:
+        result = middleware_pipeline.post_tool_call(tool_name, result, hook_ctx)
+    return f"[{tool_name}]: {result}"
 
 
 def _run_via_graph(
@@ -218,6 +289,10 @@ def _run_via_graph(
     from app.services.ai.prompts import CHAT_SYSTEM_PROMPT
 
     system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
+    system_prompt = _apply_frozen_memory(system_prompt, session)
+    system_prompt = _apply_custom_skills(
+        system_prompt, container=container, user_id=user_id, content=content
+    )
     chat_history = session.get_history()
     if chat_history:
         system_prompt += f"\n\n## 对话历史\n{chat_history}"
@@ -420,9 +495,12 @@ def run_conversation_loop(
 
         # Build the base prompt
         system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
+        system_prompt = _apply_frozen_memory(system_prompt, session)
+        system_prompt = _apply_custom_skills(
+            system_prompt, container=container, user_id=user_id, content=content
+        )
 
         chat_history = session.get_history()
-        topics_text = "、".join(session.profile_topics) if session.profile_topics else "（暂无）"
 
         base_user_prompt = CHAT_USER_PROMPT_TEMPLATE.format(
             pinned_diaries=pinned_diaries_text,
@@ -431,10 +509,8 @@ def run_conversation_loop(
             chat_history=chat_history,
             user_message=content.strip(),
         )
-        if session.profile_style or session.profile_topics:
-            base_user_prompt += (
-                f"\n\n【用户画像】偏好风格：{session.profile_style or '自然'}；近期关注：{topics_text}"
-            )
+        # The user profile now lives in the frozen memory block (system prefix)
+        # instead of the volatile user prompt — see _apply_frozen_memory (D6).
 
         # Get LLM
         llm: LLMClient | None = container._llm_for_tier(tier, agent_name="chat")
@@ -683,6 +759,10 @@ async def run_conversation_loop_streaming(
 
     # Build the base prompt
     system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
+    system_prompt = _apply_frozen_memory(system_prompt, session)
+    system_prompt = _apply_custom_skills(
+        system_prompt, container=container, user_id=user_id, content=content
+    )
 
     # V3 P7: optional middleware pipeline — on_system_prompt hooks (e.g. the
     # SafetyMiddleware crisis instruction) run before any LLM call. An empty
@@ -693,22 +773,28 @@ async def run_conversation_loop_streaming(
     # mode to the frontend as a ``mode_state`` protocol block (badge update +
     # one-time gentle notice).
     current_mode: str | None = None
+    mw_ctx: MiddlewareContext | None = None
     if middleware_pipeline is not None and not middleware_pipeline.is_empty:
-        system_prompt = middleware_pipeline.apply_system_prompt(
-            system_prompt,
-            MiddlewareContext(
-                scenario="conversation",
-                user_id=user_id,
-                content=content,
-                intent=intent,
-                trace_id=trace_id,
-                conversation_id=conversation_id,
-                # Request-scoped session + precomputed mode for presentation
-                # middlewares such as ModePromptBuilder. Kept in ``extra`` so
-                # unrelated middlewares never depend on a specific key.
-                extra={"db": db, "current_mode": current_mode},
-            ),
+        mw_ctx = MiddlewareContext(
+            scenario="conversation",
+            user_id=user_id,
+            content=content,
+            intent=intent,
+            trace_id=trace_id,
+            conversation_id=conversation_id,
+            # Request-scoped session + precomputed mode for presentation
+            # middlewares such as ModePromptBuilder. Kept in ``extra`` so
+            # unrelated middlewares never depend on a specific key.
+            # ``personality`` (E1) carries the user's chosen 回信人格 preset
+            # (session-cached ``preferred_response_style``) for
+            # PersonalityPromptBuilder — orthogonal to the mode.
+            extra={
+                "db": db,
+                "current_mode": current_mode,
+                "personality": getattr(session, "profile_style", "") or "",
+            },
         )
+        system_prompt = middleware_pipeline.apply_system_prompt(system_prompt, mw_ctx)
         # Best-effort mode for the mode_state event.
         try:
             if current_mode is None:
@@ -731,7 +817,6 @@ async def run_conversation_loop_streaming(
             )
 
     chat_history = session.get_history()
-    topics_text = "、".join(session.profile_topics) if session.profile_topics else "（暂无）"
 
     base_user_prompt = CHAT_USER_PROMPT_TEMPLATE.format(
         pinned_diaries=pinned_diaries_text,
@@ -740,10 +825,8 @@ async def run_conversation_loop_streaming(
         chat_history=chat_history,
         user_message=content.strip(),
     )
-    if session.profile_style or session.profile_topics:
-        base_user_prompt += (
-            f"\n\n【用户画像】偏好风格：{session.profile_style or '自然'}；近期关注：{topics_text}"
-        )
+    # The user profile now lives in the frozen memory block (system prefix)
+    # instead of the volatile user prompt — see _apply_frozen_memory (D6).
 
     # Get LLM
     llm: LLMClient | None = container._llm_for_tier(tier, agent_name="chat")
@@ -895,7 +978,13 @@ async def run_conversation_loop_streaming(
         tool_results: list[str] = []
         for tc in tool_call_results:
             tool_calls_made.append(tc.name)
-            result = _execute_tool(tc.name, tc.args, tools or {})
+            result = _execute_tool(
+                tc.name,
+                tc.args,
+                tools or {},
+                middleware_pipeline=middleware_pipeline,
+                ctx=mw_ctx,
+            )
             tool_results.append(result)
             citations.append(
                 Citation(

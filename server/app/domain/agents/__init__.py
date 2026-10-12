@@ -15,6 +15,7 @@ from __future__ import annotations
 
 __all__ = [
     "ContextCompressor",
+    "ContextEngine",
     "EmpathyAgent",
     "InsightAgent",
     "IntentCategory",
@@ -23,9 +24,11 @@ __all__ = [
     "MultiAgentGraph",
     "MultiAgentGraphBuilder",
     "MultiAgentState",
+    "ReferenceContextEngine",
     "RetrievalAgent",
     "SupervisorAgent",
     "allocate_token_budget",
+    "build_context_engine",
     "create_multi_agent_graph",
     "extract_token_usage",
     "merge_unique",
@@ -39,6 +42,7 @@ def __getattr__(name: str) -> object:
         # Map the public names to their source modules.
         _module_map = {
             "ContextCompressor": "app.domain.agents.context_compressor",
+            "ContextEngine": "app.domain.agents.context_engine",
             "EmpathyAgent": "app.domain.agents.empathy_agent",
             "InsightAgent": "app.domain.agents.insight_agent",
             "IntentCategory": "app.domain.agents.types",
@@ -47,9 +51,11 @@ def __getattr__(name: str) -> object:
             "MultiAgentGraph": "app.domain.agents.graph",
             "MultiAgentGraphBuilder": "app.domain.agents.graph",
             "MultiAgentState": "app.domain.agents.state",
+            "ReferenceContextEngine": "app.domain.agents.context_compressor",
             "RetrievalAgent": "app.domain.agents.retrieval_agent",
             "SupervisorAgent": "app.domain.agents.supervisor",
             "allocate_token_budget": "app.domain.agents.supervisor",
+            "build_context_engine": "app.domain.agents.context_engine",
             "create_multi_agent_graph": "app.domain.agents.graph",
             "extract_token_usage": "app.domain.agents.state",
             "merge_unique": "app.domain.agents.state",

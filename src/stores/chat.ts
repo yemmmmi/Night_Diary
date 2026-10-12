@@ -9,6 +9,8 @@ import {
   sendMessageStreaming,
   generateCardSummary,
   listSkills,
+  rollbackMessages,
+  regenerateReply,
   type Conversation,
   type ChatMessage,
   type GenerateCardPayload,
@@ -33,6 +35,7 @@ export const useChatStore = defineStore('chat', () => {
   const pinnedDiaryIds = ref<number[]>([])
   const pinnedCardIds = ref<string[]>([])
   const pinnedPlanIds = ref<string[]>([])
+  const pinnedTagNames = ref<string[]>([])
   const autoRetrieve = ref(true)
   /* 手动指定的 skill：null = 自动路由；发送后自动复位 */
   const selectedSkill = ref<UserSkill | null>(null)
@@ -158,6 +161,8 @@ export const useChatStore = defineStore('chat', () => {
                 pinnedCardIds.value.length > 0 ? pinnedCardIds.value : undefined,
               plan_ids:
                 pinnedPlanIds.value.length > 0 ? pinnedPlanIds.value : undefined,
+              tag_names:
+                pinnedTagNames.value.length > 0 ? pinnedTagNames.value : undefined,
               auto_retrieve: autoRetrieve.value,
               skill,
             },
@@ -204,6 +209,7 @@ export const useChatStore = defineStore('chat', () => {
       diary_ids: pinnedDiaryIds.value,
       card_ids: pinnedCardIds.value,
       plan_ids: pinnedPlanIds.value,
+      tag_names: pinnedTagNames.value,
       auto_retrieve: autoRetrieve.value,
       skill: selectedSkill.value ?? undefined,
     })
@@ -223,6 +229,45 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /* ── B3: 回退 / 重新生成 ── */
+
+  /* 回退与重新生成期间禁用信末操作，避免并发改写历史 */
+  const historyBusy = ref(false)
+
+  async function rollbackTo(messageId: string): Promise<boolean> {
+    const convId = activeConversationId.value
+    if (!convId) return false
+    historyBusy.value = true
+    error.value = null
+    try {
+      const result = await rollbackMessages(convId, messageId)
+      messages.value = result.messages
+      return true
+    } catch (err) {
+      error.value = formatApiError(err, '回退失败')
+      return false
+    } finally {
+      historyBusy.value = false
+    }
+  }
+
+  async function regenerate(messageId: string): Promise<boolean> {
+    const convId = activeConversationId.value
+    if (!convId) return false
+    historyBusy.value = true
+    error.value = null
+    try {
+      const result = await regenerateReply(convId, messageId)
+      messages.value = result.messages
+      return true
+    } catch (err) {
+      error.value = formatApiError(err, '重新生成失败')
+      return false
+    } finally {
+      historyBusy.value = false
+    }
+  }
+
   function setPinnedDiaryIds(ids: number[]) {
     pinnedDiaryIds.value = ids.slice(0, 3)
   }
@@ -239,6 +284,10 @@ export const useChatStore = defineStore('chat', () => {
 
   function setPinnedPlanIds(ids: string[]) {
     pinnedPlanIds.value = ids.slice(0, 3)
+  }
+
+  function setPinnedTagNames(names: string[]) {
+    pinnedTagNames.value = names.slice(0, 3)
   }
 
   function selectSkill(skill: UserSkill | null) {
@@ -266,6 +315,7 @@ export const useChatStore = defineStore('chat', () => {
     pinnedDiaryIds,
     pinnedCardIds,
     pinnedPlanIds,
+    pinnedTagNames,
     autoRetrieve,
     selectedSkill,
     skills,
@@ -276,16 +326,20 @@ export const useChatStore = defineStore('chat', () => {
     streamingEnabled,
     streamingActive,
     streamingText,
+    historyBusy,
     loadConversations,
     openConversation,
     startNewConversation,
     removeConversation,
     send,
     generateCard,
+    rollbackTo,
+    regenerate,
     setPinnedDiaryIds,
     pinDiary,
     setPinnedCardIds,
     setPinnedPlanIds,
+    setPinnedTagNames,
     selectSkill,
     loadSkills,
   }

@@ -35,9 +35,11 @@ from app.infrastructure.models import memory_card as _memory_card_models  # noqa
 from app.infrastructure.models import model_provider as _model_provider_models  # noqa: F401
 from app.infrastructure.models import plan as _plan_models  # noqa: F401
 from app.infrastructure.models import reply_quality as _reply_quality_models  # noqa: F401
+from app.infrastructure.models import scheduled_task as _scheduled_task_models  # noqa: F401
 from app.infrastructure.models import skill_activation as _skill_activation_models  # noqa: F401
 from app.infrastructure.models import tag as _tag_models  # noqa: F401
 from app.infrastructure.models import user as _user_models  # noqa: F401
+from app.infrastructure.models import user_skill as _user_skill_models  # noqa: F401
 from app.infrastructure.models import weekly_report as _weekly_report_models  # noqa: F401
 
 config = context.config

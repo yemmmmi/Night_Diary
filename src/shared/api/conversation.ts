@@ -35,6 +35,7 @@ export interface ChatMessage {
   retrieved_memory_ids?: string[]
   attached_card_ids?: string[]
   attached_plan_ids?: string[]
+  attached_tag_names?: string[]
   skill_result?: SkillResult | null
   process_info?: ProcessInfo | null
   created_at: string
@@ -73,7 +74,23 @@ export interface PlanSkillResult {
   tasks: PlanSkillNode[]
 }
 
-export type SkillResult = RecordSkillResult | InsightSkillResult | PlanSkillResult
+/* 歧义澄清：意图不明确时不下结论，给出可一键澄清的选项（B4） */
+export interface ClarifyOption {
+  skill: string
+  label: string
+  prefill: string
+}
+
+export interface ClarificationSkillResult {
+  skill: 'clarify'
+  options: ClarifyOption[]
+}
+
+export type SkillResult =
+  | RecordSkillResult
+  | InsightSkillResult
+  | PlanSkillResult
+  | ClarificationSkillResult
 
 /* 用户可手动指定的技能：取值来自 GET /api/v1/skills 的动态发现 */
 export type UserSkill = string
@@ -95,6 +112,7 @@ export interface SendMessagePayload {
   diary_ids?: number[]
   card_ids?: string[]
   plan_ids?: string[]
+  tag_names?: string[]
   auto_retrieve?: boolean
   skill?: UserSkill
 }
@@ -186,6 +204,43 @@ export async function abortStreaming(
   const { data } = await client.post<{ cancelled: boolean }>(
     `/api/v1/conversations/${conversationId}/messages/abort`,
     { trace_id: traceId },
+  )
+  return data
+}
+
+/* ── B3: 对话级回退与记忆撤销 ── */
+
+export interface RollbackResponse {
+  removed_message_ids: string[]
+  removed_memories: number
+  messages: ChatMessage[]
+}
+
+export interface RegenerateResponse {
+  removed_message_ids: string[]
+  removed_memories: number
+  reply: ChatMessage
+  messages: ChatMessage[]
+}
+
+export async function rollbackMessages(
+  conversationId: string,
+  messageId: string,
+): Promise<RollbackResponse> {
+  const client = await getHttpClient()
+  const { data } = await client.post<RollbackResponse>(
+    `/api/v1/conversations/${conversationId}/messages/${messageId}/rollback`,
+  )
+  return data
+}
+
+export async function regenerateReply(
+  conversationId: string,
+  messageId: string,
+): Promise<RegenerateResponse> {
+  const client = await getHttpClient()
+  const { data } = await client.post<RegenerateResponse>(
+    `/api/v1/conversations/${conversationId}/messages/${messageId}/regenerate`,
   )
   return data
 }

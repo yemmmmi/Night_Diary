@@ -7,7 +7,11 @@ import time
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.memory.types import EpisodicEntry, UserProfile
-from app.infrastructure.models.memory import EpisodicMemoryRow, LongTermProfileRow
+from app.infrastructure.models.memory import (
+    EpisodicMemoryRow,
+    LongTermProfileRow,
+    UserAboutRow,
+)
 
 
 class SqliteEpisodicMemoryStore:
@@ -99,3 +103,31 @@ class SqliteLongTermProfileStore:
                 row.profile_json = payload
                 row.updated_at = now
             session.commit()
+
+
+class SqliteUserAboutStore:
+    """Persist the user-authored 「关于我」 text (B2)."""
+
+    def __init__(self, session_factory: sessionmaker[Session]) -> None:
+        self._session_factory = session_factory
+
+    def get_about(self, user_id: str) -> tuple[str, float] | None:
+        """Return ``(content, updated_at)`` or ``None`` when never saved."""
+        with self._session_factory() as session:
+            row = session.get(UserAboutRow, user_id)
+            if row is None:
+                return None
+            return row.content or "", row.updated_at or 0.0
+
+    def save_about(self, user_id: str, content: str) -> float:
+        """Upsert the about text, returning the new ``updated_at`` timestamp."""
+        now = time.time()
+        with self._session_factory() as session:
+            row = session.get(UserAboutRow, user_id)
+            if row is None:
+                session.add(UserAboutRow(user_id=user_id, content=content, updated_at=now))
+            else:
+                row.content = content
+                row.updated_at = now
+            session.commit()
+        return now

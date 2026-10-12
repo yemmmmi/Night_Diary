@@ -20,8 +20,10 @@ from app.api.mappers import source_links_from_json
 from app.api.schemas import (
     CheckinCreateRequest,
     CheckinResponse,
+    PlanChangeResponse,
     PlanCreateRequest,
     PlanResponse,
+    PlanUndoResult,
     PlanUpdateRequest,
     SourceLink,
     TaskCreateRequest,
@@ -29,8 +31,8 @@ from app.api.schemas import (
     TaskUpdateRequest,
     TodayProgressSnapshot,
 )
-from app.infrastructure.models import PlanCheckinRow, PlanRow, TaskRow
-from app.services import plan_service
+from app.infrastructure.models import PlanChangeLogRow, PlanCheckinRow, PlanRow, TaskRow
+from app.services import plan_change_service, plan_service
 from app.shared.errors import ValidationError
 
 router = APIRouter(prefix="/plans", tags=["plan"])
@@ -99,6 +101,20 @@ def _plan_to_response(
     )
 
 
+def _change_to_response(row: PlanChangeLogRow) -> PlanChangeResponse:
+    return PlanChangeResponse(
+        id=row.id,
+        entity_type=row.entity_type,
+        entity_id=row.entity_id,
+        action=row.action,
+        proposal_id=row.proposal_id,
+        conversation_id=row.conversation_id,
+        message_id=row.message_id,
+        undone=row.undone,
+        created_at=row.created_at.isoformat() if row.created_at else "",
+    )
+
+
 # ── Plan CRUD ─────────────────────────────────────────────────────────
 
 
@@ -118,6 +134,9 @@ def create_plan(body: PlanCreateRequest, db: DbDep, user: CurrentUserDep) -> Pla
         target_unit=body.target_unit,
         target_period=body.target_period,
         template=body.template,
+        proposal_id=body.proposal_id,
+        conversation_id=body.conversation_id,
+        message_id=body.message_id,
     )
     created_tasks: list[TaskRow] = []
     for task_body in body.tasks:
@@ -131,6 +150,9 @@ def create_plan(body: PlanCreateRequest, db: DbDep, user: CurrentUserDep) -> Pla
             due_date=task_body.due_date,
             source=task_body.source,
             created_from_conversation_id=task_body.created_from_conversation_id,
+            proposal_id=body.proposal_id,
+            conversation_id=body.conversation_id,
+            message_id=body.message_id,
         )
         created_tasks.append(task)
     return _plan_to_response(plan, db, created_tasks)
@@ -144,6 +166,51 @@ def list_plans(
 ) -> list[PlanResponse]:
     plans = plan_service.list_plans(db, user_id=str(user.id), status=plan_status)
     return [_plan_to_response(p, db) for p in plans]
+
+
+# ── Change log & undo (A3) ────────────────────────────────────────────
+# Registered before ``/{plan_id}`` so the literal path wins the match.
+
+
+@router.get("/changes", response_model=list[PlanChangeResponse])
+def list_plan_changes(
+    db: DbDep,
+    user: CurrentUserDep,
+    conversation_id: str | None = Query(default=None),
+    entity_type: str | None = Query(default=None, pattern="^(plan|task)$"),
+    include_undone: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[PlanChangeResponse]:
+    """Recent plan/task changes for the current user (newest first)."""
+    rows = plan_change_service.list_changes(
+        db,
+        user_id=str(user.id),
+        conversation_id=conversation_id,
+        entity_type=entity_type,
+        include_undone=include_undone,
+        limit=limit,
+    )
+    return [_change_to_response(r) for r in rows]
+
+
+@router.post("/changes/undo-conversation", response_model=list[PlanUndoResult])
+def undo_conversation_changes(
+    db: DbDep,
+    user: CurrentUserDep,
+    conversation_id: str = Query(...),
+) -> list[PlanUndoResult]:
+    """Undo every pending change an agent proposal applied in one conversation."""
+    results = plan_change_service.undo_conversation_changes(
+        db, user_id=str(user.id), conversation_id=conversation_id
+    )
+    return [PlanUndoResult(**item) for item in results]
+
+
+@router.post("/changes/{log_id}/undo", response_model=PlanUndoResult)
+def undo_plan_change(log_id: str, db: DbDep, user: CurrentUserDep) -> PlanUndoResult:
+    """Replay one change's ``before`` snapshot (create→delete, update/delete→restore)."""
+    result = plan_change_service.undo_change(db, log_id=log_id, user_id=str(user.id))
+    return PlanUndoResult(**result)
 
 
 @router.get("/{plan_id}", response_model=PlanResponse)
@@ -214,6 +281,9 @@ def create_task(body: TaskCreateRequest, db: DbDep, user: CurrentUserDep) -> Tas
         due_date=body.due_date,
         source=body.source,
         created_from_conversation_id=body.created_from_conversation_id,
+        proposal_id=body.proposal_id,
+        conversation_id=body.conversation_id,
+        message_id=body.message_id,
     )
     return _task_to_response(task)
 
@@ -254,6 +324,11 @@ def update_task(
     container: ContainerDep,
 ) -> TaskResponse:
     fields = body.model_dump(exclude_unset=True)
+    linkage = {
+        "proposal_id": fields.pop("proposal_id", None),
+        "conversation_id": fields.pop("conversation_id", None),
+        "message_id": fields.pop("message_id", None),
+    }
     if "status" in fields:
         # Task completion must trigger episodic memory write-back (closed-loop
         # for source=task). ``ensure_memory`` lazily loads the three memory
@@ -265,14 +340,15 @@ def update_task(
             user_id=str(user.id),
             status=fields.pop("status"),
             container=container,
+            **linkage,
         )
         if fields:
             task = plan_service.update_task(
-                db, task_id=task_id, user_id=str(user.id), **fields
+                db, task_id=task_id, user_id=str(user.id), **fields, **linkage
             )
     else:
         task = plan_service.update_task(
-            db, task_id=task_id, user_id=str(user.id), **fields
+            db, task_id=task_id, user_id=str(user.id), **fields, **linkage
         )
     return _task_to_response(task)
 
