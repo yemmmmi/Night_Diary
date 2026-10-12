@@ -1027,3 +1027,53 @@ class TestFilterTools:
     def test_no_tools_at_all(self) -> None:
         assert conversation_ai_service._filter_tools(None, ["search_diary"]) is None
         assert conversation_ai_service._filter_tools({"search_diary": lambda **k: ""}, []) is None
+
+    def test_enabled_toolsets_none_keeps_everything(self) -> None:
+        all_tools = {
+            "search_diary": lambda **k: "",
+            "list_todos": lambda **k: "",
+            "mcp__tavily__search": lambda **k: "",
+        }
+        result = conversation_ai_service._filter_tools(
+            all_tools, ["search_diary", "list_todos"], None
+        )
+        assert set(result) == {"search_diary", "list_todos", "mcp__tavily__search"}
+
+    def test_enabled_toolsets_drops_disabled_family(self) -> None:
+        all_tools = {"search_diary": lambda **k: "", "list_todos": lambda **k: ""}
+        result = conversation_ai_service._filter_tools(
+            all_tools, ["search_diary", "list_todos"], {"plan"}
+        )
+        assert set(result) == {"list_todos"}
+
+    def test_enabled_toolsets_filters_mcp_by_alias(self) -> None:
+        all_tools = {
+            "mcp__tavily__search": lambda **k: "",
+            "mcp__fetch__get_url": lambda **k: "",
+        }
+        result = conversation_ai_service._filter_tools(all_tools, [], {"mcp:tavily"})
+        assert set(result) == {"mcp__tavily__search"}
+
+    def test_enabled_toolsets_can_disable_all(self) -> None:
+        all_tools = {"search_diary": lambda **k: "", "mcp__tavily__search": lambda **k: ""}
+        assert conversation_ai_service._filter_tools(all_tools, ["search_diary"], {"plan"}) is None
+
+
+class TestEnabledToolsets:
+    def test_empty_setting_means_all_enabled(self) -> None:
+        container = MagicMock()
+        container.settings.enabled_toolsets = ""
+        assert conversation_ai_service._enabled_toolsets(container) is None
+
+    def test_parses_comma_separated_names(self) -> None:
+        container = MagicMock()
+        container.settings.enabled_toolsets = "memory, mcp:tavily ,plan"
+        assert conversation_ai_service._enabled_toolsets(container) == {
+            "memory",
+            "mcp:tavily",
+            "plan",
+        }
+
+    def test_missing_settings_degrades_to_all(self) -> None:
+        container = MagicMock(spec=[])
+        assert conversation_ai_service._enabled_toolsets(container) is None

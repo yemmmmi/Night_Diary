@@ -24,7 +24,7 @@ from app.services.ai.conversation_loop import run_conversation_loop
 from app.services.ai.input_preprocessor import InputPreprocessor
 from app.services.ai.prompts import FALLBACK_FEEDBACK
 from app.services.ai.session_context import get_or_create_session
-from app.services.ai.tool_factory import ToolFn, build_tool_map, is_mcp_tool
+from app.services.ai.tool_factory import ToolFn, build_tool_map, is_mcp_tool, toolset_for_tool
 from app.services.memory_gateway import MemoryGateway
 from app.shared.crisis_guard import CrisisGuard, get_crisis_guard
 from app.shared.emotion_estimator import get_emotion_estimator
@@ -353,21 +353,48 @@ def _build_tools(
         return None
 
 
+def _enabled_toolsets(container: ServiceContainer) -> set[str] | None:
+    """Parse ``Settings.enabled_toolsets`` into a set, or None for "all enabled".
+
+    An empty/unset value means every toolset is allowed, preserving the previous
+    behaviour. Values may be built-in families (``memory`` / ``plan`` /
+    ``external``) or ``mcp:<alias>`` to allow-list one MCP endpoint.
+    """
+    settings = getattr(container, "settings", None)
+    raw = getattr(settings, "enabled_toolsets", "") if settings is not None else ""
+    names = {part.strip() for part in str(raw or "").split(",") if part.strip()}
+    return names or None
+
+
 def _filter_tools(
     all_tools: dict[str, ToolFn] | None,
     need_tools: list[str],
+    enabled_toolsets: set[str] | None = None,
 ) -> dict[str, ToolFn] | None:
-    """Intent-gated local tools + always-available MCP tools."""
+    """Intent-gated local tools + always-available MCP tools, toolset-filtered.
+
+    Intent (``need_tools``) picks the candidate subset; ``enabled_toolsets`` then
+    drops whole families the user/deployment has switched off (including MCP
+    endpoints, grouped as ``mcp:<alias>``). ``None`` means "all toolsets enabled".
+    """
     if not all_tools:
         return None
+
+    def _allowed(name: str) -> bool:
+        return enabled_toolsets is None or toolset_for_tool(name) in enabled_toolsets
+
     if need_tools:
         selected = {
             name: fn
             for name, fn in all_tools.items()
-            if name in need_tools or is_mcp_tool(name)
+            if (name in need_tools or is_mcp_tool(name)) and _allowed(name)
         }
     else:
-        selected = {name: fn for name, fn in all_tools.items() if is_mcp_tool(name)}
+        selected = {
+            name: fn
+            for name, fn in all_tools.items()
+            if is_mcp_tool(name) and _allowed(name)
+        }
     return selected or None
 
 
@@ -679,7 +706,9 @@ def _prepare_reply_context(
         all_tools = _build_tools(container, user_id=user_id)
         if span:
             span.metadata["tool_count"] = len(all_tools) if all_tools else 0
-    tools: dict[str, ToolFn] | None = _filter_tools(all_tools, intent_result.need_tools)
+    tools: dict[str, ToolFn] | None = _filter_tools(
+        all_tools, intent_result.need_tools, _enabled_toolsets(container)
+    )
 
     # Release the DB connection before the long-running streaming loop.
     # The session re-acquires a connection when downstream code next
@@ -1006,7 +1035,9 @@ def generate_reply(
             all_tools = _build_tools(container, user_id=user_id)
             if span:
                 span.metadata["tool_count"] = len(all_tools) if all_tools else 0
-        tools: dict[str, ToolFn] | None = _filter_tools(all_tools, intent_result.need_tools)
+        tools: dict[str, ToolFn] | None = _filter_tools(
+            all_tools, intent_result.need_tools, _enabled_toolsets(container)
+        )
 
         # Release the DB connection before the long-running Agentic Loop
         # (LLM network calls). The session re-acquires a connection when

@@ -107,6 +107,21 @@ class Settings(BaseSettings):
         "become child-process env vars. Paths with spaces are unsupported.",
     )
 
+    # ---- Agent harness ----
+    context_engine: str = Field(
+        default="compressor",
+        description="Context-management engine for the agent pipeline. "
+        "'compressor' (default) is the relevance-ranked sliding-window engine; "
+        "'reference' keeps source diary ids alongside the compressed text. "
+        "Unknown names fall back to the default.",
+    )
+    enabled_toolsets: str = Field(
+        default="",
+        description="Comma-separated toolset allow-list (memory, plan, external, "
+        "and/or 'mcp:<alias>' for a specific MCP endpoint). Empty = every toolset "
+        "enabled. Filters the intent-gated tool subset without touching MCP wiring.",
+    )
+
     # ---- Security ----
     model_key_secret: str = Field(
         default="",
