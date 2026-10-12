@@ -10,7 +10,11 @@ import httpx
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.models.app_config import AppConfigRow
-from app.services.ai.utils import filter_diary_results, format_diary_result
+from app.services.ai.utils import (
+    filter_diary_results,
+    format_diary_result,
+    summarize_diary_results,
+)
 from app.shared.llm import LLMClient, message_text
 from app.shared.tool_protocol import ToolSpec
 
@@ -28,6 +32,7 @@ TOOLSET_MCP_PREFIX = "mcp:"
 #: Built-in tool → toolset. MCP tools are grouped dynamically by endpoint alias.
 LOCAL_TOOL_TOOLSETS: dict[str, str] = {
     "search_diary": TOOLSET_MEMORY,
+    "summarize_diaries": TOOLSET_MEMORY,
     "analyze_sentiment": TOOLSET_MEMORY,
     "query_entity_graph": TOOLSET_MEMORY,
     "list_todos": TOOLSET_PLAN,
@@ -76,6 +81,50 @@ def create_diary_search_tool(
             return "日记搜索暂时不可用"
 
     return search_diary
+
+
+def create_summarize_diaries_tool(retriever: Any) -> ToolFn:
+    """Compound retrieval tool (A6): batch-retrieve → filter → aggregate.
+
+    Hermes-style compound tool: filtering and aggregation run *inside* the
+    tool, so only the bounded conclusion re-enters the model context instead
+    of a multi-round ``search_diary`` loop. Read-only, output capped.
+    """
+
+    def summarize_diaries(
+        query: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        tag: str = "",
+        max_items: int = 8,
+    ) -> str:
+        try:
+            hits = retriever.retrieve(query or "", top_k=20)
+            results = [
+                {
+                    "date": hit.date,
+                    "tags": hit.tags,
+                    "content": hit.content,
+                }
+                for hit in hits
+            ]
+            results = filter_diary_results(
+                results,
+                start_date=start_date,
+                end_date=end_date,
+                tag=tag,
+            )
+            try:
+                limit = int(max_items)
+            except (TypeError, ValueError):
+                limit = 8
+            limit = max(1, min(limit, 10))
+            return summarize_diary_results(results, max_items=limit)
+        except Exception as exc:
+            logger.error("日记批量汇总工具失败: %s", exc)
+            return "日记汇总暂时不可用"
+
+    return summarize_diaries
 
 
 def _fetch_weather_from_api(city: str, api_key: str) -> str | None:
@@ -296,6 +345,7 @@ def build_tool_map(
 ) -> dict[str, ToolFn]:
     return {
         "search_diary": create_diary_search_tool(retriever),
+        "summarize_diaries": create_summarize_diaries_tool(retriever),
         "get_weather_info": create_weather_tool(session_factory, weather_api_key=weather_api_key),
         "get_user_address": create_address_tool(session_factory),
         "analyze_sentiment": create_sentiment_tool(llm),
@@ -321,6 +371,29 @@ def build_tool_specs() -> list[ToolSpec]:
                     "start_date": {"type": "string", "description": "开始日期 YYYY-MM-DD"},
                     "end_date": {"type": "string", "description": "结束日期 YYYY-MM-DD"},
                     "tag": {"type": "string", "description": "标签过滤"},
+                },
+                "required": ["query"],
+            },
+            toolset=TOOLSET_MEMORY,
+        ),
+        ToolSpec(
+            name="summarize_diaries",
+            description=(
+                "批量检索历史日记并在工具内完成筛选与汇总，一次返回结论"
+                "（命中数量、时间跨度、高频标签、代表性条目）。当需要跨多篇日记"
+                "归纳模式/趋势时优先用它，避免多轮逐条检索。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "检索关键词"},
+                    "start_date": {"type": "string", "description": "开始日期 YYYY-MM-DD"},
+                    "end_date": {"type": "string", "description": "结束日期 YYYY-MM-DD"},
+                    "tag": {"type": "string", "description": "标签过滤"},
+                    "max_items": {
+                        "type": "integer",
+                        "description": "最多返回的代表性条目数（1-10，默认 8）",
+                    },
                 },
                 "required": ["query"],
             },

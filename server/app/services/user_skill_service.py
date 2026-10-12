@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
+from app.domain.skills.disclosure import get_skill_disclosure
 from app.domain.skills.intent import IntentDecision, classify_user_intent
 from app.domain.skills.record_skill import SkillRunOutcome
 from app.domain.skills.user_skill_registry import get_user_skill_registry
@@ -29,9 +30,15 @@ logger = logging.getLogger(__name__)
 def route_intent(
     container: ServiceContainer, content: str
 ) -> IntentDecision:
-    """Classify intent; the light LLM is the fallback inside the router."""
+    """Classify intent; the light LLM is the fallback inside the router.
+
+    The Level-0 skill catalog (id / label / description / token cost) is
+    injected into the fallback prompt so the router sees the registered
+    skills rather than a fixed list.
+    """
     light_llm = container._llm_for_tier("light", agent_name="user_skill_intent")
-    return classify_user_intent(content, llm=light_llm)
+    catalog = get_skill_disclosure().level0_catalog()
+    return classify_user_intent(content, llm=light_llm, skill_catalog=catalog)
 
 
 def run_user_skill(
@@ -47,6 +54,9 @@ def run_user_skill(
 
     *skill* forces a specific skill (user-side manual selection) and skips
     intent classification entirely; only registered skills are honored.
+
+    Level-1 progressive disclosure: once a skill is hit, its SKILL.md body is
+    loaded on demand and injected into the skill's generation prompt.
     """
     try:
         registry = get_user_skill_registry()
@@ -63,6 +73,7 @@ def run_user_skill(
             decision.source,
         )
 
+        skill_doc = get_skill_disclosure().level1_body(decision.intent)
         llm = container._llm_for_tier("medium", agent_name=f"user_skill_{decision.intent}")
         return registry.run(
             db,
@@ -72,6 +83,7 @@ def run_user_skill(
             content=content,
             user_id=user_id,
             conversation_id=conversation_id,
+            skill_doc=skill_doc,
         )
     except Exception as exc:
         logger.warning(

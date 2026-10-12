@@ -175,14 +175,14 @@ _INTENT_ROUTING: dict[str, dict[str, Any]] = {
     },
     ChatIntent.RETROSPECTIVE_QUERY.value: {
         "need_retrieval": True,
-        "need_tools": ["search_diary"],
+        "need_tools": ["search_diary", "summarize_diaries"],
         "need_entity_query": False,
         "tier": "heavy",
         "max_iterations": 3,
     },
     ChatIntent.ADVICE_SEEKING.value: {
         "need_retrieval": True,
-        "need_tools": ["search_diary", "analyze_sentiment"],
+        "need_tools": ["search_diary", "summarize_diaries", "analyze_sentiment"],
         "need_entity_query": False,
         "tier": "heavy",
         "max_iterations": 3,
