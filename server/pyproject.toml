@@ -201,4 +201,5 @@ addopts = "-ra -m 'not eval'"
 asyncio_mode = "auto"
 markers = [
     "eval: offline RAG/generation eval; excluded from the default test run",
+    "security: cross-tenant isolation / trust-boundary regression gate (C4)",
 ]
