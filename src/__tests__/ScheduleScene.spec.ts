@@ -29,9 +29,9 @@ import ScheduleScene from '@/pages/ScheduleScene.vue'
 import type { ScheduledTask, ScheduledTaskRun } from '@/shared/api/schedule'
 
 const kinds = [
-  { kind: 'daily_review', label: '每日回顾' },
-  { kind: 'weekly_insight', label: '每周洞察' },
-  { kind: 'plan_reminder', label: '计划提醒' },
+  { kind: 'daily_review', label: '每日回顾', default_mode: 'script', allowed_modes: ['agent', 'script'] },
+  { kind: 'weekly_insight', label: '每周洞察', default_mode: 'agent', allowed_modes: ['agent'] },
+  { kind: 'plan_reminder', label: '计划提醒', default_mode: 'script', allowed_modes: ['script'] },
 ]
 
 function task(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
@@ -39,6 +39,9 @@ function task(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
     id: 't1',
     kind: 'daily_review',
     kind_label: '每日回顾',
+    mode: 'script',
+    mode_label: '纯数据（零 LLM）',
+    sink: 'inbox',
     cron_expr: '0 22 * * *',
     payload: {},
     enabled: true,
@@ -76,8 +79,14 @@ describe('ScheduleScene', () => {
     listKinds.mockResolvedValue(kinds)
     listSchedules.mockResolvedValue([])
     createSchedule.mockImplementation(
-      async (body: { kind: string; cron_expr: string; enabled?: boolean }) =>
-        task({ id: 'new', kind: body.kind, cron_expr: body.cron_expr, enabled: body.enabled ?? true }),
+      async (body: { kind: string; cron_expr: string; enabled?: boolean; mode?: string }) =>
+        task({
+          id: 'new',
+          kind: body.kind,
+          cron_expr: body.cron_expr,
+          enabled: body.enabled ?? true,
+          mode: body.mode ?? 'script',
+        }),
     )
     updateSchedule.mockImplementation(
       async (id: string, patch: Partial<ScheduledTask>) => task({ id, ...patch }),
@@ -113,6 +122,45 @@ describe('ScheduleScene', () => {
       enabled: true,
     })
     expect(wrapper.findAll('[data-testid="schedule-item"]')).toHaveLength(1)
+  })
+
+  it('offers an execution mode only for kinds that support more than one', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    // daily_review is the default selection and supports script + agent.
+    const modeSelect = wrapper.find('[data-testid="schedule-mode"]')
+    expect(modeSelect.exists()).toBe(true)
+    expect((modeSelect.element as HTMLSelectElement).value).toBe('script')
+
+    await wrapper.find('[data-testid="schedule-kind"]').setValue('plan_reminder')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="schedule-mode"]').exists()).toBe(false)
+  })
+
+  it('sends the chosen mode when creating', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="schedule-mode"]').setValue('agent')
+    await wrapper.find('[data-testid="schedule-cron"]').setValue('0 22 * * *')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(createSchedule).toHaveBeenCalledWith({
+      kind: 'daily_review',
+      cron_expr: '0 22 * * *',
+      enabled: true,
+      mode: 'agent',
+    })
+  })
+
+  it('shows the execution mode on a task', async () => {
+    listSchedules.mockResolvedValue([task({ mode: 'agent', mode_label: '生成型（走 LLM）' })])
+    const wrapper = mountScene()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="schedule-mode-badge"]').text()).toContain('生成型')
   })
 
   it('renders tasks and toggles enabled', async () => {

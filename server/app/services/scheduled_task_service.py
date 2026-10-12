@@ -12,6 +12,11 @@ Design (Hermes lessons A4):
 - **No re-entrancy**: :func:`create_task` / :func:`update_task` refuse to run
   while inside a task execution context (:data:`_TASK_EXECUTION`), so a task
   can never spawn further tasks ("任务创建工具必须在任务执行上下文中禁用").
+- **E3 mode**: a task carries ``mode`` — ``script`` runs a zero-LLM data body
+  (digest refresh / statistics), ``agent`` routes the body through the LLM
+  (daily reflection / weekly letter). This keeps steady-state cost low.
+- **E4 result sink**: the finished result is handed to the task's ``sink``
+  (default the in-app mailbox). Delivery is best-effort and never fails a run.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.schedule.cron import next_run_after, validate_cron
 from app.infrastructure.scheduled_task_repository import SqliteScheduledTaskStore
+from app.services import result_sink as sinks
 from app.shared.errors import NotFoundError, ValidationError
 
 if TYPE_CHECKING:
@@ -44,6 +50,33 @@ TASK_KINDS: dict[str, str] = {
     "weekly_insight": "每周洞察",
     "plan_reminder": "计划提醒",
 }
+
+#: E3 — execution modes → human label.
+TASK_MODES: dict[str, str] = {
+    "script": "纯数据（零 LLM）",
+    "agent": "生成型（走 LLM）",
+}
+
+#: E3 — the mode a kind uses when the caller does not specify one.
+KIND_DEFAULT_MODE: dict[str, str] = {
+    "daily_review": "script",
+    "weekly_insight": "agent",
+    "plan_reminder": "script",
+}
+
+#: E3 — the modes each kind actually supports.
+KIND_ALLOWED_MODES: dict[str, frozenset[str]] = {
+    "daily_review": frozenset({"script", "agent"}),
+    "weekly_insight": frozenset({"agent"}),
+    "plan_reminder": frozenset({"script"}),
+}
+
+#: Prompt used when a daily review runs in agent mode (LLM-written reflection).
+_DAILY_REVIEW_PROMPT = (
+    "你是「夜记」，一个温柔、克制的日记伙伴。下面是一日摘要，"
+    "请用 2-3 句写一段温和的回顾，点出一处情绪线索和一件值得留意的小事。"
+    "不要罗列数据，不要提问，不要编造摘要中没有的内容。\n\n{digest}"
+)
 
 #: Per-thread/task flag set while a task body runs; blocks task creation.
 _TASK_EXECUTION: ContextVar[bool] = ContextVar("scheduled_task_execution", default=False)
@@ -80,6 +113,8 @@ def _task_dict(row: Any) -> dict[str, Any]:
     return {
         "id": row.id,
         "kind": row.kind,
+        "mode": getattr(row, "mode", None) or KIND_DEFAULT_MODE.get(row.kind, "script"),
+        "sink": getattr(row, "sink", None) or sinks.DEFAULT_SINK,
         "cron_expr": row.cron_expr,
         "payload": json.loads(row.payload_json or "{}"),
         "enabled": bool(row.enabled),
@@ -88,6 +123,26 @@ def _task_dict(row: Any) -> dict[str, Any]:
         "last_status": row.last_status,
         "created_at": row.created_at,
     }
+
+
+def _resolve_mode(kind: str, mode: str | None) -> str:
+    """Validate and default the execution mode for ``kind``."""
+    resolved = mode or KIND_DEFAULT_MODE[kind]
+    if resolved not in TASK_MODES:
+        raise ValidationError(f"未知的任务模式: {resolved}")
+    if resolved not in KIND_ALLOWED_MODES[kind]:
+        raise ValidationError(
+            f"「{TASK_KINDS[kind]}」不支持「{TASK_MODES[resolved]}」模式"
+        )
+    return resolved
+
+
+def _resolve_sink(sink: str | None) -> str:
+    """Validate and default the result-delivery channel."""
+    resolved = sink or sinks.DEFAULT_SINK
+    if resolved not in sinks.available_sinks():
+        raise ValidationError(f"未知的结果分发器: {resolved}")
+    return resolved
 
 
 def _run_dict(row: Any) -> dict[str, Any]:
@@ -114,6 +169,8 @@ def create_task(
     cron_expr: str,
     payload: dict[str, Any] | None = None,
     enabled: bool = True,
+    mode: str | None = None,
+    sink: str | None = None,
 ) -> dict[str, Any]:
     if in_task_execution():
         raise ValidationError("任务执行上下文中不允许创建定时任务")
@@ -123,6 +180,8 @@ def create_task(
         normalized = validate_cron(cron_expr)
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
+    resolved_mode = _resolve_mode(kind, mode)
+    resolved_sink = _resolve_sink(sink)
     next_run = next_run_after(normalized, datetime.now()) if enabled else None
     row = _store(container).create(
         user_id=user_id,
@@ -131,6 +190,8 @@ def create_task(
         payload_json=json.dumps(payload or {}, ensure_ascii=False),
         enabled=enabled,
         next_run_at=next_run,
+        mode=resolved_mode,
+        sink=resolved_sink,
     )
     return _task_dict(row)
 
@@ -154,6 +215,8 @@ def update_task(
     cron_expr: str | None = None,
     payload: dict[str, Any] | None = None,
     enabled: bool | None = None,
+    mode: str | None = None,
+    sink: str | None = None,
 ) -> dict[str, Any]:
     if in_task_execution():
         raise ValidationError("任务执行上下文中不允许修改定时任务")
@@ -169,20 +232,24 @@ def update_task(
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
     new_enabled = existing.enabled if enabled is None else enabled
+    new_mode = _resolve_mode(existing.kind, mode) if mode is not None else None
+    new_sink = _resolve_sink(sink) if sink is not None else None
 
     recompute = cron_expr is not None or enabled is not None
-    next_run: Any = None
-    if recompute:
-        next_run = next_run_after(new_cron, datetime.now()) if new_enabled else None
 
-    row = store.update(
-        task_id,
-        user_id=user_id,
-        cron_expr=new_cron if cron_expr is not None else None,
-        payload_json=json.dumps(payload, ensure_ascii=False) if payload is not None else None,
-        enabled=enabled,
-        next_run_at=next_run if recompute else _UNCHANGED,
-    )
+    fields: dict[str, Any] = {
+        "cron_expr": new_cron if cron_expr is not None else None,
+        "payload_json": json.dumps(payload, ensure_ascii=False) if payload is not None else None,
+        "enabled": enabled,
+        "mode": new_mode,
+        "sink": new_sink,
+    }
+    if recompute:
+        fields["next_run_at"] = (
+            next_run_after(new_cron, datetime.now()) if new_enabled else None
+        )
+
+    row = store.update(task_id, user_id=user_id, **fields)
     assert row is not None  # existence checked above
     return _task_dict(row)
 
@@ -265,19 +332,65 @@ def execute_scheduled_task(task_id: str) -> None:
     run_id = store.record_run_started(
         task_id=task.id, user_id=task.user_id, kind=task.kind
     )
+    mode = getattr(task, "mode", None) or KIND_DEFAULT_MODE.get(task.kind, "script")
+    sink_name = getattr(task, "sink", None) or sinks.DEFAULT_SINK
     token = _TASK_EXECUTION.set(True)
     try:
         payload = json.loads(task.payload_json or "{}")
         with container.session_factory() as db:
-            summary = _run_body(db, container, task.kind, payload, task.user_id)
+            summary = _run_body(
+                db, container, task.kind, payload, task.user_id, mode=mode
+            )
         store.finish_run(run_id, status="done", summary=summary)
         store.mark_last(task.id, status="done", last_run_at=datetime.now())
+        _deliver(
+            sink_name,
+            task,
+            mode=mode,
+            status="done",
+            body=summary or "",
+            run_id=run_id,
+        )
     except Exception as exc:
         logger.warning("Scheduled task %s failed: %s", task_id, exc, exc_info=True)
         store.finish_run(run_id, status="failed", error=str(exc))
         store.mark_last(task.id, status="failed", last_run_at=datetime.now())
+        _deliver(
+            sink_name,
+            task,
+            mode=mode,
+            status="failed",
+            body=str(exc),
+            run_id=run_id,
+        )
     finally:
         _TASK_EXECUTION.reset(token)
+
+
+def _deliver(
+    sink_name: str,
+    task: Any,
+    *,
+    mode: str,
+    status: str,
+    body: str,
+    run_id: int | None,
+) -> None:
+    """Hand a finished result to the task's sink; never fail the run."""
+    result = sinks.TaskResult(
+        user_id=task.user_id,
+        task_id=task.id,
+        kind=task.kind,
+        mode=mode,
+        status=status,
+        title=TASK_KINDS.get(task.kind, task.kind),
+        body=body,
+        run_id=run_id,
+    )
+    try:
+        sinks.get_sink(sink_name).deliver(result)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Result sink %s failed for task %s: %s", sink_name, task.id, exc)
 
 
 def _run_body(
@@ -286,14 +399,21 @@ def _run_body(
     kind: str,
     payload: dict[str, Any],
     user_id: str,
+    *,
+    mode: str = "script",
 ) -> str:
     """Run the task body for ``kind`` and return a short receipt summary."""
     if kind == "daily_review":
         from app.services.digest_service import format_day_digest
 
         day = date.today()
-        text = format_day_digest(db, user_id=user_id, day=day).strip()
-        return text or f"{day.isoformat()} 还没有可回顾的记录。"
+        digest = format_day_digest(db, user_id=user_id, day=day).strip()
+        if not digest:
+            return f"{day.isoformat()} 还没有可回顾的记录。"
+        if mode == "agent":
+            reflection = _agent_daily_review(container, db, user_id=user_id, digest=digest)
+            return reflection or digest
+        return digest
 
     if kind == "weekly_insight":
         from app.services import weekly_service
@@ -317,13 +437,34 @@ def _run_body(
     raise ValueError(f"未知的定时任务类型: {kind}")
 
 
-# Sentinel for "leave next_run_at unchanged" in update_task.
-_UNCHANGED: object = object()
+def _agent_daily_review(
+    container: ServiceContainer,
+    db: Session,
+    *,
+    user_id: str,
+    digest: str,
+) -> str:
+    """Turn a day digest into a short LLM-written reflection (E3 agent mode).
+
+    Best-effort: on any LLM failure the caller falls back to the raw digest.
+    """
+    from app.shared.llm import message_text
+
+    try:
+        client = container.llm_factory.create_for_tier(db, "default", user_id=user_id)
+        response = client.invoke(_DAILY_REVIEW_PROMPT.format(digest=digest))
+    except Exception as exc:
+        logger.warning("daily_review agent mode fell back to script digest: %s", exc)
+        return ""
+    return message_text(response).strip()
 
 
 __all__ = [
     "EXECUTE_PATH",
+    "KIND_ALLOWED_MODES",
+    "KIND_DEFAULT_MODE",
     "TASK_KINDS",
+    "TASK_MODES",
     "create_task",
     "delete_task",
     "execute_scheduled_task",

@@ -4,7 +4,7 @@ import { PhArrowLeft } from '@phosphor-icons/vue'
 
 import GameButton from '@/shared/components/GameButton.vue'
 import { scheduleCopy as copy } from '@/shared/copy/schedule'
-import type { ScheduledTask } from '@/shared/api/schedule'
+import type { ScheduledTask, ScheduledTaskCreate } from '@/shared/api/schedule'
 import { useScheduleStore } from '@/stores/schedule'
 
 defineOptions({ name: 'ScheduleScene' })
@@ -13,6 +13,7 @@ const store = useScheduleStore()
 
 const draft = reactive({
   kind: '',
+  mode: '',
   cron: '',
   enabled: true,
 })
@@ -25,8 +26,19 @@ const pendingDeleteId = ref<string | null>(null)
 
 const canCreate = computed(() => draft.kind.length > 0 && draft.cron.trim().length > 0)
 
+const selectedKind = computed(() => store.kinds.find((k) => k.kind === draft.kind) ?? null)
+const availableModes = computed(() => selectedKind.value?.allowed_modes ?? [])
+
+function onKindChange(): void {
+  draft.mode = selectedKind.value?.default_mode ?? ''
+}
+
 function kindLabel(task: ScheduledTask): string {
   return task.kind_label || copy.kinds[task.kind] || task.kind
+}
+
+function modeLabel(task: ScheduledTask): string {
+  return task.mode_label || copy.modes[task.mode] || task.mode
 }
 
 function formatTime(iso: string | null): string {
@@ -47,11 +59,13 @@ function statusLabel(status: string | null): string {
 async function onCreate(): Promise<void> {
   if (!canCreate.value) return
   try {
-    await store.create({
+    const body: ScheduledTaskCreate = {
       kind: draft.kind,
       cron_expr: draft.cron.trim(),
       enabled: draft.enabled,
-    })
+    }
+    if (draft.mode && availableModes.value.length > 1) body.mode = draft.mode
+    await store.create(body)
     draft.cron = ''
   } catch {
     // surfaced via store.error
@@ -131,6 +145,7 @@ onMounted(async () => {
     // surfaced via store.error
   }
   if (!draft.kind && store.kinds.length) draft.kind = store.kinds[0].kind
+  onKindChange()
 })
 </script>
 
@@ -156,11 +171,30 @@ onMounted(async () => {
         <form class="schedule-form" @submit.prevent="onCreate">
           <label class="schedule-field">
             <span class="schedule-field__label">{{ copy.kindLabel }}</span>
-            <select v-model="draft.kind" class="schedule-field__input" data-testid="schedule-kind">
+            <select
+              v-model="draft.kind"
+              class="schedule-field__input"
+              data-testid="schedule-kind"
+              @change="onKindChange"
+            >
               <option v-for="k in store.kinds" :key="k.kind" :value="k.kind">
                 {{ k.label }}
               </option>
             </select>
+          </label>
+
+          <label v-if="availableModes.length > 1" class="schedule-field">
+            <span class="schedule-field__label">{{ copy.modeLabel }}</span>
+            <select
+              v-model="draft.mode"
+              class="schedule-field__input"
+              data-testid="schedule-mode"
+            >
+              <option v-for="m in availableModes" :key="m" :value="m">
+                {{ copy.modes[m] || m }}
+              </option>
+            </select>
+            <span class="schedule-field__hint">{{ copy.modeHint }}</span>
           </label>
 
           <label class="schedule-field">
@@ -208,6 +242,9 @@ onMounted(async () => {
             <div class="schedule-item__head">
               <span class="schedule-item__kind">{{ kindLabel(task) }}</span>
               <code class="schedule-item__cron">{{ task.cron_expr }}</code>
+              <span class="schedule-item__mode" data-testid="schedule-mode-badge">
+                {{ modeLabel(task) }}
+              </span>
               <span class="schedule-item__badge" :class="{ 'is-off': !task.enabled }">
                 {{ task.enabled ? copy.resume : copy.pause }}
               </span>
@@ -493,6 +530,15 @@ onMounted(async () => {
   border-radius: 0.25rem;
   background: var(--color-bg-elevated-2);
   color: var(--color-text-secondary);
+}
+
+.schedule-item__mode {
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated-2);
+  border: 1px solid var(--color-line);
 }
 
 .schedule-item__badge {

@@ -311,23 +311,35 @@ class ScheduledTaskCreateRequest(BaseModel):
     cron_expr: str = Field(min_length=1, max_length=128)
     payload: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
+    #: E3 — ``script`` (zero-LLM) or ``agent`` (LLM). Defaults to the kind's mode.
+    mode: str | None = Field(default=None, max_length=16)
+    #: E4 — result-delivery channel; defaults to the in-app mailbox.
+    sink: str | None = Field(default=None, max_length=32)
 
 
 class ScheduledTaskUpdateRequest(BaseModel):
     cron_expr: str | None = Field(default=None, min_length=1, max_length=128)
     payload: dict[str, Any] | None = None
     enabled: bool | None = None
+    mode: str | None = Field(default=None, max_length=16)
+    sink: str | None = Field(default=None, max_length=32)
 
 
 class ScheduledTaskKindResponse(BaseModel):
     kind: str
     label: str
+    #: E3 — the mode used when none is supplied, and the modes this kind allows.
+    default_mode: str = "script"
+    allowed_modes: list[str] = Field(default_factory=list)
 
 
 class ScheduledTaskResponse(BaseModel):
     id: str
     kind: str
     kind_label: str = ""
+    mode: str = "script"
+    mode_label: str = ""
+    sink: str = "inbox"
     cron_expr: str
     payload: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True

@@ -6,6 +6,10 @@ free-form ``payload``. A background scheduler loop dispatches due tasks
 through the existing task queue; each execution is recorded as a durable run
 row so the in-app "信箱/回执" can show what ran and when.
 
+E3 adds a ``mode`` (``script`` = zero-LLM data task, ``agent`` = generation
+task); E4 adds a ``sink`` naming the result-delivery channel (default the
+in-app mailbox).
+
 Schedule datetimes (``next_run_at`` / ``last_run_at``) are naive **local**
 time (cron is naturally wall-clock); ``created_at`` / ``updated_at`` keep the
 project-wide UTC convention.
@@ -34,6 +38,10 @@ class ScheduledTaskRow(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_new_task_id)
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: E3 — ``script`` (zero-LLM, data only) or ``agent`` (generation via LLM).
+    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="script")
+    #: E4 — result-delivery channel name (default in-app mailbox).
+    sink: Mapped[str] = mapped_column(String(32), nullable=False, default="inbox")
     cron_expr: Mapped[str] = mapped_column(String(128), nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
