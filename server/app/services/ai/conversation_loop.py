@@ -50,6 +50,7 @@ from app.shared.streaming_events import (
     publish_text_end,
 )
 from app.shared.streaming_safety import StreamingSafetyGuard
+from app.shared.tool_approval import evaluate_tool_call
 from app.shared.tool_protocol import (
     build_tool_hint,
     extract_native_tool_calls,
@@ -154,21 +155,56 @@ def _execute_tool(
     tool_name: str,
     tool_args: dict[str, Any],
     tools: dict[str, ToolFn],
+    *,
+    middleware_pipeline: MiddlewarePipeline | None = None,
+    ctx: MiddlewareContext | None = None,
+    approved_write_tools: frozenset[str] | None = None,
 ) -> str:
     """Execute a single tool call, returning a result string.
 
-    Tool output is fenced as untrusted data before it can enter the LLM
-    context: MCP servers and external fetches may carry prompt-injection text.
+    Two cross-cutting guards wrap execution:
+
+    * C2 approval gate — write tools are refused unless approved. The same
+      evaluator backs the pipeline's ``pre_tool_call`` hook, so the hard gate
+      and the hook surface can never diverge.
+    * C1 trust boundary — tool output is fenced as untrusted data before it can
+      enter the LLM context (MCP servers and external fetches may carry
+      prompt-injection text).
     """
     fn = tools.get(tool_name)
     if fn is None:
         return f"[{tool_name}]: 未知工具"
+
+    decision = evaluate_tool_call(tool_name, approved=approved_write_tools or frozenset())
+    if not decision.allowed:
+        logger.warning("Tool %s blocked by approval gate: %s", tool_name, decision.reason)
+        return f"[{tool_name} blocked]: {decision.reason}"
+
+    has_hooks = middleware_pipeline is not None and not middleware_pipeline.is_empty
+    hook_ctx = ctx
+    if has_hooks:
+        if hook_ctx is None:
+            hook_ctx = MiddlewareContext(scenario="conversation")
+        assert middleware_pipeline is not None  # narrow for type-checkers
+        hook_decision = middleware_pipeline.pre_tool_call(tool_name, tool_args, hook_ctx)
+        if hook_decision is not None:
+            if not hook_decision.allowed:
+                logger.warning(
+                    "Tool %s blocked by pre_tool_call: %s", tool_name, hook_decision.reason
+                )
+                return f"[{tool_name} blocked]: {hook_decision.reason}"
+            if hook_decision.args is not None:
+                tool_args = hook_decision.args
+
     try:
-        result = fn(**tool_args)
-        return f"[{tool_name}]: {wrap_untrusted(str(result), source=tool_name)}"
+        result = wrap_untrusted(str(fn(**tool_args)), source=tool_name)
     except Exception as exc:
         logger.warning("Tool %s failed: %s", tool_name, exc)
         return f"[{tool_name} error]: {exc}"
+
+    if has_hooks and hook_ctx is not None and middleware_pipeline is not None:
+        result = middleware_pipeline.post_tool_call(tool_name, result, hook_ctx)
+    return f"[{tool_name}]: {result}"
 
 
 def _run_via_graph(
@@ -693,22 +729,21 @@ async def run_conversation_loop_streaming(
     # mode to the frontend as a ``mode_state`` protocol block (badge update +
     # one-time gentle notice).
     current_mode: str | None = None
+    mw_ctx: MiddlewareContext | None = None
     if middleware_pipeline is not None and not middleware_pipeline.is_empty:
-        system_prompt = middleware_pipeline.apply_system_prompt(
-            system_prompt,
-            MiddlewareContext(
-                scenario="conversation",
-                user_id=user_id,
-                content=content,
-                intent=intent,
-                trace_id=trace_id,
-                conversation_id=conversation_id,
-                # Request-scoped session + precomputed mode for presentation
-                # middlewares such as ModePromptBuilder. Kept in ``extra`` so
-                # unrelated middlewares never depend on a specific key.
-                extra={"db": db, "current_mode": current_mode},
-            ),
+        mw_ctx = MiddlewareContext(
+            scenario="conversation",
+            user_id=user_id,
+            content=content,
+            intent=intent,
+            trace_id=trace_id,
+            conversation_id=conversation_id,
+            # Request-scoped session + precomputed mode for presentation
+            # middlewares such as ModePromptBuilder. Kept in ``extra`` so
+            # unrelated middlewares never depend on a specific key.
+            extra={"db": db, "current_mode": current_mode},
         )
+        system_prompt = middleware_pipeline.apply_system_prompt(system_prompt, mw_ctx)
         # Best-effort mode for the mode_state event.
         try:
             if current_mode is None:
@@ -895,7 +930,13 @@ async def run_conversation_loop_streaming(
         tool_results: list[str] = []
         for tc in tool_call_results:
             tool_calls_made.append(tc.name)
-            result = _execute_tool(tc.name, tc.args, tools or {})
+            result = _execute_tool(
+                tc.name,
+                tc.args,
+                tools or {},
+                middleware_pipeline=middleware_pipeline,
+                ctx=mw_ctx,
+            )
             tool_results.append(result)
             citations.append(
                 Citation(
