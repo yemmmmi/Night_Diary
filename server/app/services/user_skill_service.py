@@ -26,6 +26,35 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Shown when the router leaned toward a skill but was not confident enough
+#: to act — a lightweight disambiguation card instead of a guessed proposal.
+_CLARIFY_QUESTION = (
+    "我还不确定你想让我做什么。"
+    "是想把这段整理成日记、帮你分析一下状态，还是一起理个计划？"
+)
+
+#: ``prefill`` is dropped into the composer so one tap gives the router an
+#: unambiguous instruction on the next turn.
+_CLARIFY_OPTIONS: tuple[dict[str, str], ...] = (
+    {"skill": "record", "label": "整理成日记", "prefill": "帮我记一篇日记："},
+    {"skill": "insight", "label": "分析我的状态", "prefill": "帮我分析一下我最近的状态"},
+    {"skill": "plan", "label": "一起理个计划", "prefill": "帮我做个计划："},
+    {"skill": "chat", "label": "就聊聊", "prefill": "先不着急，就聊聊"},
+)
+
+
+def build_clarification_outcome() -> SkillRunOutcome:
+    """Build the disambiguation reply — writes nothing, only asks."""
+    return SkillRunOutcome(
+        skill="clarify",
+        reply_text=_CLARIFY_QUESTION,
+        skill_result={
+            "skill": "clarify",
+            "options": [dict(option) for option in _CLARIFY_OPTIONS],
+        },
+        token_info=None,
+    )
+
 
 def route_intent(
     container: ServiceContainer, content: str
@@ -64,6 +93,17 @@ def run_user_skill(
             decision = IntentDecision(intent=skill, source="manual")
         else:
             decision = route_intent(container, content)
+
+        if decision.should_clarify:
+            logger.info(
+                "user_skill ambiguous, asking to clarify: conversation=%s "
+                "intent=%s confidence=%.2f",
+                conversation_id,
+                decision.intent,
+                decision.confidence,
+            )
+            return build_clarification_outcome()
+
         if decision.intent == "chat" or not registry.has(decision.intent):
             return None
         logger.info(

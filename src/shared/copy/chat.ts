@@ -48,6 +48,7 @@ export const chatCopy = {
   skillInsightLabel: '洞悉 · 心理视角',
   skillPlanLabel: '已创建计划',
   skillPlanOpen: '去计划页推进',
+  skillClarifyLabel: '夜记想先确认一下',
   skillPlanCheckin: (days: number) => `坚持 ${days} 天 · 每日打卡`,
   skillPlanTimer: (hours: number) => `每日 ${hours} 小时 · 计时推进`,
   skillPlanNodes: (total: number, multiSource: number) =>

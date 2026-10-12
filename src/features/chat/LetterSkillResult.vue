@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { PhArrowSquareOut, PhNotePencil, PhSparkle } from '@phosphor-icons/vue'
+import { PhArrowSquareOut, PhNotePencil, PhQuestion, PhSparkle } from '@phosphor-icons/vue'
 
 import type { SkillResult } from '@/shared/api/conversation'
 import { chatCopy } from '@/shared/copy/chat'
@@ -9,6 +9,10 @@ import { parseLocalDate } from '@/shared/utils/diaryFormat'
 
 const props = defineProps<{
   result: SkillResult
+}>()
+
+const emit = defineEmits<{
+  clarify: [prefill: string]
 }>()
 
 const router = useRouter()
@@ -106,6 +110,30 @@ function goToPlan() {
       {{ chatCopy.skillPlanOpen }}
     </button>
   </div>
+
+  <!-- 歧义澄清：不下结论，给出可一键澄清的选项（B4） -->
+  <div
+    v-else-if="result.skill === 'clarify'"
+    class="skill-block"
+    data-testid="skill-block-clarify"
+  >
+    <p class="skill-block__label">
+      <PhQuestion :size="13" aria-hidden="true" />
+      {{ chatCopy.skillClarifyLabel }}
+    </p>
+    <div class="skill-block__chips">
+      <button
+        v-for="option in result.options"
+        :key="option.skill"
+        type="button"
+        class="skill-block__chip skill-block__chip--action"
+        :data-testid="`skill-clarify-${option.skill}`"
+        @click="emit('clarify', option.prefill)"
+      >
+        {{ option.label }}
+      </button>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -180,6 +208,20 @@ function goToPlan() {
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
   background: color-mix(in srgb, var(--color-ink) 4%, transparent);
+}
+
+/* 澄清选项：可点，hover 上墨 */
+.skill-block__chip--action {
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart);
+}
+
+.skill-block__chip--action:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
 }
 
 .skill-block__plan-title {

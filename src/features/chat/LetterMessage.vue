@@ -20,6 +20,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   generateCard: []
+  clarify: [prefill: string]
 }>()
 
 const isNight = computed(() => props.message.role === 'assistant')
@@ -97,6 +98,7 @@ function onGenerateCard() {
     <LetterSkillResult
       v-if="message.role === 'assistant' && message.skill_result"
       :result="message.skill_result"
+      @clarify="emit('clarify', $event)"
     />
 
     <LetterProcess

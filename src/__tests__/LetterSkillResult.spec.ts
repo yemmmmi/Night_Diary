@@ -121,4 +121,24 @@ describe('LetterSkillResult', () => {
     })
     expect(wrapper.text()).toContain('共 3 个学习节点 · 2 个有多来源候选')
   })
+
+  it('renders a clarification card whose options emit a prefill (B4)', async () => {
+    const wrapper = mountResult({
+      skill: 'clarify',
+      options: [
+        { skill: 'record', label: '整理成日记', prefill: '帮我记一篇日记：' },
+        { skill: 'insight', label: '分析我的状态', prefill: '帮我分析一下我最近的状态' },
+        { skill: 'plan', label: '一起理个计划', prefill: '帮我做个计划：' },
+        { skill: 'chat', label: '就聊聊', prefill: '先不着急，就聊聊' },
+      ],
+    })
+    const block = wrapper.find('[data-testid="skill-block-clarify"]')
+    expect(block.exists()).toBe(true)
+    expect(block.text()).toContain('夜记想先确认一下')
+
+    const recordOption = wrapper.find('[data-testid="skill-clarify-record"]')
+    expect(recordOption.text()).toBe('整理成日记')
+    await recordOption.trigger('click')
+    expect(wrapper.emitted('clarify')?.[0]).toEqual(['帮我记一篇日记：'])
+  })
 })

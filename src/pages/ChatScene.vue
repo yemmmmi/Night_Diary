@@ -339,6 +339,7 @@ watch(
                 :generating="cardGenerating"
                 :generated="cardGenerated"
                 @generate-card="onGenerateCard"
+                @clarify="onSkillStart"
               />
             </template>
 
