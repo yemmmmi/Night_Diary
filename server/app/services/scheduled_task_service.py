@@ -48,7 +48,7 @@ TASK_KINDS: dict[str, str] = {
 #: Per-thread/task flag set while a task body runs; blocks task creation.
 _TASK_EXECUTION: ContextVar[bool] = ContextVar("scheduled_task_execution", default=False)
 
-_container: Any = None
+_container: ServiceContainer | None = None
 _container_lock = threading.Lock()
 
 
