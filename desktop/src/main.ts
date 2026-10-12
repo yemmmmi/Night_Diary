@@ -3,23 +3,28 @@ import path from 'node:path'
 import { app, BrowserWindow } from 'electron'
 
 import { BackendProcess } from './backend'
+import { resolveDataDir } from './dataDir'
 import { resolveBackendPaths } from './paths'
 import { findFreePort } from './port'
 
-const backend = new BackendProcess(
-  resolveBackendPaths({
-    packaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-    repoRoot: path.resolve(__dirname, '..', '..'),
-    pythonOverride: process.env.NIGHT_DIARY_PYTHON,
-  }),
-)
+const paths = resolveBackendPaths({
+  packaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  repoRoot: path.resolve(__dirname, '..', '..'),
+  pythonOverride: process.env.NIGHT_DIARY_PYTHON,
+})
+const backend = new BackendProcess(paths)
 
 let mainWindow: BrowserWindow | null = null
 
 async function boot(): Promise<void> {
   const port = await findFreePort()
-  const dataDir = path.join(app.getPath('appData'), 'night-diary')
+  // 打包态数据与程序同盘（便携目录 <install>/data）；开发态用 %APPDATA%。
+  const dataDir = resolveDataDir({
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appData: app.getPath('appData'),
+  })
 
   const { child, url } = backend.start({ port, dataDir })
   child.stderr?.on('data', (chunk) => console.error('[backend]', String(chunk)))
