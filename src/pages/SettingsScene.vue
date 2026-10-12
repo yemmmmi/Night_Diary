@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { PhArrowLeft, PhCaretRight } from '@phosphor-icons/vue'
 
 import BackupManager from '@/features/settings/BackupManager.vue'
+import CustomSkillsManager from '@/features/settings/CustomSkillsManager.vue'
 import DeveloperToggle from '@/features/settings/DeveloperToggle.vue'
 import SettingsSection from '@/features/settings/SettingsSection.vue'
 import ThemeToggle from '@/features/settings/ThemeToggle.vue'
@@ -16,7 +17,7 @@ const settings = useSettingsStore()
 settings.load()
 
 const openSection = ref('general')
-const sectionIds = ['general', 'backup', 'about'] as const
+const sectionIds = ['general', 'custom-skills', 'backup', 'about'] as const
 const usageStats = ref<AppStats | null>(null)
 const statsLoading = ref(true)
 
@@ -116,6 +117,16 @@ watch(
         </div>
         <PhCaretRight :size="18" class="settings-scene__llm-link-arrow" />
       </RouterLink>
+
+      <SettingsSection
+        id="custom-skills"
+        title="自定义技能"
+        subtitle="定义夜记在这类话题里的回信偏好"
+        :open="openSection === 'custom-skills'"
+        @toggle="toggleSection"
+      >
+        <CustomSkillsManager />
+      </SettingsSection>
 
       <SettingsSection
         id="backup"

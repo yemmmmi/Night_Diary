@@ -101,6 +101,27 @@ def _apply_frozen_memory(system_prompt: str, session: Any) -> str:
     return system_prompt
 
 
+def _apply_custom_skills(
+    system_prompt: str, *, container: Any, user_id: str, content: str
+) -> str:
+    """Append the triggered custom-skill block (A2) after the frozen prefix.
+
+    Volatile by design: present only when one of the user's enabled custom
+    skills has a trigger occurring in the current message. Best-effort — any
+    failure degrades to no block, so a custom skill can never break a reply.
+    """
+    try:
+        from app.services.custom_skill_service import build_custom_skill_block
+
+        block = build_custom_skill_block(container, user_id=user_id, content=content)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("custom skill block failed (best-effort): %s", exc)
+        return system_prompt
+    if block:
+        return f"{system_prompt}\n\n{block}"
+    return system_prompt
+
+
 @dataclass(frozen=True, slots=True)
 class Citation:
     """Source citation for result integration — tracks where information came from.
@@ -269,6 +290,9 @@ def _run_via_graph(
 
     system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
     system_prompt = _apply_frozen_memory(system_prompt, session)
+    system_prompt = _apply_custom_skills(
+        system_prompt, container=container, user_id=user_id, content=content
+    )
     chat_history = session.get_history()
     if chat_history:
         system_prompt += f"\n\n## 对话历史\n{chat_history}"
@@ -472,6 +496,9 @@ def run_conversation_loop(
         # Build the base prompt
         system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
         system_prompt = _apply_frozen_memory(system_prompt, session)
+        system_prompt = _apply_custom_skills(
+            system_prompt, container=container, user_id=user_id, content=content
+        )
 
         chat_history = session.get_history()
 
@@ -733,6 +760,9 @@ async def run_conversation_loop_streaming(
     # Build the base prompt
     system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
     system_prompt = _apply_frozen_memory(system_prompt, session)
+    system_prompt = _apply_custom_skills(
+        system_prompt, container=container, user_id=user_id, content=content
+    )
 
     # V3 P7: optional middleware pipeline — on_system_prompt hooks (e.g. the
     # SafetyMiddleware crisis instruction) run before any LLM call. An empty
