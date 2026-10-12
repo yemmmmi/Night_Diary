@@ -87,6 +87,7 @@ def _make_graph(
     insight: FakeWorker,
     confidence: float = 0.9,
     worker_timeout_s: float = 30.0,
+    max_concurrency: int = 3,
 ) -> Any:
     supervisor = SupervisorAgent(
         StubIntentClassifier(
@@ -98,7 +99,12 @@ def _make_graph(
         llm_tracer=InMemoryLLMCallTracer(),
     )
     return create_multi_agent_graph(
-        supervisor, empathy, retrieval, insight, worker_timeout_s=worker_timeout_s
+        supervisor,
+        empathy,
+        retrieval,
+        insight,
+        worker_timeout_s=worker_timeout_s,
+        max_concurrency=max_concurrency,
     )
 
 
@@ -256,3 +262,64 @@ async def test_graph_compresses_episodic_before_workers() -> None:
     assert result.get("compressed_history")
     assert "失眠" in result["compressed_history"]
     assert empathy.observed and "失眠" in str(empathy.observed)
+
+
+class _ConcurrencyProbe(FakeWorker):
+    """FakeWorker that records the peak number of concurrent invocations (D4)."""
+
+    def __init__(self, output_key: str, probe: dict[str, int]) -> None:
+        super().__init__(output_key, response="ok")
+        self._probe = probe
+
+    async def run(
+        self,
+        state: dict[str, Any],
+        *,
+        style_fragment: str | None = None,
+    ) -> dict[str, Any]:
+        self._probe["active"] += 1
+        self._probe["peak"] = max(self._probe["peak"], self._probe["active"])
+        try:
+            await asyncio.sleep(0.03)
+            return await super().run(state, style_fragment=style_fragment)
+        finally:
+            self._probe["active"] -= 1
+
+
+async def test_consumer_phase_respects_max_concurrency_cap() -> None:
+    probe = {"active": 0, "peak": 0}
+    empathy = _ConcurrencyProbe("empathy_response", probe)
+    insight = _ConcurrencyProbe("insight_response", probe)
+    retrieval = FakeWorker("retrieval_context", "历史")
+    graph = _make_graph(
+        IntentCategory.RETROSPECTIVE_REVIEW.value,
+        empathy=empathy,
+        retrieval=retrieval,
+        insight=insight,
+        max_concurrency=1,
+    )
+
+    await graph.invoke(_state())
+
+    # Two consumer workers, cap of 1 — they must not overlap.
+    assert probe["peak"] == 1
+    assert empathy.ran and insight.ran
+
+
+async def test_consumer_phase_runs_concurrently_under_cap() -> None:
+    probe = {"active": 0, "peak": 0}
+    empathy = _ConcurrencyProbe("empathy_response", probe)
+    insight = _ConcurrencyProbe("insight_response", probe)
+    retrieval = FakeWorker("retrieval_context", "历史")
+    graph = _make_graph(
+        IntentCategory.RETROSPECTIVE_REVIEW.value,
+        empathy=empathy,
+        retrieval=retrieval,
+        insight=insight,
+        max_concurrency=3,
+    )
+
+    await graph.invoke(_state())
+
+    # Cap of 3 does not needlessly serialize the two consumers.
+    assert probe["peak"] == 2

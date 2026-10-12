@@ -12,6 +12,8 @@ Two flows mirror ``analysis_service``:
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import json
 import logging
 from datetime import UTC, date, datetime, time, timedelta
@@ -218,6 +220,157 @@ def _build_context(content: str) -> dict[str, str]:
     }
 
 
+# ── multi-dimensional analysis (D4) ──────────────────────────────────────
+# Bounded borrowing from Hermes' delegate_task: instead of one monolithic
+# weekly prompt, the week is sliced into isolated dimensions, each analysed
+# separately and reduced to a short summary. No generic delegation and no tool
+# access are introduced — the only reusable primitive is SubTaskRunner.
+
+_MAX_DIMENSION_LINES = 20
+
+
+def _diary_tag_names(entry: DiaryEntryRow) -> list[str]:
+    return [t.name for t in entry.tags if getattr(t, "name", None)] if entry.tags else []
+
+
+def _dimension_subtasks(
+    diaries: list[DiaryEntryRow],
+    cards: list[MemoryCardRow],
+    plans_data: PlansInWeek,
+) -> list[Any]:
+    """Build isolated per-dimension sub-tasks from the week's data.
+
+    Each sub-task carries only its own slice (mood / tags / plans / events) so
+    no dimension can see the raw week wholesale — the "isolated context" half of
+    D4. Dimensions with no data are skipped entirely.
+    """
+    from app.domain.agents.subtask import SubTask
+
+    subtasks: list[SubTask] = []
+
+    if cards:
+        mood_lines = [
+            f"[{c.created_at.date().isoformat() if c.created_at else '未知'}] "
+            f"{c.emotion}（心情 {c.mood_score if c.mood_score is not None else '未知'}）"
+            for c in cards[:_MAX_CARD_LINES]
+        ]
+        avg = _avg_mood(cards)
+        header = f"本周均分心情：{avg}\n" if avg is not None else ""
+        subtasks.append(
+            SubTask(
+                name="情绪曲线",
+                context=header + "\n".join(mood_lines),
+                instruction="概括本周情绪的总体走向与显著波动。",
+            )
+        )
+
+    tag_counts: dict[str, int] = {}
+    for entry in diaries:
+        for name in _diary_tag_names(entry):
+            tag_counts[name] = tag_counts.get(name, 0) + 1
+    if tag_counts:
+        ranked = sorted(tag_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        subtasks.append(
+            SubTask(
+                name="反复主题",
+                context="\n".join(f"{name}（出现 {n} 次）" for name, n in ranked[:_MAX_DIMENSION_LINES]),
+                instruction="指出本周反复出现的主题或关注点。",
+            )
+        )
+
+    plan_lines: list[str] = []
+    for plan in plans_data.get("active_plans", []):
+        done = sum(1 for t in plan.tasks if t.status == "done")
+        plan_lines.append(f"计划「{plan.title}」：{done}/{len(plan.tasks)} 完成")
+    for task in plans_data.get("week_tasks", []):
+        if task.plan_id is None:
+            plan_lines.append(f"{'✓' if task.status == 'done' else '○'} {task.title}")
+    if plan_lines:
+        subtasks.append(
+            SubTask(
+                name="计划执行",
+                context="\n".join(plan_lines),
+                instruction="评估本周计划与任务的推进情况。",
+            )
+        )
+
+    event_lines: list[str] = []
+    for entry in diaries:
+        first_line = next((ln for ln in (entry.content or "").splitlines() if ln.strip()), "")
+        day = entry.date.isoformat() if entry.date else "未知"
+        event_lines.append(f"[{day}] {first_line.strip()[:80]}")
+    if event_lines:
+        subtasks.append(
+            SubTask(
+                name="生活事件",
+                context="\n".join(event_lines[:_MAX_DIMENSION_LINES]),
+                instruction="概括本周发生的主要事件。",
+            )
+        )
+
+    return subtasks
+
+
+def _dimension_worker(llm: Any) -> Any:
+    """Adapt an LLM into a summary-only sub-task worker."""
+
+    async def _worker(task: Any) -> str:
+        from app.shared.llm import message_text
+
+        prompt = (
+            "你是周报的多维分析助手。只基于给定的【维度数据】输出该维度的一句话摘要"
+            "（不超过 120 字），不要编造数据之外的信息，不要展开。\n\n"
+            f"分析维度：{task.name}\n要求：{task.instruction}\n\n"
+            f"【维度数据】\n{task.context}"
+        )
+        response = await llm.ainvoke(prompt)
+        return message_text(response).strip()
+
+    return _worker
+
+
+def _run_async_sync(coro: Any) -> Any:
+    """Run a coroutine from a sync context (mirrors analysis_service)."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        if loop.is_closed():
+            raise RuntimeError
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
+
+
+def _weekly_dimension_block(
+    planner: ExecutionPlanner,
+    diaries: list[DiaryEntryRow],
+    cards: list[MemoryCardRow],
+    plans_data: PlansInWeek,
+) -> str:
+    """Return a 【多维分析摘要】 block, or "" when unavailable.
+
+    Best-effort: any failure (no LLM, provider error) degrades to an empty
+    block so weekly generation is never blocked by the dimension pre-pass.
+    """
+    from app.domain.agents.subtask import SubTaskRunner, format_subtask_summaries
+
+    subtasks = _dimension_subtasks(diaries, cards, plans_data)
+    if not subtasks:
+        return ""
+    llm = planner.llm_for_tier("light")
+    if llm is None:
+        return ""
+    try:
+        runner = SubTaskRunner(_dimension_worker(llm))
+        outcomes = _run_async_sync(runner.run(subtasks))
+    except Exception as exc:
+        logger.warning("weekly dimension analysis skipped: %s", exc)
+        return ""
+    return format_subtask_summaries(outcomes)
+
+
 # ── persistence ──────────────────────────────────────────────────────────
 
 
@@ -306,6 +459,9 @@ def create_weekly_report(
 
     plans_data = _plans_in_week(db, user_id=user_id, start=start, end=end)
     content = _build_weekly_content(start, end, diaries, cards, plans_data=plans_data)
+    dimension_block = _weekly_dimension_block(planner, diaries, cards, plans_data)
+    if dimension_block:
+        content = f"{content}\n\n【本周多维分析摘要】\n{dimension_block}"
     result = planner.execute(
         diary_id=_WEEKLY_SENTINEL_ID,
         context=_build_context(content),
