@@ -1,7 +1,7 @@
 {
   "name": "night-diary-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Night Diary desktop host (Electron shell + local Python backend).",
   "author": "Night Diary",
   "main": "dist/main.js",
