@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 defineProps<{ frameless?: boolean }>()
-import { PhCpu, PhGear, PhTerminal } from '@phosphor-icons/vue'
+import { PhClock, PhCpu, PhGear, PhTerminal } from '@phosphor-icons/vue'
 import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
@@ -62,6 +62,15 @@ function navigate(tab: Tab) {
         aria-label="开发者"
       >
         <PhTerminal :size="17" :weight="route.name === 'dev' ? 'fill' : 'regular'" />
+      </RouterLink>
+
+      <RouterLink
+        to="/schedules"
+        class="nav-tabs__icon"
+        :class="{ 'is-active': route.name === 'schedules' }"
+        aria-label="定时任务"
+      >
+        <PhClock :size="17" :weight="route.name === 'schedules' ? 'fill' : 'regular'" />
       </RouterLink>
 
       <RouterLink

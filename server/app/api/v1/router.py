@@ -17,6 +17,7 @@ from app.api.v1 import (
     model_download,
     models,
     plan,
+    schedules,
     skills,
     stats,
     tags,
@@ -41,3 +42,4 @@ api_router.include_router(plan.router)
 api_router.include_router(plan.tasks_router)
 api_router.include_router(mode.router)
 api_router.include_router(skills.router)
+api_router.include_router(schedules.router)

@@ -109,6 +109,14 @@ watch(
         <PhCaretRight :size="18" class="settings-scene__llm-link-arrow" />
       </RouterLink>
 
+      <RouterLink to="/schedules" class="settings-scene__llm-link">
+        <div class="settings-scene__llm-link-body">
+          <span class="settings-scene__llm-link-title">定时任务</span>
+          <span class="settings-scene__llm-link-desc">让夜记按时做每日回顾、每周洞察与计划提醒</span>
+        </div>
+        <PhCaretRight :size="18" class="settings-scene__llm-link-arrow" />
+      </RouterLink>
+
       <SettingsSection
         id="backup"
         title="备份"
