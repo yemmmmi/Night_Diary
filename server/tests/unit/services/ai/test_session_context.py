@@ -101,6 +101,59 @@ def test_session_context_profile_style_default_empty() -> None:
     assert ctx.profile_topics == []
 
 
+# ── Frozen memory block (D6) ───────────────────────────────────────────
+
+
+def test_frozen_memory_block_built_from_profile() -> None:
+    clear_session("frozen-1")
+    container = MagicMock()
+    profile = MagicMock()
+    profile.preferred_response_style = "温和"
+    profile.recurring_topics = ["失眠"]
+    container.long_term_memory = MagicMock()
+    container.long_term_memory.get_profile.return_value = profile
+
+    ctx = get_or_create_session("frozen-1", container=container)
+    assert "温和" in ctx.frozen_memory_block
+    assert "失眠" in ctx.frozen_memory_block
+    assert ctx.memory_budget["topic_count"] == 1
+    clear_session("frozen-1")
+
+
+def test_frozen_memory_block_stable_across_turns() -> None:
+    ctx = SessionContext(conversation_id="frozen-2")
+    ctx.profile_style = "温和"
+    ctx.profile_topics = ["失眠"]
+    ctx.refresh_frozen_memory()
+    frozen = ctx.frozen_memory_block
+    ctx.add_turn("你好", "你好呀")
+    # Adding turns must not mutate the frozen block — that is what preserves
+    # the provider's prefix cache for the whole session.
+    assert ctx.frozen_memory_block == frozen
+
+
+def test_snapshot_roundtrip_preserves_frozen_block() -> None:
+    ctx = SessionContext(conversation_id="frozen-3")
+    ctx.profile_style = "温和"
+    ctx.profile_topics = ["失眠"]
+    ctx.refresh_frozen_memory()
+
+    restored = SessionContext.from_snapshot(ctx.to_snapshot())
+    assert restored.frozen_memory_block == ctx.frozen_memory_block
+    assert restored.memory_budget == ctx.memory_budget
+
+
+def test_snapshot_without_frozen_block_rebuilds_from_profile() -> None:
+    ctx = SessionContext(conversation_id="frozen-4")
+    ctx.profile_style = "理性"
+    snapshot = ctx.to_snapshot()
+    snapshot.pop("frozen_memory_block")
+    snapshot.pop("memory_budget")
+
+    restored = SessionContext.from_snapshot(snapshot)
+    assert "理性" in restored.frozen_memory_block
+
+
 # ── LRU eviction + cache stats (P6 Task 2) ─────────────────────────────
 
 

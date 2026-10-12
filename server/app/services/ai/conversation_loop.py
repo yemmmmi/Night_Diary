@@ -87,6 +87,20 @@ def _current_date_context() -> str:
     return f'\n\n## 当前日期\n今天是 {now.strftime("%Y-%m-%d")} {weekday_cn}。用户说「昨天」「明天」等相对日期时，请以此日期为基准计算。'
 
 
+def _apply_frozen_memory(system_prompt: str, session: Any) -> str:
+    """Append the session-frozen memory block at a fixed prefix position (D6).
+
+    The block is assembled once at session start and never changes mid-session,
+    so the base prompt + memory block form a stable prefix that the provider's
+    automatic prefix cache can reuse across turns. Volatile context (retrieved
+    diaries, chat history, the user message) stays *after* this point.
+    """
+    block = getattr(session, "frozen_memory_block", "")
+    if block:
+        return f"{system_prompt}\n\n{block}"
+    return system_prompt
+
+
 @dataclass(frozen=True, slots=True)
 class Citation:
     """Source citation for result integration — tracks where information came from.
@@ -254,6 +268,7 @@ def _run_via_graph(
     from app.services.ai.prompts import CHAT_SYSTEM_PROMPT
 
     system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
+    system_prompt = _apply_frozen_memory(system_prompt, session)
     chat_history = session.get_history()
     if chat_history:
         system_prompt += f"\n\n## 对话历史\n{chat_history}"
@@ -456,9 +471,9 @@ def run_conversation_loop(
 
         # Build the base prompt
         system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
+        system_prompt = _apply_frozen_memory(system_prompt, session)
 
         chat_history = session.get_history()
-        topics_text = "、".join(session.profile_topics) if session.profile_topics else "（暂无）"
 
         base_user_prompt = CHAT_USER_PROMPT_TEMPLATE.format(
             pinned_diaries=pinned_diaries_text,
@@ -467,10 +482,8 @@ def run_conversation_loop(
             chat_history=chat_history,
             user_message=content.strip(),
         )
-        if session.profile_style or session.profile_topics:
-            base_user_prompt += (
-                f"\n\n【用户画像】偏好风格：{session.profile_style or '自然'}；近期关注：{topics_text}"
-            )
+        # The user profile now lives in the frozen memory block (system prefix)
+        # instead of the volatile user prompt — see _apply_frozen_memory (D6).
 
         # Get LLM
         llm: LLMClient | None = container._llm_for_tier(tier, agent_name="chat")
@@ -719,6 +732,7 @@ async def run_conversation_loop_streaming(
 
     # Build the base prompt
     system_prompt = CHAT_SYSTEM_PROMPT + _current_date_context()
+    system_prompt = _apply_frozen_memory(system_prompt, session)
 
     # V3 P7: optional middleware pipeline — on_system_prompt hooks (e.g. the
     # SafetyMiddleware crisis instruction) run before any LLM call. An empty
@@ -766,7 +780,6 @@ async def run_conversation_loop_streaming(
             )
 
     chat_history = session.get_history()
-    topics_text = "、".join(session.profile_topics) if session.profile_topics else "（暂无）"
 
     base_user_prompt = CHAT_USER_PROMPT_TEMPLATE.format(
         pinned_diaries=pinned_diaries_text,
@@ -775,10 +788,8 @@ async def run_conversation_loop_streaming(
         chat_history=chat_history,
         user_message=content.strip(),
     )
-    if session.profile_style or session.profile_topics:
-        base_user_prompt += (
-            f"\n\n【用户画像】偏好风格：{session.profile_style or '自然'}；近期关注：{topics_text}"
-        )
+    # The user profile now lives in the frozen memory block (system prefix)
+    # instead of the volatile user prompt — see _apply_frozen_memory (D6).
 
     # Get LLM
     llm: LLMClient | None = container._llm_for_tier(tier, agent_name="chat")

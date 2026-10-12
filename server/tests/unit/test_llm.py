@@ -11,6 +11,7 @@ from app.infrastructure.security import decrypt_api_key, encrypt_api_key
 from app.services import model_service
 from app.shared.errors import AIServiceUnavailableError
 from app.shared.llm_factory import LLMFactory, StubLLMClient
+from app.shared.llm_resilience import FallbackLLMClient
 from app.shared.tracing import InMemoryLLMCallTracer
 
 
@@ -228,3 +229,99 @@ def test_record_streaming_produces_nonzero_token_usage():
     usage = extract_token_usage(msg)
     assert usage["total_tokens_used"] > 0, f"Expected non-zero total tokens, got {usage}"
     assert usage["output_tokens"] > 0, f"Expected non-zero output tokens, got {usage}"
+
+
+# ── D5: provider fallback + credential pool ────────────────────────────
+
+
+def _create_provider(db_session, **kwargs):
+    with patch.object(model_service, "validate_model_connection", return_value=None):
+        return model_service.create_model(
+            db_session,
+            user_id=kwargs.pop("user_id", "default"),
+            base_url=kwargs.pop("base_url", "https://api.example.com/v1"),
+            **kwargs,
+        )
+
+
+def test_provider_api_keys_includes_extra_keys(db_session) -> None:
+    row = _create_provider(
+        db_session,
+        model_name="pool-model",
+        api_key="sk-primary",
+        api_keys=["sk-extra-1", "sk-extra-2"],
+    )
+    keys = model_service.provider_api_keys(row)
+    assert keys == ["sk-primary", "sk-extra-1", "sk-extra-2"]
+    assert model_service.model_to_public_dict(row)["key_count"] == 3
+    # Extra keys must be encrypted at rest, never stored as plaintext.
+    assert row.api_keys_encrypted is not None
+    assert "sk-extra-1" not in row.api_keys_encrypted
+
+
+def test_provider_api_keys_legacy_single_key(db_session) -> None:
+    row = _create_provider(db_session, model_name="solo", api_key="sk-only")
+    assert model_service.provider_api_keys(row) == ["sk-only"]
+    assert model_service.model_to_public_dict(row)["key_count"] == 1
+
+
+def test_provider_api_keys_dedupes(db_session) -> None:
+    row = _create_provider(
+        db_session,
+        model_name="dup",
+        api_key="sk-same",
+        api_keys=["sk-same", "sk-other"],
+    )
+    assert model_service.provider_api_keys(row) == ["sk-same", "sk-other"]
+
+
+def test_create_for_tier_builds_provider_fallback_chain(db_session) -> None:
+    _create_provider(db_session, model_name="default-model", api_key="sk-d", tier="default", is_active=True)
+    _create_provider(db_session, model_name="heavy-model", api_key="sk-h", tier="heavy", is_active=True)
+
+    client = LLMFactory().create_for_tier(db_session, "heavy")
+    assert isinstance(client, FallbackLLMClient)
+    assert _client_model(client) == "heavy-model"
+    assert len(client.attempts) == 2  # heavy → default backup
+
+
+def test_resolve_by_tier_builds_fallback_chain(db_session) -> None:
+    _create_provider(db_session, model_name="default-model", api_key="sk-d", tier="default", is_active=True)
+    _create_provider(db_session, model_name="heavy-model", api_key="sk-h", tier="heavy", is_active=True)
+
+    clients = LLMFactory().resolve_by_tier(db_session)
+    heavy = clients["heavy"]
+    assert isinstance(heavy, FallbackLLMClient)
+    assert _client_model(heavy) == "heavy-model"
+    assert len(heavy.attempts) == 2
+    # The default tier has no backup of its own → a single raw client.
+    assert not isinstance(clients["default"], FallbackLLMClient)
+
+
+def test_resolve_by_tier_expands_credential_pool(db_session) -> None:
+    _create_provider(
+        db_session,
+        model_name="pool-model",
+        api_key="sk-1",
+        api_keys=["sk-2", "sk-3"],
+        tier="default",
+        is_active=True,
+    )
+    clients = LLMFactory().resolve_by_tier(db_session)
+    default = clients["default"]
+    assert isinstance(default, FallbackLLMClient)
+    assert len(default.attempts) == 3  # one attempt per key
+
+
+def test_resolve_by_tier_does_not_cross_tenants(db_session) -> None:
+    _create_provider(
+        db_session, user_id="alice", model_name="alice-heavy", api_key="sk-a",
+        tier="heavy", is_active=True,
+    )
+    _create_provider(
+        db_session, user_id="bob", model_name="bob-default", api_key="sk-b",
+        tier="default", is_active=True,
+    )
+    # Legacy call (no user_id) must not chain Bob's default under Alice's heavy.
+    clients = LLMFactory().resolve_by_tier(db_session)
+    assert not isinstance(clients["heavy"], FallbackLLMClient)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -14,6 +15,56 @@ from app.infrastructure.security import decrypt_api_key, encrypt_api_key
 from app.shared.errors import ModelProviderNotFoundError, ValidationError
 
 logger = logging.getLogger(__name__)
+
+
+def _decode_extra_keys(raw: str | None) -> list[str]:
+    """Parse the encrypted extra-key JSON list (defensive: bad data → [])."""
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        logger.warning("model provider api_keys_encrypted is not valid JSON; ignoring")
+        return []
+    if not isinstance(data, list):
+        return []
+    return [str(token) for token in data if token]
+
+
+def _encode_extra_keys(keys: list[str] | None, settings: Settings | None) -> str | None:
+    """Encrypt extra keys into a JSON list; empty/None → NULL."""
+    if not keys:
+        return None
+    encrypted = [encrypt_api_key(key, settings) for key in keys if key]
+    return json.dumps(encrypted) if encrypted else None
+
+
+def provider_api_keys(row: ModelProviderRow, settings: Settings | None = None) -> list[str]:
+    """Return the provider's decrypted credential pool (primary first).
+
+    Legacy rows with only ``api_key_encrypted`` yield a single key, so the
+    caller behaves exactly as before. Order is preserved and duplicates are
+    dropped so the same credential is never retried twice.
+    """
+    resolved = settings or get_settings()
+    keys: list[str] = []
+    if row.api_key_encrypted:
+        try:
+            keys.append(decrypt_api_key(row.api_key_encrypted, resolved))
+        except Exception as exc:
+            logger.warning("provider id=%s primary key decrypt failed: %s", row.id, exc)
+    for token in _decode_extra_keys(row.api_keys_encrypted):
+        try:
+            keys.append(decrypt_api_key(token, resolved))
+        except Exception as exc:
+            logger.warning("provider id=%s extra key decrypt failed: %s", row.id, exc)
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for key in keys:
+        if key and key not in seen:
+            seen.add(key)
+            ordered.append(key)
+    return ordered
 
 
 def list_models(db: Session, *, user_id: str) -> list[ModelProviderRow]:
@@ -177,6 +228,7 @@ def create_model(
     base_url: str,
     tier: str = "default",
     is_active: bool = False,
+    api_keys: list[str] | None = None,
     settings: Settings | None = None,
 ) -> ModelProviderRow:
     tier = _validate_tier(tier)
@@ -188,6 +240,7 @@ def create_model(
         user_id=user_id,
         model_name=model_name,
         api_key_encrypted=encrypt_api_key(api_key, settings),
+        api_keys_encrypted=_encode_extra_keys(api_keys, settings),
         base_url=base_url,
         tier=tier,
         is_active=is_active,
@@ -213,6 +266,7 @@ def update_model(
     base_url: str | None = None,
     tier: str | None = None,
     is_active: bool | None = None,
+    api_keys: list[str] | None = None,
     settings: Settings | None = None,
 ) -> ModelProviderRow:
     row = get_model(db, model_id, user_id=user_id)
@@ -224,6 +278,8 @@ def update_model(
         row.base_url = base_url
     if tier is not None:
         row.tier = _validate_tier(tier)
+    if api_keys is not None:
+        row.api_keys_encrypted = _encode_extra_keys(api_keys, resolved_settings)
     if api_key is not None:
         test_url = (base_url or row.base_url) or ""
         test_key = api_key
@@ -251,6 +307,9 @@ def delete_model(db: Session, model_id: int, *, user_id: str) -> None:
 
 def model_to_public_dict(row: ModelProviderRow) -> dict[str, Any]:
     """API-safe projection — never exposes the encrypted key."""
+    key_count = (1 if row.api_key_encrypted else 0) + len(
+        _decode_extra_keys(row.api_keys_encrypted)
+    )
     return {
         "id": row.id,
         "model_name": row.model_name,
@@ -259,6 +318,7 @@ def model_to_public_dict(row: ModelProviderRow) -> dict[str, Any]:
         "is_active": row.is_active,
         "is_default": row.is_default,
         "has_api_key": bool(row.api_key_encrypted),
+        "key_count": key_count,
     }
 
 
