@@ -2,12 +2,68 @@
 
 from __future__ import annotations
 
+import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 # Trailing "key=value" tokens in a stdio spec become child-process env vars.
 # Leading dashes (CLI options) are explicitly excluded.
 _ENV_TOKEN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=\S+$")
+
+# Only these parent-process variables are forwarded to a stdio MCP child. The
+# child is a third-party server, so it must never inherit LLM/DB credentials.
+SAFE_ENV_KEYS = frozenset(
+    {
+        "PATH",
+        "PATHEXT",
+        "HOME",
+        "USERPROFILE",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TZ",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "WINDIR",
+        "COMSPEC",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PYTHONIOENCODING",
+        "PYTHONUTF8",
+        "PYTHONUNBUFFERED",
+    }
+)
+
+# Defence in depth: even a whitelisted name is dropped if it looks like a secret.
+_SECRET_NAME = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL)", re.IGNORECASE)
+
+
+def build_child_env(
+    spec_env: Mapping[str, str] | None = None,
+    *,
+    parent_env: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Build the environment for a stdio MCP child process.
+
+    Starts from a strict whitelist of ``parent_env`` (defaults to
+    ``os.environ``), drops any secret-looking name as defence in depth, then
+    layers the endpoint's explicitly declared variables on top. The result is
+    always a concrete mapping, so a child never inherits the full parent
+    environment (which would leak ``LLM_API_KEY``, DB credentials, ...).
+    """
+    parent = parent_env if parent_env is not None else os.environ
+    env = {
+        key: value
+        for key, value in parent.items()
+        if key in SAFE_ENV_KEYS and not _SECRET_NAME.search(key)
+    }
+    if spec_env:
+        env.update(spec_env)
+    return env
 
 
 @dataclass(frozen=True, slots=True)

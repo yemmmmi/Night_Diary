@@ -9,6 +9,7 @@ from app.services.ai.tool_factory import ToolFn, specs_for_names
 from app.services.ai.utils import extract_token_usage, merge_token_info
 from app.shared.llm import LLMClient, message_text
 from app.shared.tool_protocol import build_tool_hint, parse_text_tag_calls, strip_tool_tags
+from app.shared.untrusted_content import wrap_untrusted
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,9 @@ def run_agent(
                 tool_results.append(f"[{tc.name}]: 未知工具")
                 continue
             try:
-                tool_results.append(f"[{tc.name}]: {fn(**tc.args)}")
+                tool_results.append(
+                    f"[{tc.name}]: {wrap_untrusted(str(fn(**tc.args)), source=tc.name)}"
+                )
             except Exception as exc:
                 logger.warning("Tool %s failed: %s", tc.name, exc)
                 tool_results.append(f"[{tc.name} error]: {exc}")

@@ -265,12 +265,12 @@ class StdioMcpConnection(McpConnection):
         self.spec = spec
 
     async def _connect(self) -> Any:
-        import os
-
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
-        env = {**os.environ, **self.spec.env} if self.spec.env else None
+        from app.services.ai.mcp_config import build_child_env
+
+        env = build_child_env(self.spec.env)
         params = StdioServerParameters(
             command=self.spec.command, args=list(self.spec.args), env=env
         )
