@@ -428,3 +428,67 @@ def test_research_task_rejects_standalone(authed_client: TestClient) -> None:
     response = authed_client.post(f"/api/v1/tasks/{task_id}/research")
     # 独立任务 plan_id 为 None → ValidationError (4xx)
     assert response.status_code in (400, 404, 422)
+
+
+# ── A3: change log & undo ─────────────────────────────────────────────
+
+
+def test_changes_route_not_shadowed_by_plan_id(authed_client: TestClient) -> None:
+    """GET /plans/changes 命中字面路由而非 /plans/{plan_id}。"""
+    response = authed_client.get("/api/v1/plans/changes")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_changes_records_plan_create(authed_client: TestClient) -> None:
+    """创建计划后可在变更日志中查到对应的 create 记录。"""
+    plan = _create_plan(authed_client, title="可追溯", conversation_id="conv-a3")
+    changes = authed_client.get(
+        "/api/v1/plans/changes", params={"conversation_id": "conv-a3"}
+    ).json()
+    assert len(changes) == 1
+    log = changes[0]
+    assert log["entity_type"] == "plan"
+    assert log["entity_id"] == plan["id"]
+    assert log["action"] == "create"
+    assert log["conversation_id"] == "conv-a3"
+    assert log["undone"] is False
+
+
+def test_undo_create_removes_plan(authed_client: TestClient) -> None:
+    """撤销一条 create 变更 → 计划被删除。"""
+    plan = _create_plan(authed_client, title="待撤销", conversation_id="conv-u")
+    log = authed_client.get(
+        "/api/v1/plans/changes", params={"conversation_id": "conv-u"}
+    ).json()[0]
+
+    result = authed_client.post(f"/api/v1/plans/changes/{log['id']}/undo")
+    assert result.status_code == 200
+    assert result.json()["restored"] == "deleted"
+    assert authed_client.get(f"/api/v1/plans/{plan['id']}").status_code == 404
+
+
+def test_undo_conversation_endpoint(authed_client: TestClient) -> None:
+    """按会话一次性撤销该回信带来的全部计划/任务变更。"""
+    plan = _create_plan(authed_client, title="会话计划", conversation_id="conv-all")
+    authed_client.post(
+        "/api/v1/tasks", json={"title": "会话任务", "conversation_id": "conv-all"}
+    )
+
+    response = authed_client.post(
+        "/api/v1/plans/changes/undo-conversation",
+        params={"conversation_id": "conv-all"},
+    )
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+    assert authed_client.get(f"/api/v1/plans/{plan['id']}").status_code == 404
+    remaining = authed_client.get(
+        "/api/v1/plans/changes", params={"conversation_id": "conv-all"}
+    ).json()
+    assert remaining == []
+
+
+def test_undo_unknown_change_404(authed_client: TestClient) -> None:
+    """撤销不存在的变更记录应 404。"""
+    response = authed_client.post("/api/v1/plans/changes/nope/undo")
+    assert response.status_code == 404

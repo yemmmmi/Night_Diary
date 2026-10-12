@@ -416,6 +416,10 @@ class TaskCreateRequest(BaseModel):
     plan_id: str | None = None
     source: str = Field(default="manual", pattern="^(manual|agent)$")
     created_from_conversation_id: str | None = None
+    #: A3: change-log linkage (see TaskUpdateRequest).
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
 
 
 class TaskResponse(BaseModel):
@@ -441,6 +445,11 @@ class TaskUpdateRequest(BaseModel):
     due_date: str | None = None
     status: str | None = Field(default=None, pattern="^(pending|done|skipped)$")
     actual_value: float | None = Field(default=None, ge=0)
+    #: A3: link the change to the agent proposal / chat reply that caused it,
+    #: so the change can be listed and undone per conversation.
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
 
 
 class PlanCreateRequest(BaseModel):
@@ -459,6 +468,11 @@ class PlanCreateRequest(BaseModel):
     template: str | None = Field(
         default=None, pattern="^(checkin_total|timer_daily|milestones)$"
     )
+    #: A3: link the change to the agent proposal / chat reply that caused it,
+    #: so the change can be listed and undone per conversation.
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
 
 
 class CheckinCreateRequest(BaseModel):
@@ -516,3 +530,31 @@ class PlanUpdateRequest(BaseModel):
     target_value: float | None = Field(default=None, ge=0)
     target_unit: str | None = Field(default=None, max_length=16)
     target_period: str | None = Field(default=None, pattern="^(daily|weekly|total)$")
+    #: A3: change-log linkage (see TaskUpdateRequest).
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
+
+
+class PlanChangeResponse(BaseModel):
+    """A recorded plan/task change (A3) — powers the undo entry."""
+
+    id: str
+    entity_type: str
+    entity_id: str
+    action: str
+    proposal_id: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
+    undone: bool = False
+    created_at: str
+
+
+class PlanUndoResult(BaseModel):
+    """Outcome of replaying one change's snapshot."""
+
+    id: str
+    entity_type: str
+    entity_id: str
+    action: str
+    restored: str

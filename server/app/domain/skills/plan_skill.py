@@ -284,6 +284,7 @@ def run(
         target_unit=target_unit,
         target_period=target_period,
         template=template,
+        conversation_id=conversation_id or None,
     )
 
     task_results: list[dict[str, Any]] = []
@@ -298,6 +299,7 @@ def run(
             source_links=node.get("source_links"),
             source="agent",
             created_from_conversation_id=conversation_id or None,
+            conversation_id=conversation_id or None,
         )
         task_results.append(
             {

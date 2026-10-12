@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database import Base
@@ -116,3 +116,36 @@ class PlanCheckinRow(Base):
     )
 
     plan: Mapped[PlanRow] = relationship(back_populates="checkins")
+
+
+class PlanChangeLogRow(Base):
+    """Versioned snapshot of a plan/task mutation, enabling undo (A3).
+
+    Every create/update/delete on a plan or task records the entity state
+    *before* and *after* the change. Undo replays ``before_json`` — deleting a
+    created entity, restoring updated fields, or recreating a deleted entity
+    (a plan is recreated together with its tasks).
+
+    ``proposal_id`` / ``conversation_id`` / ``message_id`` link a change back to
+    the agent proposal or chat reply that caused it, so the UI can offer
+    「撤销这条回信带来的计划变更」. Rows are append-only; ``undone`` marks an
+    already-replayed row so it is not applied twice.
+    """
+
+    __tablename__ = "plan_change_log"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    entity_type: Mapped[str] = mapped_column(String(16))  # plan/task
+    entity_id: Mapped[str] = mapped_column(String(32), index=True)
+    action: Mapped[str] = mapped_column(String(16))  # create/update/delete
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposal_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    conversation_id: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, index=True
+    )
+    message_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    undone: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    undone_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
