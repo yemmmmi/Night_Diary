@@ -63,7 +63,7 @@ class FallbackLLMClient:
         # Expose native tool binding only when some attempt supports it, keeping
         # ``supports_native_tools`` accurate for stub/non-tool clients.
         if any(callable(getattr(client, "bind_tools", None)) for client in self._attempts):
-            self.bind_tools = self._bind_tools  # type: ignore[method-assign]
+            self.bind_tools = self._bind_tools
 
     @property
     def attempts(self) -> list[LLMClient]:
