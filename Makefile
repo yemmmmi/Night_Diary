@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval eval-rag eval-episodic eval-tool eval-skill eval-intent eval-plan e2e smoke
+.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval eval-rag eval-episodic eval-tool eval-skill eval-intent eval-plan eval-routing e2e smoke
 
 PY ?= python
 NPM ?= npm
@@ -50,6 +50,11 @@ eval-tool:
 # Skill call accuracy eval (progressive disclosure A/B). Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-skill
 eval-skill:
 	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/skill_call/ -v -s -m eval
+
+# Skill-routing clarification eval (B4 acceptance gate). Seed baseline:
+# EVAL_UPDATE_BASELINE=1 make eval-routing
+eval-routing:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/skill_routing/ -v -s -m eval
 
 # Intent classification eval (fine-tune A/B). Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-intent
 eval-intent:
