@@ -46,6 +46,10 @@ class MiddlewareContext:
     trace_id: str = ""
     conversation_id: str | None = None
     diary_id: str | None = None
+    #: Id of the assistant chat message this turn will persist as (B3). Lets the
+    #: write-back tag memory entries with their source message so a rollback can
+    #: undo them. Empty for scenes with no chat message (e.g. diary replies).
+    reply_message_id: str = ""
     #: Final reply text (safe template or generated reply). Filled before on_reply.
     reply_text: str = ""
     #: Service container (lazy-typed to avoid circular imports). May be None.

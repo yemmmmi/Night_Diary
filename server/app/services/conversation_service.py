@@ -145,6 +145,7 @@ def add_message(
     conversation_id: str,
     role: str,
     content: str,
+    message_id: str | None = None,
     retrieved_diary_ids: list[int] | None = None,
     retrieved_memory_ids: list[str] | None = None,
     attached_card_ids: list[str] | None = None,
@@ -157,7 +158,7 @@ def add_message(
     if get_conversation(db, user_id=user_id, conversation_id=conversation_id) is None:
         raise ConversationNotFoundError(conversation_id=conversation_id)
     row = ChatMessageRow(
-        id=_new_id(),
+        id=message_id or _new_id(),
         conversation_id=conversation_id,
         role=role,
         content=content,
@@ -194,6 +195,8 @@ def add_user_message_and_reply(
     skill_result: dict[str, Any] | None = None,
     process_info: dict[str, Any] | None = None,
     token_info: dict[str, Any] | None = None,
+    user_message_id: str | None = None,
+    reply_message_id: str | None = None,
 ) -> tuple[ChatMessageRow, ChatMessageRow]:
     user_msg = add_message(
         db,
@@ -201,6 +204,7 @@ def add_user_message_and_reply(
         conversation_id=conversation_id,
         role="user",
         content=content,
+        message_id=user_message_id,
         attached_card_ids=attached_card_ids,
         attached_plan_ids=attached_plan_ids,
         attached_tag_names=attached_tag_names,
@@ -211,6 +215,7 @@ def add_user_message_and_reply(
         conversation_id=conversation_id,
         role="assistant",
         content=reply_content,
+        message_id=reply_message_id,
         retrieved_diary_ids=retrieved_diary_ids,
         retrieved_memory_ids=retrieved_memory_ids,
         skill_result=skill_result,
@@ -226,3 +231,40 @@ def add_user_message_and_reply(
         update_conversation_title(db, user_id=user_id, conversation_id=conversation_id, title=title)
 
     return user_msg, reply_msg
+
+
+def get_message(
+    db: Session, *, user_id: str, conversation_id: str, message_id: str
+) -> ChatMessageRow | None:
+    """Fetch a single message, verifying conversation ownership first."""
+    if get_conversation(db, user_id=user_id, conversation_id=conversation_id) is None:
+        return None
+    return (
+        db.query(ChatMessageRow)
+        .filter(
+            ChatMessageRow.id == message_id,
+            ChatMessageRow.conversation_id == conversation_id,
+        )
+        .first()
+    )
+
+
+def delete_messages_from(
+    db: Session, *, user_id: str, conversation_id: str, message_id: str
+) -> list[str]:
+    """Delete *message_id* and every message created after it (B3 rollback).
+
+    Returns the deleted message ids in chronological order (empty when the
+    message is unknown or not owned by *user_id*). Ordering follows
+    :func:`list_messages`, which breaks same-second ties user-first so the cut
+    point is stable. Ids are captured before the bulk delete because the ORM
+    rows are expired afterwards.
+    """
+    messages = list_messages(db, user_id=user_id, conversation_id=conversation_id)
+    cut = next((i for i, m in enumerate(messages) if m.id == message_id), None)
+    if cut is None:
+        return []
+    ids = [m.id for m in messages[cut:]]
+    db.query(ChatMessageRow).filter(ChatMessageRow.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+    return ids

@@ -9,6 +9,8 @@ import {
   sendMessageStreaming,
   generateCardSummary,
   listSkills,
+  rollbackMessages,
+  regenerateReply,
   type Conversation,
   type ChatMessage,
   type GenerateCardPayload,
@@ -227,6 +229,45 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /* ── B3: 回退 / 重新生成 ── */
+
+  /* 回退与重新生成期间禁用信末操作，避免并发改写历史 */
+  const historyBusy = ref(false)
+
+  async function rollbackTo(messageId: string): Promise<boolean> {
+    const convId = activeConversationId.value
+    if (!convId) return false
+    historyBusy.value = true
+    error.value = null
+    try {
+      const result = await rollbackMessages(convId, messageId)
+      messages.value = result.messages
+      return true
+    } catch (err) {
+      error.value = formatApiError(err, '回退失败')
+      return false
+    } finally {
+      historyBusy.value = false
+    }
+  }
+
+  async function regenerate(messageId: string): Promise<boolean> {
+    const convId = activeConversationId.value
+    if (!convId) return false
+    historyBusy.value = true
+    error.value = null
+    try {
+      const result = await regenerateReply(convId, messageId)
+      messages.value = result.messages
+      return true
+    } catch (err) {
+      error.value = formatApiError(err, '重新生成失败')
+      return false
+    } finally {
+      historyBusy.value = false
+    }
+  }
+
   function setPinnedDiaryIds(ids: number[]) {
     pinnedDiaryIds.value = ids.slice(0, 3)
   }
@@ -285,12 +326,15 @@ export const useChatStore = defineStore('chat', () => {
     streamingEnabled,
     streamingActive,
     streamingText,
+    historyBusy,
     loadConversations,
     openConversation,
     startNewConversation,
     removeConversation,
     send,
     generateCard,
+    rollbackTo,
+    regenerate,
     setPinnedDiaryIds,
     pinDiary,
     setPinnedCardIds,

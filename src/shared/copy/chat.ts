@@ -41,6 +41,12 @@ export const chatCopy = {
   generateCard: '存为记忆卡片',
   cardGenerating: '收入中…',
   cardSavedInline: '已收入记忆',
+  /* ── B3: 信末回退与重新生成 ── */
+  regenerate: '重新生成',
+  regenerating: '重写中…',
+  rollback: '回退到此处',
+  rollingBack: '回退中…',
+  rollbackHint: '撤下这封回信与对应的来信，并收回它写下的记忆',
   dateDivider: (date: string) => date,
   skillRecordLabel: '已录入日记',
   skillRecordExpand: '展开全文',

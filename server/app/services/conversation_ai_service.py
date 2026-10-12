@@ -810,6 +810,7 @@ def generate_reply(
     plan_ids: list[str] | None = None,
     tag_names: list[str] | None = None,
     forced_skill: str | None = None,
+    reply_message_id: str | None = None,
 ) -> ChatReplyResult:
     """Build chat context and generate an assistant reply via the Agentic Loop.
 
@@ -1141,6 +1142,7 @@ def generate_reply(
                 reply_text=loop_result.reply_text,
                 conversation_id=conversation_id,
                 user_id=user_id,
+                source_message_id=reply_message_id,
             )
         # Write is dispatched fire-and-forget via enqueue_task; mark the span
         # dispatched so its short duration is read as scheduling, not full I/O.
@@ -1243,6 +1245,7 @@ async def generate_reply_streaming(
     plan_ids: list[str] | None = None,
     tag_names: list[str] | None = None,
     forced_skill: str | None = None,
+    reply_message_id: str | None = None,
 ) -> None:
     """Real streaming (P3): _prepare_reply_context -> run_conversation_loop_streaming -> post-write.
 
@@ -1317,6 +1320,7 @@ async def generate_reply_streaming(
                     attached_card_ids=card_ids,
                     attached_plan_ids=plan_ids,
                     attached_tag_names=tag_names,
+                    reply_message_id=reply_message_id,
                     process_info={
                         "intent": "crisis_signal",
                         "skill": None,
@@ -1338,6 +1342,7 @@ async def generate_reply_streaming(
                         trace_id=trace_id,
                         conversation_id=conversation_id,
                         reply_text=ctx.safe_response or "",
+                        reply_message_id=reply_message_id or "",
                         container=container,
                     )
                 )
@@ -1368,6 +1373,7 @@ async def generate_reply_streaming(
                     attached_plan_ids=plan_ids,
                     attached_tag_names=tag_names,
                     skill_result=outcome.skill_result,
+                    reply_message_id=reply_message_id,
                     process_info={
                         "intent": f"user_skill_{outcome.skill}",
                         "skill": outcome.skill,
@@ -1387,6 +1393,7 @@ async def generate_reply_streaming(
                         trace_id=trace_id,
                         conversation_id=conversation_id,
                         reply_text=outcome.reply_text,
+                        reply_message_id=reply_message_id or "",
                         container=container,
                     )
                 )
@@ -1444,6 +1451,7 @@ async def generate_reply_streaming(
                 attached_card_ids=card_ids,
                 attached_plan_ids=plan_ids,
                 attached_tag_names=tag_names,
+                reply_message_id=reply_message_id,
                 process_info={
                     "intent": (
                         ctx.intent_result.intent_category
@@ -1491,6 +1499,7 @@ async def generate_reply_streaming(
                     trace_id=trace_id,
                     conversation_id=conversation_id,
                     reply_text=final_reply_text,
+                    reply_message_id=reply_message_id or "",
                     container=container,
                 )
             )
@@ -1571,6 +1580,7 @@ def _maybe_persist_episodic(
     reply_text: str,
     conversation_id: str = "",
     user_id: str = "default",
+    source_message_id: str | None = None,
 ) -> None:
     """Persist an episodic entry when the turn carries strong emotion.
 
@@ -1605,6 +1615,7 @@ def _maybe_persist_episodic(
             user_id=user_id,
             emotion_label=emotion_label,
             emotion_score=score,
+            source_message_id=source_message_id,
         )
 
         # Fire-and-forget: persist_atom opens its own session via the episodic

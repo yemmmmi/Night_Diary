@@ -196,6 +196,30 @@ async function onGenerateCard() {
   }
 }
 
+/* ── B3: 回退 / 重新生成 ── */
+
+async function onRegenerate(messageId: string) {
+  await chatStore.regenerate(messageId)
+  scrollToBottom()
+}
+
+async function onRollback(messageId: string) {
+  /* 「回退到此处」撤下这封回信与对应的来信（上一轮往来）：
+     目标定为该回信前一条来信，找不到来信时退化为仅撤这封回信。 */
+  const index = chatStore.messages.findIndex((m) => m.id === messageId)
+  const previous = index > 0 ? chatStore.messages[index - 1] : null
+  const targetId = previous?.role === 'user' ? previous.id : messageId
+  const previousText = previous?.role === 'user' ? previous.content : null
+
+  const ok = await chatStore.rollbackTo(targetId)
+  if (ok && previousText) {
+    // 撤回的来信回填输入框，方便改写后重寄
+    await nextTick()
+    chatInput.value?.prefill(previousText)
+  }
+  scrollToBottom()
+}
+
 const messageTimeline = computed(() => {
   const items: Array<
     | { kind: 'divider'; key: string; date: string }
@@ -338,8 +362,11 @@ watch(
                 :show-actions="item.message.id === lastAssistantId"
                 :generating="cardGenerating"
                 :generated="cardGenerated"
+                :busy="chatStore.historyBusy"
                 @generate-card="onGenerateCard"
                 @clarify="onSkillStart"
+                @regenerate="onRegenerate(item.message.id)"
+                @rollback="onRollback(item.message.id)"
               />
             </template>
 

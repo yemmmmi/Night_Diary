@@ -471,6 +471,23 @@ class SendMessageResponse(BaseModel):
     reply: MessageResponse
 
 
+class RollbackResponse(BaseModel):
+    """Result of rolling a conversation back to before a message (B3)."""
+
+    removed_message_ids: list[str]
+    removed_memories: int
+    messages: list[MessageResponse]
+
+
+class RegenerateResponse(BaseModel):
+    """Result of regenerating an assistant reply (B3)."""
+
+    removed_message_ids: list[str]
+    removed_memories: int
+    reply: MessageResponse
+    messages: list[MessageResponse]
+
+
 # ── Plan / Task (V3 P2) ──────────────────────────────────────────────
 
 

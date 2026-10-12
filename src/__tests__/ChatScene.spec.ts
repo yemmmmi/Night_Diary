@@ -25,6 +25,8 @@ const sendMessage = vi.hoisted(() => vi.fn())
 const sendMessageStreaming = vi.hoisted(() => vi.fn())
 const generateCardSummary = vi.hoisted(() => vi.fn())
 const abortStreaming = vi.hoisted(() => vi.fn(async () => ({ cancelled: true })))
+const rollbackMessages = vi.hoisted(() => vi.fn())
+const regenerateReply = vi.hoisted(() => vi.fn())
 const listSkills = vi.hoisted(() =>
   vi.fn(async () => [
     { id: 'record', label: '记录', description: '把这封信转写成一篇日记' },
@@ -42,6 +44,8 @@ vi.mock('@/shared/api/conversation', () => ({
   sendMessageStreaming,
   generateCardSummary,
   abortStreaming,
+  rollbackMessages,
+  regenerateReply,
   listSkills,
 }))
 
@@ -610,5 +614,57 @@ describe('ChatScene', () => {
     expect(getMessages).toHaveBeenCalledWith('c1')
     expect(wrapper.text()).toContain('明天会轻一些')
     expect(wrapper.find('[data-testid="letter-streaming"]').exists()).toBe(false)
+  })
+
+  it('regenerates the latest reply from the letter action bar', async () => {
+    regenerateReply.mockResolvedValue({
+      removed_message_ids: ['m2'],
+      removed_memories: 0,
+      reply: msg('m2-new', 'assistant', '换个说法：早点歇着'),
+      messages: [msg('m1', 'user', '今天有点累'), msg('m2-new', 'assistant', '换个说法：早点歇着')],
+    })
+    const { wrapper } = mountScene({
+      messages: [msg('m1', 'user', '今天有点累'), msg('m2', 'assistant', '早点休息')],
+    })
+    await flushPromises()
+
+    const button = wrapper.find('[data-testid="letter-regenerate"]')
+    expect(button.exists()).toBe(true)
+    expect(button.text()).toContain('重新生成')
+
+    await button.trigger('click')
+    await flushPromises()
+    await flushMacrotasks()
+
+    expect(regenerateReply).toHaveBeenCalledWith('c1', 'm2')
+    expect(wrapper.text()).toContain('换个说法：早点歇着')
+    expect(wrapper.text()).not.toContain('早点休息')
+  })
+
+  it('rolls the last exchange back and refills the composer', async () => {
+    rollbackMessages.mockResolvedValue({
+      removed_message_ids: ['m1', 'm2'],
+      removed_memories: 1,
+      messages: [],
+    })
+    const { wrapper } = mountScene({
+      messages: [msg('m1', 'user', '今天有点累'), msg('m2', 'assistant', '早点休息')],
+    })
+    await flushPromises()
+
+    const button = wrapper.find('[data-testid="letter-rollback"]')
+    expect(button.exists()).toBe(true)
+    expect(button.text()).toContain('回退到此处')
+
+    await button.trigger('click')
+    await flushPromises()
+    await flushMacrotasks()
+
+    // 「回退到此处」撤下这封回信与对应的来信（上一轮往来）
+    expect(rollbackMessages).toHaveBeenCalledWith('c1', 'm1')
+    expect(wrapper.findAll('[data-testid="letter"]')).toHaveLength(0)
+
+    const textarea = wrapper.find('[data-testid="letter-input"] textarea')
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('今天有点累')
   })
 })
