@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import statistics
 from collections import Counter
 from datetime import datetime
 
@@ -15,6 +16,14 @@ class LongTermMemory:
     """Manage the persisted user profile and promote recurring themes."""
 
     PROMOTION_THRESHOLD_DAYS = 3
+    #: Rolling-window size (most recent N entries, by timestamp) for the
+    #: emotion baseline. Keeps the baseline responsive to recent shifts.
+    BASELINE_WINDOW_ENTRIES = 14
+    #: Minimum entries in the window before average/volatility are estimable.
+    BASELINE_MIN_ENTRIES = 3
+    #: Minimum shift in average/volatility before a profile write is spent
+    #: (avoids churn: every new entry nudges the rolling mean by a hair).
+    BASELINE_UPDATE_TOLERANCE = 0.02
 
     def __init__(self, store: LongTermProfileStore | None = None) -> None:
         self._store = store
@@ -52,7 +61,12 @@ class LongTermMemory:
         user_id: str,
         episodic_entries: list[EpisodicEntry],
     ) -> None:
-        """Promote emotions / topics that appear on 3 or more consecutive days."""
+        """Promote emotions / topics that appear on 3 or more consecutive days.
+
+        Also (P0-B) activates the ``average_sentiment`` / ``volatility``
+        baseline fields from the episodic ``mood_score`` sequence — these were
+        previously dead defaults that insight/empathy agents kept reading.
+        """
         if not episodic_entries:
             logger.info("No episodic entries to promote for user_id=%s", user_id)
             return
@@ -132,8 +146,55 @@ class LongTermMemory:
                 )
                 updated = True
 
+        if self._update_emotion_baseline(profile, episodic_entries):
+            logger.info(
+                "Updated emotion baseline for user_id=%s avg=%.2f vol=%.2f (window=%d)",
+                user_id,
+                profile.emotion_baseline.average_sentiment,
+                profile.emotion_baseline.volatility,
+                min(len(episodic_entries), self.BASELINE_WINDOW_ENTRIES),
+            )
+            updated = True
+
         if updated:
             self.update_profile(user_id, profile)
+
+    def _update_emotion_baseline(
+        self,
+        profile: UserProfile,
+        entries: list[EpisodicEntry],
+    ) -> bool:
+        """Roll the windowed emotion baseline from episodic ``mood_score`` (P0-B).
+
+        ``mood_score`` lives in [0, 1] with 0.5 = neutral (see the normalizer:
+        ``mood = 0.5 + sentiment * 0.5``). Map it back to the [-1, 1] sentiment
+        scale the consumers assume — the empathy agent's crisis check compares
+        against ``crisis_threshold = -0.7``, and the insight agent's deviation
+        detector mixes the baseline with per-emotion scores of +/-0.6 x importance.
+
+        Only ``average_sentiment`` and ``volatility`` are touched;
+        ``dominant_emotion`` stays under the consecutive-days promotion rule.
+        Returns True when the profile changed enough to justify a write.
+        """
+        recent = sorted(entries, key=lambda e: e.timestamp, reverse=True)
+        window = recent[: self.BASELINE_WINDOW_ENTRIES]
+        if len(window) < self.BASELINE_MIN_ENTRIES:
+            return False
+
+        sentiments = [entry.mood_score * 2.0 - 1.0 for entry in window]
+        average = statistics.fmean(sentiments)
+        volatility = statistics.pstdev(sentiments)
+
+        baseline = profile.emotion_baseline
+        if (
+            abs(average - baseline.average_sentiment) < self.BASELINE_UPDATE_TOLERANCE
+            and abs(volatility - baseline.volatility) < self.BASELINE_UPDATE_TOLERANCE
+        ):
+            return False
+
+        baseline.average_sentiment = round(average, 4)
+        baseline.volatility = round(volatility, 4)
+        return True
 
     def _find_consecutive_items(
         self,
