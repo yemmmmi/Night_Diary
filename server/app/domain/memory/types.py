@@ -36,6 +36,11 @@ class EpisodicEntry(BaseModel):
     mood_score: float = Field(default=0.5, ge=0.0, le=1.0)
     emotions: list[str] = Field(default_factory=list)
     event_date: str | None = None  # ISO date string (YYYY-MM-DD)
+    # ── P0-C: entities mentioned in this event (serialized EntityRef dicts:
+    # name / entity_type / relation / sentiment). Populated by the entity
+    # extraction sidecar via MemoryGateway.attach_entities; the long-term
+    # promoter aggregates person entities into profile.important_people.
+    entities: list[dict[str, Any]] = Field(default_factory=list)
     # ── B3: provenance — the chat message that produced this entry ──
     # Lets a conversation rollback undo the memory writes of the removed turn.
     source_message_id: str | None = None

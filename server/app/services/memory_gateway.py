@@ -141,6 +141,7 @@ class MemoryGateway:
         emotions: list[str] | None = None,
         event_date: str | None = None,
         source_message_id: str | None = None,
+        entities: list[dict[str, Any]] | None = None,
     ) -> bool:
         """Store an episodic entry and trigger long-term promotion.
 
@@ -202,6 +203,7 @@ class MemoryGateway:
                 emotions=emotions or [],
                 event_date=event_date,
                 source_message_id=source_message_id,
+                entities=entities or [],
             )
 
             try:
@@ -249,7 +251,83 @@ class MemoryGateway:
             emotions=atom.emotions,
             event_date=atom.event_date.isoformat() if atom.event_date else None,
             source_message_id=atom.source_message_id,
+            entities=[e.model_dump() for e in atom.entities],
         )
+
+    def attach_entities(
+        self,
+        *,
+        user_id: str,
+        source_ref: str,
+        entities: list[dict[str, Any]],
+    ) -> bool:
+        """Attach extraction-sidecar entities to their source episodic entry (P0-C).
+
+        The entity extractor runs as a fire-and-forget sidecar AFTER the reply,
+        so entities can't ride along with the original write. This finds the
+        entry the sidecar came from — ``source_ref`` matches either a
+        ``diary_ids`` member (diary path) or ``source_message_id`` (chat path) —
+        appends the new entities (deduped by name), re-persists, and re-runs
+        long-term promotion so person entities can flow into
+        ``profile.important_people``.
+
+        Works on every storage backend (entities live in the episodic JSON),
+        unlike the Neo4j-only ``write_entity`` path. Best-effort: never raises.
+        Returns True when an entry was found and updated.
+        """
+        if not entities or self._episodic is None:
+            return False
+
+        try:
+            all_entries = self._episodic.get_all_entries_for_user(user_id)
+            target: EpisodicEntry | None = None
+            for entry in all_entries:
+                if source_ref in entry.diary_ids or (
+                    entry.source_message_id is not None and entry.source_message_id == source_ref
+                ):
+                    target = entry
+                    break
+
+            if target is None:
+                logger.debug(
+                    "attach_entities: no episodic entry for source_ref=%s user_id=%s",
+                    source_ref,
+                    user_id,
+                )
+                return False
+
+            existing_names = {str(e.get("name", "")) for e in target.entities}
+            batch: dict[str, dict[str, Any]] = {}
+            for entity in entities:
+                name = str(entity.get("name", ""))
+                if name and name not in batch:
+                    batch[name] = entity
+            new_entities = [e for name, e in batch.items() if name not in existing_names]
+            if not new_entities:
+                return True  # already attached (idempotent re-dispatch)
+
+            target.entities = [*target.entities, *new_entities]
+            self._episodic.upsert(target)
+
+            if self._long_term is not None:
+                try:
+                    refreshed = self._episodic.get_all_entries_for_user(user_id)
+                    self._long_term.promote_from_episodic(
+                        user_id=user_id, episodic_entries=refreshed
+                    )
+                except Exception as exc:
+                    logger.warning("MemoryGateway: entity promotion failed: %s", exc)
+
+            logger.debug(
+                "attach_entities: +%d entities -> entry %s (source_ref=%s)",
+                len(new_entities),
+                target.entry_id,
+                source_ref,
+            )
+            return True
+        except Exception as exc:
+            logger.warning("MemoryGateway: attach_entities failed: %s", exc)
+            return False
 
     @staticmethod
     def from_container(container: ServiceContainer) -> MemoryGateway:

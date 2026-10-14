@@ -154,3 +154,129 @@ def test_load_query_relevance_ranks_related_higher(_session_factory: sessionmake
     result = gw.load(query="睡眠", session_type=SessionType.CHAT, top_k=2)
 
     assert result.episodic_context[0]["event_summary"] == "失眠"
+
+
+# ── P0-C: entity attach from the extraction sidecar ──
+
+
+def _person_entity(name: str, relation: str = "", sentiment: float = 0.0) -> dict[str, object]:
+    return {
+        "name": name,
+        "entity_type": "person",
+        "relation": relation,
+        "sentiment": sentiment,
+    }
+
+
+def test_attach_entities_finds_entry_by_diary_id(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    episodic.store(_entry(event="和妈妈聊了很久", importance=0.8))
+    long_term = _make_long_term()
+
+    gw = MemoryGateway(episodic=episodic, long_term=long_term)
+    attached = gw.attach_entities(
+        user_id="default",
+        source_ref="1",  # matches _entry's diary_ids=["1"]
+        entities=[_person_entity("妈妈", relation="家人", sentiment=0.5)],
+    )
+
+    assert attached is True
+    stored = episodic.get_all_entries_for_user("default")
+    assert stored[0].entities[0]["name"] == "妈妈"
+    long_term.promote_from_episodic.assert_called_once()
+
+
+def test_attach_entities_matches_source_message_id(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """Chat-path entries match by source_message_id (B3 provenance)."""
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    episodic.store(
+        EpisodicEntry(
+            event_summary="和小雨吵架了",
+            emotion="sad",
+            reply_insight="",
+            timestamp=time.time(),
+            importance=0.7,
+            entry_id="",
+            source_message_id="msg-42",
+        )
+    )
+
+    gw = MemoryGateway(episodic=episodic, long_term=None)
+    attached = gw.attach_entities(
+        user_id="default",
+        source_ref="msg-42",
+        entities=[_person_entity("小雨", relation="恋人", sentiment=-0.2)],
+    )
+
+    assert attached is True
+    stored = episodic.get_all_entries_for_user("default")
+    assert stored[0].entities[0]["name"] == "小雨"
+
+
+def test_attach_entities_dedupes_on_redispatch(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """A re-dispatched sidecar job must not duplicate entities."""
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    episodic.store(_entry(event="和朋友吃饭", importance=0.8))
+
+    gw = MemoryGateway(episodic=episodic, long_term=None)
+    entities = [_person_entity("老王", relation="同事"), _person_entity("老王", relation="同事")]
+    first = gw.attach_entities(user_id="default", source_ref="1", entities=entities)
+    second = gw.attach_entities(user_id="default", source_ref="1", entities=entities)
+
+    assert first is True
+    assert second is True  # idempotent, not a failure
+    stored = episodic.get_all_entries_for_user("default")
+    names = [e["name"] for e in stored[0].entities]
+    assert names == ["老王"]
+
+
+def test_attach_entities_without_match_returns_false(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    episodic.store(_entry(event="普通的一天", importance=0.8))
+
+    gw = MemoryGateway(episodic=episodic, long_term=None)
+    attached = gw.attach_entities(
+        user_id="default",
+        source_ref="999",  # no entry has this diary id
+        entities=[_person_entity("妈妈")],
+    )
+
+    assert attached is False
+
+
+def test_persist_atom_carries_entities_into_episodic(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """The unified write path (atom → entry) must not drop atom.entities."""
+    from app.domain.memory.atom import EntityRef, UnifiedMemoryAtom
+
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+
+    gw = MemoryGateway(episodic=episodic, long_term=None)
+    atom = UnifiedMemoryAtom(
+        event_summary="陪儿子去公园",
+        emotion="happy",
+        reply_insight="",
+        source="diary",
+        importance=0.8,
+        diary_id=7,
+        entities=[EntityRef(name="儿子", entity_type="person", relation="家人", sentiment=0.6)],
+    )
+    assert gw.persist_atom(atom) is True
+
+    stored = episodic.get_all_entries_for_user("default")
+    assert stored[0].entities[0]["name"] == "儿子"
+    assert stored[0].diary_ids == ["7"]

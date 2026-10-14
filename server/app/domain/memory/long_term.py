@@ -6,8 +6,14 @@ import logging
 import statistics
 from collections import Counter
 from datetime import datetime
+from typing import Any
 
-from app.domain.memory.types import EpisodicEntry, LongTermProfileStore, UserProfile
+from app.domain.memory.types import (
+    EpisodicEntry,
+    ImportantPerson,
+    LongTermProfileStore,
+    UserProfile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +30,14 @@ class LongTermMemory:
     #: Minimum shift in average/volatility before a profile write is spent
     #: (avoids churn: every new entry nudges the rolling mean by a hair).
     BASELINE_UPDATE_TOLERANCE = 0.02
+    #: Person-entity aggregation window (most recent N entries, P0-C).
+    PEOPLE_WINDOW_ENTRIES = 30
+    #: Mentions required before a person is promoted into important_people.
+    PEOPLE_MIN_MENTIONS = 3
+    #: Cap on important_people — keeps the frozen-block profile compact.
+    PEOPLE_MAX = 5
+    #: Sentiment drift (per person) below which no profile write is spent.
+    PEOPLE_SENTIMENT_TOLERANCE = 0.05
 
     def __init__(self, store: LongTermProfileStore | None = None) -> None:
         self._store = store
@@ -156,6 +170,14 @@ class LongTermMemory:
             )
             updated = True
 
+        if self._update_important_people(profile, episodic_entries):
+            logger.info(
+                "Updated important people for user_id=%s: %s",
+                user_id,
+                [p.name for p in profile.important_people],
+            )
+            updated = True
+
         if updated:
             self.update_profile(user_id, profile)
 
@@ -194,6 +216,83 @@ class LongTermMemory:
 
         baseline.average_sentiment = round(average, 4)
         baseline.volatility = round(volatility, 4)
+        return True
+
+    def _update_important_people(
+        self,
+        profile: UserProfile,
+        entries: list[EpisodicEntry],
+    ) -> bool:
+        """Aggregate person entities into ``important_people`` (P0-C).
+
+        Person entities ride on episodic entries (attached by the extraction
+        sidecar via ``MemoryGateway.attach_entities``). A person mentioned on
+        at least ``PEOPLE_MIN_MENTIONS`` entries in the recent window is
+        promoted with their most common relation label and mean sentiment
+        ([-1, 1]). The list is recomputed from the window — people who fade
+        out of recent entries fade out of the profile.
+
+        Returns True when the list changed enough to justify a write.
+        """
+        recent = sorted(entries, key=lambda e: e.timestamp, reverse=True)
+        window = recent[: self.PEOPLE_WINDOW_ENTRIES]
+
+        stats: dict[str, dict[str, Any]] = {}
+        for entry in window:
+            for entity in entry.entities:
+                if not isinstance(entity, dict):
+                    continue
+                if str(entity.get("entity_type", "")).lower() not in ("person", "人物", "people"):
+                    continue
+                name = str(entity.get("name", "")).strip()
+                if not name:
+                    continue
+                stat = stats.setdefault(name, {"mentions": 0, "sentiments": [], "relations": Counter()})
+                stat["mentions"] += 1
+                try:
+                    sentiment = float(entity.get("sentiment", 0.0))
+                except (TypeError, ValueError):
+                    sentiment = 0.0
+                stat["sentiments"].append(max(-1.0, min(1.0, sentiment)))
+                relation = str(entity.get("relation", "")).strip()
+                if relation:
+                    stat["relations"][relation] += 1
+
+        people: list[tuple[str, int, str, float]] = []
+        for name, stat in stats.items():
+            if stat["mentions"] < self.PEOPLE_MIN_MENTIONS:
+                continue
+            relation = stat["relations"].most_common(1)[0][0] if stat["relations"] else ""
+            average_sentiment = statistics.fmean(stat["sentiments"]) if stat["sentiments"] else 0.0
+            people.append((name, stat["mentions"], relation, average_sentiment))
+
+        # Deterministic order: most-mentioned first, then name.
+        people.sort(key=lambda item: (-item[1], item[0]))
+        people = people[: self.PEOPLE_MAX]
+
+        new_list = [
+            ImportantPerson(name=name, relation=relation, sentiment=round(sentiment, 4))
+            for name, _, relation, sentiment in people
+        ]
+        if self._people_lists_equal(profile.important_people, new_list):
+            return False
+
+        profile.important_people = new_list
+        return True
+
+    def _people_lists_equal(
+        self,
+        old: list[ImportantPerson],
+        new: list[ImportantPerson],
+    ) -> bool:
+        """Same people, same order, same relations, sentiments within tolerance."""
+        if len(old) != len(new):
+            return False
+        for old_person, new_person in zip(old, new, strict=True):
+            if old_person.name != new_person.name or old_person.relation != new_person.relation:
+                return False
+            if abs(old_person.sentiment - new_person.sentiment) >= self.PEOPLE_SENTIMENT_TOLERANCE:
+                return False
         return True
 
     def _find_consecutive_items(

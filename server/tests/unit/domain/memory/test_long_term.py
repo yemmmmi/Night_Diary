@@ -8,7 +8,7 @@ import time
 import pytest
 
 from app.domain.memory.long_term import LongTermMemory
-from app.domain.memory.types import EpisodicEntry, UserProfile
+from app.domain.memory.types import EpisodicEntry, ImportantPerson, UserProfile
 from app.infrastructure.memory_repository import SqliteLongTermProfileStore
 
 
@@ -175,3 +175,125 @@ def test_baseline_window_tracks_most_recent_entries(
     assert baseline.average_sentiment == pytest.approx(statistics.fmean(sentiments), abs=1e-3)
     # A whole-history mean would be 0.0; the windowed mean must be clearly negative.
     assert baseline.average_sentiment < -0.2
+
+
+# ── P0-C: important_people aggregation from person entities ──
+
+
+def _person_entity(name: str, relation: str = "", sentiment: float = 0.0) -> dict[str, object]:
+    return {
+        "name": name,
+        "entity_type": "person",
+        "relation": relation,
+        "sentiment": sentiment,
+    }
+
+
+def test_promotes_important_people_from_person_entities(
+    profile_store: SqliteLongTermProfileStore,
+) -> None:
+    """3+ mentions with a majority relation and mean sentiment → promoted."""
+    memory = LongTermMemory(store=profile_store)
+    entries = [
+        EpisodicEntry(
+            event_summary=f"和妈妈谈心{index}",
+            emotion="平静",
+            reply_insight="",
+            timestamp=index * 86400,
+            mood_score=0.6,
+            entities=[_person_entity("妈妈", relation="家人", sentiment=0.4 + 0.1 * index)],
+        )
+        for index in range(3)
+    ]
+    # Below the mention threshold — must not be promoted.
+    entries.append(
+        EpisodicEntry(
+            event_summary="和同事老王吃了个饭",
+            emotion="平静",
+            reply_insight="",
+            timestamp=3 * 86400,
+            mood_score=0.6,
+            entities=[_person_entity("老王", relation="同事", sentiment=-0.2)],
+        )
+    )
+
+    memory.promote_from_episodic("u1", entries)
+
+    people = memory.get_profile("u1").important_people
+    assert [p.name for p in people] == ["妈妈"]
+    assert people[0].relation == "家人"
+    assert people[0].sentiment == pytest.approx(0.5, abs=1e-3)
+
+
+def test_people_promotion_requires_minimum_mentions(
+    profile_store: SqliteLongTermProfileStore,
+) -> None:
+    memory = LongTermMemory(store=profile_store)
+    entries = [
+        EpisodicEntry(
+            event_summary=f"事件{index}",
+            emotion="平静",
+            reply_insight="",
+            timestamp=index * 86400,
+            mood_score=0.6,
+            entities=[_person_entity("小雅", relation="朋友")],
+        )
+        for index in range(2)  # only 2 mentions < PEOPLE_MIN_MENTIONS
+    ]
+
+    memory.promote_from_episodic("u1", entries)
+
+    assert memory.get_profile("u1").important_people == []
+
+
+def test_people_promotion_ignores_non_person_entities(
+    profile_store: SqliteLongTermProfileStore,
+) -> None:
+    memory = LongTermMemory(store=profile_store)
+    entries = [
+        EpisodicEntry(
+            event_summary=f"事件{index}",
+            emotion="平静",
+            reply_insight="",
+            timestamp=index * 86400,
+            mood_score=0.6,
+            entities=[
+                {"name": "公司", "entity_type": "place", "relation": "", "sentiment": -0.5},
+                {"name": "加班", "entity_type": "topic", "relation": "", "sentiment": -0.3},
+            ],
+        )
+        for index in range(4)
+    ]
+
+    memory.promote_from_episodic("u1", entries)
+
+    assert memory.get_profile("u1").important_people == []
+
+
+def test_people_promotion_skips_negligible_sentiment_drift(
+    profile_store: SqliteLongTermProfileStore,
+) -> None:
+    """Sentiment drift within tolerance must not burn a profile write."""
+    memory = LongTermMemory(store=profile_store)
+    profile = UserProfile()
+    profile.important_people = [
+        ImportantPerson(name="妈妈", relation="家人", sentiment=0.5),
+    ]
+    memory.update_profile("u1", profile)
+
+    entries = [
+        EpisodicEntry(
+            event_summary=f"事件{index}",
+            emotion="平静",
+            reply_insight="",
+            timestamp=index * 86400,
+            mood_score=0.6,
+            entities=[_person_entity("妈妈", relation="家人", sentiment=0.52)],
+        )
+        for index in range(3)
+    ]
+
+    memory.promote_from_episodic("u1", entries)
+
+    # Computed mean 0.52 vs stored 0.5: within the 0.05 tolerance → untouched.
+    assert memory.get_profile("u1").important_people[0].sentiment == 0.5
