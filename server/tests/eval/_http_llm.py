@@ -47,7 +47,9 @@ load_local_dotenv()
 API_KEY = os.getenv("LLM_API_KEY", "")
 BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
 MODEL = os.getenv("LLM_MODEL", "deepseek-v4-flash")
-REAL_MODE = bool(API_KEY)
+#: EVAL_FORCE_STUB=1 forces stub mode even when a key is configured — used to
+#: verify CI's stub path locally (e.g. when the configured endpoint is down).
+REAL_MODE = bool(API_KEY) and os.getenv("EVAL_FORCE_STUB", "") != "1"
 
 _AUTH_ERROR_STATUSES = frozenset({401, 403})
 

@@ -1,0 +1,356 @@
+[
+  {
+    "id": "pers_emp_style_01",
+    "agent": "empathy",
+    "category": "style",
+    "intent": "emotional_support",
+    "diary": "今天本来打算把最后一个接口写完，结果下午被拉去开了三个小时的会，一行代码都没写，心里很烦躁。",
+    "long_term_profile": {
+      "preferred_response_style": "pragmatic",
+      "recurring_topics": ["项目上线"],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": -0.1,
+        "volatility": 0.15,
+        "dominant_emotion": "neutral"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "为赶项目上线连续一周加班到十点",
+        "emotion": "压力",
+        "importance": 0.7,
+        "reply_insight": " Deadline 前的连续消耗会放大被占用时间的烦躁感"
+      }
+    ]
+  },
+  {
+    "id": "pers_emp_style_02",
+    "agent": "empathy",
+    "category": "style",
+    "intent": "emotional_support",
+    "diary": "突然被通知下周要给全部门做技术分享，我一站到人前脑子就空白，从现在开始心里就发慌。",
+    "long_term_profile": {
+      "preferred_response_style": "calm",
+      "recurring_topics": ["公开表达"],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": -0.15,
+        "volatility": 0.2,
+        "dominant_emotion": "紧张"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "上次季度汇报时紧张到声音发抖",
+        "emotion": "紧张",
+        "importance": 0.6,
+        "reply_insight": "表达场景的紧张是这个用户反复出现的情绪主题"
+      }
+    ]
+  },
+  {
+    "id": "pers_emp_pattern_01",
+    "agent": "empathy",
+    "category": "episodic_pattern",
+    "intent": "emotional_support",
+    "diary": "昨晚又是一点多才睡着，脑子里全是明天要做的事，早上起来头很沉。",
+    "long_term_profile": {
+      "preferred_response_style": "warm",
+      "recurring_topics": ["失眠", "工作压力"],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": -0.2,
+        "volatility": 0.2,
+        "dominant_emotion": "疲惫"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "连续三天失眠到凌晨两点",
+        "emotion": "疲惫",
+        "importance": 0.7,
+        "reply_insight": "睡前反刍白天任务是这个用户失眠的主要触发模式"
+      },
+      {
+        "event_summary": "因为项目进度被领导催促，晚上报复性刷手机到两点",
+        "emotion": "压力",
+        "importance": 0.6,
+        "reply_insight": "压力与睡眠问题相互强化"
+      }
+    ]
+  },
+  {
+    "id": "pers_emp_pattern_02",
+    "agent": "empathy",
+    "category": "episodic_pattern",
+    "intent": "emotional_support",
+    "diary": "今天膝盖又开始疼，教练让我停跑一周，可下个月就是首马了，心里空落落的。",
+    "long_term_profile": {
+      "preferred_response_style": "warm",
+      "recurring_topics": ["跑步", "马拉松备赛"],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": 0.1,
+        "volatility": 0.15,
+        "dominant_emotion": "neutral"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "为人生首个马拉松已系统训练四个月",
+        "emotion": "希望",
+        "importance": 0.8,
+        "reply_insight": "首马对用户意义重大，受伤休跑威胁的是长期投入的目标"
+      }
+    ]
+  },
+  {
+    "id": "pers_emp_baseline_01",
+    "agent": "empathy",
+    "category": "emotion_baseline",
+    "intent": "emotional_support",
+    "diary": "今天没什么特别的，上班下班，也没什么不好的事，就是觉得心里空空的。",
+    "long_term_profile": {
+      "preferred_response_style": "warm",
+      "recurring_topics": ["独居"],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": -0.3,
+        "volatility": 0.25,
+        "dominant_emotion": "低落"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "最近两周连续婉拒了两次朋友聚会邀请，更愿意一个人待着",
+        "emotion": "孤独",
+        "importance": 0.6,
+        "reply_insight": "社交退缩叠加低落基线值得温和关注"
+      }
+    ]
+  },
+  {
+    "id": "pers_emp_people_01",
+    "agent": "empathy",
+    "category": "important_people",
+    "intent": "emotional_support",
+    "diary": "晚上我妈又打电话来催婚事，说了两句我就把电话挂了，挂完又有点后悔。",
+    "long_term_profile": {
+      "preferred_response_style": "warm",
+      "recurring_topics": ["催婚", "与母亲的边界"],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": -0.15,
+        "volatility": 0.3,
+        "dominant_emotion": "烦躁"
+      },
+      "important_people": [
+        {
+          "name": "母亲",
+          "relation": "家人",
+          "sentiment": 0.2
+        }
+      ]
+    },
+    "episodic_context": [
+      {
+        "event_summary": "上个月和母亲因为相亲安排大吵一架，冷战了一周",
+        "emotion": "愤怒",
+        "importance": 0.7,
+        "reply_insight": "催婚是母子间反复爆发的话题，冲突后用户常有内疚感"
+      }
+    ]
+  },
+  {
+    "id": "pers_ins_topics_01",
+    "agent": "insight",
+    "category": "recurring_topics",
+    "intent": "retrospective_review",
+    "diary": "今天又在两所学校之间摇摆了一整天，资料收藏了一堆，结果一个字都没看进去，晚上特别自责。",
+    "long_term_profile": {
+      "preferred_response_style": "warm",
+      "recurring_topics": ["考研", "择校纠结"],
+      "personality_tags": ["追求完美"],
+      "emotion_baseline": {
+        "average_sentiment": -0.1,
+        "volatility": 0.2,
+        "dominant_emotion": "焦虑"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "三周内第五次因为择校问题整晚查资料到凌晨",
+        "emotion": "焦虑",
+        "importance": 0.7,
+        "reply_insight": "决策回避（收藏代替决定）是用户应对择校焦虑的固定模式"
+      }
+    ]
+  },
+  {
+    "id": "pers_ins_topics_02",
+    "agent": "insight",
+    "category": "recurring_topics",
+    "intent": "retrospective_review",
+    "diary": "本周第三次通宵，上线又推迟了，我现在已经麻木了，连吐槽的力气都没有。",
+    "long_term_profile": {
+      "preferred_response_style": "pragmatic",
+      "recurring_topics": ["加班", "项目延期"],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": -0.25,
+        "volatility": 0.2,
+        "dominant_emotion": "疲惫"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "项目两周内三次推迟上线，团队连续通宵赶工",
+        "emotion": "疲惫",
+        "importance": 0.8,
+        "reply_insight": "延期压力已从焦虑转为麻木，是持续消耗的信号"
+      }
+    ]
+  },
+  {
+    "id": "pers_ins_deviation_01",
+    "agent": "insight",
+    "category": "emotion_deviation",
+    "intent": "retrospective_review",
+    "diary": "今天也没什么特别的事，就是觉得干什么都提不起劲，连最爱的游戏开着也没玩。",
+    "long_term_profile": {
+      "preferred_response_style": "warm",
+      "recurring_topics": [],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": 0.2,
+        "volatility": 0.15,
+        "dominant_emotion": "neutral"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "连续几天不想出门，取消了周末的徒步计划",
+        "emotion": "疲惫",
+        "importance": 0.8,
+        "reply_insight": ""
+      },
+      {
+        "event_summary": "工作群里不再发言，午饭一个人在工位吃",
+        "emotion": "孤独",
+        "importance": 0.7,
+        "reply_insight": ""
+      },
+      {
+        "event_summary": "凌晨三点还醒着，白天靠咖啡撑着",
+        "emotion": "压力",
+        "importance": 0.8,
+        "reply_insight": ""
+      }
+    ]
+  },
+  {
+    "id": "pers_ins_deviation_02",
+    "agent": "insight",
+    "category": "emotion_deviation",
+    "intent": "retrospective_review",
+    "diary": "今天面试过了！一整天都在偷偷傻笑，晚上请自己吃了顿好的，感觉好久没这么高兴过了。",
+    "long_term_profile": {
+      "preferred_response_style": "warm",
+      "recurring_topics": ["求职"],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": -0.1,
+        "volatility": 0.2,
+        "dominant_emotion": "沮丧"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "经历了三个月求职空窗期，上一场面试被拒后在车里坐了很久",
+        "emotion": "兴奋",
+        "importance": 0.9,
+        "reply_insight": "这个积极转折发生在长期低迷之后"
+      }
+    ]
+  },
+  {
+    "id": "pers_ins_people_01",
+    "agent": "insight",
+    "category": "important_people",
+    "intent": "retrospective_review",
+    "diary": "这周和小雨又吵了两次，一次因为回消息慢，一次因为她发了个我和别人的合影没提前问我。都是小事，但吵完都很累。",
+    "long_term_profile": {
+      "preferred_response_style": "warm",
+      "recurring_topics": ["和小雨的沟通方式"],
+      "personality_tags": ["敏感"],
+      "emotion_baseline": {
+        "average_sentiment": -0.1,
+        "volatility": 0.3,
+        "dominant_emotion": "neutral"
+      },
+      "important_people": [
+        {
+          "name": "小雨",
+          "relation": "恋人",
+          "sentiment": 0.4
+        }
+      ]
+    },
+    "episodic_context": [
+      {
+        "event_summary": "上月因「和异性朋友吃饭没提前说」与小雨冷战四天",
+        "emotion": "沮丧",
+        "importance": 0.7,
+        "reply_insight": "边界议题（提前告知）是两人反复的冲突触发点"
+      },
+      {
+        "event_summary": "冷战和好后小雨说「其实我只是想被优先」",
+        "emotion": "感动",
+        "importance": 0.6,
+        "reply_insight": "冲突背后是双方对确定感的需要"
+      }
+    ]
+  },
+  {
+    "id": "pers_ins_pattern_01",
+    "agent": "insight",
+    "category": "episodic_pattern",
+    "intent": "retrospective_review",
+    "diary": "练了三个月，体重和围度一点没变，开始怀疑自己的训练计划是不是从头就错了，有点想放弃。",
+    "long_term_profile": {
+      "preferred_response_style": "pragmatic",
+      "recurring_topics": ["增肌平台期"],
+      "personality_tags": [],
+      "emotion_baseline": {
+        "average_sentiment": 0.0,
+        "volatility": 0.15,
+        "dominant_emotion": "neutral"
+      },
+      "important_people": []
+    },
+    "episodic_context": [
+      {
+        "event_summary": "坚持「练三休一」计划三个月，前两个月力量记录稳步上涨",
+        "emotion": "满足",
+        "importance": 0.7,
+        "reply_insight": "力量上涨但体重不变，可能是体成分在变化而非无进步"
+      },
+      {
+        "event_summary": "一个月前也曾因「看不到体型变化」想放弃过一次",
+        "emotion": "失落",
+        "importance": 0.6,
+        "reply_insight": "以体重为唯一标尺是这个用户反复受挫的认知习惯"
+      }
+    ]
+  }
+]
