@@ -414,6 +414,11 @@ class LongTermMemory:
                 old_profile.short_term_state.model_dump(),
                 new_profile.short_term_state.model_dump(),
             ),
+            (
+                "pending_clarifications",
+                old_profile.pending_clarifications,
+                new_profile.pending_clarifications,
+            ),
         ]
 
         changed = [(field, old, new) for field, old, new in comparisons if old != new]

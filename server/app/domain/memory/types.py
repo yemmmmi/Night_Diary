@@ -48,6 +48,10 @@ class EpisodicEntry(BaseModel):
     # ── P2-A: chat sessions that produced this entry (entity sidecar joins on
     # these when diary_ids / source_message_id don't match) ──
     conversation_ids: list[str] = Field(default_factory=list)
+    # ── P2-B: soft-override pointer — the entry id of the newer memory that
+    # superseded this one. Superseded entries drop out of retrieval and
+    # long-term promotion, but the user's original text is never touched.
+    superseded_by: str | None = None
     # ── V3 P4: vector for retrieval (lazy-computed by EpisodicMemory) ──
     embedding: list[float] | None = None
 
@@ -146,6 +150,11 @@ class UserProfile(BaseModel):
     preferred_response_style: str = "empathetic"
     #: Recent-state section (P1-A) — see :class:`ShortTermState`.
     short_term_state: ShortTermState = Field(default_factory=ShortTermState)
+    #: Pending gentle clarifications (P2-B) — one dict per detected memory
+    #: conflict (person / old / new / date), newest last, capped by the
+    #: writer. Rendered by the empathy agent within a freshness window;
+    #: never auto-deleted, just aged out of the render.
+    pending_clarifications: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class WorkingContext(TypedDict, total=False):
@@ -168,7 +177,9 @@ class WorkingContext(TypedDict, total=False):
 class EpisodicMemoryStore(Protocol):
     """Persistence port for episodic memory entries."""
 
-    def load_entries(self, user_id: str) -> list[EpisodicEntry]: ...
+    def load_entries(
+        self, user_id: str, *, include_superseded: bool = False
+    ) -> list[EpisodicEntry]: ...
 
     def upsert_entry(self, user_id: str, entry: EpisodicEntry) -> None: ...
 

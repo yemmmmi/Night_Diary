@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.domain.memory.types import EpisodicEntry
+from app.domain.memory.types import EpisodicEntry, UserProfile
 from app.services.analysis_service import _sync_diary_to_memory
 
 
@@ -79,6 +79,9 @@ class _FakeLongTerm:
 
     def __init__(self) -> None:
         self.promote_calls: list[tuple[str, list[EpisodicEntry]]] = []
+
+    def get_profile(self, user_id: str) -> UserProfile:
+        return UserProfile()
 
     def promote_from_episodic(self, user_id: str, episodic_entries: list[EpisodicEntry]) -> None:
         self.promote_calls.append((user_id, episodic_entries))

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from app.domain.agents.empathy_agent import EmpathyAgent
 from app.domain.skills.crisis_detector import CRISIS_RESOURCES
 from app.shared.tracing import InMemoryLLMCallTracer
@@ -187,3 +189,61 @@ def test_fallback_direct_call_uses_intent_template(
     agent = EmpathyAgent(fake_llm, knowledge_store)
     result = agent.fallback("habit_tracking")
     assert "习惯" in result["empathy_response"]
+
+
+# ── P2-B: memory-conflict clarification block ───────────────────────────
+
+
+async def test_pending_clarification_rendered_into_prompt(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """A fresh person-sentiment reversal surfaces as a gentle check block."""
+    fresh_date = (date.today() - timedelta(days=1)).isoformat()
+    agent = EmpathyAgent(fake_llm, knowledge_store)
+    await agent.run(
+        {
+            "diary_content": "今天和朋友聊了聊。",
+            "intent": "pure_record",
+            "long_term_profile": {
+                "pending_clarifications": [
+                    {"person": "小雨", "was": 0.7, "now": -0.5, "date": fresh_date}
+                ]
+            },
+        }
+    )
+    prompt = fake_llm.calls[0]
+    assert "## 记忆核对" in prompt
+    assert "小雨" in prompt
+    assert "正面" in prompt and "负面" in prompt
+
+
+async def test_expired_clarification_not_rendered(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """Clarifications older than the freshness window age out of the render."""
+    stale_date = (date.today() - timedelta(days=30)).isoformat()
+    agent = EmpathyAgent(fake_llm, knowledge_store)
+    await agent.run(
+        {
+            "diary_content": "今天和朋友聊了聊。",
+            "intent": "pure_record",
+            "long_term_profile": {
+                "pending_clarifications": [
+                    {"person": "小雨", "was": 0.7, "now": -0.5, "date": stale_date}
+                ]
+            },
+        }
+    )
+    assert "## 记忆核对" not in fake_llm.calls[0]
+
+
+async def test_no_clarification_block_without_pending(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """No pending clarifications → no block, prompt stays clean."""
+    agent = EmpathyAgent(fake_llm, knowledge_store)
+    await agent.run({"diary_content": "今天还行。", "intent": "pure_record"})
+    assert "## 记忆核对" not in fake_llm.calls[0]

@@ -9,9 +9,20 @@ import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.memory.episodic import EpisodicMemory
-from app.domain.memory.types import EmotionBaseline, EpisodicEntry, UserProfile
+from app.domain.memory.long_term import LongTermMemory
+from app.domain.memory.types import (
+    EmotionBaseline,
+    EpisodicEntry,
+    ImportantPerson,
+    UserProfile,
+)
 from app.infrastructure.database import create_db_engine, create_session_factory, init_db
-from app.infrastructure.memory_repository import SqliteEpisodicMemoryStore
+from app.infrastructure.memory_repository import (
+    SqliteEpisodicMemoryStore,
+    SqliteLongTermProfileStore,
+    SqliteProfileChangeLogStore,
+)
+from app.infrastructure.models.profile_change_log import ProfileChangeLogRow
 from app.services.memory_gateway import MemoryGateway, SessionType
 
 
@@ -335,3 +346,242 @@ def test_attach_entities_matches_conversation_id(
     assert attached is True
     stored = episodic.get_all_entries_for_user("default")
     assert stored[0].entities[0]["name"] == "小雨"
+
+
+# ── P2-B: person-sentiment conflict resolution ─────────────────────────
+
+
+def _make_real_long_term(
+    _session_factory: sessionmaker[Session],
+) -> tuple[LongTermMemory, SqliteLongTermProfileStore, SqliteProfileChangeLogStore]:
+    profile_store = SqliteLongTermProfileStore(_session_factory)
+    change_log = SqliteProfileChangeLogStore(_session_factory)
+    return LongTermMemory(store=profile_store, change_log=change_log), profile_store, change_log
+
+
+def test_attach_entities_resolves_person_conflict(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """Sign flip via the entity sidecar: old view soft-superseded, clarification
+    queued, and the whole change audited with source=conflict_resolution."""
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    long_term, profile_store, _ = _make_real_long_term(_session_factory)
+
+    # The profile already believes 小雨 is a positive presence.
+    long_term.update_profile(
+        "default",
+        UserProfile(
+            important_people=[ImportantPerson(name="小雨", relation="朋友", sentiment=0.7)]
+        ),
+        source="manual",
+    )
+    # An older entry carrying the outdated positive view.
+    episodic.store(
+        EpisodicEntry(
+            event_summary="和小雨吃了晚饭",
+            emotion="happy",
+            reply_insight="",
+            timestamp=time.time() - 3600,
+            importance=0.8,
+            entry_id="",
+            diary_ids=["1"],
+            entities=[_person_entity("小雨", relation="朋友", sentiment=0.6)],
+        )
+    )
+    # The new memory: a fight — entity arrives from the extraction sidecar.
+    episodic.store(
+        EpisodicEntry(
+            event_summary="和小雨吵架了",
+            emotion="sad",
+            reply_insight="",
+            timestamp=time.time(),
+            importance=0.8,
+            entry_id="",
+            diary_ids=["2"],
+        )
+    )
+
+    gw = MemoryGateway(episodic=episodic, long_term=long_term)
+    attached = gw.attach_entities(
+        user_id="default",
+        source_ref="2",
+        entities=[_person_entity("小雨", relation="朋友", sentiment=-0.5)],
+    )
+    assert attached is True
+
+    # Superseded entry drops out of the default view but keeps its text.
+    live = episodic.get_all_entries_for_user("default")
+    assert [e.event_summary for e in live] == ["和小雨吵架了"]
+    full = episodic.get_all_entries_for_user("default", include_superseded=True)
+    by_summary = {e.event_summary: e for e in full}
+    assert by_summary["和小雨吃了晚饭"].superseded_by == by_summary["和小雨吵架了"].entry_id
+    assert by_summary["和小雨吵架了"].superseded_by is None
+
+    # The clarification is queued on the profile.
+    profile = profile_store.get_profile("default")
+    assert profile is not None
+    assert len(profile.pending_clarifications) == 1
+    record = profile.pending_clarifications[0]
+    assert record["person"] == "小雨"
+    assert record["was"] == pytest.approx(0.7)
+    assert record["now"] == pytest.approx(-0.5)
+
+
+def test_attach_entities_conflict_audited(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """The clarification write lands in profile_change_log (P1-B trail)."""
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    long_term, _, _ = _make_real_long_term(_session_factory)
+    long_term.update_profile(
+        "default",
+        UserProfile(
+            important_people=[ImportantPerson(name="小雨", relation="朋友", sentiment=0.7)]
+        ),
+        source="manual",
+    )
+    episodic.store(
+        EpisodicEntry(
+            event_summary="和小雨吵架了",
+            emotion="sad",
+            reply_insight="",
+            timestamp=time.time(),
+            importance=0.8,
+            entry_id="",
+            diary_ids=["1"],
+        )
+    )
+
+    gw = MemoryGateway(episodic=episodic, long_term=long_term)
+    gw.attach_entities(
+        user_id="default",
+        source_ref="1",
+        entities=[_person_entity("小雨", relation="朋友", sentiment=-0.6)],
+    )
+
+    with _session_factory() as session:
+        rows = (
+            session.query(ProfileChangeLogRow)
+            .filter(
+                ProfileChangeLogRow.user_id == "default",
+                ProfileChangeLogRow.source == "conflict_resolution",
+            )
+            .all()
+        )
+    assert any(row.field == "pending_clarifications" for row in rows)
+
+
+def test_attach_entities_no_conflict_on_consistent_sentiment(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """Consistent new entities supersede nothing and queue no clarification."""
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    long_term, profile_store, _ = _make_real_long_term(_session_factory)
+    long_term.update_profile(
+        "default",
+        UserProfile(
+            important_people=[ImportantPerson(name="妈妈", relation="家人", sentiment=0.8)]
+        ),
+        source="manual",
+    )
+    episodic.store(
+        EpisodicEntry(
+            event_summary="陪妈妈买菜",
+            emotion="happy",
+            reply_insight="",
+            timestamp=time.time(),
+            importance=0.8,
+            entry_id="",
+            diary_ids=["1"],
+        )
+    )
+
+    gw = MemoryGateway(episodic=episodic, long_term=long_term)
+    gw.attach_entities(
+        user_id="default",
+        source_ref="1",
+        entities=[_person_entity("妈妈", relation="家人", sentiment=0.9)],
+    )
+
+    assert episodic.get_all_entries_for_user("default")[0].superseded_by is None
+    profile = profile_store.get_profile("default")
+    assert profile is not None
+    assert profile.pending_clarifications == []
+
+
+def test_persist_episodic_with_entities_resolves_conflict(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """The persist path also detects conflicts when entities ride along
+    (e.g. persist_atom carrying atom.entities)."""
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    long_term, profile_store, _ = _make_real_long_term(_session_factory)
+    long_term.update_profile(
+        "default",
+        UserProfile(
+            important_people=[ImportantPerson(name="小雨", relation="朋友", sentiment=0.7)]
+        ),
+        source="manual",
+    )
+    # Seed an old-view entry first.
+    episodic.store(
+        EpisodicEntry(
+            event_summary="和小雨吃了晚饭",
+            emotion="happy",
+            reply_insight="",
+            timestamp=time.time() - 3600,
+            importance=0.8,
+            entry_id="",
+            diary_ids=["1"],
+            entities=[_person_entity("小雨", relation="朋友", sentiment=0.6)],
+        )
+    )
+
+    gw = MemoryGateway(episodic=episodic, long_term=long_term)
+    stored = gw.persist_episodic(
+        event_summary="和小雨大吵一架",
+        emotion="sad",
+        importance=0.9,
+        diary_ids=["2"],
+        entities=[_person_entity("小雨", relation="朋友", sentiment=-0.5)],
+    )
+    assert stored is True
+
+    by_summary = {
+        e.event_summary: e for e in episodic.get_all_entries_for_user("default", include_superseded=True)
+    }
+    assert by_summary["和小雨吃了晚饭"].superseded_by is not None
+    assert by_summary["和小雨大吵一架"].superseded_by is None
+
+    profile = profile_store.get_profile("default")
+    assert profile is not None
+    assert [r["person"] for r in profile.pending_clarifications] == ["小雨"]
+
+
+def test_resolve_person_conflicts_best_effort_never_raises(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """A broken long-term layer must not break the entity write path."""
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    episodic.store(_entry(event="和小雨吵架了", importance=0.8))
+
+    class _BrokenLongTerm:
+        def get_profile(self, user_id: str) -> UserProfile:
+            raise RuntimeError("profile store down")
+
+    gw = MemoryGateway(episodic=episodic, long_term=_BrokenLongTerm())  # type: ignore[arg-type]
+    attached = gw.attach_entities(
+        user_id="default",
+        source_ref="1",  # matches _entry's diary_ids=["1"]
+        entities=[_person_entity("小雨", sentiment=-0.5)],
+    )
+    # Entity attachment succeeded; only the promotion/conflict step failed.
+    assert attached is True
+    stored = episodic.get_all_entries_for_user("default")
+    assert stored[0].entities[0]["name"] == "小雨"
+

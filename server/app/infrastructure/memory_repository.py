@@ -23,7 +23,15 @@ class SqliteEpisodicMemoryStore:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
 
-    def load_entries(self, user_id: str) -> list[EpisodicEntry]:
+    def load_entries(
+        self, user_id: str, *, include_superseded: bool = False
+    ) -> list[EpisodicEntry]:
+        """Load a user's entries, by default excluding soft-superseded ones.
+
+        Superseded entries (P2-B) carry a ``superseded_by`` pointer to the
+        newer memory that replaced them; they must stay out of retrieval
+        and long-term promotion, but remain in storage for audit.
+        """
         with self._session_factory() as session:
             rows = (
                 session.query(EpisodicMemoryRow)
@@ -31,7 +39,10 @@ class SqliteEpisodicMemoryStore:
                 .order_by(EpisodicMemoryRow.timestamp.asc())
                 .all()
             )
-            return [EpisodicEntry.model_validate_json(row.payload_json) for row in rows]
+            entries = [EpisodicEntry.model_validate_json(row.payload_json) for row in rows]
+            if include_superseded:
+                return entries
+            return [entry for entry in entries if entry.superseded_by is None]
 
     def get_entry(self, user_id: str, entry_id: str) -> EpisodicEntry | None:
         with self._session_factory() as session:

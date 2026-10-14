@@ -33,6 +33,7 @@ from app.domain.agents.prompts import (
 )
 from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.knowledge.store import DomainKnowledgeStore
+from app.domain.memory.conflict import renderable_clarifications
 from app.domain.memory.types import ShortTermState
 from app.domain.skills.crisis_detector import CRISIS_RESOURCES
 from app.shared.emotion_estimator import EmotionEstimator, get_emotion_estimator
@@ -132,6 +133,7 @@ class EmpathyAgent:
             is_crisis=is_crisis,
             style_fragment=style_fragment,
             short_term_state_text=self._short_term_state_text(profile),
+            clarification_text=self._pending_clarification_text(profile),
         )
 
         # 用中性指令收尾, 不再硬编码「请给予温暖的回应」——
@@ -173,6 +175,33 @@ class EmpathyAgent:
             return ShortTermState(**short_term).render()
         return ""
 
+    @staticmethod
+    def _pending_clarification_text(profile: dict[str, Any]) -> str:
+        """Render fresh memory-conflict clarifications (P2-B, may be empty).
+
+        Reads ``pending_clarifications`` off the long-term profile dict and
+        keeps only records inside the freshness window — expired ones age
+        out of the render without being deleted.
+        """
+        pending = profile.get("pending_clarifications")
+        if not isinstance(pending, list):
+            return ""
+        lines: list[str] = []
+        for record in renderable_clarifications(pending):
+            person = str(record.get("person", "")).strip()
+            if not person:
+                continue
+            try:
+                was = float(record.get("was", 0.0))
+                now = float(record.get("now", 0.0))
+            except (TypeError, ValueError):
+                continue
+            lines.append(
+                f"- {person}：记忆中的感受偏{'正面' if was >= 0 else '负面'}，"
+                f"{record.get('date', '最近')}的表达转为偏{'正面' if now >= 0 else '负面'}"
+            )
+        return "\n".join(lines)
+
     def _build_system_prompt(
         self,
         *,
@@ -183,6 +212,7 @@ class EmpathyAgent:
         is_crisis: bool,
         style_fragment: str | None = None,
         short_term_state_text: str = "",
+        clarification_text: str = "",
     ) -> str:
         length = EMPATHY_RESPONSE_LENGTH.get(intent, EMPATHY_RESPONSE_LENGTH["pure_record"])
 
@@ -205,6 +235,13 @@ class EmpathyAgent:
                 "\n## 用户近期状态\n"
                 f"近几日模式与情绪信号汇总：{short_term_state_text}。"
                 "回应时请把这一趋势纳入考虑，但不要直接复述统计数字。"
+            )
+        if clarification_text:
+            parts.append(
+                "\n## 记忆核对\n"
+                "检测到用户对以下人物的情感倾向最近发生了变化，如与用户当前表达"
+                f"自然相关，可温和地核实一下：\n{clarification_text}\n"
+                "若用户确认感受已变化，请自然接纳新感受，不要坚持旧印象。"
             )
         if episodic_context:
             parts.append(
