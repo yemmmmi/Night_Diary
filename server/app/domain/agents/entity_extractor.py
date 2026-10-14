@@ -215,6 +215,7 @@ def _attach_entities_to_episodic(
         from app.infrastructure.memory_repository import (
             SqliteEpisodicMemoryStore,
             SqliteLongTermProfileStore,
+            SqliteProfileChangeLogStore,
         )
         from app.services.memory_gateway import MemoryGateway
 
@@ -223,7 +224,10 @@ def _attach_entities_to_episodic(
                 store=SqliteEpisodicMemoryStore(session_factory),
                 user_id=user_id,
             ),
-            long_term=LongTermMemory(store=SqliteLongTermProfileStore(session_factory)),
+            long_term=LongTermMemory(
+                store=SqliteLongTermProfileStore(session_factory),
+                change_log=SqliteProfileChangeLogStore(session_factory),
+            ),
         )
         return gateway.attach_entities(
             user_id=user_id,

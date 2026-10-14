@@ -178,3 +178,24 @@ class LongTermProfileStore(Protocol):
     def get_profile(self, user_id: str) -> UserProfile | None: ...
 
     def save_profile(self, user_id: str, profile: UserProfile) -> None: ...
+
+
+class ProfileChangeLogStore(Protocol):
+    """Persistence port for the field-level profile change audit log (P1-B).
+
+    One ``record_change`` call = one changed profile field. Values are plain
+    JSON-serializable objects (strings / lists / dicts); the implementation
+    serializes them for storage. ``evidence`` carries the memory pairs the
+    change was derived from (promotion inputs), when available.
+    """
+
+    def record_change(
+        self,
+        user_id: str,
+        *,
+        field: str,
+        old_value: Any,
+        new_value: Any,
+        source: str,
+        evidence: list[dict[str, Any]] | None = None,
+    ) -> None: ...

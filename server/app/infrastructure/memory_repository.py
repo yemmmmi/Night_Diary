@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import time
+from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -12,6 +14,7 @@ from app.infrastructure.models.memory import (
     LongTermProfileRow,
     UserAboutRow,
 )
+from app.infrastructure.models.profile_change_log import ProfileChangeLogRow
 
 
 class SqliteEpisodicMemoryStore:
@@ -102,6 +105,49 @@ class SqliteLongTermProfileStore:
             else:
                 row.profile_json = payload
                 row.updated_at = now
+            session.commit()
+
+
+class SqliteProfileChangeLogStore:
+    """Persist field-level profile changes to ``profile_change_log`` (P1-B)."""
+
+    def __init__(self, session_factory: sessionmaker[Session]) -> None:
+        self._session_factory = session_factory
+
+    @staticmethod
+    def _dump_value(value: Any) -> str | None:
+        """Serialize an audit value (None stays NULL, strings pass through)."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False, default=str)
+
+    def record_change(
+        self,
+        user_id: str,
+        *,
+        field: str,
+        old_value: Any,
+        new_value: Any,
+        source: str,
+        evidence: list[dict[str, Any]] | None = None,
+    ) -> None:
+        with self._session_factory() as session:
+            session.add(
+                ProfileChangeLogRow(
+                    user_id=user_id,
+                    field=field,
+                    old_value=self._dump_value(old_value),
+                    new_value=self._dump_value(new_value),
+                    source=source,
+                    evidence_json=(
+                        json.dumps(evidence, ensure_ascii=False, default=str)
+                        if evidence
+                        else None
+                    ),
+                )
+            )
             session.commit()
 
 

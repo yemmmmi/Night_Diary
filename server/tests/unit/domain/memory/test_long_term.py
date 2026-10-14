@@ -297,3 +297,93 @@ def test_people_promotion_skips_negligible_sentiment_drift(
 
     # Computed mean 0.52 vs stored 0.5: within the 0.05 tolerance → untouched.
     assert memory.get_profile("u1").important_people[0].sentiment == 0.5
+
+
+# ── P1-B: field-level profile change audit ──
+
+
+class _RecordingChangeLog:
+    """In-memory ProfileChangeLogStore double."""
+
+    def __init__(self) -> None:
+        self.rows: list[dict[str, object]] = []
+
+    def record_change(
+        self,
+        user_id: str,
+        *,
+        field: str,
+        old_value: object,
+        new_value: object,
+        source: str,
+        evidence: list[dict[str, object]] | None = None,
+    ) -> None:
+        self.rows.append(
+            {
+                "user_id": user_id,
+                "field": field,
+                "old_value": old_value,
+                "new_value": new_value,
+                "source": source,
+                "evidence": evidence,
+            }
+        )
+
+
+def test_update_profile_audits_field_level_changes(
+    profile_store: SqliteLongTermProfileStore,
+) -> None:
+    """Each changed field lands as one audit row with old/new values (P1-B)."""
+    audit = _RecordingChangeLog()
+    memory = LongTermMemory(store=profile_store, change_log=audit)
+    profile = UserProfile(personality_tags=["乐观"], preferred_response_style="pragmatic")
+    memory.update_profile("u1", profile, source="manual")
+
+    by_field: dict[str, dict[str, object]] = {row["field"]: row for row in audit.rows}
+    assert "personality_tags" in by_field
+    assert "preferred_response_style" in by_field
+    for row in audit.rows:
+        assert row["user_id"] == "u1"
+        assert row["source"] == "manual"
+        assert row["evidence"] is None
+    assert by_field["personality_tags"]["old_value"] == []
+    assert by_field["personality_tags"]["new_value"] == ["乐观"]
+    assert by_field["preferred_response_style"]["old_value"] == "empathetic"
+    assert by_field["preferred_response_style"]["new_value"] == "pragmatic"
+
+
+def test_promotion_audits_with_evidence_pairs(
+    profile_store: SqliteLongTermProfileStore,
+) -> None:
+    """Promotion audit rows carry source=promotion + the memory pairs used."""
+    audit = _RecordingChangeLog()
+    memory = LongTermMemory(store=profile_store, change_log=audit)
+    start = time.mktime(time.strptime("2026-06-01", "%Y-%m-%d"))
+    entries = _entries_for_days("焦虑", "工作压力大", 3, start)
+
+    memory.promote_from_episodic("u1", entries)
+
+    assert audit.rows
+    for row in audit.rows:
+        assert row["user_id"] == "u1"
+        assert row["source"] == "promotion"
+        assert row["evidence"], "promotion rows must carry evidence pairs"
+
+    # Evidence pairs carry the dates/summaries of the underlying entries,
+    # newest first.
+    first_pair = audit.rows[0]["evidence"][0]  # type: ignore[index]
+    assert first_pair["date"] == "2026-06-03"
+    assert "工作压力大" in first_pair["summary"]
+
+    by_field: dict[str, dict[str, object]] = {row["field"]: row for row in audit.rows}
+    assert "recurring_topics" in by_field
+    assert "工作压力大" in by_field["recurring_topics"]["new_value"]  # type: ignore[operator]
+
+
+def test_update_without_change_log_still_works(
+    profile_store: SqliteLongTermProfileStore,
+) -> None:
+    """No injected audit store: the diff falls back to the logger, never raises."""
+    memory = LongTermMemory(store=profile_store)
+    memory.update_profile("u1", UserProfile(personality_tags=["沉稳"]))
+    assert memory.get_profile("u1").personality_tags == ["沉稳"]

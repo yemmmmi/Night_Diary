@@ -71,7 +71,7 @@ def refresh_short_term_state(
             return state  # already synced today (daily churn guard)
 
         profile.short_term_state = state
-        long_term.update_profile(user_id, profile)
+        long_term.update_profile(user_id, profile, source="mood_sync")
         logger.info(
             "Short-term state synced for user_id=%s: modes=%s mood=%.2f samples=%d",
             user_id,

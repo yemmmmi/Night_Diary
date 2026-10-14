@@ -12,6 +12,7 @@ from app.domain.memory.types import (
     EpisodicEntry,
     ImportantPerson,
     LongTermProfileStore,
+    ProfileChangeLogStore,
     UserProfile,
 )
 
@@ -39,8 +40,13 @@ class LongTermMemory:
     #: Sentiment drift (per person) below which no profile write is spent.
     PEOPLE_SENTIMENT_TOLERANCE = 0.05
 
-    def __init__(self, store: LongTermProfileStore | None = None) -> None:
+    def __init__(
+        self,
+        store: LongTermProfileStore | None = None,
+        change_log: ProfileChangeLogStore | None = None,
+    ) -> None:
         self._store = store
+        self._change_log = change_log
 
     def get_profile(self, user_id: str = "default") -> UserProfile:
         if self._store is None:
@@ -61,14 +67,28 @@ class LongTermMemory:
             return False
         return self._store.get_profile(user_id) is not None
 
-    def update_profile(self, user_id: str, profile: UserProfile) -> None:
+    def update_profile(
+        self,
+        user_id: str,
+        profile: UserProfile,
+        *,
+        source: str = "manual",
+        evidence: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Persist ``profile`` and audit the field-level diff (P1-B).
+
+        ``source`` marks the trigger: ``promotion`` (episodic promotion),
+        ``mood_sync`` (P1-A short-term state refresh) or ``manual``
+        (direct edits / defaults). ``evidence`` carries the memory pairs
+        the change was derived from, when available.
+        """
         if self._store is None:
             logger.warning("Long-term profile store unavailable; skip update user_id=%s", user_id)
             return
 
         old_profile = self.get_profile(user_id)
         self._store.save_profile(user_id, profile)
-        self._log_profile_changes(user_id, old_profile, profile)
+        self._record_profile_changes(user_id, old_profile, profile, source, evidence)
 
     def promote_from_episodic(
         self,
@@ -179,7 +199,32 @@ class LongTermMemory:
             updated = True
 
         if updated:
-            self.update_profile(user_id, profile)
+            self.update_profile(
+                user_id,
+                profile,
+                source="promotion",
+                evidence=self._promotion_evidence(episodic_entries),
+            )
+
+    def _promotion_evidence(
+        self,
+        entries: list[EpisodicEntry],
+    ) -> list[dict[str, Any]]:
+        """Lightweight (date, summary, emotion) pairs backing a promotion.
+
+        Capped at the baseline window so the audit row stays compact even
+        for large batch imports.
+        """
+        recent = sorted(entries, key=lambda e: e.timestamp, reverse=True)
+        return [
+            {
+                "date": entry.event_date
+                or datetime.fromtimestamp(entry.timestamp).strftime("%Y-%m-%d"),
+                "summary": entry.event_summary[:80],
+                "emotion": entry.emotion,
+            }
+            for entry in recent[: self.BASELINE_WINDOW_ENTRIES]
+        ]
 
     def _update_emotion_baseline(
         self,
@@ -331,46 +376,68 @@ class LongTermMemory:
 
         return promoted
 
-    def _log_profile_changes(
+    def _record_profile_changes(
         self,
         user_id: str,
         old_profile: UserProfile,
         new_profile: UserProfile,
+        source: str,
+        evidence: list[dict[str, Any]] | None,
     ) -> None:
-        changes: list[str] = []
+        """Audit the field-level diff between two profile versions (P1-B).
 
-        if old_profile.personality_tags != new_profile.personality_tags:
-            changes.append(
-                f"personality_tags: {old_profile.personality_tags} -> {new_profile.personality_tags}"
-            )
+        With a ``ProfileChangeLogStore`` injected, each changed field is
+        persisted as one audit row (trigger source + old/new values + the
+        memory pairs the change was derived from). Without one, the diff
+        falls back to the logger so the write path still leaves a trace.
+        """
+        comparisons: list[tuple[str, Any, Any]] = [
+            ("personality_tags", old_profile.personality_tags, new_profile.personality_tags),
+            (
+                "emotion_baseline",
+                old_profile.emotion_baseline.model_dump(),
+                new_profile.emotion_baseline.model_dump(),
+            ),
+            (
+                "important_people",
+                [person.model_dump() for person in old_profile.important_people],
+                [person.model_dump() for person in new_profile.important_people],
+            ),
+            ("recurring_topics", old_profile.recurring_topics, new_profile.recurring_topics),
+            (
+                "preferred_response_style",
+                old_profile.preferred_response_style,
+                new_profile.preferred_response_style,
+            ),
+            (
+                "short_term_state",
+                old_profile.short_term_state.model_dump(),
+                new_profile.short_term_state.model_dump(),
+            ),
+        ]
 
-        if old_profile.emotion_baseline != new_profile.emotion_baseline:
-            changes.append(
-                "emotion_baseline: "
-                f"{old_profile.emotion_baseline.model_dump()} -> "
-                f"{new_profile.emotion_baseline.model_dump()}"
-            )
+        changed = [(field, old, new) for field, old, new in comparisons if old != new]
+        if not changed:
+            return
 
-        if old_profile.important_people != new_profile.important_people:
-            old_people = [person.model_dump() for person in old_profile.important_people]
-            new_people = [person.model_dump() for person in new_profile.important_people]
-            changes.append(f"important_people: {old_people} -> {new_people}")
-
-        if old_profile.recurring_topics != new_profile.recurring_topics:
-            changes.append(
-                f"recurring_topics: {old_profile.recurring_topics} -> {new_profile.recurring_topics}"
-            )
-
-        if old_profile.preferred_response_style != new_profile.preferred_response_style:
-            changes.append(
-                "preferred_response_style: "
-                f"{old_profile.preferred_response_style!r} -> "
-                f"{new_profile.preferred_response_style!r}"
-            )
-
-        if changes:
+        if self._change_log is not None:
+            for field, old_value, new_value in changed:
+                try:
+                    self._change_log.record_change(
+                        user_id,
+                        field=field,
+                        old_value=old_value,
+                        new_value=new_value,
+                        source=source,
+                        evidence=evidence,
+                    )
+                except Exception as exc:  # audit must never break the write path
+                    logger.warning("Profile change audit failed for %s: %s", field, exc)
+        else:
+            changes = [f"{field}: {old} -> {new}" for field, old, new in changed]
             logger.info(
-                "Long-term profile updated for user_id=%s:\n  %s",
+                "Long-term profile updated for user_id=%s (source=%s):\n  %s",
                 user_id,
+                source,
                 "\n  ".join(changes),
             )
