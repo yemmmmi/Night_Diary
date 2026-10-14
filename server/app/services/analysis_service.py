@@ -318,6 +318,20 @@ def _sync_diary_to_memory(
             exc,
         )
 
+    # ── Personality-tag extraction sidecar (P1-C, fire-and-forget) ──
+    # The new episodic entry is fresh material for the periodic tag refresh;
+    # the sync body throttles itself to one LLM extraction per week.
+    try:
+        from app.services.ai.personality_extractor import schedule_personality_extraction
+
+        schedule_personality_extraction(container, user_id=_episodic_user_id(container))
+    except Exception as exc:
+        logger.warning(
+            "Personality extraction scheduling failed (non-blocking): diary_id=%s %s",
+            entry.id,
+            exc,
+        )
+
 
 def create_analysis(
     db: Session,

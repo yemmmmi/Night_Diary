@@ -977,7 +977,12 @@ async def test_generate_reply_streaming_crisis_still_short_circuits_with_pipelin
     assert delta_events[0]["text"] == "安全模板：请联系心理热线。"
     # 危机审计写回：severe signal → FinalizeMiddleware 调度 persist_atom
     assert mock_enqueue.called
-    assert mock_enqueue.call_args.args[0].__name__ == "persist_atom"
+    persist_calls = [
+        call
+        for call in mock_enqueue.call_args_list
+        if getattr(call.args[0], "__name__", "") == "persist_atom"
+    ]
+    assert persist_calls, "persist_atom must be dispatched"
 
 
 # ── V3 tree-hole: scene-2 diary reference prefers the day digest ────────

@@ -182,10 +182,14 @@ def test_finalize_conversation_writes_on_severe_signal(mock_enqueue):
         container=_make_container(episodic=_FakeEpisodic()),
     )
     mw.on_reply(ctx)
-    mock_enqueue.assert_called_once()
-    # 参数应是 (gw.persist_atom, atom)
-    args = mock_enqueue.call_args
-    assert callable(args.args[0]) and args.args[0].__name__ == "persist_atom"
+    # 写回必须恰好派发一次 (gw.persist_atom, atom)；personality sidecar
+    # 的 job 派发是额外的独立调用（P1-C）。
+    persist_calls = [
+        call
+        for call in mock_enqueue.call_args_list
+        if getattr(call.args[0], "__name__", "") == "persist_atom"
+    ]
+    assert len(persist_calls) == 1
 
 
 @patch("app.infrastructure.task_queue.enqueue_task")
@@ -205,7 +209,12 @@ def test_finalize_diary_always_writes_even_neutral_content(mock_enqueue):
         extra={"entry": entry},
     )
     mw.on_reply(ctx)
-    mock_enqueue.assert_called_once()
+    persist_calls = [
+        call
+        for call in mock_enqueue.call_args_list
+        if getattr(call.args[0], "__name__", "") == "persist_atom"
+    ]
+    assert len(persist_calls) == 1
 
 
 @patch("app.infrastructure.task_queue.enqueue_task")
