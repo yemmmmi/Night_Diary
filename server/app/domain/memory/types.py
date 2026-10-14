@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, TypedDict
+from collections import Counter
+from typing import Any, ClassVar, Protocol, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -78,6 +79,60 @@ class ImportantPerson(BaseModel):
     sentiment: float = 0.0
 
 
+class ShortTermState(BaseModel):
+    """Rolling window of the user's recent daily modes & mood (P1-A).
+
+    Fed back from MoodMonitor's ``daily_modes`` rows so agents can perceive
+    the user's *recent* state (as opposed to ``EmotionBaseline``, which is the
+    long-run personality). Refreshed at most once a day per user.
+    """
+
+    #: Oldest → newest mode keys over the window (daily/followup/introspection).
+    recent_modes: list[str] = Field(default_factory=list)
+    #: Windowed mean of daily mood signals, [0, 1] (0.5 = neutral).
+    composite_mood: float = Field(default=0.5, ge=0.0, le=1.0)
+    #: Total mood samples behind ``composite_mood`` (confidence indicator).
+    samples: int = 0
+    #: ISO date (YYYY-MM-DD) of the last refresh — the daily churn guard.
+    updated_date: str = ""
+
+    #: User-facing labels for the internal mode keys.
+    MODE_LABELS: ClassVar[dict[str, str]] = {
+        "daily": "日常",
+        "followup": "跟进",
+        "introspection": "内视",
+    }
+
+    def render(self) -> str:
+        """Compact rendering for prompt contexts (frozen block, agent profile).
+
+        Empty string when there is nothing meaningful to say — callers skip
+        the line entirely in that case.
+        """
+        modes = [self.MODE_LABELS.get(mode, mode) for mode in self.recent_modes]
+        parts: list[str] = []
+
+        if self.samples > 0:
+            if self.composite_mood < 0.35:
+                mood_desc = "情绪偏低"
+            elif self.composite_mood > 0.65:
+                mood_desc = "情绪偏暖"
+            else:
+                mood_desc = "情绪平稳"
+            days = len(modes) or 1
+            parts.append(f"近{days}天{mood_desc}（均值{self.composite_mood:.2f}）")
+
+        if modes:
+            counts: Counter[str] = Counter(modes)
+            dominant, occurrences = counts.most_common(1)[0]
+            if len(counts) == 1:
+                parts.append(f"持续{dominant}模式（{len(modes)}天）")
+            else:
+                parts.append(f"模式多为{dominant}（{occurrences}/{len(modes)}天）")
+
+        return "、".join(parts)
+
+
 class UserProfile(BaseModel):
     """Long-term user profile persisted as JSON."""
 
@@ -86,6 +141,8 @@ class UserProfile(BaseModel):
     important_people: list[ImportantPerson] = Field(default_factory=list)
     recurring_topics: list[str] = Field(default_factory=list)
     preferred_response_style: str = "empathetic"
+    #: Recent-state section (P1-A) — see :class:`ShortTermState`.
+    short_term_state: ShortTermState = Field(default_factory=ShortTermState)
 
 
 class WorkingContext(TypedDict, total=False):

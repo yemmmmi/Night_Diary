@@ -81,6 +81,9 @@ class SessionContext:
     profile_style: str = ""
     profile_topics: list[str] = field(default_factory=list)
     user_about: str = ""
+    #: Recent mode/mood trend (P1-A) as a plain dict — kept JSON-shaped so the
+    #: L2 snapshot stays plain data; rebuilt into ShortTermState on freeze.
+    profile_short_term: dict[str, Any] = field(default_factory=dict)
     usage: UsageAccumulator = field(default_factory=UsageAccumulator)
     pinned_diary_ids: list[int] = field(default_factory=list)
     #: Frozen memory block (D6) — assembled once at session start and reused
@@ -96,12 +99,17 @@ class SessionContext:
         The block is intentionally *not* refreshed on every turn — freezing it
         is what preserves the provider's prefix cache for the whole session.
         """
+        from app.domain.memory.types import ShortTermState
         from app.services.ai.memory_snapshot import build_frozen_memory_block
 
+        short_term = (
+            ShortTermState(**self.profile_short_term) if self.profile_short_term else None
+        )
         block = build_frozen_memory_block(
             profile_style=self.profile_style,
             profile_topics=self.profile_topics,
             user_about=self.user_about,
+            short_term_state=short_term,
         )
         self.frozen_memory_block = block.text
         self.memory_budget = block.budget.to_dict()
@@ -180,6 +188,7 @@ class SessionContext:
             "profile_style": self.profile_style,
             "profile_topics": list(self.profile_topics),
             "user_about": self.user_about,
+            "profile_short_term": dict(self.profile_short_term),
             "usage": self.usage.summary(),
             "pinned_diary_ids": list(self.pinned_diary_ids),
             "frozen_memory_block": self.frozen_memory_block,
@@ -198,6 +207,7 @@ class SessionContext:
             profile_style=data.get("profile_style", ""),
             profile_topics=list(data.get("profile_topics", [])),
             user_about=data.get("user_about", ""),
+            profile_short_term=dict(data.get("profile_short_term", {})),
             pinned_diary_ids=list(data.get("pinned_diary_ids", [])),
         )
         usage_data = data.get("usage", {})
@@ -451,6 +461,8 @@ def get_or_create_session(
             profile = container.long_term_memory.get_profile(user_id)
             ctx.profile_style = profile.preferred_response_style or ""
             ctx.profile_topics = list(profile.recurring_topics or [])
+            if profile.short_term_state.recent_modes or profile.short_term_state.samples:
+                ctx.profile_short_term = profile.short_term_state.model_dump()
         except Exception as exc:
             logger.warning("SessionContext profile load failed: %s", exc)
 

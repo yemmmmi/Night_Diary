@@ -33,6 +33,7 @@ from app.domain.agents.prompts import (
 )
 from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.knowledge.store import DomainKnowledgeStore
+from app.domain.memory.types import ShortTermState
 from app.domain.skills.crisis_detector import CRISIS_RESOURCES
 from app.shared.emotion_estimator import EmotionEstimator, get_emotion_estimator
 from app.shared.llm import LLMClient, message_text
@@ -126,6 +127,7 @@ class EmpathyAgent:
             domain_knowledge=domain_knowledge,
             is_crisis=is_crisis,
             style_fragment=style_fragment,
+            short_term_state_text=self._short_term_state_text(profile),
         )
 
         # 用中性指令收尾, 不再硬编码「请给予温暖的回应」——
@@ -156,6 +158,14 @@ class EmpathyAgent:
             return float(baseline.get("average_sentiment", 0.0) or 0.0)
         return 0.0
 
+    @staticmethod
+    def _short_term_state_text(profile: dict[str, Any]) -> str:
+        """Render the P1-A recent mode/mood trend for the prompt (may be empty)."""
+        short_term = profile.get("short_term_state")
+        if isinstance(short_term, dict):
+            return ShortTermState(**short_term).render()
+        return ""
+
     def _build_system_prompt(
         self,
         *,
@@ -165,6 +175,7 @@ class EmpathyAgent:
         domain_knowledge: str,
         is_crisis: bool,
         style_fragment: str | None = None,
+        short_term_state_text: str = "",
     ) -> str:
         length = EMPATHY_RESPONSE_LENGTH.get(intent, EMPATHY_RESPONSE_LENGTH["pure_record"])
 
@@ -182,6 +193,12 @@ class EmpathyAgent:
         parts.append(f"\n## 回应长度\n请将回应控制在 {length['min']}-{length['max']} 个汉字之间。")
         if is_crisis:
             parts.append(EMPATHY_CRISIS_BLOCK)
+        if short_term_state_text:
+            parts.append(
+                "\n## 用户近期状态\n"
+                f"近几日模式与情绪信号汇总：{short_term_state_text}。"
+                "回应时请把这一趋势纳入考虑，但不要直接复述统计数字。"
+            )
         if episodic_context:
             parts.append(
                 "\n## 之前的交互记忆\n"
