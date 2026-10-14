@@ -280,3 +280,58 @@ def test_persist_atom_carries_entities_into_episodic(
     stored = episodic.get_all_entries_for_user("default")
     assert stored[0].entities[0]["name"] == "儿子"
     assert stored[0].diary_ids == ["7"]
+
+
+# ── P2-A: chat entries carry conversation_ids for sidecar joins ─────────
+
+
+def test_persist_episodic_records_conversation_id(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """Chat-path entries persist their conversation id (sidecar join key)."""
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+
+    gw = MemoryGateway(episodic=episodic, long_term=None)
+    assert (
+        gw.persist_episodic(
+            event_summary="和小雨聊了很久，心情好了一些",
+            emotion="happy",
+            importance=0.8,
+            conversation_id="conv-7",
+        )
+        is True
+    )
+
+    stored = episodic.get_all_entries_for_user("default")
+    assert stored[0].conversation_ids == ["conv-7"]
+
+
+def test_attach_entities_matches_conversation_id(
+    _session_factory: sessionmaker[Session],
+) -> None:
+    """The sidecar's source_ref=conversation_id now finds the entry (P2-A)."""
+    store = SqliteEpisodicMemoryStore(_session_factory)
+    episodic = _make_episodic(store)
+    episodic.store(
+        EpisodicEntry(
+            event_summary="和小雨聊了很久，聊到很晚才睡下",
+            emotion="neutral",
+            reply_insight="",
+            timestamp=time.time(),
+            importance=0.7,
+            entry_id="",
+            conversation_ids=["conv-7"],
+        )
+    )
+
+    gw = MemoryGateway(episodic=episodic, long_term=None)
+    attached = gw.attach_entities(
+        user_id="default",
+        source_ref="conv-7",
+        entities=[_person_entity("小雨", relation="朋友")],
+    )
+
+    assert attached is True
+    stored = episodic.get_all_entries_for_user("default")
+    assert stored[0].entities[0]["name"] == "小雨"

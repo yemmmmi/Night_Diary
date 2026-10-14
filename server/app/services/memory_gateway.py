@@ -142,11 +142,14 @@ class MemoryGateway:
         event_date: str | None = None,
         source_message_id: str | None = None,
         entities: list[dict[str, Any]] | None = None,
+        conversation_id: str | None = None,
     ) -> bool:
         """Store an episodic entry and trigger long-term promotion.
 
         *source_message_id* records the chat message that produced this entry
         (B3 provenance) so a conversation rollback can undo the turn's writes.
+        *conversation_id* records the chat session it belongs to, letting the
+        entity-extraction sidecar join back onto the entry (P2-A).
         Returns ``True`` if the entry was stored, ``False`` if it was below
         threshold or memory is unavailable.  Never raises.
         """
@@ -204,6 +207,7 @@ class MemoryGateway:
                 event_date=event_date,
                 source_message_id=source_message_id,
                 entities=entities or [],
+                conversation_ids=[conversation_id] if conversation_id else [],
             )
 
             try:
@@ -252,6 +256,7 @@ class MemoryGateway:
             event_date=atom.event_date.isoformat() if atom.event_date else None,
             source_message_id=atom.source_message_id,
             entities=[e.model_dump() for e in atom.entities],
+            conversation_id=atom.conversation_id,
         )
 
     def attach_entities(
@@ -282,8 +287,10 @@ class MemoryGateway:
             all_entries = self._episodic.get_all_entries_for_user(user_id)
             target: EpisodicEntry | None = None
             for entry in all_entries:
-                if source_ref in entry.diary_ids or (
-                    entry.source_message_id is not None and entry.source_message_id == source_ref
+                if (
+                    source_ref in entry.diary_ids
+                    or source_ref in entry.conversation_ids
+                    or (entry.source_message_id is not None and entry.source_message_id == source_ref)
                 ):
                     target = entry
                     break

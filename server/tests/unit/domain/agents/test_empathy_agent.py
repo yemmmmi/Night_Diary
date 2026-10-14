@@ -68,6 +68,64 @@ async def test_fallback_when_llm_unreachable(
     assert llm_tracer.records[0].error is not None
 
 
+# ── P2-A: volatility discounts the baseline in crisis detection ────────
+
+
+class _FixedEstimator:
+    """Estimator double with a pinned score and the real crisis threshold."""
+
+    crisis_threshold = -0.7
+
+    def score(self, text: str) -> float:
+        return -0.6
+
+
+def test_crisis_discounts_baseline_by_volatility(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """P2-A: a volatile baseline is a less trustworthy floor.
+
+    With content at -0.6 and baseline -0.65: calm users stay above the
+    -0.7 threshold, but volatility 0.5 discounts the baseline by 0.2*0.5
+    and the same content crosses into crisis.
+    """
+    agent = EmpathyAgent(fake_llm, knowledge_store, emotion_estimator=_FixedEstimator())
+    calm = {
+        "emotion_baseline": {
+            "average_sentiment": -0.65,
+            "volatility": 0.0,
+            "dominant_emotion": "焦虑",
+        }
+    }
+    volatile = {
+        "emotion_baseline": {
+            "average_sentiment": -0.65,
+            "volatility": 0.5,
+            "dominant_emotion": "焦虑",
+        }
+    }
+
+    assert agent._is_crisis("今天有点撑不住", calm) is False
+    assert agent._is_crisis("今天有点撑不住", volatile) is True
+
+
+def test_crisis_clamps_discounted_baseline(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """The discounted baseline never leaves [-1, 1]."""
+    agent = EmpathyAgent(fake_llm, knowledge_store, emotion_estimator=_FixedEstimator())
+    extreme = {
+        "emotion_baseline": {
+            "average_sentiment": -0.9,
+            "volatility": 1.0,
+            "dominant_emotion": "焦虑",
+        }
+    }
+    assert agent._effective_baseline(extreme) == -1.0
+
+
 async def test_crisis_fallback_includes_resources(
     failing_llm: FailingLLM,
     knowledge_store: StubKnowledgeStore,

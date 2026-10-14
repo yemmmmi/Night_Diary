@@ -41,6 +41,7 @@ class ContextEngine(Protocol):
         *,
         candidates: list[dict[str, Any]] | None = None,
         episodic: list[dict[str, Any]] | None = None,
+        boost_terms: list[str] | None = None,
     ) -> str: ...
 
 

@@ -45,6 +45,9 @@ class EpisodicEntry(BaseModel):
     # ── B3: provenance — the chat message that produced this entry ──
     # Lets a conversation rollback undo the memory writes of the removed turn.
     source_message_id: str | None = None
+    # ── P2-A: chat sessions that produced this entry (entity sidecar joins on
+    # these when diary_ids / source_message_id don't match) ──
+    conversation_ids: list[str] = Field(default_factory=list)
     # ── V3 P4: vector for retrieval (lazy-computed by EpisodicMemory) ──
     embedding: list[float] | None = None
 

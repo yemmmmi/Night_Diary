@@ -43,6 +43,10 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_STYLE = "warm"
 _DOMAIN_KNOWLEDGE_TOP_K = 2
+# P2-A: how strongly emotional volatility discounts the baseline in crisis
+# detection. A volatile baseline is a less trustworthy floor, so borderline
+# negative content from swingy users is more likely to cross the threshold.
+_VOLATILITY_WEIGHT = 0.2
 
 
 class EmpathyAgent:
@@ -144,7 +148,7 @@ class EmpathyAgent:
 
     def _is_crisis(self, diary_content: str, profile: dict[str, Any]) -> bool:
         content_score = self._emotion.score(diary_content)
-        baseline_score = self._baseline_score(profile)
+        baseline_score = self._effective_baseline(profile)
         effective = min(baseline_score, content_score) if content_score < 0 else content_score
         crisis = effective < self._emotion.crisis_threshold
         if crisis:
@@ -152,10 +156,13 @@ class EmpathyAgent:
         return crisis
 
     @staticmethod
-    def _baseline_score(profile: dict[str, Any]) -> float:
+    def _effective_baseline(profile: dict[str, Any]) -> float:
+        """Baseline sentiment, discounted by emotional volatility (P2-A)."""
         baseline = profile.get("emotion_baseline", {})
         if isinstance(baseline, dict):
-            return float(baseline.get("average_sentiment", 0.0) or 0.0)
+            average = float(baseline.get("average_sentiment", 0.0) or 0.0)
+            volatility = float(baseline.get("volatility", 0.0) or 0.0)
+            return max(-1.0, min(1.0, average - _VOLATILITY_WEIGHT * volatility))
         return 0.0
 
     @staticmethod
