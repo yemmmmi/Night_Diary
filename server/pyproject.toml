@@ -87,7 +87,9 @@ select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["N802", "N803", "S101"]
+# RUF001: eval/unit tests carry Chinese fixtures & judge prompts whose
+# fullwidth punctuation is the *point* of the test data.
+"tests/**" = ["N802", "N803", "S101", "RUF001"]
 "app/domain/knowledge/extractor.py" = ["RUF001"]
 "app/domain/knowledge/psychology.py" = ["RUF001"]
 "app/domain/rag/chunker.py" = ["RUF001"]
