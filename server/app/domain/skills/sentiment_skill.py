@@ -50,7 +50,12 @@ class LLMClient(Protocol):
 
 
 class SentimentSkill(BaseSkill):
-    """Analyze sentiment polarity and intensity when emotion cues are present."""
+    """Analyze sentiment polarity and intensity when emotion cues are present.
+
+    Keyword misses (a user's emotional phrasing absent from the lexicon) can
+    be rescued by the registry's stage-2 LLM pass on emotion-flavoured
+    intents — rules remain the activation floor, the LLM only raises.
+    """
 
     metadata = SkillMetadata(
         name="sentiment_skill",

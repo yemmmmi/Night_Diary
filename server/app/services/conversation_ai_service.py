@@ -680,11 +680,15 @@ def _prepare_reply_context(
     with trace_span(
         "S6_skills", "技能选择", input_snapshot={"intent": intent_result.intent_category}
     ) as span:
+        # Light-tier LLM for the registry's stage-2 rescue of grey-listed
+        # skills (max fusion — can only raise, never veto a rule hit).
+        skill_llm = container._llm_for_tier("light", agent_name="skill_registry")
         selected_skills = skill_registry.select_skills(
             content,
             skill_profile,
             token_budget=4000,
             decision_id=conversation_id,
+            llm=skill_llm,
         )
         if span:
             span.metadata["selected_count"] = len(selected_skills)
@@ -1009,11 +1013,15 @@ def generate_reply(
         with trace_span(
             "S6_skills", "技能选择", input_snapshot={"intent": intent_result.intent_category}
         ) as span:
+            # Light-tier LLM for the registry's stage-2 rescue of grey-listed
+            # skills (max fusion — can only raise, never veto a rule hit).
+            skill_llm = container._llm_for_tier("light", agent_name="skill_registry")
             selected_skills = skill_registry.select_skills(
                 content,
                 skill_profile,
                 token_budget=4000,
                 decision_id=conversation_id,
+                llm=skill_llm,
             )
             if span:
                 span.metadata["selected_count"] = len(selected_skills)

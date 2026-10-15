@@ -1,8 +1,16 @@
 """MemoryRecallSkill — scene 2 skill that retrieves relevant episodic memories.
 
-Activates when the user references past events or asks about conversation history.
-This skill is scene-2 specific (multi-turn conversation), complementing the
-scene-1 skills (crisis_detector, sentiment_skill).
+Positioning in the memory model: the condensed memory summary is ALWAYS in
+context (frozen prefix / DiaryDigest), so the agent is never blind to what it
+knows — diary data is inherently user-provided memory. This skill is the
+fine-grained complement: pulling the verbatim episodic source text on demand
+when the user references a specific past event. The hard problem it guards
+against is memory *freshness*, not presence (7-day half-life decay,
+emotion-reversal soft overrides, and sliding windows are handled upstream).
+
+Activates when the user references past events or asks about conversation
+history. This skill is scene-2 specific (multi-turn conversation),
+complementing the scene-1 skills (crisis_detector, sentiment_skill).
 """
 
 from __future__ import annotations

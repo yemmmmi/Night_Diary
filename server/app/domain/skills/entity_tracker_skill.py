@@ -30,7 +30,12 @@ _PERSON_REFERENCES = (
 
 
 class EntityTrackerSkill(BaseSkill):
-    """Query the entity graph when the user mentions specific people/entities."""
+    """Query the entity graph when the user mentions specific people/entities.
+
+    Keyword misses on a person reference (e.g. a nickname the lexicon doesn't
+    cover) can be rescued by the registry's stage-2 LLM pass when the turn's
+    intent is entity_query — rules remain the activation floor.
+    """
 
     metadata = SkillMetadata(
         name="entity_tracker",
