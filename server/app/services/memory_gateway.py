@@ -24,7 +24,12 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from app.domain.memory.atom import UnifiedMemoryAtom
-from app.domain.memory.types import EpisodicEntry
+from app.domain.memory.conflict import (
+    MAX_PENDING_CLARIFICATIONS,
+    detect_person_conflicts,
+    supersede_outdated_entries,
+)
+from app.domain.memory.types import EpisodicEntry, UserProfile
 from app.shared.pipeline_trace import trace_span
 
 if TYPE_CHECKING:
@@ -141,11 +146,15 @@ class MemoryGateway:
         emotions: list[str] | None = None,
         event_date: str | None = None,
         source_message_id: str | None = None,
+        entities: list[dict[str, Any]] | None = None,
+        conversation_id: str | None = None,
     ) -> bool:
         """Store an episodic entry and trigger long-term promotion.
 
         *source_message_id* records the chat message that produced this entry
         (B3 provenance) so a conversation rollback can undo the turn's writes.
+        *conversation_id* records the chat session it belongs to, letting the
+        entity-extraction sidecar join back onto the entry (P2-A).
         Returns ``True`` if the entry was stored, ``False`` if it was below
         threshold or memory is unavailable.  Never raises.
         """
@@ -202,6 +211,8 @@ class MemoryGateway:
                 emotions=emotions or [],
                 event_date=event_date,
                 source_message_id=source_message_id,
+                entities=entities or [],
+                conversation_ids=[conversation_id] if conversation_id else [],
             )
 
             try:
@@ -217,11 +228,18 @@ class MemoryGateway:
                 logger.warning("MemoryGateway: episodic store failed: %s", exc)
                 return False
 
-            # Best-effort long-term promotion.
+            # Best-effort long-term promotion + conflict resolution (P2-B).
             if self._long_term is not None:
                 try:
+                    old_profile = self._long_term.get_profile(user_id)
                     all_entries = self._episodic.get_all_entries_for_user(user_id)
                     self._long_term.promote_from_episodic(user_id=user_id, episodic_entries=all_entries)
+                    if stored and all_entries:
+                        # The freshly stored entry sits at the tail (timestamp asc);
+                        # it now carries the server-assigned entry_id.
+                        self._resolve_person_conflicts(
+                            user_id, trigger=all_entries[-1], old_profile=old_profile
+                        )
                 except Exception as exc:
                     logger.warning("MemoryGateway: profile promotion failed: %s", exc)
 
@@ -249,7 +267,157 @@ class MemoryGateway:
             emotions=atom.emotions,
             event_date=atom.event_date.isoformat() if atom.event_date else None,
             source_message_id=atom.source_message_id,
+            entities=[e.model_dump() for e in atom.entities],
+            conversation_id=atom.conversation_id,
         )
+
+    def attach_entities(
+        self,
+        *,
+        user_id: str,
+        source_ref: str,
+        entities: list[dict[str, Any]],
+    ) -> bool:
+        """Attach extraction-sidecar entities to their source episodic entry (P0-C).
+
+        The entity extractor runs as a fire-and-forget sidecar AFTER the reply,
+        so entities can't ride along with the original write. This finds the
+        entry the sidecar came from — ``source_ref`` matches either a
+        ``diary_ids`` member (diary path) or ``source_message_id`` (chat path) —
+        appends the new entities (deduped by name), re-persists, and re-runs
+        long-term promotion so person entities can flow into
+        ``profile.important_people``.
+
+        Works on every storage backend (entities live in the episodic JSON),
+        unlike the Neo4j-only ``write_entity`` path. Best-effort: never raises.
+        Returns True when an entry was found and updated.
+        """
+        if not entities or self._episodic is None:
+            return False
+
+        try:
+            all_entries = self._episodic.get_all_entries_for_user(user_id)
+            target: EpisodicEntry | None = None
+            for entry in all_entries:
+                if (
+                    source_ref in entry.diary_ids
+                    or source_ref in entry.conversation_ids
+                    or (entry.source_message_id is not None and entry.source_message_id == source_ref)
+                ):
+                    target = entry
+                    break
+
+            if target is None:
+                logger.debug(
+                    "attach_entities: no episodic entry for source_ref=%s user_id=%s",
+                    source_ref,
+                    user_id,
+                )
+                return False
+
+            existing_names = {str(e.get("name", "")) for e in target.entities}
+            batch: dict[str, dict[str, Any]] = {}
+            for entity in entities:
+                name = str(entity.get("name", ""))
+                if name and name not in batch:
+                    batch[name] = entity
+            new_entities = [e for name, e in batch.items() if name not in existing_names]
+            if not new_entities:
+                return True  # already attached (idempotent re-dispatch)
+
+            target.entities = [*target.entities, *new_entities]
+            self._episodic.upsert(target)
+
+            if self._long_term is not None:
+                try:
+                    old_profile = self._long_term.get_profile(user_id)
+                    refreshed = self._episodic.get_all_entries_for_user(user_id)
+                    self._long_term.promote_from_episodic(
+                        user_id=user_id, episodic_entries=refreshed
+                    )
+                    # Entity attachment is the main conflict battlefield (P2-B):
+                    # persist_episodic usually writes before the extraction
+                    # sidecar produces entities, so sign flips surface here.
+                    self._resolve_person_conflicts(
+                        user_id, trigger=target, old_profile=old_profile
+                    )
+                except Exception as exc:
+                    logger.warning("MemoryGateway: entity promotion failed: %s", exc)
+
+            logger.debug(
+                "attach_entities: +%d entities -> entry %s (source_ref=%s)",
+                len(new_entities),
+                target.entry_id,
+                source_ref,
+            )
+            return True
+        except Exception as exc:
+            logger.warning("MemoryGateway: attach_entities failed: %s", exc)
+            return False
+
+    def _resolve_person_conflicts(
+        self,
+        user_id: str,
+        *,
+        trigger: EpisodicEntry | None,
+        old_profile: UserProfile | None,
+    ) -> None:
+        """React to person-sentiment sign flips carried by *trigger* (P2-B).
+
+        Called after promotion on both write paths. For each conflict the
+        entries carrying the outdated view are soft-superseded (original
+        text untouched, but they drop out of retrieval/promotion), and a
+        pending clarification is appended to the profile so the empathy
+        agent can gently ask the user about the change. Best-effort:
+        failures are logged, never raised.
+        """
+        if (
+            self._episodic is None
+            or self._long_term is None
+            or trigger is None
+            or old_profile is None
+        ):
+            return
+
+        try:
+            conflicts = detect_person_conflicts([trigger], old_profile)
+            if not conflicts:
+                return
+
+            superseded = 0
+            for conflict in conflicts:
+                retired = supersede_outdated_entries(
+                    self._episodic.get_all_entries_for_user(user_id), conflict
+                )
+                for entry in retired:
+                    self._episodic.upsert(entry)
+                superseded += len(retired)
+
+            profile = self._long_term.get_profile(user_id)
+            profile.pending_clarifications = [
+                *profile.pending_clarifications,
+                *(conflict.clarification_pair() for conflict in conflicts),
+            ][-MAX_PENDING_CLARIFICATIONS:]
+            self._long_term.update_profile(
+                user_id,
+                profile,
+                source="conflict_resolution",
+                evidence=[
+                    {
+                        "event_summary": trigger.event_summary,
+                        "reply_insight": trigger.reply_insight,
+                    }
+                ],
+            )
+            logger.info(
+                "Conflict resolution: %d person conflict(s) for user_id=%s, "
+                "%d entries superseded",
+                len(conflicts),
+                user_id,
+                superseded,
+            )
+        except Exception as exc:
+            logger.warning("MemoryGateway: conflict resolution failed: %s", exc)
 
     @staticmethod
     def from_container(container: ServiceContainer) -> MemoryGateway:

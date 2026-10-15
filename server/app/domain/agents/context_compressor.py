@@ -101,11 +101,13 @@ class ContextCompressor:
         llm: LLMClient | None = None,
         similarity: SimilarityFn | None = None,
         episodic_boost: float = 0.2,
+        people_boost: float = 0.15,
     ) -> None:
         self.max_tokens = max_tokens
         self._llm = llm
         self._similarity = similarity or lexical_similarity
         self._episodic_boost = episodic_boost
+        self._people_boost = people_boost
 
     def compress(
         self,
@@ -113,12 +115,18 @@ class ContextCompressor:
         *,
         candidates: list[dict[str, Any]] | None = None,
         episodic: list[dict[str, Any]] | None = None,
+        boost_terms: list[str] | None = None,
     ) -> str:
-        """Return a ``\\n---\\n``-joined context string within ``max_tokens``."""
+        """Return a ``\\n---\\n``-joined context string within ``max_tokens``.
+
+        ``boost_terms`` (P2-A) lifts entries that mention any of the terms —
+        e.g. the user's important-people names — above equally similar
+        entries, so memories involving close people surface first.
+        """
         if not current_content.strip():
             return ""
 
-        unified = self._unify_entries(episodic or [], candidates or [])
+        unified = self._unify_entries(episodic or [], candidates or [], boost_terms or [])
         if not unified:
             return ""
 
@@ -158,7 +166,13 @@ class ContextCompressor:
         self,
         episodic: list[dict[str, Any]],
         candidates: list[dict[str, Any]],
+        boost_terms: list[str],
     ) -> list[dict[str, Any]]:
+        def _people_boost(content: str) -> float:
+            if boost_terms and any(term in content for term in boost_terms):
+                return self._people_boost
+            return 0.0
+
         unified: list[dict[str, Any]] = []
         for entry in episodic:
             content = _entry_content(entry)
@@ -168,7 +182,7 @@ class ContextCompressor:
                 {
                     "content": content,
                     "source": "episodic",
-                    "priority_boost": self._episodic_boost,
+                    "priority_boost": self._episodic_boost + _people_boost(content),
                 }
             )
         for entry in candidates:
@@ -179,7 +193,7 @@ class ContextCompressor:
                 {
                     "content": content,
                     "source": "diary",
-                    "priority_boost": 0.0,
+                    "priority_boost": _people_boost(content),
                 }
             )
         return unified
@@ -229,9 +243,13 @@ class ReferenceContextEngine:
         *,
         candidates: list[dict[str, Any]] | None = None,
         episodic: list[dict[str, Any]] | None = None,
+        boost_terms: list[str] | None = None,
     ) -> str:
         text = self._compressor.compress(
-            current_content, candidates=candidates, episodic=episodic
+            current_content,
+            candidates=candidates,
+            episodic=episodic,
+            boost_terms=boost_terms,
         )
         if not text:
             return ""
@@ -252,6 +270,23 @@ register_engine(ContextCompressor.name, ContextCompressor)
 register_engine(ReferenceContextEngine.name, ReferenceContextEngine)
 
 
+def _important_people_names(state: Mapping[str, Any]) -> list[str]:
+    """Extract the important-people names from the profile in ``state`` (P2-A)."""
+    profile = state.get("long_term_profile")
+    if not isinstance(profile, Mapping):
+        return []
+    people = profile.get("important_people")
+    if not isinstance(people, list):
+        return []
+    names: list[str] = []
+    for person in people:
+        if isinstance(person, Mapping):
+            name = str(person.get("name", "")).strip()
+            if name:
+                names.append(name)
+    return names
+
+
 def prepare_compressed_history(
     state: Mapping[str, Any],
     compressor: ContextEngine | None = None,
@@ -262,9 +297,11 @@ def prepare_compressed_history(
         return {}
 
     comp = compressor or ContextCompressor()
+    people = _important_people_names(state)
     compressed = comp.compress(
         state.get("diary_content", ""),
         episodic=episodic,
+        boost_terms=people or None,
     )
     if not compressed:
         return {}

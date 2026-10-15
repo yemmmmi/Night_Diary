@@ -197,6 +197,56 @@ class HybridEntityExtractor:
         return refined
 
 
+def _attach_entities_to_episodic(
+    session_factory: Any,
+    user_id: str,
+    source_id: str,
+    entities: list[ExtractedEntity],
+) -> bool:
+    """Attach extracted entities to their source episodic entry (P0-C).
+
+    The episodic JSON keeps entities on every storage backend (SQLite
+    included), and the attach re-runs long-term promotion so recurring
+    person entities flow into ``profile.important_people``. Best-effort.
+    """
+    try:
+        from app.domain.memory.episodic import EpisodicMemory
+        from app.domain.memory.long_term import LongTermMemory
+        from app.infrastructure.memory_repository import (
+            SqliteEpisodicMemoryStore,
+            SqliteLongTermProfileStore,
+            SqliteProfileChangeLogStore,
+        )
+        from app.services.memory_gateway import MemoryGateway
+
+        gateway = MemoryGateway(
+            episodic=EpisodicMemory(
+                store=SqliteEpisodicMemoryStore(session_factory),
+                user_id=user_id,
+            ),
+            long_term=LongTermMemory(
+                store=SqliteLongTermProfileStore(session_factory),
+                change_log=SqliteProfileChangeLogStore(session_factory),
+            ),
+        )
+        return gateway.attach_entities(
+            user_id=user_id,
+            source_ref=source_id,
+            entities=[
+                {
+                    "name": e.name,
+                    "entity_type": e.entity_type,
+                    "relation": e.relation,
+                    "sentiment": e.sentiment,
+                }
+                for e in entities
+            ],
+        )
+    except Exception as exc:
+        logger.warning("Entity attach to episodic failed (best-effort): %s", exc)
+        return False
+
+
 def _run_extraction_sync(
     session_factory: Any,
     user_id: str,
@@ -204,11 +254,17 @@ def _run_extraction_sync(
     text: str,
     source_label: str = "conversation",
 ) -> None:
-    """Extract entities and write to Neo4j entity graph (synchronous body).
+    """Extract entities and persist them (graph + episodic), synchronous body.
 
     Designed to be invoked via :func:`enqueue_task` — either on an RQ worker
     (when Redis is available and a dotted path is passed) or a daemon thread
     (fallback). Best-effort: never raises.
+
+    Two persistence paths (P0-C):
+    1. Neo4j entity graph (if available) — multi-hop relationship queries.
+    2. Episodic entry attach — always attempted, backend-independent, so
+       entities (and later ``important_people`` promotion) survive even
+       without Neo4j. Previously the SQLite-fallback run DISCARDED them.
 
     Args:
         source_id: Identifier for the source (conversation_id or diary_id).
@@ -232,7 +288,9 @@ def _run_extraction_sync(
         if not entities:
             return
 
-        # Write to Neo4j entity graph (if available, for multi-hop queries)
+        attached = _attach_entities_to_episodic(session_factory, user_id, source_id, entities)
+
+        # Neo4j entity graph (if available, for multi-hop queries)
         from app.infrastructure.entity_graph import is_neo4j_available, write_entity
 
         if is_neo4j_available():
@@ -248,10 +306,10 @@ def _run_extraction_sync(
                     context=text[:100],
                     related_entities=related[:5],  # Limit to avoid explosion
                 )
-        else:
+        elif not attached:
             logger.info(
-                "Entity extraction: Neo4j unavailable, %d entities extracted but not persisted "
-                "(source=%s:%s)",
+                "Entity extraction: %d entities extracted but nowhere to persist "
+                "(no Neo4j, no matching episodic entry; source=%s:%s)",
                 len(entities),
                 source_label,
                 source_id,
@@ -259,10 +317,11 @@ def _run_extraction_sync(
             return
 
         logger.info(
-            "Entity extraction: source=%s:%s entities=%d types=%s",
+            "Entity extraction: source=%s:%s entities=%d attached_to_episodic=%s types=%s",
             source_label,
             source_id,
             len(entities),
+            attached,
             [e.entity_type for e in entities],
         )
     except Exception as exc:

@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval eval-rag eval-episodic eval-tool eval-skill eval-intent eval-plan eval-routing e2e smoke
+.PHONY: help dev-api dev-web test test-server test-web lint lint-server lint-web format eval eval-rag eval-episodic eval-tool eval-skill eval-intent eval-plan eval-routing eval-personalization e2e smoke
 
 PY ?= python
 NPM ?= npm
@@ -66,6 +66,14 @@ eval-intent:
 # scoring. Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-plan
 eval-plan:
 	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/plan/ -v -s -m eval
+
+# Personalization A/B eval (P0-A): same cases through the real worker agent
+# twice — full profile+memory state vs cold empty-profile state — judged against
+# the same ground-truth context. Reports per-case lift + win rate, quantifying
+# what the memory system actually adds. Stub mode (CI) proves the wiring
+# deterministically. Seed baseline: EVAL_UPDATE_BASELINE=1 make eval-personalization
+eval-personalization:
+	cd $(SERVER_DIR) && $(PY) -m pytest tests/eval/personalization/ -v -s -m eval
 
 test-web:
 	$(NPM) run test

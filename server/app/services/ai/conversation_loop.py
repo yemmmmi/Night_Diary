@@ -816,6 +816,18 @@ async def run_conversation_loop_streaming(
                 data={"mode": current_mode, "light_notice": False},
             )
 
+    # P1-A: flow the multi-day mode/mood trend back into the profile's
+    # short_term_state (best-effort; guarded to one write per day). Runs
+    # outside the middleware branch so the return path stays on even when
+    # the pipeline is empty, and before agent state assembly so this turn's
+    # profile reads already see the fresh state.
+    try:
+        from app.services.ai.mode_profile_sync import refresh_short_term_state
+
+        refresh_short_term_state(db, container, user_id=user_id)
+    except Exception:
+        pass
+
     chat_history = session.get_history()
 
     base_user_prompt = CHAT_USER_PROMPT_TEMPLATE.format(

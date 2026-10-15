@@ -72,6 +72,12 @@ class FinalizeMiddleware(MiddlewareBase):
             from app.infrastructure.task_queue import enqueue_task
 
             enqueue_task(gw.persist_atom, atom)
+            # P1-C: fresh material for the weekly personality-tag refresh.
+            from app.services.ai.personality_extractor import (
+                schedule_personality_extraction,
+            )
+
+            schedule_personality_extraction(container, user_id=ctx.user_id)
             logger.info(
                 "FinalizeMiddleware write-back dispatched: scenario=%s user_id=%s",
                 ctx.scenario,

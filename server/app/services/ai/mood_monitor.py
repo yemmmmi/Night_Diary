@@ -23,10 +23,15 @@ Design splits:
 
 Mode codes are internal (``daily`` / ``followup`` / ``introspection``); the
 user-visible names ``日常 / 跟进 / 内视`` are rendered by the presentation layer.
+
+P1-A: :func:`compute_short_term_state` rolls recent ``daily_modes`` rows
+into the profile's ``short_term_state`` (recent_modes + composite_mood), so
+agents perceive the multi-day trend instead of only today's mode.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -37,6 +42,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.domain.memory.types import ShortTermState
 from app.infrastructure.models.daily_mode import MODE, DailyModeRow
 
 logger = logging.getLogger(__name__)
@@ -374,6 +380,7 @@ class MoodMonitor:
             mood_signals_json=mood_signals_json,
         )
 
+
     def record_manual_override(
         self, db: Session, *, user_id: str, day: date, mode: str
     ) -> DailyModeRow:
@@ -391,3 +398,52 @@ class MoodMonitor:
                 row.mood_signals_json if row else "{}"
             ),
         )
+
+
+# ── P1-A: daily_modes → profile short_term_state ──
+
+#: Window (days) rolled into the profile's short-term state.
+SHORT_TERM_WINDOW_DAYS = 7
+
+
+def compute_short_term_state(
+    rows: list[DailyModeRow],
+    *,
+    window_days: int = SHORT_TERM_WINDOW_DAYS,
+    today: date | None = None,
+) -> ShortTermState:
+    """Roll ``daily_modes`` rows into a profile ``short_term_state`` (pure).
+
+    ``recent_modes`` keeps the per-day baseline modes (oldest → newest,
+    capped at ``window_days``); ``composite_mood`` is the mean of the daily
+    mood signals that actually have samples (signal-less days don't drag the
+    composite toward a fake neutral — they only show up in the mode list).
+    """
+    if not rows:
+        return ShortTermState()
+
+    window = sorted(rows, key=lambda r: r.date)[-window_days:]
+    recent_modes = [row.baseline_mode for row in window]
+
+    moods: list[float] = []
+    samples = 0
+    for row in window:
+        try:
+            signals = json.loads(row.mood_signals_json or "{}")
+            mood = float(signals.get("mood", 0.0))
+            row_samples = int(signals.get("samples", 0))
+        except (ValueError, TypeError):
+            continue
+        if row_samples > 0:
+            moods.append(max(0.0, min(1.0, mood)))
+            samples += row_samples
+
+    composite = sum(moods) / len(moods) if moods else 0.5
+    day = today if today is not None else window[-1].date
+
+    return ShortTermState(
+        recent_modes=recent_modes,
+        composite_mood=round(composite, 4),
+        samples=samples,
+        updated_date=day.isoformat(),
+    )

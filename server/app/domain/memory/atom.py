@@ -14,7 +14,7 @@ fields) by :class:`MemoryGateway`.
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -58,7 +58,7 @@ class UnifiedMemoryAtom(BaseModel):
         """Convert to EpisodicEntry-compatible dict for MemoryGateway.
 
         Returns a dict that can be unpacked into ``EpisodicEntry(**dict)``
-        with the extended fields (tags, mood_score, event_date).
+        with the extended fields (tags, mood_score, event_date, entities).
         """
         return EpisodicEntryShim(
             event_summary=self.event_summary[:120],
@@ -73,6 +73,7 @@ class UnifiedMemoryAtom(BaseModel):
             mood_score=self.mood_score,
             event_date=self.event_date.isoformat() if self.event_date else None,
             emotions=self.emotions,
+            entities=[e.model_dump() for e in self.entities],
             source_message_id=self.source_message_id,
         )
 
@@ -96,6 +97,7 @@ class EpisodicEntryShim(BaseModel):
     mood_score: float = Field(default=0.5, ge=0.0, le=1.0)
     event_date: str | None = None
     emotions: list[str] = Field(default_factory=list)
+    entities: list[dict[str, Any]] = Field(default_factory=list)
     source_message_id: str | None = None
 
 

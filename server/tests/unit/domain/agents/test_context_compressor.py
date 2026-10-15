@@ -84,3 +84,75 @@ def test_prepare_compressed_history_from_state() -> None:
 
 def test_prepare_compressed_history_empty_when_no_episodic() -> None:
     assert prepare_compressed_history({"diary_content": "今天很好。"}) == {}
+
+
+# ── P2-A: important-people boost in retrieval ranking ──────────────────
+
+
+def test_compress_boosts_entries_mentioning_important_people() -> None:
+    """Entries mentioning boosted names outrank equally similar ones (P2-A)."""
+    compressor = ContextCompressor(
+        max_tokens=500, similarity=lambda q, c: 0.5  # uniform relevance
+    )
+    result = compressor.compress(
+        "晚饭吃了什么，聊了什么",
+        episodic=[
+            {"event_summary": "独处的晚上", "content": "一个人吃了简餐，看了会儿书就早早休息了"},
+            {
+                "event_summary": "和小雨的晚饭",
+                "content": "和小雨一起吃了晚饭，聊了很多最近的烦恼和打算",
+            },
+            {"event_summary": "加班的晚上", "content": "晚上加班改方案，回家路上买了个面包"},
+        ],
+        boost_terms=["小雨"],
+    )
+
+    assert result.split("\n---\n")[0].startswith("和小雨的晚饭")
+
+    # Without boost terms the order is unchanged (all similarity ties):
+    # stable sort keeps insertion order, so the plain entry stays first.
+    baseline = compressor.compress(
+        "晚饭吃了什么，聊了什么",
+        episodic=[
+            {"event_summary": "独处的晚上", "content": "一个人吃了简餐，看了会儿书就早早休息了"},
+            {
+                "event_summary": "和小雨的晚饭",
+                "content": "和小雨一起吃了晚饭，聊了很多最近的烦恼和打算",
+            },
+        ],
+    )
+    assert baseline.split("\n---\n")[0].startswith("独处的晚上")
+
+
+def test_important_people_names_extracts_from_profile() -> None:
+    from app.domain.agents.context_compressor import _important_people_names
+
+    state = {
+        "long_term_profile": {
+            "important_people": [{"name": "小雨"}, {"name": " 妈妈 "}, 42, {"name": ""}]
+        }
+    }
+    assert _important_people_names(state) == ["小雨", "妈妈"]
+    assert _important_people_names({}) == []
+    assert _important_people_names({"long_term_profile": None}) == []
+
+
+def test_prepare_compressed_history_lifts_important_people_entries() -> None:
+    """The graph prep-step feeds profile people into the compressor.
+
+    Query shares no tokens with either entry, so lexical similarity ties
+    at zero for both — only the people boost can lift 小雨's entry first.
+    """
+    state = {
+        "diary_content": "最近过得怎么样",
+        "episodic_context": [
+            {"event_summary": "独处的晚上", "content": "一个人吃了简餐，看了会儿书就早早休息了"},
+            {
+                "event_summary": "和小雨的晚饭",
+                "content": "和小雨一起吃了晚饭，聊了很多最近的烦恼和打算",
+            },
+        ],
+        "long_term_profile": {"important_people": [{"name": "小雨"}]},
+    }
+    update = prepare_compressed_history(state)
+    assert update["compressed_history"].split("\n---\n")[0].startswith("和小雨的晚饭")

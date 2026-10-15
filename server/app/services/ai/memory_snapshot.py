@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.domain.memory.types import MAX_ABOUT_CHARS
+from app.domain.memory.types import MAX_ABOUT_CHARS, ShortTermState
 
 #: Hard character cap for the frozen memory block.
 MEMORY_BLOCK_MAX_CHARS = 1200
@@ -66,6 +66,7 @@ def build_frozen_memory_block(
     profile_style: str = "",
     profile_topics: list[str] | None = None,
     user_about: str = "",
+    short_term_state: ShortTermState | None = None,
     cap: int = MEMORY_BLOCK_MAX_CHARS,
 ) -> FrozenMemoryBlock:
     """Assemble the frozen memory block, consolidating when over budget.
@@ -73,6 +74,10 @@ def build_frozen_memory_block(
     The user-authored 「关于我」 (``user_about``, B2) is placed first — it is the
     highest-signal, user-owned content, so when the block overflows it is the
     system-inferred style/topics that get trimmed first.
+
+    ``short_term_state`` (P1-A) renders the recent mode/mood trend line; it is
+    day-granular, so freezing it still keeps the block byte-stable within a
+    session.
     """
     style = (profile_style or "").strip()
     about = (user_about or "").strip()
@@ -90,6 +95,10 @@ def build_frozen_memory_block(
         lines.append(f"- 偏好风格：{style}")
     if topics:
         lines.append(f"- 近期关注：{'、'.join(topics)}")
+    if short_term_state is not None:
+        state_text = short_term_state.render()
+        if state_text:
+            lines.append(f"- 近期状态：{state_text}")
 
     if len(lines) == 1:
         return FrozenMemoryBlock(

@@ -364,16 +364,24 @@ class EpisodicMemory:
         """返回所有情景记忆条目的快照（公开 API）。"""
         return list(self._entries)
 
-    def get_all_entries_for_user(self, user_id: str) -> list[EpisodicEntry]:
+    def get_all_entries_for_user(
+        self, user_id: str, *, include_superseded: bool = False
+    ) -> list[EpisodicEntry]:
         """从存储中加载某用户的全部条目。
 
         与 ``get_entries``（返回经 decay 过滤、并被 ``MAX_ENTRIES`` 封顶的内存 deque）不同，
         本方法会从存储中加载每一条已持久化的条目，且不做 decay 过滤。
         供长期记忆提升器用于在完整历史中检测重复模式，而非仅限于最近活跃的窗口。
+
+        默认排除已被软覆盖（``superseded_by``）的条目（P2-B）——被修正的
+        记忆不再参与检索与画像聚合；``include_superseded=True`` 时返回全量。
         """
         if self._store is None:
-            return list(self._entries)
-        return self._store.load_entries(user_id)
+            entries = list(self._entries)
+            if include_superseded:
+                return entries
+            return [e for e in entries if e.superseded_by is None]
+        return self._store.load_entries(user_id, include_superseded=include_superseded)
 
     @property
     def user_id(self) -> str:

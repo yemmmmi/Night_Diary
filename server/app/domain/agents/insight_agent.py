@@ -25,7 +25,7 @@ from app.domain.agents.prompts import (
 )
 from app.domain.agents.state import MultiAgentState, extract_token_usage
 from app.domain.knowledge.store import DomainKnowledgeStore
-from app.domain.memory.types import EmotionBaseline
+from app.domain.memory.types import EmotionBaseline, ShortTermState
 from app.shared.llm import LLMClient, message_text
 from app.shared.tracing import LLMCallRecord, LLMCallTracer, NoOpLLMCallTracer
 
@@ -256,6 +256,12 @@ class InsightAgent:
         tags = profile.get("personality_tags", [])
         if tags:
             profile_parts.append(f"性格特征: {', '.join(tags[:5])}")
+        short_term = profile.get("short_term_state")
+        if isinstance(short_term, dict):
+            state = ShortTermState(**short_term)
+            state_text = state.render()
+            if state_text:
+                profile_parts.append(f"近期状态: {state_text}")
         if profile_parts:
             parts.append("【用户画像】\n" + "\n".join(profile_parts))
 

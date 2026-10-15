@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from app.domain.agents.empathy_agent import EmpathyAgent
 from app.domain.skills.crisis_detector import CRISIS_RESOURCES
 from app.shared.tracing import InMemoryLLMCallTracer
@@ -68,6 +70,64 @@ async def test_fallback_when_llm_unreachable(
     assert llm_tracer.records[0].error is not None
 
 
+# ── P2-A: volatility discounts the baseline in crisis detection ────────
+
+
+class _FixedEstimator:
+    """Estimator double with a pinned score and the real crisis threshold."""
+
+    crisis_threshold = -0.7
+
+    def score(self, text: str) -> float:
+        return -0.6
+
+
+def test_crisis_discounts_baseline_by_volatility(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """P2-A: a volatile baseline is a less trustworthy floor.
+
+    With content at -0.6 and baseline -0.65: calm users stay above the
+    -0.7 threshold, but volatility 0.5 discounts the baseline by 0.2*0.5
+    and the same content crosses into crisis.
+    """
+    agent = EmpathyAgent(fake_llm, knowledge_store, emotion_estimator=_FixedEstimator())
+    calm = {
+        "emotion_baseline": {
+            "average_sentiment": -0.65,
+            "volatility": 0.0,
+            "dominant_emotion": "焦虑",
+        }
+    }
+    volatile = {
+        "emotion_baseline": {
+            "average_sentiment": -0.65,
+            "volatility": 0.5,
+            "dominant_emotion": "焦虑",
+        }
+    }
+
+    assert agent._is_crisis("今天有点撑不住", calm) is False
+    assert agent._is_crisis("今天有点撑不住", volatile) is True
+
+
+def test_crisis_clamps_discounted_baseline(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """The discounted baseline never leaves [-1, 1]."""
+    agent = EmpathyAgent(fake_llm, knowledge_store, emotion_estimator=_FixedEstimator())
+    extreme = {
+        "emotion_baseline": {
+            "average_sentiment": -0.9,
+            "volatility": 1.0,
+            "dominant_emotion": "焦虑",
+        }
+    }
+    assert agent._effective_baseline(extreme) == -1.0
+
+
 async def test_crisis_fallback_includes_resources(
     failing_llm: FailingLLM,
     knowledge_store: StubKnowledgeStore,
@@ -129,3 +189,61 @@ def test_fallback_direct_call_uses_intent_template(
     agent = EmpathyAgent(fake_llm, knowledge_store)
     result = agent.fallback("habit_tracking")
     assert "习惯" in result["empathy_response"]
+
+
+# ── P2-B: memory-conflict clarification block ───────────────────────────
+
+
+async def test_pending_clarification_rendered_into_prompt(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """A fresh person-sentiment reversal surfaces as a gentle check block."""
+    fresh_date = (date.today() - timedelta(days=1)).isoformat()
+    agent = EmpathyAgent(fake_llm, knowledge_store)
+    await agent.run(
+        {
+            "diary_content": "今天和朋友聊了聊。",
+            "intent": "pure_record",
+            "long_term_profile": {
+                "pending_clarifications": [
+                    {"person": "小雨", "was": 0.7, "now": -0.5, "date": fresh_date}
+                ]
+            },
+        }
+    )
+    prompt = fake_llm.calls[0]
+    assert "## 记忆核对" in prompt
+    assert "小雨" in prompt
+    assert "正面" in prompt and "负面" in prompt
+
+
+async def test_expired_clarification_not_rendered(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """Clarifications older than the freshness window age out of the render."""
+    stale_date = (date.today() - timedelta(days=30)).isoformat()
+    agent = EmpathyAgent(fake_llm, knowledge_store)
+    await agent.run(
+        {
+            "diary_content": "今天和朋友聊了聊。",
+            "intent": "pure_record",
+            "long_term_profile": {
+                "pending_clarifications": [
+                    {"person": "小雨", "was": 0.7, "now": -0.5, "date": stale_date}
+                ]
+            },
+        }
+    )
+    assert "## 记忆核对" not in fake_llm.calls[0]
+
+
+async def test_no_clarification_block_without_pending(
+    fake_llm: FakeLLM,
+    knowledge_store: StubKnowledgeStore,
+) -> None:
+    """No pending clarifications → no block, prompt stays clean."""
+    agent = EmpathyAgent(fake_llm, knowledge_store)
+    await agent.run({"diary_content": "今天还行。", "intent": "pure_record"})
+    assert "## 记忆核对" not in fake_llm.calls[0]

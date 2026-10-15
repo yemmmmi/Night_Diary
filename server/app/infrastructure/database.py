@@ -88,6 +88,9 @@ def init_db(engine: Engine) -> None:
     from app.infrastructure.models import memory_card as _memory_card_models  # noqa: F401
     from app.infrastructure.models import model_provider as _model_provider_models  # noqa: F401
     from app.infrastructure.models import plan as _plan_models  # noqa: F401
+    from app.infrastructure.models import (
+        profile_change_log as _profile_change_log_models,  # noqa: F401
+    )
     from app.infrastructure.models import reply_quality as _reply_quality_models  # noqa: F401
     from app.infrastructure.models import scheduled_task as _scheduled_task_models  # noqa: F401
     from app.infrastructure.models import skill_activation as _skill_activation_models  # noqa: F401

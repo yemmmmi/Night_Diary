@@ -32,6 +32,10 @@ DAY = __import__("datetime").date(2026, 8, 18)
 @pytest.fixture
 def db():
     engine = create_engine("sqlite:///:memory:")
+    # Register the long_term_profiles table used by the P1-A sync tests
+    # (daily_mode is already registered via the module-level import above).
+    import app.infrastructure.models.memory  # noqa: F401
+
     Base.metadata.create_all(engine)
     with Session(engine) as session:
         yield session
@@ -281,3 +285,113 @@ def test_real_plan_service_tension_db(db):
     tasks = plan_service.get_today_tasks(db, user_id="u1")
     assert has_today_tension(tasks) is True
     assert mon.followup_needs_pending is True
+
+
+# ---------------------------------------------------------------------------
+# P1-A: daily_modes → profile short_term_state
+# ---------------------------------------------------------------------------
+
+
+def _mode_row(day_iso: str, mode: str, mood: float | None, samples: int) -> DailyModeRow:
+    signals = f'{{"mood":{mood},"samples":{samples}}}' if mood is not None else "{}"
+    return DailyModeRow(
+        user_id="u1",
+        date=__import__("datetime").date.fromisoformat(day_iso),
+        baseline_mode=mode,
+        mood_signals_json=signals,
+    )
+
+
+def test_compute_short_term_state_rolls_modes_and_mood():
+    from app.services.ai.mood_monitor import compute_short_term_state
+
+    rows = [
+        _mode_row("2026-08-15", MODE.DAILY, 0.6, 4),
+        _mode_row("2026-08-16", MODE.INTROSPECTION, 0.2, 7),
+        _mode_row("2026-08-17", MODE.INTROSPECTION, 0.1, 9),
+    ]
+    state = compute_short_term_state(rows, today=__import__("datetime").date(2026, 8, 17))
+
+    assert state.recent_modes == ["daily", "introspection", "introspection"]
+    assert state.composite_mood == pytest.approx((0.6 + 0.2 + 0.1) / 3, abs=1e-3)
+    assert state.samples == 20
+    assert state.updated_date == "2026-08-17"
+    assert "情绪偏低" in state.render()  # composite 0.3 < 0.35
+    assert "模式多为内视" in state.render()
+
+
+def test_compute_short_term_state_skips_signalless_days():
+    from app.services.ai.mood_monitor import compute_short_term_state
+
+    rows = [
+        _mode_row("2026-08-15", MODE.DAILY, None, 0),
+        _mode_row("2026-08-16", MODE.DAILY, 0.8, 5),
+    ]
+    state = compute_short_term_state(rows, today=__import__("datetime").date(2026, 8, 16))
+
+    # Signal-less day counts toward modes but not the mood mean.
+    assert state.recent_modes == ["daily", "daily"]
+    assert state.composite_mood == pytest.approx(0.8, abs=1e-3)
+    assert state.samples == 5
+    assert "持续日常模式" in state.render()
+
+
+def test_compute_short_term_state_caps_window():
+    from app.services.ai.mood_monitor import compute_short_term_state
+
+    rows = [_mode_row(f"2026-08-{d:02d}", MODE.DAILY, 0.5, 1) for d in range(10, 25)]
+    state = compute_short_term_state(rows, today=__import__("datetime").date(2026, 8, 24))
+
+    assert len(state.recent_modes) == 7  # window cap
+    assert state.recent_modes[0] == "daily"
+
+
+def test_refresh_short_term_state_persists_profile():
+    """Full return path: daily_modes rows → profile.short_term_state (P1-A)."""
+    from types import SimpleNamespace
+
+    from app.domain.memory.long_term import LongTermMemory
+    from app.infrastructure.database import (
+        create_db_engine,
+        create_session_factory,
+        init_db,
+    )
+    from app.infrastructure.memory_repository import SqliteLongTermProfileStore
+    from app.services.ai.mode_profile_sync import refresh_short_term_state
+
+    # The store closes sessions it creates, so hand it a real sessionmaker
+    # (production shape) instead of the shared test Session.
+    engine = create_db_engine("sqlite:///:memory:")
+    init_db(engine)
+    factory = create_session_factory(engine)
+    with factory() as db:
+        store = SqliteLongTermProfileStore(factory)
+        container = SimpleNamespace(long_term_memory=LongTermMemory(store=store))
+        today = DAY.__class__.today()
+        db.add(_mode_row((today - __import__("datetime").timedelta(days=1)).isoformat(),
+                         MODE.INTROSPECTION, 0.2, 6))
+        db.add(_mode_row(today.isoformat(), MODE.INTROSPECTION, 0.3, 8))
+        db.commit()
+
+        state = refresh_short_term_state(db, container, user_id="u1")
+
+        assert state is not None
+        persisted = store.get_profile("u1")
+        assert persisted is not None
+        assert persisted.short_term_state.recent_modes == ["introspection", "introspection"]
+        assert persisted.short_term_state.samples == 14
+
+        # Churn guard: re-running the same day must not produce a new state
+        # object (write path is skipped when nothing changed).
+        again = refresh_short_term_state(db, container, user_id="u1")
+        assert again == state
+
+
+def test_refresh_short_term_state_without_rows_is_none(db):
+    from types import SimpleNamespace
+
+    from app.domain.memory.long_term import LongTermMemory
+    from app.services.ai.mode_profile_sync import refresh_short_term_state
+
+    container = SimpleNamespace(long_term_memory=LongTermMemory(store=None))
+    assert refresh_short_term_state(db, container, user_id="nobody") is None

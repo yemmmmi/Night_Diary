@@ -8,6 +8,8 @@ were left ``pending``/``running`` by a dead process (bounded retries).
 Job kinds and handlers:
 - ``entity_extraction`` → :func:`app.domain.agents.entity_extractor._run_extraction_sync`
   (payload: user_id, conversation_id, text, source_label)
+- ``personality_extraction`` → :func:`app.services.ai.personality_extractor._run_personality_sync`
+  (payload: user_id)
 
 All functions are best-effort — a failed job row write must never break the
 caller's main flow.
@@ -86,6 +88,10 @@ def _job_handler(kind: str) -> Any:
         from app.domain.agents.entity_extractor import _run_extraction_sync
 
         return _run_extraction_sync
+    if kind == "personality_extraction":
+        from app.services.ai.personality_extractor import _run_personality_sync
+
+        return _run_personality_sync
     return None
 
 
@@ -114,6 +120,8 @@ def _run_job(session_factory: Any, job_id: str) -> None:
                 str(payload.get("text", "")),
                 str(payload.get("source_label", "conversation")),
             )
+        elif kind == "personality_extraction":
+            handler(session_factory, str(payload.get("user_id", "default")))
         with session_factory() as db:
             finish_job(db, job_id, status="done")
     except Exception as exc:

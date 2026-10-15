@@ -18,6 +18,7 @@ from app.infrastructure.llm_call_tracer import SqliteLLMCallTracer
 from app.infrastructure.memory_repository import (
     SqliteEpisodicMemoryStore,
     SqliteLongTermProfileStore,
+    SqliteProfileChangeLogStore,
 )
 from app.infrastructure.skill_activation_tracer import SqliteSkillActivationTracer
 from app.shared.embeddings import build_embedding_function
@@ -164,7 +165,8 @@ class ServiceContainer:
 
         self.episodic_memory = episodic
         self.long_term_memory = LongTermMemory(
-            store=SqliteLongTermProfileStore(self.session_factory)
+            store=SqliteLongTermProfileStore(self.session_factory),
+            change_log=SqliteProfileChangeLogStore(self.session_factory),
         )
         self.working_memory = WorkingMemory()
 
