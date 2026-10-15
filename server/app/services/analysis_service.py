@@ -1,4 +1,11 @@
-﻿"""Analysis orchestration — diary lookup → AI router → persist result."""
+﻿"""Analysis persistence for the card→diary expansion path.
+
+Typed-diary writes never reach this module — they trigger
+``digest_worker`` (structured day digest, reply ignored). What remains
+here is the card-expansion analysis (``card_service.expand_to_diary`` →
+``trigger_analysis``): brief tree-hole acknowledgment + day-digest
+refresh, plus the episodic-memory sync shared with the digest worker.
+"""
 
 from __future__ import annotations
 
@@ -76,11 +83,15 @@ def _persist_analysis(
     return analysis
 
 
-# ── V3 tree-hole: scene-1 daily path ────────────────────────────────────
-# The daily reply is a brief "tree-hole" acknowledgment (1-3 sentences) plus
-# a structured day digest; deep conversation belongs to scene 2. The legacy
-# multi-agent graph stays for weekly reports (weekly_service reuses
-# ExecutionPlanner directly).
+# ── V3 tree-hole: card→diary expansion path ────────────────────────────
+# NOTE: typed-diary writes do NOT go through this module — they trigger
+# digest_worker, which produces the structured DiaryDigest (scene 1's
+# primary product, consumed by scene 2) and ignores the reply output.
+# This path only runs when a memory card is expanded into a diary
+# (card_service.expand_to_diary → trigger_analysis): it refreshes the day
+# digest and stores a brief tree-hole acknowledgment on the entry.
+# The multi-agent graph is NOT part of scene 1 at all; it stays for
+# weekly reports (weekly_service reuses ExecutionPlanner directly).
 
 
 def _entry_day(entry: DiaryEntryRow) -> date:
@@ -120,7 +131,7 @@ def _treehole_tracer(container: Any) -> Any:
 
 
 def _run_async_sync(coro: Any) -> Any:
-    """Run a coroutine from a sync context (mirrors run_multi_agent)."""
+    """Run a coroutine from a sync (threadpool) context."""
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -142,7 +153,7 @@ def _run_treehole_analysis(
     *,
     user_id: str,
 ) -> tuple[AnalysisResult, DiaryDigest]:
-    """Run the scene-1 tree-hole path (sync wrapper for the sync callers).
+    """Run the tree-hole extraction (sync wrapper for the sync callers).
 
     Returns ``(AnalysisResult, DiaryDigest)``. Crisis diaries short-circuit
     to the safe template before any LLM call; LLM failure degrades to rules.
