@@ -70,6 +70,14 @@ EVAL_UPDATE_BASELINE=1 make eval-tool
 > native 真实模式下 exact_match=0.6000，**主要失败仍是过度调用**：`no_tool_emotional` 6/6 全错、
 > `ambiguous` 4/4 全错（FPR=0.7333、avg_cnt 1.725）。参数准确率升到 0.96，但"该不该调"的判断未改善。
 
+> ⚠️ 读 native FPR 时必须带上一个限定（2026-10-16 核查）：本 eval 对每个用例都**强行绑定该用例
+> `enabled_tools` 里的全部工具**，且不注入任何系统提示；而生产侧 `conversation_ai_service.py`
+> （`need_tools` 选择候选子集，约 484-498 行）**只绑定意图层选中的工具** —— 情绪倾诉 / 闲聊 /
+> 歧义输入下 `need_tools` 为空，模型根本看不到 schema。也就是说这里的 `FPR=0.7333` 衡量的是
+> 「schema 摆在旁边时模型的自制力」（一个合理的能力探针），**不是生产环境的实际过度调用率**；
+> 生产由意图门控兜底。要把它变成生产代表值，需要让 eval 发生产系统提示并按 need_tools 门控绑定，
+> 属 harness 增强，未纳入本次改动。
+
 > 历史记录（2026-07-06 · deepseek-v4-flash，同一 40 例）：
 > native decision=0.75 / name=0.90 / arg=0.88 / exact=0.675 / FPR=0.60 / FNR=0.04 / avg_cnt=1.25。
 > 该版基线未写 `_mode` 元数据，`test_no_regression_vs_baseline` 因 `"_mode" not in baseline` 长期 skip，
