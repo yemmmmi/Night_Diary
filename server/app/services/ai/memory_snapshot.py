@@ -26,7 +26,12 @@ MEMORY_BLOCK_MAX_CHARS = 1200
 #: Maximum number of recurring topics kept before consolidation kicks in.
 MAX_TOPICS = 8
 
+#: Hard character cap for the per-turn fresh state block (D7).
+FRESH_STATE_MAX_CHARS = 400
+
 _HEADER = "## 关于我（会话冻结快照）"
+
+_FRESH_HEADER = "## 近期状态（每轮更新）"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +71,6 @@ def build_frozen_memory_block(
     profile_style: str = "",
     profile_topics: list[str] | None = None,
     user_about: str = "",
-    short_term_state: ShortTermState | None = None,
     cap: int = MEMORY_BLOCK_MAX_CHARS,
 ) -> FrozenMemoryBlock:
     """Assemble the frozen memory block, consolidating when over budget.
@@ -75,9 +79,11 @@ def build_frozen_memory_block(
     highest-signal, user-owned content, so when the block overflows it is the
     system-inferred style/topics that get trimmed first.
 
-    ``short_term_state`` (P1-A) renders the recent mode/mood trend line; it is
-    day-granular, so freezing it still keeps the block byte-stable within a
-    session.
+    D7: ``short_term_state`` no longer freezes here — it is turn-granular and
+    now renders per turn via :func:`build_fresh_state_block` in the volatile
+    tail of the prompt (after chat history, before the user message), so
+    mid-session mood/mode evolution reaches the agent without ever breaking
+    the frozen prefix.
     """
     style = (profile_style or "").strip()
     about = (user_about or "").strip()
@@ -95,10 +101,6 @@ def build_frozen_memory_block(
         lines.append(f"- 偏好风格：{style}")
     if topics:
         lines.append(f"- 近期关注：{'、'.join(topics)}")
-    if short_term_state is not None:
-        state_text = short_term_state.render()
-        if state_text:
-            lines.append(f"- 近期状态：{state_text}")
 
     if len(lines) == 1:
         return FrozenMemoryBlock(
@@ -125,11 +127,41 @@ def build_frozen_memory_block(
     )
 
 
+def build_fresh_state_block(
+    short_term_state: ShortTermState | None,
+    *,
+    cap: int = FRESH_STATE_MAX_CHARS,
+) -> str:
+    """Render the per-turn fresh state block (D7) — turn-granular freshness.
+
+    ``short_term_state`` used to freeze inside the frozen memory block, which
+    meant mid-session mood/mode evolution (P1-A writes it back to the profile)
+    never reached the agent until the next session. It now renders per turn in
+    the volatile prompt tail (after chat history, before the user message) —
+    a region that is re-sent every turn anyway, so freshness costs no extra
+    prefix-cache loss.
+
+    Returns ``""`` when there is nothing to inject (so template formatting
+    stays byte-identical to the pre-D7 prompt); non-empty results carry
+    leading/trailing newlines for clean section separation.
+    """
+    if short_term_state is None:
+        return ""
+    state_text = short_term_state.render()
+    if not state_text:
+        return ""
+    if len(state_text) > cap:
+        state_text = state_text[: max(0, cap - 1)].rstrip() + "…"
+    return f"\n{_FRESH_HEADER}\n- 近期状态：{state_text}\n"
+
+
 __all__ = [
+    "FRESH_STATE_MAX_CHARS",
     "MAX_ABOUT_CHARS",
-    "MEMORY_BLOCK_MAX_CHARS",
     "MAX_TOPICS",
+    "MEMORY_BLOCK_MAX_CHARS",
     "FrozenMemoryBlock",
     "MemoryBudget",
+    "build_fresh_state_block",
     "build_frozen_memory_block",
 ]

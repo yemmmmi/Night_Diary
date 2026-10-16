@@ -1,10 +1,12 @@
-"""Tests for the frozen memory block builder (D6)."""
+"""Tests for the frozen memory block builder (D6) and fresh state block (D7)."""
 
 from __future__ import annotations
 
+from app.domain.memory.types import ShortTermState
 from app.services.ai.memory_snapshot import (
     MAX_TOPICS,
     MEMORY_BLOCK_MAX_CHARS,
+    build_fresh_state_block,
     build_frozen_memory_block,
 )
 
@@ -86,3 +88,47 @@ def test_budget_to_dict_roundtrip() -> None:
     assert data["cap_chars"] == MEMORY_BLOCK_MAX_CHARS
     assert data["topic_count"] == 0
     assert data["over_budget"] is False
+
+
+# ---------------------------------------------------------------------------
+# D7: fresh state block — turn-granular short_term_state in the volatile tail
+# ---------------------------------------------------------------------------
+
+
+def test_fresh_state_block_empty_for_none_state() -> None:
+    assert build_fresh_state_block(None) == ""
+
+
+def test_fresh_state_block_empty_when_nothing_to_say() -> None:
+    # samples=0 + no modes → render() is empty → block must be skipped so the
+    # user-prompt template stays byte-identical to the pre-D7 prompt.
+    assert build_fresh_state_block(ShortTermState()) == ""
+
+
+def test_fresh_state_block_renders_short_term_state() -> None:
+    state = ShortTermState(
+        recent_modes=["daily", "introspection"],
+        composite_mood=0.30,
+        samples=14,
+        updated_date="2026-10-16",
+    )
+    block = build_fresh_state_block(state)
+    assert "## 近期状态（每轮更新）" in block
+    assert "- 近期状态：" in block
+    assert "情绪偏低" in block
+    # Leading/trailing newlines keep template formatting byte-identical when
+    # the block is absent and cleanly sectioned when present.
+    assert block.startswith("\n") and block.endswith("\n")
+
+
+def test_fresh_state_block_caps_oversized_render() -> None:
+    # render() aggregates (mode counts, mood mean) so it stays compact — force
+    # the cap below the rendered length to exercise the truncation branch.
+    state = ShortTermState(
+        recent_modes=["daily"] * 100,
+        composite_mood=0.30,
+        samples=100,
+    )
+    block = build_fresh_state_block(state, cap=12)
+    assert "…" in block
+    assert len(block) < 60
