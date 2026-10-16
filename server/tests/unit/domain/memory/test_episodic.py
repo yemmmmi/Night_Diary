@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from app.domain.memory.episodic import EpisodicMemory
 from app.domain.memory.types import EpisodicEntry
+from app.infrastructure.database import (
+    create_db_engine,
+    create_session_factory,
+    init_db,
+)
 from app.infrastructure.memory_repository import SqliteEpisodicMemoryStore
 
 
@@ -24,6 +30,16 @@ def _entry(
         diary_ids=["d01"],
         importance=importance,
     )
+
+
+def _memory_with_store(tmp_path: Path) -> EpisodicMemory:
+    """按 episodic 模块 docstring 的方式建一个临时 SQLite 支撑的实例。"""
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'episodic.db'}")
+    init_db(engine)
+    store = SqliteEpisodicMemoryStore(create_session_factory(engine))
+    memory = EpisodicMemory(store=store, user_id="u1")
+    memory.load()
+    return memory
 
 
 def test_store_high_importance(episodic_store: SqliteEpisodicMemoryStore) -> None:
@@ -290,3 +306,33 @@ def test_retrieve_relevant_respects_top_k() -> None:
 
     results = memory.retrieve_relevant("查询", top_k=3)
     assert len(results) <= 3
+
+
+# ── 已退役记忆门控召回:排序单源 ──
+
+
+def test_retrieve_relevant_delegates_to_shared_rank(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """排序必须是单一实现：改一处不能让两个入口行为漂移。"""
+    memory = _memory_with_store(tmp_path)
+    memory.store(
+        EpisodicEntry(
+            event_summary="失眠",
+            emotion="焦虑",
+            reply_insight="",
+            timestamp=time.time(),
+            importance=0.8,
+        )
+    )
+
+    calls: list[tuple[str, int]] = []
+    original = EpisodicMemory._rank
+
+    def spy(self, candidates, query, top_k, now):
+        calls.append((query, top_k))
+        return original(self, candidates, query, top_k, now)
+
+    monkeypatch.setattr(EpisodicMemory, "_rank", spy)
+    memory.retrieve_relevant("睡眠", top_k=3)
+    assert calls == [("睡眠", 3)]
