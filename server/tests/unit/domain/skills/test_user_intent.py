@@ -156,6 +156,47 @@ class TestConfidenceAndClarification:
         assert decision.should_clarify is True
 
 
+class TestExplicitAmbiguityFlag:
+    """The router answers "is this ambiguous?" explicitly, not via confidence.
+
+    Self-reported confidence turned out to be badly calibrated on the B4
+    gate (genuinely ambiguous messages came back at 0.85/0.92), which left
+    clarification_recall at 0.17. The explicit flag replaces that guesswork;
+    a missing flag still falls back to the confidence heuristic so the older
+    contract (and the eval's stub oracle) keeps working.
+    """
+    def test_high_confidence_but_ambiguous_still_clarifies(self) -> None:
+        reply = '{"intent": "insight", "confidence": 0.85, "ambiguous": true}'
+        decision = classify_user_intent("感觉心里堵得慌", llm=_llm(reply))
+        assert decision.intent == "insight"
+        assert decision.should_clarify is True
+
+    def test_ambiguous_chat_lean_does_not_clarify(self) -> None:
+        # Ambiguous, but the router still read it as chat: a normal reply
+        # writes nothing, so an interruption card is not worth it. Interrupting
+        # here is exactly what false_clarification_rate counts.
+        reply = '{"intent": "chat", "confidence": 0.4, "ambiguous": true}'
+        decision = classify_user_intent("有点烦", llm=_llm(reply))
+        assert decision.intent == "chat"
+        assert decision.should_clarify is False
+
+    def test_explicit_not_ambiguous_overrides_low_confidence(self) -> None:
+        reply = '{"intent": "plan", "confidence": 0.3, "ambiguous": false}'
+        decision = classify_user_intent("帮我看看这个想法", llm=_llm(reply))
+        assert decision.should_clarify is False
+
+    def test_missing_flag_falls_back_to_confidence_heuristic(self) -> None:
+        reply = '{"intent": "insight", "confidence": 0.3}'
+        decision = classify_user_intent("帮我看看这个", llm=_llm(reply))
+        assert decision.ambiguous is None
+        assert decision.should_clarify is True
+
+    def test_bare_intent_word_stays_not_ambiguous(self) -> None:
+        decision = classify_user_intent("帮我看看这个", llm=_llm("plan"))
+        assert decision.ambiguous is None
+        assert decision.should_clarify is False
+
+
 class TestSkillCatalog:
     def test_catalog_injected_into_fallback_prompt(self) -> None:
         llm = _llm("plan")
