@@ -198,9 +198,28 @@ def _load_baseline() -> dict[str, Any] | None:
 
 
 def _write_baseline(
-    native: dict[str, float], fallback: dict[str, float]
+    native: dict[str, float],
+    fallback: dict[str, float],
+    *,
+    real_mode: bool,
+    model_name: str,
+    sample_count: int,
 ) -> None:
-    payload = {"native": native, "fallback": fallback}
+    """Persist the recorded baseline, mode metadata included.
+
+    ``test_no_regression_vs_baseline`` refuses any baseline lacking ``_mode``
+    (it cannot tell stub from real numbers apart), so a writer that dropped the
+    metadata kept the regression gate permanently inert — see
+    ``test_baseline_writer_records_mode_metadata``.
+    """
+    payload = {
+        "native": native,
+        "fallback": fallback,
+        "_placeholder": not real_mode,
+        "_mode": "real" if real_mode else "stub",
+        "_model": model_name if real_mode else "stub",
+        "_sample_count": sample_count,
+    }
     BASELINE_PATH.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
@@ -267,7 +286,13 @@ def eval_report(
     )
 
     if os.getenv("EVAL_UPDATE_BASELINE") == "1":
-        _write_baseline(native_metrics, fallback_metrics)
+        _write_baseline(
+            native_metrics,
+            fallback_metrics,
+            real_mode=real_mode,
+            model_name=model_name,
+            sample_count=len(eval_cases),
+        )
         print(
             f"[baseline] wrote {BASELINE_PATH.name} "
             f"(native + fallback) for {len(eval_cases)} cases"
@@ -366,6 +391,32 @@ def test_stub_fallback_wiring(eval_report: dict[str, Any], real_mode: bool) -> N
     assert m["exact_match"] == pytest.approx(1.0)
     assert m["false_positive_rate"] == pytest.approx(0.0)
     assert m["false_negative_rate"] == pytest.approx(0.0)
+
+
+def test_baseline_writer_records_mode_metadata(tmp_path: Path, monkeypatch) -> None:
+    """The writer must emit mode metadata.
+
+    ``test_no_regression_vs_baseline`` refuses any baseline lacking ``_mode``,
+    so a writer that dropped the field left the regression gate permanently
+    inert (it skipped forever, even after a reseed). This pins the fix.
+    """
+    target = tmp_path / "baseline.json"
+    monkeypatch.setattr(
+        "tests.eval.tool_call.test_eval_tool_call.BASELINE_PATH", target
+    )
+    _write_baseline(
+        {"decision_accuracy": 0.5},
+        {"decision_accuracy": 1.0},
+        real_mode=True,
+        model_name="fake-model",
+        sample_count=40,
+    )
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    assert payload["_mode"] == "real"
+    assert payload["_model"] == "fake-model"
+    assert payload["_placeholder"] is False
+    assert payload["_sample_count"] == 40
+    assert payload["native"] == {"decision_accuracy": 0.5}
 
 
 def test_no_regression_vs_baseline(eval_report: dict[str, Any], real_mode: bool) -> None:
