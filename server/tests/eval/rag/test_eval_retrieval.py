@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -164,9 +165,25 @@ def _load_baseline() -> dict[str, dict[str, float]] | None:
     return json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
 
 
-def _write_baseline(metrics: dict[str, dict[str, float]]) -> None:
+def _write_baseline(
+    metrics: dict[str, dict[str, float]],
+    *,
+    embedding_model: str,
+    rerank_model: str | None,
+) -> None:
+    """Persist per-branch numbers plus the model identity they were produced by.
+
+    Retrieval metrics are only comparable against a baseline from the same
+    embedding/rerank backend; the regression test skips (loudly) on drift rather
+    than comparing e.g. local BGE numbers against a cloud ``text-embedding-v3``
+    baseline.
+    """
+    payload: dict[str, Any] = dict(metrics)
+    payload["_embedding_model"] = embedding_model
+    payload["_rerank_model"] = rerank_model
+    payload["_seeded_at"] = datetime.now(UTC).isoformat()
     BASELINE_PATH.write_text(
-        json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
 
 
@@ -179,6 +196,8 @@ def eval_report(
     bm25_index: BM25Index,
     vector_collection: DiaryCollectionManager | None,
     reranker: Reranker | None,
+    embedding_backend: str,
+    rerank_backend: str | None,
 ) -> dict[str, Any]:
     branches = _build_branches(bm25_index, vector_collection, reranker)
 
@@ -194,10 +213,20 @@ def eval_report(
     _print_report(metrics, failures, skipped)
 
     if os.getenv("EVAL_UPDATE_BASELINE") == "1":
-        _write_baseline(metrics)
+        _write_baseline(
+            metrics,
+            embedding_model=embedding_backend,
+            rerank_model=rerank_backend,
+        )
         print(f"[baseline] wrote {BASELINE_PATH.name} for branches: {sorted(metrics)}")
 
-    return {"metrics": metrics, "skipped": skipped, "failures": failures}
+    return {
+        "metrics": metrics,
+        "skipped": skipped,
+        "failures": failures,
+        "embedding_backend": embedding_backend,
+        "rerank_backend": rerank_backend,
+    }
 
 
 def test_bm25_branch_runs(eval_report: dict[str, Any]) -> None:
@@ -229,6 +258,20 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any]) -> None:
     baseline = _load_baseline()
     if baseline is None:
         pytest.skip("no baseline.json; seed with EVAL_UPDATE_BASELINE=1 make eval-rag")
+
+    recorded_embedding = baseline.get("_embedding_model")
+    if recorded_embedding is None:
+        pytest.skip(
+            "baseline.json predates embedding-model metadata; its numbers are not "
+            "provably comparable. Reseed with EVAL_UPDATE_BASELINE=1 make eval-rag "
+            "on the intended (cloud) embedding backend"
+        )
+    if recorded_embedding != eval_report["embedding_backend"]:
+        pytest.skip(
+            f"embedding model drift: current run uses {eval_report['embedding_backend']!r}, "
+            f"baseline was seeded on {recorded_embedding!r}; retrieval numbers are not "
+            "comparable. Re-run on the baseline backend or reseed explicitly"
+        )
 
     regressions: list[str] = []
     for branch, scores in eval_report["metrics"].items():

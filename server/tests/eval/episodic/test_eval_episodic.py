@@ -286,6 +286,24 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any]) -> None:
             "EVAL_UPDATE_BASELINE=1 make eval-episodic"
         )
 
+    # Retrieval numbers are only comparable against a baseline produced by the
+    # same embedding backend (cloud text-embedding-v3 vs local bge-small-zh).
+    from app.config import get_settings
+
+    _settings = get_settings()
+    current_embedding = (
+        _settings.embedding_model
+        if _settings.embedding_api_key.strip()
+        else _settings.embedding_model_name
+    )
+    recorded_embedding = baseline.get("_embedding_model")
+    if recorded_embedding and recorded_embedding != current_embedding:
+        pytest.skip(
+            f"embedding model drift: current run uses {current_embedding!r}, baseline "
+            f"was seeded on {recorded_embedding!r}; episodic retrieval numbers are not "
+            "comparable. Re-run on the baseline backend or reseed explicitly"
+        )
+
     regressions: list[str] = []
     for branch, scores in eval_report["metrics"].items():
         recorded_branch = baseline.get(branch)

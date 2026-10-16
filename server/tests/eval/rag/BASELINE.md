@@ -43,6 +43,8 @@ EVAL_UPDATE_BASELINE=1 make eval-rag
 > **云端跑法（本地复现 2026-09-14 基线）**：`EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` 位于**仓库根 `.env`**（由 docker compose 注入容器）。直接在本机 `server/` 下跑 pytest 时 pydantic 只读 `server/.env`，请先把这三个键注入进程环境，例如：
 > `Get-Content ..\.env | Where-Object { $_ -match '^(EMBEDDING_|RERANK_)' } | ForEach-Object { $i=$_.IndexOf('='); Set-Item -Path ("env:"+$_.Substring(0,$i).Trim()) -Value $_.Substring($i+1).Trim() }`
 > 未注入时向量/融合/重排三个分支会 `SKIPPED`（只报 BM25），不会被记成退化数字。
+>
+> **可比性守卫（2026-10-16）**：`baseline.json` 记录 `_embedding_model` / `_rerank_model`；当前运行的 embedding 模型与基线不同、或基线早于该元数据时，回归测试**显式 SKIP** 并提示重播种 —— 本地 BGE 数字（见下方历史快照）不会被拿来误判云端基线退化。云端「已配置但不可用」（如欠费返回 400 Arrearage）由建索引前的 embedding 探针拦截，向量分支直接 SKIP，不会留下空集合导致 0.0 假退化。
 
 ## Baseline 指标
 
