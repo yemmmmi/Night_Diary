@@ -59,12 +59,19 @@ EVAL_UPDATE_BASELINE=1 make eval-tool
 
 ## Baseline 指标
 
-> 记录日期：2026-07-06 · 环境：deepseek-v4-flash（REAL_MODE）
+> 记录日期：2026-10-16 · 环境：deepseek-v4.1-flash-d（REAL_MODE，40 例 × 2 路径）
 
 | 路径 | decision | name_acc | arg_acc | exact | FPR | FNR | parse | avg_cnt |
 |------|----------|----------|---------|-------|-----|-----|-------|---------|
-| native   | 0.7500 | 0.9000 | 0.8800 | 0.6750 | 0.6000 | 0.0400 | 1.0000 | 1.2500 |
+| native   | 0.7250 | 0.8867 | 0.9600 | 0.6000 | 0.7333 | 0.0000 | 1.0000 | 1.7250 |
 | fallback | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.0000 | 0.0000 | 1.0000 | 0.7750 |
 
 > fallback 在 stub 模式下恒为满分（oracle 输入），仅验证解析管道。
-> native 真实模式下 exact_match=0.675，主要失败在 no_tool_emotional 类（LLM 倾向过度调用工具，FPR=0.6）。
+> native 真实模式下 exact_match=0.6000，**主要失败仍是过度调用**：`no_tool_emotional` 6/6 全错、
+> `ambiguous` 4/4 全错（FPR=0.7333、avg_cnt 1.725）。参数准确率升到 0.96，但"该不该调"的判断未改善。
+
+> 历史记录（2026-07-06 · deepseek-v4-flash，同一 40 例）：
+> native decision=0.75 / name=0.90 / arg=0.88 / exact=0.675 / FPR=0.60 / FNR=0.04 / avg_cnt=1.25。
+> 该版基线未写 `_mode` 元数据，`test_no_regression_vs_baseline` 因 `"_mode" not in baseline` 长期 skip，
+> 回归闸门形同虚设；2026-10-16 起 `_write_baseline` 强制写元数据（并由
+> `test_baseline_writer_records_mode_metadata` 守卫）后重播种才恢复生效。

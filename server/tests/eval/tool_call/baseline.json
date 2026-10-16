@@ -1,13 +1,13 @@
 {
   "native": {
-    "decision_accuracy": 0.75,
-    "tool_name_accuracy": 0.9,
-    "argument_accuracy": 0.88,
-    "exact_match": 0.675,
-    "false_positive_rate": 0.6,
-    "false_negative_rate": 0.04,
+    "decision_accuracy": 0.725,
+    "tool_name_accuracy": 0.8867,
+    "argument_accuracy": 0.96,
+    "exact_match": 0.6,
+    "false_positive_rate": 0.7333,
+    "false_negative_rate": 0.0,
     "parse_success_rate": 1.0,
-    "avg_tool_count": 1.25
+    "avg_tool_count": 1.725
   },
   "fallback": {
     "decision_accuracy": 1.0,
@@ -18,5 +18,9 @@
     "false_negative_rate": 0.0,
     "parse_success_rate": 1.0,
     "avg_tool_count": 0.775
-  }
+  },
+  "_placeholder": false,
+  "_mode": "real",
+  "_model": "deepseek-v4.1-flash-d",
+  "_sample_count": 40
 }

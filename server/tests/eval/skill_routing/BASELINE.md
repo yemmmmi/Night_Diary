@@ -66,11 +66,17 @@ EVAL_UPDATE_BASELINE=1 make eval-routing
 
 ## Baseline 指标
 
-> 记录日期：2026-10-11 · 模式：stub_oracle（占位基线）
-> ⚠️ stub 为确定性 oracle，质量指标恒为 1.0 / 0.0，仅证明接线正确；
-> 需在有可用 `LLM_API_KEY` 时以 `EVAL_UPDATE_BASELINE=1 make eval-routing` 重播真实基线，
-> 才能得到有意义的回归下限。
+> 记录日期：2026-10-16 · 模式：real · 环境：deepseek-v4.1-flash-d（31 例）
 
 | routing_acc | clr_P | clr_R | clr_F1 | false_clr | miss_clr | avg_tok |
 |-------------|-------|-------|--------|-----------|----------|---------|
-| 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.0000 | 0.0000 | 140.00 |
+| 0.8387 | 1.0000 | 0.1667 | 0.2857 | 0.0000 | 0.8333 | 584.25 |
+
+> ⚠️ 真实基线暴露的短板：`ambiguous_skill` 6 例**全部漏澄清**（routing_acc=0.1667），
+> `clarification_recall=0.1667` / `missed_clarification_rate=0.8333` —— 弱信号歧义下路由器
+> 直接猜技能（insight）或静默走 chat，未按设计触发澄清。旧的 stub-oracle 基线（质量指标恒 1.0）
+> 完全掩盖了这一点。这是 B4 澄清验收闸门在真实模型下的**真实水位**，属待修的质量问题（另立项）。
+
+> 历史记录（2026-10-11 · stub_oracle 占位）：质量指标恒 1.0 / 0.0，仅证明接线正确，不是回归下限。
+> ⚠️ 该套件此前**既不在** `run_real_eval_quality_gates.sh` 的运行清单、**也不在**重播种清单里，
+> 真实基线从未入仓；2026-10-16 起两条清单均已补入。
