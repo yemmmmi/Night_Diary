@@ -89,7 +89,12 @@ class LLMJudge:
         rubric: EvalRubric | None = None,
         *,
         mode: str = "strict",
-        max_attempts: int = 2,
+        # Exhausting the retries raises rather than degrading, so one transient
+        # truncated reply from the judge endpoint turns into a red gate (that is
+        # what failed the real-mode treehole run on 2026-10-16). The retry only
+        # fires on a parse failure, so the extra attempt costs nothing when the
+        # judge answers cleanly.
+        max_attempts: int = 3,
         safety_screen: Callable[[str], list[str]] | None = None,
     ) -> None:
         if mode not in ("strict", "lenient"):
