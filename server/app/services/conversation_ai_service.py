@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.memory.recall_policy import HISTORY_SECTION_MAX
+from app.domain.memory.types import EpisodicEntry
 from app.infrastructure.task_queue import enqueue_task
 from app.services import (
     card_service,
@@ -304,7 +306,21 @@ def _format_retrieved_diaries(db: Session, diary_ids: list[int], *, user_id: str
     return "\n\n".join(parts)
 
 
-def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[str, list[str]]:
+def _history_note() -> str:
+    """逐行时效标注（spec §3.3）。
+
+    缺了这一行，被退役的旧观点就会以"当前状态"的名义回到 prompt 里，
+    等于重新打开软覆盖本来堵住的漏洞。
+    """
+    return "（该感受此后已被修正，非当前状态）"
+
+
+def _format_episodic_memories(
+    container: ServiceContainer,
+    query: str,
+    *,
+    allow_superseded: bool = False,
+) -> tuple[str, list[str]]:
     """Format episodic memories for context, organized by source type.
 
     Three-source ordered display (P2-5):
@@ -313,16 +329,33 @@ def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[
     3. Card-derived memories (source="card") — structured emotional events
 
     Each source is displayed in a separate section with a header.
+
+    ``allow_superseded``（默认 False）额外召回已被软覆盖的历史条目，独立成节
+    并逐行带时效标注。只有追溯型意图的调用点会传 True——见
+    ``app.domain.memory.recall_policy``。
     """
     if container.episodic_memory is None:
         return "（无）", []
+
     try:
-        entries = container.episodic_memory.retrieve_relevant(query, top_k=MAX_EPISODIC_RESULTS)
+        entries = container.episodic_memory.retrieve_relevant(
+            query, top_k=MAX_EPISODIC_RESULTS
+        )
     except Exception as exc:
         logger.warning("Chat episodic retrieve failed: %s", exc)
         return "（无）", []
 
-    if not entries:
+    superseded_entries: list[EpisodicEntry] = []
+    if allow_superseded:
+        try:
+            superseded_entries = container.episodic_memory.retrieve_superseded(
+                query, top_k=HISTORY_SECTION_MAX
+            )
+        except Exception as exc:  # 历史召回失败不阻断：退回仅当前态
+            logger.warning("Superseded recall failed (non-fatal): %s", exc)
+            superseded_entries = []
+
+    if not entries and not superseded_entries:
         return "（无）", []
 
     # Categorize by source
@@ -348,6 +381,17 @@ def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[
     _format_section("相关日记记忆", diary_entries)
     _format_section("夜话共鸣", chat_entries)
     _format_section("情绪卡片", card_entries)
+
+    # 历史节放在当前态之后：旧观点可被召回，但排位永远低于当下事实。
+    seen_ids = {entry.entry_id for entry in entries}
+    history = [e for e in superseded_entries if e.entry_id not in seen_ids]
+    if history:
+        lines.append("【历史记忆（已被后续经历修正）】")
+        for entry in history:
+            memory_ids.append(entry.entry_id or "")
+            emotion = entry.emotion or "未知"
+            event = (entry.event_summary or "").strip()
+            lines.append(f"- [{emotion}] {event}{_history_note()}")
 
     if not lines:
         return "（无）", []
