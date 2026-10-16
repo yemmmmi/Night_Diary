@@ -14,7 +14,10 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domain.memory.recall_policy import HISTORY_SECTION_MAX
+from app.domain.memory.recall_policy import (
+    HISTORY_SECTION_MAX,
+    allow_superseded_recall,
+)
 from app.domain.memory.types import EpisodicEntry
 from app.infrastructure.task_queue import enqueue_task
 from app.services import (
@@ -800,7 +803,16 @@ def _prepare_reply_context(
     all_context_ids = pinned_ids + [did for did in retrieved_ids if did not in pinned_ids]
 
     with trace_span("S7c_episodic", "情景记忆", input_snapshot={"query": retrieval_query}) as span:
-        episodic_text, memory_ids = _format_episodic_memories(container, retrieval_query)
+        # 危机轮已在 S2_crisis 早退，此处恒为 False；参数仍显式传，避免将来
+        # 有调用方默认放行（recall_policy 的门控要求调用方声明危机状态）。
+        episodic_text, memory_ids = _format_episodic_memories(
+            container,
+            retrieval_query,
+            allow_superseded=allow_superseded_recall(
+                intent_result.intent_category,
+                crisis_detected=False,
+            ),
+        )
         if span:
             span.metadata["memory_count"] = len(memory_ids)
     if skill_context_text:
@@ -1139,7 +1151,15 @@ def generate_reply(
         with trace_span(
             "S7c_episodic", "情景记忆", input_snapshot={"query": retrieval_query}
         ) as span:
-            episodic_text, memory_ids = _format_episodic_memories(container, retrieval_query)
+            # 危机轮已在 S2_crisis 早退，此处恒为 False；理由同第一处调用点。
+            episodic_text, memory_ids = _format_episodic_memories(
+                container,
+                retrieval_query,
+                allow_superseded=allow_superseded_recall(
+                    intent_result.intent_category,
+                    crisis_detected=False,
+                ),
+            )
             if span:
                 span.metadata["memory_count"] = len(memory_ids)
         if skill_context_text:
