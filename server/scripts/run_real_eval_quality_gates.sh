@@ -52,6 +52,7 @@ if not settings.embedding_api_key:
 judge_dirs = [
     "tests/eval/intent/",
     "tests/eval/skill_call/",
+    "tests/eval/skill_routing/",
     "tests/eval/tool_call/",
     "tests/eval/plan/",
     "tests/eval/treehole/",
@@ -67,12 +68,17 @@ baseline_dirs = [
     "tests/eval/plan/",
     "tests/eval/intent/",
     "tests/eval/skill_call/",
+    "tests/eval/skill_routing/",
+    "tests/eval/tool_call/",
     "tests/eval/episodic/",
     # These three used to be missing from the reseed list, so their REAL numbers
     # never landed in the repo (the report had to label them "local run only").
     "tests/eval/rag/",           # writes baseline.json from the cloud run
     "tests/eval/treehole/",      # writes BASELINE.md (no baseline.json gate)
     "tests/eval/mcp_decision/",  # writes the real-mode decision floor
+    # skill_routing used to be absent from BOTH lists (never run, never seeded)
+    # and tool_call was run but never reseeded, so both regression gates were
+    # structurally inert — see tool_call's _write_baseline metadata fix.
 ]
 
 

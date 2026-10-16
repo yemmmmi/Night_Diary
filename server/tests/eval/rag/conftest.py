@@ -100,6 +100,11 @@ def vector_collection(
 
         client = chromadb.PersistentClient(path=tmp_dir)
         embedding_function = build_embedding_function(settings)
+        # Probe before indexing: a configured-but-broken cloud backend (e.g. key
+        # in arrears) otherwise leaves Chroma with an empty collection, so vector
+        # metrics come back 0.0 and masquerade as a quality regression instead of
+        # degrading to a skip with the real cause.
+        embedding_function(["评估探针"])
         manager = DiaryCollectionManager(
             settings=settings,
             chroma_client=client,
@@ -150,3 +155,22 @@ def reranker() -> Any:
         return candidate
     logger.warning("Reranker model unavailable; rerank branch will be skipped")
     return None
+
+
+@pytest.fixture(scope="session")
+def embedding_backend() -> str:
+    """Identity of the embedding model in use, so baseline comparison can reject
+    numbers produced by a different backend (cloud ``text-embedding-v3`` vs
+    local ``BAAI/bge-small-zh-v1.5`` are not comparable)."""
+    settings = get_settings()
+    if settings.embedding_api_key.strip():
+        return settings.embedding_model
+    return settings.embedding_model_name
+
+
+@pytest.fixture(scope="session")
+def rerank_backend(reranker: Any) -> str | None:
+    """Model name of the *usable* reranker (``None`` -> rerank branch skipped)."""
+    if reranker is None:
+        return None
+    return getattr(reranker, "model_name", None)

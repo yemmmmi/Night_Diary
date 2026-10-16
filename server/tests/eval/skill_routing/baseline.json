@@ -1,19 +1,19 @@
 {
-  "_placeholder": true,
-  "_mode": "stub_oracle",
-  "_model": "stub-oracle",
+  "_placeholder": false,
+  "_mode": "real",
+  "_model": "deepseek-v4.1-flash-d",
   "_sample_count": 31,
-  "_seeded_at": "2026-10-11T07:05:47.250389+00:00",
+  "_seeded_at": "2026-10-16T09:19:46.877489+00:00",
   "_runs": 1,
-  "_note": "stub mode is a deterministic oracle (all quality metrics pinned at 1.0 / 0.0) and only proves the routing wiring; reseed in REAL mode for a meaningful regression floor.",
+  "_note": "real-mode regression floor; efficiency metrics are advisory.",
   "metrics": {
-    "routing_accuracy": 1.0,
-    "clarification_precision": 1.0,
-    "clarification_recall": 1.0,
-    "clarification_f1": 1.0,
-    "false_clarification_rate": 0.0,
-    "missed_clarification_rate": 0.0,
-    "avg_latency_ms": 0.0,
-    "avg_tokens_per_call": 140.0
+    "routing_accuracy": 0.871,
+    "clarification_precision": 0.75,
+    "clarification_recall": 0.5,
+    "clarification_f1": 0.6,
+    "false_clarification_rate": 0.04,
+    "missed_clarification_rate": 0.5,
+    "avg_latency_ms": 1115.291,
+    "avg_tokens_per_call": 740.69
   }
 }

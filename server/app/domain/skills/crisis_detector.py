@@ -27,6 +27,12 @@ class CrisisDetectorSkill(BaseSkill):
     Emotion scoring is delegated to the shared :class:`EmotionEstimator` (the
     single source of truth for the keyword heuristic) instead of a skill-local
     copy of the lexicon.
+
+    Layered defense (layers 0/1): a severe signal scores 1.0 at the rule stage
+    and activates directly — the registry's stage-2 LLM rescue uses ``max``
+    fusion and therefore can never downgrade it. Combined with the outer
+    CrisisGuard / intent-classifier safety nets, crisis activation is
+    single-directional: rules only, no LLM veto path.
     """
 
     metadata = SkillMetadata(

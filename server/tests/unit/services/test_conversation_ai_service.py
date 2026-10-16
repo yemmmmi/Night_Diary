@@ -5,13 +5,17 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.services import conversation_ai_service, conversation_service, diary_service
-from app.services.conversation_ai_service import ChatReplyResult
+from app.services.conversation_ai_service import (
+    ChatReplyResult,
+    _format_episodic_memories,
+)
 from app.shared.errors import ValidationError
 
 
@@ -1124,3 +1128,95 @@ class TestEnabledToolsets:
     def test_missing_settings_degrades_to_all(self) -> None:
         container = MagicMock(spec=[])
         assert conversation_ai_service._enabled_toolsets(container) is None
+
+
+# ── 已退役记忆门控召回:历史节渲染 ──────────────────────────────────
+
+
+def _container_with_history(
+    tmp_path, *, superseded_count: int = 1, fail_recall: bool = False
+):
+    """构造「一条当前态 + N 条已退役」的情景记忆容器。"""
+    from app.domain.memory.episodic import EpisodicMemory
+    from app.domain.memory.types import EpisodicEntry
+    from app.infrastructure.database import (
+        create_db_engine,
+        create_session_factory,
+        init_db,
+    )
+    from app.infrastructure.memory_repository import SqliteEpisodicMemoryStore
+
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'episodic.db'}")
+    init_db(engine)
+    store = SqliteEpisodicMemoryStore(create_session_factory(engine))
+    memory = EpisodicMemory(store=store, user_id="u1")
+    memory.upsert(
+        EpisodicEntry(
+            event_summary="和小雨吵架了",
+            emotion="难过",
+            reply_insight="",
+            timestamp=time.time(),
+            importance=0.8,
+            entry_id="e_current",
+        )
+    )
+    for i in range(superseded_count):
+        memory.upsert(
+            EpisodicEntry(
+                event_summary=f"和小雨一起吃火锅{i}",
+                emotion="开心",
+                reply_insight="",
+                timestamp=time.time() - 90 * 24 * 3600,
+                importance=0.9,
+                entry_id=f"e_old_{i}",
+                superseded_by="e_current",
+            )
+        )
+    memory.load()
+    if fail_recall:
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("store unavailable")
+
+        memory.retrieve_superseded = _boom  # type: ignore[method-assign]
+    return SimpleNamespace(episodic_memory=memory)
+
+
+def test_history_section_rendered_when_allowed(tmp_path) -> None:
+    container = _container_with_history(tmp_path)
+    text, ids = _format_episodic_memories(
+        container, "我和小雨这些年是怎么过来的", allow_superseded=True
+    )
+    assert "【历史记忆（已被后续经历修正）】" in text
+    assert "和小雨一起吃火锅0" in text
+    assert "（该感受此后已被修正，非当前状态）" in text
+    assert "e_old_0" in ids
+
+
+def test_history_section_absent_when_not_allowed(tmp_path) -> None:
+    container = _container_with_history(tmp_path)
+    text, ids = _format_episodic_memories(container, "今天好烦")
+    assert "【历史记忆" not in text
+    assert "e_old_0" not in ids
+
+
+def test_history_section_capped_at_two(tmp_path) -> None:
+    container = _container_with_history(tmp_path, superseded_count=3)
+    text, _ = _format_episodic_memories(container, "回顾一下", allow_superseded=True)
+    assert text.count("（该感受此后已被修正，非当前状态）") == 2
+
+
+def test_history_recall_failure_degrades_to_current_only(tmp_path) -> None:
+    """历史召回失败只退回当前态，绝不阻断回复（spec §3.4）。"""
+    container = _container_with_history(tmp_path, fail_recall=True)
+    text, _ = _format_episodic_memories(container, "回顾一下", allow_superseded=True)
+    assert "和小雨吵架了" in text
+    assert "【历史记忆" not in text
+
+
+def test_default_flag_is_byte_identical_to_explicit_false(tmp_path) -> None:
+    """非追溯语境必须逐字节不变（spec §6 回归断言）。"""
+    container = _container_with_history(tmp_path)
+    assert _format_episodic_memories(
+        container, "今天好烦"
+    ) == _format_episodic_memories(container, "今天好烦", allow_superseded=False)

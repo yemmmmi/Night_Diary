@@ -82,7 +82,9 @@ class SessionContext:
     profile_topics: list[str] = field(default_factory=list)
     user_about: str = ""
     #: Recent mode/mood trend (P1-A) as a plain dict — kept JSON-shaped so the
-    #: L2 snapshot stays plain data; rebuilt into ShortTermState on freeze.
+    #: L2 snapshot stays plain data. D7: no longer frozen into the memory block;
+    #: it renders per turn via build_fresh_state_block in the prompt tail, so
+    #: the field is kept only for snapshot backward compatibility.
     profile_short_term: dict[str, Any] = field(default_factory=dict)
     usage: UsageAccumulator = field(default_factory=UsageAccumulator)
     pinned_diary_ids: list[int] = field(default_factory=list)
@@ -98,18 +100,20 @@ class SessionContext:
         Called once when the session is created (after the profile is loaded).
         The block is intentionally *not* refreshed on every turn — freezing it
         is what preserves the provider's prefix cache for the whole session.
+
+        D7: only user-edited-granular fields (style / topics / about) freeze
+        here. The turn-granular short_term_state renders per turn via
+        :func:`build_frozen_memory_block`'s companion
+        :func:`~app.services.ai.memory_snapshot.build_fresh_state_block`
+        instead — mid-session mood/mode evolution reaches the agent without
+        rebuilding the frozen prefix.
         """
-        from app.domain.memory.types import ShortTermState
         from app.services.ai.memory_snapshot import build_frozen_memory_block
 
-        short_term = (
-            ShortTermState(**self.profile_short_term) if self.profile_short_term else None
-        )
         block = build_frozen_memory_block(
             profile_style=self.profile_style,
             profile_topics=self.profile_topics,
             user_about=self.user_about,
-            short_term_state=short_term,
         )
         self.frozen_memory_block = block.text
         self.memory_budget = block.budget.to_dict()

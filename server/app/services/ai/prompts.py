@@ -45,7 +45,7 @@ CHAT_USER_PROMPT_TEMPLATE = """## 用户引用的日记
 
 ## 对话历史
 {chat_history}
-
+{fresh_state}
 ## 用户最新消息
 {user_message}
 

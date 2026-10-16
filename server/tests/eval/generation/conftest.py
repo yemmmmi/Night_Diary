@@ -103,14 +103,17 @@ def model_name() -> str:
 
 @pytest.fixture
 def agent_llm() -> Any:
-    return HttpLLM(temperature=0.3) if REAL_MODE else _StubAgentLLM()
+    # max_tokens=2048 mirrors the production LLMFactory cap: reasoning-style
+    # models burn output budget on hidden chain-of-thought, and a 600 cap
+    # truncates the reply to zero content (reasoning consumed it all).
+    return HttpLLM(temperature=0.3, max_tokens=2048) if REAL_MODE else _StubAgentLLM()
 
 
 @pytest.fixture
 def insight_agent_llm() -> Any:
     # Insight is analytical: a lower temperature keeps it grounded (less fabrication
     # of unsupplied facts/terms) and reduces run-to-run faithfulness variance.
-    return HttpLLM(temperature=0.3) if REAL_MODE else _StubAgentLLM()
+    return HttpLLM(temperature=0.3, max_tokens=2048) if REAL_MODE else _StubAgentLLM()
 
 
 @pytest.fixture

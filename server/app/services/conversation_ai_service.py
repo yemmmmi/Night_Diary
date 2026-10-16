@@ -14,6 +14,11 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.memory.recall_policy import (
+    HISTORY_SECTION_MAX,
+    allow_superseded_recall,
+)
+from app.domain.memory.types import EpisodicEntry
 from app.infrastructure.task_queue import enqueue_task
 from app.services import (
     card_service,
@@ -304,7 +309,21 @@ def _format_retrieved_diaries(db: Session, diary_ids: list[int], *, user_id: str
     return "\n\n".join(parts)
 
 
-def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[str, list[str]]:
+def _history_note() -> str:
+    """逐行时效标注（spec §3.3）。
+
+    缺了这一行，被退役的旧观点就会以"当前状态"的名义回到 prompt 里，
+    等于重新打开软覆盖本来堵住的漏洞。
+    """
+    return "（该感受此后已被修正，非当前状态）"
+
+
+def _format_episodic_memories(
+    container: ServiceContainer,
+    query: str,
+    *,
+    allow_superseded: bool = False,
+) -> tuple[str, list[str]]:
     """Format episodic memories for context, organized by source type.
 
     Three-source ordered display (P2-5):
@@ -313,16 +332,33 @@ def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[
     3. Card-derived memories (source="card") — structured emotional events
 
     Each source is displayed in a separate section with a header.
+
+    ``allow_superseded``（默认 False）额外召回已被软覆盖的历史条目，独立成节
+    并逐行带时效标注。只有追溯型意图的调用点会传 True——见
+    ``app.domain.memory.recall_policy``。
     """
     if container.episodic_memory is None:
         return "（无）", []
+
     try:
-        entries = container.episodic_memory.retrieve_relevant(query, top_k=MAX_EPISODIC_RESULTS)
+        entries = container.episodic_memory.retrieve_relevant(
+            query, top_k=MAX_EPISODIC_RESULTS
+        )
     except Exception as exc:
         logger.warning("Chat episodic retrieve failed: %s", exc)
         return "（无）", []
 
-    if not entries:
+    superseded_entries: list[EpisodicEntry] = []
+    if allow_superseded:
+        try:
+            superseded_entries = container.episodic_memory.retrieve_superseded(
+                query, top_k=HISTORY_SECTION_MAX
+            )
+        except Exception as exc:  # 历史召回失败不阻断：退回仅当前态
+            logger.warning("Superseded recall failed (non-fatal): %s", exc)
+            superseded_entries = []
+
+    if not entries and not superseded_entries:
         return "（无）", []
 
     # Categorize by source
@@ -348,6 +384,17 @@ def _format_episodic_memories(container: ServiceContainer, query: str) -> tuple[
     _format_section("相关日记记忆", diary_entries)
     _format_section("夜话共鸣", chat_entries)
     _format_section("情绪卡片", card_entries)
+
+    # 历史节放在当前态之后：旧观点可被召回，但排位永远低于当下事实。
+    seen_ids = {entry.entry_id for entry in entries}
+    history = [e for e in superseded_entries if e.entry_id not in seen_ids]
+    if history:
+        lines.append("【历史记忆（已被后续经历修正）】")
+        for entry in history:
+            memory_ids.append(entry.entry_id or "")
+            emotion = entry.emotion or "未知"
+            event = (entry.event_summary or "").strip()
+            lines.append(f"- [{emotion}] {event}{_history_note()}")
 
     if not lines:
         return "（无）", []
@@ -680,11 +727,15 @@ def _prepare_reply_context(
     with trace_span(
         "S6_skills", "技能选择", input_snapshot={"intent": intent_result.intent_category}
     ) as span:
+        # Light-tier LLM for the registry's stage-2 rescue of grey-listed
+        # skills (max fusion — can only raise, never veto a rule hit).
+        skill_llm = container._llm_for_tier("light", agent_name="skill_registry")
         selected_skills = skill_registry.select_skills(
             content,
             skill_profile,
             token_budget=4000,
             decision_id=conversation_id,
+            llm=skill_llm,
         )
         if span:
             span.metadata["selected_count"] = len(selected_skills)
@@ -752,7 +803,16 @@ def _prepare_reply_context(
     all_context_ids = pinned_ids + [did for did in retrieved_ids if did not in pinned_ids]
 
     with trace_span("S7c_episodic", "情景记忆", input_snapshot={"query": retrieval_query}) as span:
-        episodic_text, memory_ids = _format_episodic_memories(container, retrieval_query)
+        # 危机轮已在 S2_crisis 早退，此处恒为 False；参数仍显式传，避免将来
+        # 有调用方默认放行（recall_policy 的门控要求调用方声明危机状态）。
+        episodic_text, memory_ids = _format_episodic_memories(
+            container,
+            retrieval_query,
+            allow_superseded=allow_superseded_recall(
+                intent_result.intent_category,
+                crisis_detected=False,
+            ),
+        )
         if span:
             span.metadata["memory_count"] = len(memory_ids)
     if skill_context_text:
@@ -1009,11 +1069,15 @@ def generate_reply(
         with trace_span(
             "S6_skills", "技能选择", input_snapshot={"intent": intent_result.intent_category}
         ) as span:
+            # Light-tier LLM for the registry's stage-2 rescue of grey-listed
+            # skills (max fusion — can only raise, never veto a rule hit).
+            skill_llm = container._llm_for_tier("light", agent_name="skill_registry")
             selected_skills = skill_registry.select_skills(
                 content,
                 skill_profile,
                 token_budget=4000,
                 decision_id=conversation_id,
+                llm=skill_llm,
             )
             if span:
                 span.metadata["selected_count"] = len(selected_skills)
@@ -1087,7 +1151,15 @@ def generate_reply(
         with trace_span(
             "S7c_episodic", "情景记忆", input_snapshot={"query": retrieval_query}
         ) as span:
-            episodic_text, memory_ids = _format_episodic_memories(container, retrieval_query)
+            # 危机轮已在 S2_crisis 早退，此处恒为 False；理由同第一处调用点。
+            episodic_text, memory_ids = _format_episodic_memories(
+                container,
+                retrieval_query,
+                allow_superseded=allow_superseded_recall(
+                    intent_result.intent_category,
+                    crisis_detected=False,
+                ),
+            )
             if span:
                 span.metadata["memory_count"] = len(memory_ids)
         if skill_context_text:

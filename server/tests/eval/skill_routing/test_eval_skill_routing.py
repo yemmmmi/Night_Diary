@@ -141,6 +141,8 @@ def _write_baseline(
             "stub mode is a deterministic oracle (all quality metrics pinned at "
             "1.0 / 0.0) and only proves the routing wiring; reseed in REAL mode "
             "for a meaningful regression floor."
+            if not real_mode
+            else "real-mode regression floor; efficiency metrics are advisory."
         ),
         "metrics": {k: metrics[k] for k in METRIC_KEYS},
     }

@@ -76,22 +76,23 @@ EVAL_UPDATE_BASELINE=1 make eval-intent
 
 ## Baseline 指标
 
-`baseline.json` 当前为 **stub 模式** 校准（250 条 / 8 类，数据集扩展后重新 seed），
-供 CI / 本地无 `LLM_API_KEY` 时回归对照。REAL_MODE 数值需由运维在配置 `LLM_API_KEY` 后
-重新 `EVAL_UPDATE_BASELINE=1 make eval-intent` 刷新（会覆盖下表）。
+`baseline.json` 当前为 **REAL 模式** 校准（250 条 / 8 类），`_model` 记入元数据；
+`test_no_regression_vs_baseline` 会在 `_model` 与实际运行模型不一致时**显式 skip**并提示重播种
+（陈旧模型基线下的 latency/token 不可比，否则模型切换会伪装成"成本回归"）。
 
-> stub seed · 250 cases / 8 intents（baseline_a = 规则回声占位；treatment_b = oracle 占位）
+> REAL seed · 2026-10-16 · deepseek-v4.1-flash-d · 250 cases / 8 intents
+> （baseline_a = 真实 LLM；treatment_b = oracle 占位，恒为上界，不参与质量回归）
 
 | 方案 | accuracy | macro_f1 | weighted_f1 | sc_rate | llm_acc | lat_ms | tok/call |
 |------|----------|----------|-------------|---------|---------|--------|----------|
-| baseline_a  | 0.6960 | 0.6968 | 0.7012 | 0.3040 | 0.5747 |   0.02 |  175.00 |
-| treatment_b | 0.9920 | 0.9919 | 0.9920 | 0.3040 | 1.0000 |   0.04 |  112.00 |
+| baseline_a  | 0.7720 | 0.7606 | 0.7699 | 0.3040 | 0.6839 | 3376.05 | 767.48 |
+| treatment_b | 0.9920 | 0.9919 | 0.9920 | 0.3040 | 1.0000 |   0.06 | 112.00 |
 
-> 历史 REAL_MODE 记录（200 条 / 6 类，2026-07-06，deepseek-v4-flash）：
-> baseline_a accuracy=0.87 / llm_acc=0.83；treatment_b(oracle) accuracy=0.995。
-> 数据集扩展到 250 条 / 8 类后该记录不再可直接对照，需在 250 条上重新跑 REAL_MODE 刷新。
->
-> stub 解读：Baseline A（规则回声）accuracy=0.696；新意图 plan_exploration / task_command 的
-> 边界 case（规则判为 casual_chat / advice_seeking）拉低了 recall（0.44 / 0.48），正是 LLM 层
-> 需纠偏之处；Treatment B（oracle）非短路子集 llm_layer_accuracy=1.0，accuracy=0.992（2 条规则
-> 高置信误判的短路 case 无法被 LLM 层挽救）。
+> REAL 解读：LLM 层纠偏准确率 0.6839；拖后腿的是 `plan_exploration`（R=0.44）与
+> `task_command`（R=0.48）—— 边界 case 被规则层判为 `casual_chat` / `advice_seeking`，
+> LLM 层未能纠正（log 中 `boundary_*_rule_casual_chat` 一族）。
+> 该沉积与 2026-07-06（200 条 / 6 类 / deepseek-v4-flash，accuracy=0.87）不可直接对照：数据集与模型都变了。
+
+> 历史记录（stub seed · 250 cases）：baseline_a 0.6960 / llm_acc 0.5747（规则回声占位），
+> treatment_b 0.9920。2026-10-16 重播种前 `_model` 停留在 `deepseek-v4-flash`（2026-09-09 seed），
+> 导致真实模式下的模型漂移被误报为成本回归；现已随模型重播种并加装了漂移守卫。

@@ -452,7 +452,9 @@ def test_stub_baseline_a_echoes_rule_layer(
     )
 
 
-def test_no_regression_vs_baseline(eval_report: dict[str, Any], real_mode: bool) -> None:
+def test_no_regression_vs_baseline(
+    eval_report: dict[str, Any], real_mode: bool, model_name: str
+) -> None:
     """Soft per-strategy check: fail only on a real drop/rise vs the baseline."""
     if not real_mode:
         pytest.skip("regression vs baseline only checked in real mode (LLM_API_KEY set)")
@@ -465,6 +467,17 @@ def test_no_regression_vs_baseline(eval_report: dict[str, Any], real_mode: bool)
         pytest.skip(
             "baseline.json lacks mode metadata; reseed with "
             "EVAL_UPDATE_BASELINE=1 make eval-intent"
+        )
+    # Model-drift guard: a baseline seeded with a different model is not a
+    # comparable contract. Without this, a model swap surfaces as a bogus
+    # "cost regression" (latency/token figures track the model, not the change
+    # under test) and costs a full rerun to disprove. Skip loudly instead.
+    recorded_model = baseline.get("_model")
+    if recorded_model and recorded_model != model_name:
+        pytest.skip(
+            f"baseline was seeded with model {recorded_model!r} but this run uses "
+            f"{model_name!r}; accuracy/cost figures are not comparable across "
+            "models — reseed with EVAL_UPDATE_BASELINE=1 make eval-intent"
         )
 
     regressions: list[str] = []

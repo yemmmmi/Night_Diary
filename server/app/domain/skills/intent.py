@@ -158,21 +158,32 @@ class IntentDecision:
     intent: str  # one of USER_INTENTS
     source: str  # "rule" | "goal_rule" | "llm" | "default" | "manual"
     confidence: float = 1.0
+    #: The router's explicit "I cannot tell whether this is a skill or plain
+    #: chat" answer. ``None`` means the router did not answer that question
+    #: (older contract / bare intent word) and the confidence heuristic applies.
+    ambiguous: bool | None = None
 
     @property
     def should_clarify(self) -> bool:
-        """True when the router leaned toward a skill but was not sure.
+        """True when the router was not confident enough to act on its guess.
 
         Only an LLM answer can be uncertain enough to warrant asking — a
         strong rule, a goal-shaped plan sentence or a manual selection is
-        always trusted. A low-confidence ``chat`` never clarifies (nothing
-        would be written, so there is no wrong proposal to prevent).
+        always trusted.
         """
-        return (
-            self.source == "llm"
-            and self.intent in SKILL_INTENTS
-            and self.confidence < CLARIFY_THRESHOLD
-        )
+        if self.source != "llm":
+            return False
+        # The router explicitly judged the message ambiguous — but only a lean
+        # toward a *skill* is worth interrupting for. An ambiguous message the
+        # router still read as chat gets a normal reply: nothing is written, so
+        # there is no wrong proposal to prevent, and a disambiguation card would
+        # be a gratuitous interruption (that is what the false-clarification
+        # rate measures).
+        if self.ambiguous is not None:
+            return self.ambiguous and self.intent in SKILL_INTENTS
+        # Older contract: no ambiguity flag, so fall back to the confidence
+        # heuristic.
+        return self.intent in SKILL_INTENTS and self.confidence < CLARIFY_THRESHOLD
 
 
 def _match_strong(text: str) -> str | None:
@@ -198,9 +209,14 @@ _INTENT_LLM_PROMPT = """判断用户这句话最想做什么，四选一：
 
 {catalog}
 只输出一个 JSON，不要任何其他内容：
-{{"intent": "record / insight / plan / chat", "confidence": 0.0 到 1.0}}
+{{"intent": "record / insight / plan / chat", "confidence": 0.0 到 1.0, "ambiguous": true 或 false}}
 
 confidence 是你的把握程度：很确定给 0.9 以上；如果用户意图模棱两可、你只是勉强猜的，给 0.5 以下。
+
+ambiguous 表示"我拿不准这句该走技能还是普通聊天"：
+- 有明确诉求对象或产出的不算歧义，给 false（例：「分析我最近到底在想什么」「把这段心路历程留下来」「理一下接下来要做的事」「怎么调整作息」）
+- 只是模糊指代或没讲清要干什么的算歧义，给 true（例：「帮我看看这段」「帮我整理下这个想法」「最近压力有点大」）
+intent 仍要给出一个最可能的选择；ambiguous 只额外说明你有多拿不准。
 
 用户输入：{content}
 """
@@ -222,11 +238,34 @@ def _coerce_confidence(value: Any) -> float:
         return _DEFAULT_LLM_CONFIDENCE
 
 
-def _parse_llm_answer(answer: str) -> tuple[str | None, float]:
-    """Parse the router LLM reply into ``(intent, confidence)``.
+def _parse_ambiguity(value: Any) -> bool | None:
+    """Tri-state parse of the router's ``ambiguous`` flag.
 
-    Accepts the JSON contract (``{"intent": ..., "confidence": ...}``) and,
-    for robustness, a bare intent word (older prompt / mock).
+    ``True``/``False`` when the router answered the explicit question, ``None``
+    when the field is missing or unusable — the caller then falls back to the
+    confidence heuristic instead of silently treating "absent" as "not ambiguous".
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "yes", "1"):
+            return True
+        if lowered in ("false", "no", "0"):
+            return False
+    return None
+
+
+def _parse_llm_answer(answer: str) -> tuple[str | None, float, bool | None]:
+    """Parse the router LLM reply into ``(intent, confidence, ambiguous)``.
+
+    Accepts the JSON contract (``{"intent": ..., "confidence": ..., "ambiguous": ...}``)
+    and, for robustness, a bare intent word (older prompt / mock).
+
+    ``ambiguous`` is tri-state: ``True``/``False`` when the router answered the
+    explicit ambiguity question, ``None`` when the field is absent — in which
+    case the caller falls back to the confidence heuristic so the older contract
+    (and the eval's stub oracle) keeps working unchanged.
     """
     cleaned = (answer or "").strip()
     if cleaned.startswith("```"):
@@ -240,8 +279,12 @@ def _parse_llm_answer(answer: str) -> tuple[str | None, float]:
 
     if isinstance(data, dict):
         intent = _match_intent_word(str(data.get("intent", "")).strip().lower())
-        return intent, _coerce_confidence(data.get("confidence"))
-    return _match_intent_word(cleaned.lower()), _DEFAULT_LLM_CONFIDENCE
+        return (
+            intent,
+            _coerce_confidence(data.get("confidence")),
+            _parse_ambiguity(data.get("ambiguous")),
+        )
+    return _match_intent_word(cleaned.lower()), _DEFAULT_LLM_CONFIDENCE, None
 
 
 def classify_user_intent(
@@ -281,9 +324,11 @@ def classify_user_intent(
     try:
         prompt = _INTENT_LLM_PROMPT.format(content=text[:500], catalog=skill_catalog)
         response = llm.invoke(prompt)
-        intent, confidence = _parse_llm_answer(message_text(response))
+        intent, confidence, ambiguous = _parse_llm_answer(message_text(response))
         if intent is not None:
-            return IntentDecision(intent=intent, source="llm", confidence=confidence)
+            return IntentDecision(
+                intent=intent, source="llm", confidence=confidence, ambiguous=ambiguous
+            )
     except Exception as exc:
         logger.info("intent LLM fallback failed: %s", exc)
     return IntentDecision(intent="chat", source="default", confidence=_AMBIGUOUS_CONFIDENCE)

@@ -64,7 +64,32 @@ EVAL_UPDATE_BASELINE=1 make eval-episodic
 
 ## Baseline 指标
 
-> 记录日期：2026-08-11 · 环境：stub 模式（无 `sentence-transformers`，StubEmbedder）
+### 当前 baseline（云端 REAL，2026-09-09）
+
+> 环境：Qwen `text-embedding-v3` + `qwen3-rerank`（`_placeholder: false` / `_mode: real`，与 `baseline.json` 一致）
+
+| 分支 | Recall@5 | MRR | nDCG@5 | 状态 |
+|------|----------|-----|--------|------|
+| jaccard       | 0.4983 | 0.5417 | 0.4911 | ✅ 已记录 |
+| vector        | 0.3483 | 0.3267 | 0.2921 | ✅ 已记录 |
+| vector_rerank | 0.5642 | 0.5500 | 0.5222 | ✅ 已记录 |
+
+### 本地 BGE 参考（2026-10-16，非回归契约）
+
+> 环境：`BAAI/bge-small-zh-v1.5` + `BAAI/bge-reranker-base`，CPU；与云端基线**不同模型，不参与回归对照**。
+
+| 分支 | Recall@5 | MRR | nDCG@5 |
+|------|----------|-----|--------|
+| jaccard       | 0.4983 | 0.5417 | 0.4911 |
+| vector        | 0.4108 | 0.3500 | 0.3355 |
+| vector_rerank | 0.5217 | 0.5500 | 0.4659 |
+
+> 形态对比：本地 BGE 的 vector 单路略高于云端（0.41 vs 0.35），但 vector_rerank 的 Recall/nDCG 略低于云端（0.52/0.47 vs 0.56/0.52），MRR 持平（0.55）。
+> 两个后端上 vector 单路都低于 jaccard，rerank 之后才追平/超过 —— 与 RAG 小语料结论一致：该固定集上语义向量单路并非稳赢词法，三阶段 rerank 是主要增益来源。
+
+### Stub 历史快照（2026-08-11）
+
+> 环境：stub 模式（无 `sentence-transformers`，StubEmbedder），仅证明框架接线正确。
 
 | 分支 | Recall@5 | MRR | nDCG@5 | 状态 |
 |------|----------|-----|--------|------|
@@ -72,10 +97,10 @@ EVAL_UPDATE_BASELINE=1 make eval-episodic
 | vector        | 0.2317 | 0.2625 | 0.2220 | placeholder（stub，无语义） |
 | vector_rerank |  —     |  —     |  —     | SKIPPED（stub 模式无 CrossEncoder） |
 
-> **`_placeholder: true`**：当前 baseline 由 stub 模式生成，仅证明框架接线正确，**不参与回归检查**
-> （`test_no_regression_vs_baseline` 检测到 placeholder 会自动 skip）。请在真实模式下重新 seed：
-> `pip install -e ".[eval]"` 后 `EVAL_UPDATE_BASELINE=1 make eval-episodic`，届时写入
-> `_placeholder: false` 并启用回归守护。
+> **可比性守卫（2026-10-16）**：`baseline.json` 记录 `_embedding_model` / `_rerank_model`；
+> 当前运行的 embedding 模型与基线不同（如本地 BGE 对照云端 `text-embedding-v3`）时，
+> `test_no_regression_vs_baseline` **显式 SKIP** 并提示，避免跨模型数字互相误判。
+> stub placeholder 基线继续按原逻辑 skip；需刷新契约时用真实模式 `EVAL_UPDATE_BASELINE=1 make eval-episodic` 重播种。
 
 ### 分类 Recall@5（stub 模式，诊断用，不参与回归）
 

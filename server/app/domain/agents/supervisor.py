@@ -7,7 +7,9 @@ The Supervisor is the hub of the multi-agent pipeline. For each diary turn it:
    turns the B-6 Skill system from dead code into a live dependency. Every
    activation/suppression is recorded (by the registry's tracer) and stamped
    with this turn's ``decision_id`` so ``skill_activations`` rows link back to
-   the ``agent_decisions`` row written here.
+   the ``agent_decisions`` row written here. The supervisor's LLM is passed in
+   for the registry's stage-2 rescue of grey-listed skills (``max`` fusion —
+   it can only raise sub-threshold scores, never veto a rule hit).
 3. Detects crisis through the shared :class:`EmotionEstimator` (the same source
    the ``crisis_detector`` skill and ``EmpathyAgent`` use — no third copy of the
    lexicon). A crisis short-circuits routing to EmpathyAgent only.
@@ -156,6 +158,7 @@ class SupervisorAgent:
                 skill_context,
                 token_budget=SKILL_SELECTION_BUDGET,
                 decision_id=decision_id,
+                llm=self._llm,
             )
             activated_skills = [skill.metadata.name for skill in selected]
             if span:

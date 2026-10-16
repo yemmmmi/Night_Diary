@@ -109,6 +109,159 @@ def test_register_and_get_skill() -> None:
     assert registry.get_skill("high_priority") is skill
 
 
+# ----- two-stage scoring: rule floor → light-LLM rescue (stage 2) -----
+
+_RESCUE_PROFILE = {"intent": "emotional_vent"}
+
+
+class _GreySkill(BaseSkill):
+    """Always scores below threshold — only the stage-2 rescue can activate it."""
+
+    metadata = SkillMetadata(
+        name="grey_skill",
+        description="test grey",
+        triggers=["test"],
+        priority=1.0,
+        category=SkillCategory.ANALYSIS,
+        token_cost_estimate=100,
+    )
+
+    def activation_score(self, text: str, profile=None) -> float:
+        _ = (text, profile)
+        return 0.15
+
+    def execute(self, context, **kwargs) -> str:
+        return "ok"
+
+
+class _StubLLM:
+    """Minimal sync LLM stand-in: returns a canned reply or raises."""
+
+    def __init__(self, reply: str = "", error: Exception | None = None) -> None:
+        self.reply = reply
+        self.error = error
+        self.prompts: list[str] = []
+
+    def invoke(self, prompt: str) -> object:
+        self.prompts.append(prompt)
+        if self.error is not None:
+            raise self.error
+        return self.reply
+
+    async def ainvoke(self, prompt: str) -> object:
+        return self.invoke(prompt)
+
+
+def test_grey_skill_rescued_by_llm(activation_tracer) -> None:
+    """Stage 2 rescues a rule miss: max(0.15, 0.8) clears the threshold."""
+    registry = SkillRegistry(tracer=activation_tracer)
+    registry.register(_GreySkill())
+    llm = _StubLLM(reply='{"grey_skill": 0.8}')
+
+    selected = registry.select_skills(
+        "心里堵得慌，说不出的滋味", _RESCUE_PROFILE, token_budget=1000, llm=llm
+    )
+    assert [skill.metadata.name for skill in selected] == ["grey_skill"]
+    assert len(llm.prompts) == 1
+
+    record = activation_tracer.records[0]
+    assert record.activated is True
+    assert record.score == 0.8
+    assert "source=llm_rescue" in record.reason
+    assert "rule_score=0.15" in record.reason
+    assert "llm_score=0.80" in record.reason
+
+
+def test_grey_skill_llm_low_score_stays_suppressed(activation_tracer) -> None:
+    """LLM below threshold cannot rescue: max(0.15, 0.2) stays under 0.3."""
+    registry = SkillRegistry(tracer=activation_tracer)
+    registry.register(_GreySkill())
+    llm = _StubLLM(reply='{"grey_skill": 0.2}')
+
+    selected = registry.select_skills("今天有点闷", _RESCUE_PROFILE, token_budget=1000, llm=llm)
+    assert selected == []
+
+    record = activation_tracer.records[0]
+    assert record.activated is False
+    assert record.score == 0.2
+    assert "source=llm_rescue" in record.reason
+
+
+def test_grey_skill_llm_failure_degrades_to_rules(activation_tracer) -> None:
+    """LLM failure never breaks selection: grey skill keeps its rule outcome."""
+    registry = SkillRegistry(tracer=activation_tracer)
+    registry.register(_GreySkill())
+    llm = _StubLLM(error=RuntimeError("timeout"))
+
+    selected = registry.select_skills("今天有点闷", _RESCUE_PROFILE, token_budget=1000, llm=llm)
+    assert selected == []
+
+    record = activation_tracer.records[0]
+    assert record.activated is False
+    assert record.score == 0.15
+    assert "source=rule" in record.reason
+    assert "llm_rescue=error" in record.reason
+
+
+def test_rule_activated_skills_never_call_llm() -> None:
+    """Hot path: when rules clear the threshold the LLM is never invoked."""
+    registry = SkillRegistry()
+    registry.register(_HighPrioritySkill())
+    registry.register(_LowPrioritySkill())
+    llm = _StubLLM(reply="{}")
+
+    selected = registry.select_skills("今天心情不好", _RESCUE_PROFILE, token_budget=1000, llm=llm)
+    assert len(selected) == 2
+    assert llm.prompts == []
+
+
+def test_crisis_rule_hit_immune_to_llm_downgrade(activation_tracer) -> None:
+    """Severe crisis signal scores 1.0 at rule stage — no LLM veto path."""
+    from app.domain.skills.crisis_detector import CrisisDetectorSkill
+
+    registry = SkillRegistry(tracer=activation_tracer)
+    registry.register(CrisisDetectorSkill())
+    registry.register(_GreySkill())
+    llm = _StubLLM(reply='{"crisis_detector": 0.1, "grey_skill": 0.05}')
+
+    selected = registry.select_skills("我不想活了", _RESCUE_PROFILE, token_budget=1000, llm=llm)
+    assert "crisis_detector" in [skill.metadata.name for skill in selected]
+
+    crisis_record = next(
+        r for r in activation_tracer.records if r.skill_name == "crisis_detector"
+    )
+    assert crisis_record.score == 1.0
+    assert crisis_record.activated is True
+    assert "source=rule" in crisis_record.reason
+
+
+def test_llm_none_keeps_pure_rule_behavior(activation_tracer) -> None:
+    """llm=None (or omitted) is identical to the pre-two-stage pure-rule path."""
+    registry = SkillRegistry(tracer=activation_tracer)
+    registry.register(_HighPrioritySkill())
+    registry.register(_GreySkill())
+
+    selected = registry.select_skills("今天心情不好", _RESCUE_PROFILE, token_budget=1000)
+    assert [skill.metadata.name for skill in selected] == ["high_priority"]
+
+    record = activation_tracer.records[-1]
+    assert record.skill_name == "grey_skill"
+    assert record.activated is False
+    assert record.score == 0.15
+    assert "llm_rescue=no_llm" in record.reason
+
+
+def test_non_rescue_intent_skips_llm_entirely() -> None:
+    """casual_chat turns never spend rescue tokens even with an LLM present."""
+    registry = SkillRegistry()
+    registry.register(_GreySkill())
+    llm = _StubLLM(reply='{"grey_skill": 0.99}')
+
+    selected = registry.select_skills("随便聊聊", {"intent": "casual_chat"}, token_budget=1000, llm=llm)
+    assert selected == []
+    assert llm.prompts == []
+
+
 def test_select_skills_orders_by_score_priority(activation_tracer) -> None:
     registry = SkillRegistry(tracer=activation_tracer)
     registry.register(_HighPrioritySkill())

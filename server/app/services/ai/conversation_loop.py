@@ -122,6 +122,31 @@ def _apply_custom_skills(
     return system_prompt
 
 
+def _build_fresh_state_block(container: Any, user_id: str) -> str:
+    """Render the per-turn fresh state block (D7) from the *latest* profile.
+
+    Turn-granular freshness for scene 2: short_term_state evolves mid-session
+    (P1-A mood/mode sync writes it back to the profile), so it is read fresh
+    on every turn instead of freezing at session start. Placed in the volatile
+    prompt tail (after chat history, before the user message) — that region is
+    re-sent every turn anyway, so freshness costs no extra prefix-cache loss.
+
+    Best-effort: any failure (missing profile store, unreadable state) degrades
+    to no block, so freshness can never break a reply.
+    """
+    try:
+        ltm = getattr(container, "long_term_memory", None)
+        if ltm is None:
+            return ""
+        profile = ltm.get_profile(user_id)
+        from app.services.ai.memory_snapshot import build_fresh_state_block
+
+        return build_fresh_state_block(profile.short_term_state)
+    except Exception as exc:  # best-effort: MagicMock containers raise here
+        logger.debug("fresh state block failed (best-effort): %s", exc)
+        return ""
+
+
 @dataclass(frozen=True, slots=True)
 class Citation:
     """Source citation for result integration — tracks where information came from.
@@ -296,6 +321,11 @@ def _run_via_graph(
     chat_history = session.get_history()
     if chat_history:
         system_prompt += f"\n\n## 对话历史\n{chat_history}"
+
+    # D7: turn-granular fresh state — read from the latest profile each turn.
+    fresh_state = _build_fresh_state_block(container, user_id)
+    if fresh_state:
+        system_prompt += fresh_state
 
     # Get or build graph (cached in container)
     # Note: use container.__dict__ to avoid auto-creating attributes on
@@ -507,10 +537,13 @@ def run_conversation_loop(
             retrieved_diaries=retrieved_diaries_text,
             episodic_memories=episodic_text,
             chat_history=chat_history,
+            fresh_state=_build_fresh_state_block(container, user_id),
             user_message=content.strip(),
         )
         # The user profile now lives in the frozen memory block (system prefix)
         # instead of the volatile user prompt — see _apply_frozen_memory (D6).
+        # D7: turn-granular short_term_state rides in the volatile tail via
+        # {fresh_state} so mid-session mood evolution reaches the agent.
 
         # Get LLM
         llm: LLMClient | None = container._llm_for_tier(tier, agent_name="chat")
@@ -835,10 +868,13 @@ async def run_conversation_loop_streaming(
         retrieved_diaries=retrieved_diaries_text,
         episodic_memories=episodic_text,
         chat_history=chat_history,
+        fresh_state=_build_fresh_state_block(container, user_id),
         user_message=content.strip(),
     )
     # The user profile now lives in the frozen memory block (system prefix)
     # instead of the volatile user prompt — see _apply_frozen_memory (D6).
+    # D7: turn-granular short_term_state rides in the volatile tail via
+    # {fresh_state} so mid-session mood evolution reaches the agent.
 
     # Get LLM
     llm: LLMClient | None = container._llm_for_tier(tier, agent_name="chat")

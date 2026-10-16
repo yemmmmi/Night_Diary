@@ -11,7 +11,15 @@ ACTIVATION_THRESHOLD = 0.3
 
 
 class BaseSkill(ABC):
-    """Skill contract: score activation, gate with threshold, execute logic."""
+    """Skill contract: score activation, gate with threshold, execute logic.
+
+    ``activation_score`` is the *rule floor* (stage 1) of the registry's
+    two-stage scoring: a pure, LLM-free heuristic that stays testable in
+    isolation. Stage 2 (see ``SkillRegistry.select_skills``) may additively
+    rescue sub-threshold skills with one light LLM call using ``max`` fusion —
+    the LLM can only raise a score, never lower one, so any skill the rules
+    activated (e.g. crisis severe signal = 1.0) is final.
+    """
 
     metadata: SkillMetadata
 
@@ -21,7 +29,7 @@ class BaseSkill(ABC):
         text: str,
         profile: SkillProfileContext | None = None,
     ) -> float:
-        """Return activation probability in [0.0, 1.0]."""
+        """Return activation probability in [0.0, 1.0] (pure-rule stage 1)."""
 
     def can_activate(
         self,

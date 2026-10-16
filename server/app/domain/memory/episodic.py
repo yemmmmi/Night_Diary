@@ -31,7 +31,7 @@ import logging
 import time
 import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
 from app.domain.memory.types import EpisodicEntry, EpisodicMemoryStore
@@ -183,29 +183,53 @@ class EpisodicMemory:
 
         self.purge_stale(now=now)
 
-        query_trimmed = query.strip()
-        use_relevance = bool(query_trimmed)
-
         # Stage 1: importance × decay 粗排
+        candidates = self._top_candidates(self._entries, top_k, now)
+        if not candidates:
+            return []
+
+        return self._rank(candidates, query.strip(), top_k, now)
+
+    def _top_candidates(
+        self,
+        entries: Iterable[EpisodicEntry],
+        top_k: int,
+        now: float,
+    ) -> list[EpisodicEntry]:
+        """Stage 1:decay 阈值过滤 + importance×decay 排序 + top_k×5 截断。
+
+        注意这里带 ``IMPORTANCE_THRESHOLD`` 阈值——这是"当下状态"检索的前提，
+        与被软覆盖的历史召回（``retrieve_superseded``）刻意不同。
+        """
         candidates = [
             entry
-            for entry in self._entries
+            for entry in entries
             if self._effective_score(entry, now) >= self.IMPORTANCE_THRESHOLD
         ]
         candidates.sort(
             key=lambda entry: self._effective_score(entry, now),
             reverse=True,
         )
-        # 取 top_k × 5 作为粗排候选(不足时取全部)
-        candidates = candidates[: max(top_k * 5, top_k)]
+        return candidates[: max(top_k * 5, top_k)]
 
-        if not candidates:
-            return []
+    def _rank(
+        self,
+        candidates: list[EpisodicEntry],
+        query: str,
+        top_k: int,
+        now: float,
+    ) -> list[EpisodicEntry]:
+        """Stage 2+3:向量/jaccard 相关性精排 + 可选 reranker。
+
+        单一实现——``retrieve_relevant`` 与 ``retrieve_superseded`` 共用，
+        避免两份排序逻辑各自漂移。``query`` 假定已 strip。
+        """
+        use_relevance = bool(query)
 
         # Stage 2: 向量精排 或 降级 jaccard
         if use_relevance and self._embedder is not None:
             try:
-                query_vec = self._embedder.embed(query_trimmed)
+                query_vec = self._embedder.embed(query)
                 scored: list[tuple[float, EpisodicEntry]] = []
                 for entry in candidates:
                     entry_vec = self._get_or_compute_embedding(entry)
@@ -223,15 +247,11 @@ class EpisodicMemory:
                 logger.warning(
                     "Vector retrieval failed, degrading to jaccard: %s", exc
                 )
-                top_entries = self._jaccard_fallback(
-                    query_trimmed, candidates, top_k, now
-                )
+                top_entries = self._jaccard_fallback(query, candidates, top_k, now)
         else:
             # 无 embedder 或空查询:降级 char_jaccard(空查询时 relevance 恒为 0,
             # 退化为纯 importance×decay 排序)。
-            top_entries = self._jaccard_fallback(
-                query_trimmed, candidates, top_k, now
-            )
+            top_entries = self._jaccard_fallback(query, candidates, top_k, now)
 
         # Stage 3: 可选 reranker 精排(Task 11 将为 Reranker 增加 rerank_episodic)
         if (
@@ -241,13 +261,53 @@ class EpisodicMemory:
             and hasattr(self._reranker, "rerank_episodic")
         ):
             try:
-                top_entries = self._reranker.rerank_episodic(
-                    query_trimmed, top_entries
-                )
+                top_entries = self._reranker.rerank_episodic(query, top_entries)
             except Exception as exc:  # reranker 失败不阻断检索
                 logger.warning("Reranker failed (non-fatal): %s", exc)
 
         return top_entries[:top_k]
+
+    def retrieve_superseded(
+        self,
+        query: str = "",
+        top_k: int = 2,
+        now: float | None = None,
+    ) -> list[EpisodicEntry]:
+        """召回已被软覆盖的条目，供追溯型问题使用。
+
+        与 :meth:`retrieve_relevant` 正交的入口：谓词相反，且**不施加**
+        ``IMPORTANCE_THRESHOLD``——一条旧到 decay 归零的记忆，恰恰是追溯问题
+        （"我和 TA 这些年是怎么过来的"）要问的东西。排序仍复用共享的
+        :meth:`_rank`，保证两个入口的排序不可能漂移。
+
+        永不触碰进程内 deque：把退役条目读进 deque 会让它们占用
+        ``MAX_ENTRIES`` 容量，并与活跃条目争夺主检索槽位。
+        """
+        if now is None:
+            now = time.time()
+
+        if self._store is None:
+            pool = [
+                entry for entry in self._entries if entry.superseded_by is not None
+            ]
+        else:
+            pool = [
+                entry
+                for entry in self._store.load_entries(
+                    self._user_id, include_superseded=True
+                )
+                if entry.superseded_by is not None
+            ]
+
+        if not pool:
+            return []
+
+        pool.sort(
+            key=lambda entry: self._effective_score(entry, now),
+            reverse=True,
+        )
+        candidates = pool[: max(top_k * 5, top_k)]
+        return self._rank(candidates, query.strip(), top_k, now)
 
     def _jaccard_fallback(
         self,
