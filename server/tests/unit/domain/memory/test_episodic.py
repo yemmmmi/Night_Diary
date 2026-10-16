@@ -336,3 +336,78 @@ def test_retrieve_relevant_delegates_to_shared_rank(
     monkeypatch.setattr(EpisodicMemory, "_rank", spy)
     memory.retrieve_relevant("睡眠", top_k=3)
     assert calls == [("睡眠", 3)]
+
+
+def test_retrieve_superseded_returns_stale_history_without_decay_threshold(
+    tmp_path: Path,
+) -> None:
+    """90 天前的旧条目 decay 已近 0——它正是追溯问题要问的东西。"""
+    memory = _memory_with_store(tmp_path)
+    ninety_days = 90 * 24 * 3600
+    current = EpisodicEntry(
+        event_summary="和小雨吵架了",
+        emotion="难过",
+        reply_insight="",
+        timestamp=time.time(),
+        importance=0.8,
+        entry_id="e_current",
+    )
+    old = EpisodicEntry(
+        event_summary="和小雨一起吃火锅",
+        emotion="开心",
+        reply_insight="",
+        timestamp=time.time() - ninety_days,
+        importance=0.9,
+        entry_id="e_old",
+        superseded_by="e_current",
+    )
+    memory.upsert(current)
+    memory.upsert(old)
+    memory.load()
+
+    # 已退役条目不在 deque，也不在当下状态检索里
+    assert "e_old" not in [e.entry_id for e in memory.get_entries()]
+    assert "e_old" not in [
+        e.entry_id for e in memory.retrieve_relevant("小雨", top_k=5)
+    ]
+
+    hits = memory.retrieve_superseded("小雨", top_k=2)
+    assert [e.entry_id for e in hits] == ["e_old"]
+
+
+def test_retrieve_superseded_excludes_current_entries(tmp_path: Path) -> None:
+    """两个入口正交：历史入口不返回当前态条目，当前态入口不返回历史。"""
+    memory = _memory_with_store(tmp_path)
+    current = EpisodicEntry(
+        event_summary="加班到十点",
+        emotion="疲惫",
+        reply_insight="",
+        timestamp=time.time(),
+        importance=0.8,
+        entry_id="e_current",
+    )
+    memory.upsert(current)
+    memory.load()
+
+    assert memory.retrieve_superseded("加班", top_k=2) == []
+    assert memory.retrieve_relevant("加班", top_k=5) != []
+
+
+def test_retrieve_superseded_does_not_touch_the_deque(tmp_path: Path) -> None:
+    """把退役条目读进 deque 会占用 MAX_ENTRIES 并抢占主槽位。"""
+    memory = _memory_with_store(tmp_path)
+    old = EpisodicEntry(
+        event_summary="旧记忆",
+        emotion="平静",
+        reply_insight="",
+        timestamp=time.time(),
+        importance=0.9,
+        entry_id="e_old",
+        superseded_by="e_new",
+    )
+    memory.upsert(old)
+    memory.load()
+    before = memory.size
+
+    memory.retrieve_superseded("旧", top_k=2)
+    assert memory.size == before

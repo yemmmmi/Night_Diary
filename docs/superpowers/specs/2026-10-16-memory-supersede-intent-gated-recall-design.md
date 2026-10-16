@@ -62,7 +62,8 @@
 
 - 抽出 `_rank(candidates, query, top_k)`：排序逻辑**单一实现**，两个入口共用
 - `retrieve_relevant(query, top_k)`：对外行为不变，内部委托 `_rank`
-- 新增 `retrieve_including_superseded(query, top_k)`：定向存储读取 `include_superseded=True` → `_rank`
+- 新增 `retrieve_superseded(query, top_k)`：与 `retrieve_relevant` 正交（谓词相反、不施加 decay 阈值），定向存储读取 `include_superseded=True` → `_rank`。两个入口谓词相反且不共用候选池，保证当前态检索结果**结构性地**不被历史影响
+  - 收窄说明：原设计名为 `retrieve_including_superseded`，但"including"读起来像"当前态 + 历史混合池"，混合池会让历史条目在排序中挤掉当下事实，违反 §3.3「当前态在前、历史 ≤2 席」，故改名与拆分入口
 - 调用点：`_format_episodic_memories(container, query, *, allow_superseded: bool = False)`
 - **默认 `False`**：未显式放行的调用点零行为变化（场景一安全）
 
@@ -73,7 +74,8 @@
 召回后**必须带时效标注**，否则等于重新打开已修好的漏洞：
 
 1. 独立成节：`【历史记忆（已被后续经历修正）】`，与「相关日记记忆 / 夜话共鸣 / 情绪卡片」并列
-2. 逐行标注：`- [情绪] 事件摘要……（该感受此后已变化，最新倾向：…）`
+2. 逐行标注：`- [情绪] 事件摘要……（该感受此后已被修正，非当前状态）`
+   - 收窄说明：原设计的 `（该感受此后已变化，最新倾向：…）` 需要把 profile 的 `important_people`（person → sentiment 映射）注入到一个纯格式化函数里，把领域耦合塞进格式化层。标注只需让模型知道"这不是当前状态"即达成安全目标
 3. 排序与配额：当前态记忆在前；历史最多占 `top_k` 中的 2 席，防止历史挤掉当下事实
 
 ### 3.4 降级与边界
@@ -86,10 +88,10 @@
 
 | 文件 | 改动 |
 |---|---|
-| `app/domain/memory/episodic.py` | 抽 `_rank`；新增 `retrieve_including_superseded` |
+| `app/domain/memory/episodic.py` | 抽 `_rank`；新增 `retrieve_superseded` |
 | `app/services/conversation_ai_service.py` | `_format_episodic_memories` 增 `allow_superseded` 参数与历史节渲染；两处调用点传参 |
 | `app/domain/memory/conflict.py` | 不改（退役语义不变） |
-| 意图常量 | 实施时确认 `retrospective_query` / `retrospective_review` 的常量名与取值来源 |
+| 意图常量 | 已确认：`retrospective_query` / `retrospective_review` 均为 intent 分类器输出的 `intent_category` 取值（见 `training/finetune_intent/` 与 `empathy_agent.py` 的既有字符串比较），无需新增分类调用 |
 
 危机标记若不在该调用点作用域内，需向上传递；**禁止以「intent 是追溯」为由放行**。
 

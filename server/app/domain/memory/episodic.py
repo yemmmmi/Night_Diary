@@ -267,6 +267,48 @@ class EpisodicMemory:
 
         return top_entries[:top_k]
 
+    def retrieve_superseded(
+        self,
+        query: str = "",
+        top_k: int = 2,
+        now: float | None = None,
+    ) -> list[EpisodicEntry]:
+        """召回已被软覆盖的条目，供追溯型问题使用。
+
+        与 :meth:`retrieve_relevant` 正交的入口：谓词相反，且**不施加**
+        ``IMPORTANCE_THRESHOLD``——一条旧到 decay 归零的记忆，恰恰是追溯问题
+        （"我和 TA 这些年是怎么过来的"）要问的东西。排序仍复用共享的
+        :meth:`_rank`，保证两个入口的排序不可能漂移。
+
+        永不触碰进程内 deque：把退役条目读进 deque 会让它们占用
+        ``MAX_ENTRIES`` 容量，并与活跃条目争夺主检索槽位。
+        """
+        if now is None:
+            now = time.time()
+
+        if self._store is None:
+            pool = [
+                entry for entry in self._entries if entry.superseded_by is not None
+            ]
+        else:
+            pool = [
+                entry
+                for entry in self._store.load_entries(
+                    self._user_id, include_superseded=True
+                )
+                if entry.superseded_by is not None
+            ]
+
+        if not pool:
+            return []
+
+        pool.sort(
+            key=lambda entry: self._effective_score(entry, now),
+            reverse=True,
+        )
+        candidates = pool[: max(top_k * 5, top_k)]
+        return self._rank(candidates, query.strip(), top_k, now)
+
     def _jaccard_fallback(
         self,
         query: str,
